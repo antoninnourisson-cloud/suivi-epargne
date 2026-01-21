@@ -71,12 +71,12 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
   const [newExpenseAmount, setNewExpenseAmount] = useState('');
 
   const financialDetails = useMemo(() => {
-    const SOCIAL_CHARGES_RATE = 0.2233;
+    const SOCIAL_CHARGES_RATE = 0.2233; // Votre taux actuel conservé
     const ABATTEMENT_10 = 0.10;
     
-    const grossMonthly = grossAnnual / 12;
+    const grossMonthly = Number(grossAnnual) / 12;
     const netSocial = grossMonthly * (1 - SOCIAL_CHARGES_RATE);
-    const navigoReimbursement = navigoBase * (navigoRate / 100);
+    const navigoReimbursement = Number(navigoBase) * (Number(navigoRate) / 100);
     const netBeforeTax = netSocial + navigoReimbursement;
 
     const netAnnualImposable = netSocial * 12 * (1 - ABATTEMENT_10);
@@ -99,7 +99,7 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
     }
 
     const calculatedTaxRate = (theoreticalTax / (netSocial * 12)) * 100;
-    const effectiveRate = taxRateManual > 0 ? taxRateManual : calculatedTaxRate;
+    const effectiveRate = Number(taxRateManual) > 0 ? Number(taxRateManual) : calculatedTaxRate;
     const monthlyTaxAmount = netSocial * (effectiveRate / 100);
     const netAfterTax = netSocial - monthlyTaxAmount + navigoReimbursement;
 
@@ -110,16 +110,21 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
       monthlyTaxAmount, 
       netAfterTax,
       calculatedTaxRate,
-      isRateValid: Math.abs(calculatedTaxRate - taxRateManual) < 1.0,
+      isRateValid: Math.abs(calculatedTaxRate - Number(taxRateManual)) < 1.0,
       navigoReimbursement
     };
-  }, [grossAnnual, navigoBase, navigoRate, taxRateManual]);
+}, [grossAnnual, navigoBase, navigoRate, taxRateManual]);
 
-  const totalFixedCharges = useMemo(() => expenses.reduce((sum, e) => sum + e.amount, 0), [expenses]);
-  
-  // Capacité d'investissement
-  const investmentCapacity = Math.max(0, (financialDetails.netAfterTax + extraMonthlyIncome) - totalFixedCharges - leisureBudget - projectSavings);
+  const totalFixedCharges = useMemo(() => 
+    expenses.reduce((sum, e) => sum + Number(e.amount), 0)
+, [expenses]);
 
+// Capacité d'investissement recalculée avec sécurité
+const investmentCapacity = useMemo(() => {
+    const totalRevenu = financialDetails.netAfterTax + Number(extraMonthlyIncome);
+    const totalSorties = totalFixedCharges + Number(leisureBudget) + Number(projectSavings);
+    return Math.max(0, totalRevenu - totalSorties);
+}, [financialDetails.netAfterTax, extraMonthlyIncome, totalFixedCharges, leisureBudget, projectSavings]);
   const getSurvivalData = (savings: number, charges: number) => {
     if (charges <= 0) return { years: 99, months: 0, days: 0, totalMonths: 999, status: 'GREEN' as const };
     const totalMonths = savings / charges;
