@@ -12,25 +12,31 @@ export enum AccountType {
   CRYPTO = 'Cryptomonnaies',
   AUTRE = 'Autre'
 }
-
+export interface AccountMovement {
+  id: string;
+  date: string;
+  amount: number;      // Positif pour crédit, négatif pour débit
+  label: string;      // Ex: "Virement salaire", "Dépôt test +500", etc.
+  type: 'IN' | 'OUT'; // Flux entrant ou sortant
+}
 export interface SavingsAccount {
   id: string;
   name: string;
   type: AccountType;
   institution: string; 
-  totalAmount: number; // Capital total présent sur le compte
-  ownedAmount: number; // Part appartenant réellement à l'utilisateur (Part Personnelle)
-  parentalCapital: number; // Part appartenant aux parents (intouchable)
+  totalAmount: number; 
+  ownedAmount: number; 
+  parentalCapital: number; 
   interestRate?: number; 
-  recentHighRate?: number; // Taux haut récent net de frais
-  recentLowRate?: number; // Taux bas récent net de frais
+  recentHighRate?: number;
+  recentLowRate?: number;
   openingDate?: string; 
   contractEndDate?: string; 
   ceiling?: number; 
   isRevolut?: boolean; 
-  isTaxable?: boolean; // Soumis aux prélèvements sociaux (17.2%)
+  isTaxable?: boolean;
+  movements: AccountMovement[]; 
 }
-
 export interface PortfolioSnapshot {
   date: string; 
   totalAmount: number;

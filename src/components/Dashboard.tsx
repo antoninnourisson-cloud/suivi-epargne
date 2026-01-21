@@ -73,14 +73,26 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
   }, [accounts]);
 
   const filteredHistory = useMemo(() => {
-  return [...history]
-    .sort((a, b) => a.date.localeCompare(b.date)) // On trie par date
-    .filter(item => item.date >= dateRange.start && item.date <= dateRange.end)
-    .map(item => ({ 
-      ...item, 
-      displayDate: new Date(item.date).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' }) 
-    }));
-}, [history, dateRange]); // Plus besoin d'écouter 'accounts' ici !
+  // 1. Lister toutes les dates où il y a eu un mouvement
+  const allDates = accounts.flatMap(acc => (acc.movements || []).map(m => m.date));
+  const uniqueDates = Array.from(new Set([...allDates, new Date().toISOString().split('T')[0]])).sort();
+
+  // 2. Pour chaque date, sommer tous les mouvements de tous les comptes jusqu'à cette date
+  return uniqueDates.map(date => {
+    const ownedAtDate = accounts.reduce((sum, acc) => {
+      const totalMovements = (acc.movements || [])
+        .filter(m => m.date <= date)
+        .reduce((accSum, m) => accSum + (m.type === 'IN' ? m.amount : -m.amount), 0);
+      return sum + totalMovements;
+    }, 0);
+
+    return {
+      date,
+      ownedAmount: ownedAtDate,
+      displayDate: new Date(date).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })
+    };
+  }).filter(item => item.date >= dateRange.start && item.date <= dateRange.end);
+}, [accounts, dateRange]);
   const dataByType = Object.values(accounts.reduce((acc, curr) => {
     if (!acc[curr.type]) acc[curr.type] = { name: curr.type, value: 0 };
     acc[curr.type].value += curr.ownedAmount;

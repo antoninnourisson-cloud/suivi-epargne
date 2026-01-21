@@ -134,7 +134,10 @@ const App: React.FC = () => {
 
       // Hydratation des états
       if (data) {
-        setAccounts(data.accounts || []);
+        setAccounts((data.accounts || []).map(acc => ({
+  ...acc,
+  movements: acc.movements || [] // Garantit que l'historique existe toujours
+})));
         setExpenses(data.expenses || []);
         setHistory(data.history || []);
         if (data.config) {
@@ -244,19 +247,53 @@ const App: React.FC = () => {
   }, [accounts]);
 
   const handleUpdateAccountsComplex = useCallback((updates: { account: SavingsAccount, date: string }[]) => {
-    setAccounts(prev => {
-      const newAccounts = [...prev];
-      updates.forEach(upd => {
-        const idx = newAccounts.findIndex(a => a.id === upd.account.id);
-        if (idx >= 0) newAccounts[idx] = upd.account;
-      });
-      return newAccounts;
+  setAccounts(prev => {
+    const newAccounts = [...prev];
+    updates.forEach(upd => {
+      const idx = newAccounts.findIndex(a => a.id === upd.account.id);
+      if (idx >= 0) {
+        const oldAcc = newAccounts[idx];
+        const diff = upd.account.ownedAmount - oldAcc.ownedAmount;
+
+        if (diff !== 0) {
+          const movement: AccountMovement = {
+            id: crypto.randomUUID(),
+            date: upd.date,
+            amount: Math.abs(diff),
+            label: diff > 0 ? "Actualisation (+)" : "Actualisation (-)",
+            type: diff > 0 ? 'IN' : 'OUT'
+          };
+          newAccounts[idx] = {
+            ...upd.account,
+            movements: [...(oldAcc.movements || []), movement]
+          };
+        } else {
+          newAccounts[idx] = upd.account;
+        }
+      }
     });
-    setView('dashboard');
-  }, []);
+    return newAccounts;
+  });
+  setView('dashboard');
+}, []);
 
   const handleSaveAccount = (acc: SavingsAccount) => {
-    setAccounts(prev => [...prev.filter(a => a.id !== acc.id), acc]);
+    setAccounts(prev => {
+      const isNew = !prev.find(a => a.id === acc.id);
+      
+      if (isNew && acc.ownedAmount > 0) {
+        // Initialisation automatique du journal pour un nouveau compte
+        acc.movements = [{
+          id: crypto.randomUUID(),
+          date: new Date().toISOString().split('T')[0],
+          amount: acc.ownedAmount,
+          label: "Solde initial",
+          type: 'IN'
+        }];
+      }
+      
+      return [...prev.filter(a => a.id !== acc.id), acc];
+    });
     setShowForm(false);
     setEditingAccount(undefined);
   };
@@ -434,19 +471,42 @@ const App: React.FC = () => {
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {accounts.map(account => (
-                      <tr key={account.id} className="hover:bg-slate-50 transition-colors">
-                        <td className="px-6 py-4">
-                          <div className="font-bold text-slate-900">{account.name}</div>
-                          <div className="text-xs text-slate-500">{account.institution}</div>
-                        </td>
-                        <td className="px-6 py-4 text-sm text-indigo-600 text-right font-bold">{account.ownedAmount.toLocaleString()} €</td>
-                        <td className="px-6 py-4 text-sm text-amber-600 text-right font-bold">{account.parentalCapital.toLocaleString()} €</td>
-                        <td className="px-6 py-4 text-right">
-                          <button onClick={() => { setEditingAccount(account); setShowForm(true); }} className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg"><Edit2 className="w-4 h-4" /></button>
-                          <button onClick={() => { if(confirm('Supprimer ce compte ?')) setAccounts(prev => prev.filter(a => a.id !== account.id)) }} className="p-2 text-red-600 hover:bg-red-50 rounded-lg"><Trash2 className="w-4 h-4" /></button>
-                        </td>
-                      </tr>
-                    ))}
+  <React.Fragment key={account.id}>
+    <tr 
+      className="hover:bg-slate-50 cursor-pointer border-b border-slate-100"
+      onClick={() => setEditingAccount(editingAccount?.id === account.id ? undefined : account)}
+    >
+      <td className="px-6 py-4">
+        <div className="font-bold text-slate-900">{account.name}</div>
+        <div className="text-[10px] text-slate-400 uppercase">{account.institution}</div>
+      </td>
+      <td className="px-6 py-4 text-right font-black text-indigo-600">{account.ownedAmount.toLocaleString()} €</td>
+      <td className="px-6 py-4 text-right font-bold text-amber-500">{account.parentalCapital.toLocaleString()} €</td>
+      <td className="px-6 py-4 text-right">
+        <button onClick={(e) => { e.stopPropagation(); setEditingAccount(account); setShowForm(true); }} className="p-2 text-slate-400 hover:text-indigo-600"><Edit2 className="w-4 h-4" /></button>
+      </td>
+    </tr>
+    {editingAccount?.id === account.id && !showForm && (
+      <tr>
+        <td colSpan={4} className="bg-slate-50 p-4">
+          <div className="space-y-2">
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Journal des mouvements</p>
+            {account.movements?.length > 0 ? (
+              [...account.movements].sort((a,b) => b.date.localeCompare(a.date)).map(m => (
+                <div key={m.id} className="flex justify-between bg-white p-2 rounded-lg border border-slate-200 text-xs shadow-sm">
+                  <span>{new Date(m.date).toLocaleDateString()} - <span className="font-bold">{m.label}</span></span>
+                  <span className={m.type === 'IN' ? 'text-emerald-600 font-black' : 'text-rose-600 font-black'}>
+                    {m.type === 'IN' ? '+' : '-'}{m.amount.toLocaleString()} €
+                  </span>
+                </div>
+              ))
+            ) : <p className="text-xs text-slate-400 italic text-center">Aucun mouvement.</p>}
+          </div>
+        </td>
+      </tr>
+    )}
+  </React.Fragment>
+))}
                   </tbody>
                 </table>
               </div>
