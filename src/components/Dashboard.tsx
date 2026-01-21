@@ -4,7 +4,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, AreaChart, Area 
 } from 'recharts';
 import { SavingsAccount, PortfolioSnapshot, AccountType, Expense } from '../types';
-import { Euro, Lock, Wallet, Calendar, Filter, Unlock, Save } from 'lucide-react';
+import { Euro, Lock, Wallet, Filter, Unlock, Save } from 'lucide-react';
 import { Button } from './Button';
 
 interface DashboardProps {
@@ -20,6 +20,7 @@ interface DashboardProps {
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expenses, config }) => {
+  // --- 1. GESTION DES DATES ---
   const [dateRange, setDateRange] = useState(() => {
     try {
         const stored = localStorage.getItem('dashboard_date_range');
@@ -27,6 +28,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
     } catch (e) {}
     
     return {
+        // Par défaut, on remonte 6 mois en arrière
         start: new Date(new Date().setMonth(new Date().getMonth() - 6)).toISOString().split('T')[0],
         end: new Date().toISOString().split('T')[0]
     };
@@ -36,6 +38,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
     localStorage.setItem('dashboard_date_range', JSON.stringify(dateRange));
   }, [dateRange]);
 
+  // --- 2. STATISTIQUES GLOBALES ---
   const totalSavings = accounts.reduce((acc, curr) => acc + curr.totalAmount, 0);
   const mySavings = accounts.reduce((acc, curr) => acc + curr.ownedAmount, 0);
   
@@ -71,27 +74,54 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
     return { available, taxLocked, hardLocked };
   }, [accounts]);
 
-  const filteredHistory = useMemo(() => {
-    const todayStr = new Date().toISOString().split('T')[0];
-    const movementDates = accounts.flatMap(acc => (acc.movements || []).map(m => m.date));
-    const uniqueDates = Array.from(new Set(['2026-01-01', ...movementDates, todayStr])).sort();
+  // --- 3. CALCUL DE L'ÉVOLUTION (REVERSE ENGINEERING) ---
+  const stackedData = useMemo(() => {
+    const data: any[] = [];
+    const endDate = new Date(dateRange.end);
+    const startDate = new Date(dateRange.start);
+    
+    // On part des montants ACTUELS (Aujourd'hui) -> C'est notre point de vérité
+    const currentBalances = new Map<string, number>();
+    accounts.forEach(acc => {
+      currentBalances.set(acc.id, acc.ownedAmount);
+    });
 
-    return uniqueDates.map(date => {
-      const ownedAtDate = accounts.reduce((sum, acc) => {
-        const totalMovements = (acc.movements || [])
-          .filter(m => m.date <= date)
-          .reduce((accSum, m) => accSum + (m.type === 'IN' ? m.amount : -m.amount), 0);
-        return sum + totalMovements;
-      }, 0);
-
-      return {
-        date,
-        ownedAmount: ownedAtDate,
-        displayDate: new Date(date).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })
+    // On remonte le temps jour par jour (de Fin -> Début)
+    for (let d = new Date(endDate); d >= startDate; d.setDate(d.getDate() - 1)) {
+      const dateStr = d.toISOString().split('T')[0];
+      
+      // A. Snapshot de l'état à cette date
+      const daySnapshot: any = { 
+        date: dateStr, 
+        displayDate: d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' }) 
       };
-    }).filter(item => item.date >= dateRange.start && item.date <= dateRange.end);
+      
+      let dailyTotal = 0;
+      currentBalances.forEach((amount, id) => {
+        const safeAmount = Math.round(amount * 100) / 100;
+        daySnapshot[id] = safeAmount; 
+        dailyTotal += safeAmount;
+      });
+      daySnapshot.total = dailyTotal;
+      
+      data.unshift(daySnapshot); // On insère au début pour l'ordre chronologique final
+
+      // B. Calcul de l'état J-1 (On inverse les flux du jour J)
+      accounts.forEach(acc => {
+        const movesOnDate = (acc.movements || []).filter(m => m.date === dateStr);
+        if (movesOnDate.length > 0) {
+          const currentBal = currentBalances.get(acc.id) || 0;
+          // Si j'ai eu +500 aujourd'hui, hier j'avais 500 de moins.
+          const flow = movesOnDate.reduce((sum, m) => sum + (m.type === 'IN' ? m.amount : -m.amount), 0);
+          currentBalances.set(acc.id, currentBal - flow);
+        }
+      });
+    }
+
+    return data;
   }, [accounts, dateRange]);
 
+  // --- 4. DONNÉES STATIQUES (CAMEMBERT & BARRES) ---
   const dataByType = Object.values(accounts.reduce((acc, curr) => {
     if (!acc[curr.type]) acc[curr.type] = { name: curr.type, value: 0 };
     acc[curr.type].value += curr.ownedAmount;
@@ -105,7 +135,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
     return acc;
   }, {} as Record<string, { name: string, value: number }>));
 
+  // --- 5. UTILITAIRES GRAPHIQUES ---
   const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4'];
+  const getAccountColor = (index: number) => COLORS[index % COLORS.length];
 
   const exportSession = () => {
     const now = new Date();
@@ -179,20 +211,43 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
       </div>
 
       <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 h-96">
-        <h3 className="text-lg font-semibold text-slate-800 mb-4">Évolution de mon Épargne Nette</h3>
+        <h3 className="text-lg font-semibold text-slate-800 mb-4">Évolution de mon Épargne Nette (Empilé)</h3>
         <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={filteredHistory}>
+          <AreaChart data={stackedData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
             <defs>
-              <linearGradient id="colorOwned" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#6366f1" stopOpacity={0.1}/>
-                <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
-              </linearGradient>
+              {accounts.map((acc, index) => (
+                <linearGradient key={`grad-${acc.id}`} id={`color-${acc.id}`} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor={getAccountColor(index)} stopOpacity={0.8}/>
+                  <stop offset="95%" stopColor={getAccountColor(index)} stopOpacity={0.1}/>
+                </linearGradient>
+              ))}
             </defs>
-            <XAxis dataKey="displayDate" tick={{ fontSize: 10 }} />
-            <YAxis tickFormatter={(val) => `${val / 1000}k`} tick={{ fontSize: 10 }} />
+            <XAxis dataKey="displayDate" tick={{ fontSize: 10 }} minTickGap={30} />
+            <YAxis tickFormatter={(val) => `${(val/1000).toFixed(1)}k`} tick={{ fontSize: 10 }} />
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-            <RechartsTooltip formatter={(v: number) => `${v.toLocaleString()}€`} />
-            <Area type="monotone" dataKey="ownedAmount" stroke="#6366f1" strokeWidth={2} fill="url(#colorOwned)" />
+            <RechartsTooltip 
+              contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+              itemStyle={{ fontSize: '12px', padding: 0 }}
+              formatter={(value: number, name: string) => {
+                const accName = accounts.find(a => a.id === name)?.name || name;
+                if (name === 'total') return [new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(value), "TOTAL"];
+                return [new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(value), accName];
+              }}
+              labelStyle={{ color: '#64748b', marginBottom: '0.5rem', fontWeight: 'bold' }}
+            />
+            <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} formatter={(value) => accounts.find(a => a.id === value)?.name || value} />
+            {accounts.map((acc, index) => (
+              <Area 
+                key={acc.id}
+                type="monotone" 
+                dataKey={acc.id} 
+                name={acc.id} 
+                stackId="1" 
+                stroke={getAccountColor(index)} 
+                fill={`url(#color-${acc.id})`}
+                fillOpacity={1}
+              />
+            ))}
           </AreaChart>
         </ResponsiveContainer>
       </div>
