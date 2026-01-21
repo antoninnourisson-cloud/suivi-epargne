@@ -7,29 +7,27 @@ export const TAX_BRACKETS = [
   { limit: Infinity, rate: 0.45 }
 ];
 
-export const STANDARD_ALLOWANCE = 0.10; // Abattement 10% frais professionnels
-export const SOCIAL_CHARGES_CAPITAL = 0.172; // CSG/CRDS 17.2% sur placements
-export const SALARY_CHARGES_RATE = 0.223; // Charges sociales salariales (22.3%)
+export const STANDARD_ALLOWANCE = 0.10; 
+export const SOCIAL_CHARGES_CAPITAL = 0.172; 
 
-// --- PLAFONDS RÉGLEMENTÉS ---
+// Ajusté pour correspondre à ton profil (Pasteur/Post-doc) : ~22.32%
+export const SALARY_CHARGES_RATE = 0.2232; 
+
+// --- DURÉES LÉGALES DE BLOCAGE (Années) ---
+export const LEGAL_MATURITY = {
+  PEA: 5,
+  ASSURANCE_VIE: 8,
+  PEE: 5 
+};
+
 export const ACCOUNT_CEILINGS = {
   LIVRET_A: 22950,
   LDDS: 12000,
   LEP: 10000
 };
 
-// --- RENDEMENTS THÉORIQUES ---
 export const DEFAULT_RATES = {
   LIVRET_A: 3.0,
   LEP: 4.0,
   FONDS_EURO: 2.5
-  };
-  // ... (Garde le reste du fichier comme avant : TAX_BRACKETS, etc.)
-
-// --- DURÉES LÉGALES DE BLOCAGE (Années) ---
-export const LEGAL_MATURITY = {
-  PEA: 5,
-  ASSURANCE_VIE: 8,
-  PEE: 5 // Par défaut si pas de date de fin contrat
-
 };

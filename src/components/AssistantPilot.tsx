@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { SavingsAccount, Expense, AccountType } from '../types';
 import { TAX_BRACKETS, STANDARD_ALLOWANCE, SALARY_CHARGES_RATE, ACCOUNT_CEILINGS, LEGAL_MATURITY } from '../constants';
 import { 
@@ -6,8 +6,6 @@ import {
   TrendingUp, 
   ShieldCheck, 
   Target, 
-  ArrowRightCircle, 
-  CheckCircle, 
   Clock, 
   Lock, 
   Unlock, 
@@ -30,9 +28,9 @@ interface AssistantPilotProps {
   setLeisureBudget: (val: number) => void;
   projectSavings: number;
   setProjectSavings: (val: number) => void;
-  navigoBase: number;
+  navigoBase: number; // 90.80
   setNavigoBase: (val: number) => void;
-  navigoRate: number;
+  navigoRate: number; // 67.24 (correspond à ~61.05€)
   setNavigoRate: (val: number) => void;
   taxRateManual: number;
   setTaxRateManual: (val: number) => void;
@@ -63,24 +61,30 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
   // --- ÉTATS LOCAUX ---
   const [showDetails, setShowDetails] = useState(false);
   const [externalSavings, setExternalSavings] = useState<number>(0);
-  const [manualSavingsCapacity, setManualSavingsCapacity] = useState<string | null>(null); // Pour l'override
+  const [manualSavingsCapacity, setManualSavingsCapacity] = useState<string | null>(null); 
   const [activeTab, setActiveTab] = useState<'budget' | 'fiscal'>('budget');
 
-  // Remboursement Navigo mensuel net
+  // Remboursement Navigo (Gain) = 90.80 * 67.24% = ~61.05 €
   const navigoRefund = (navigoBase * (navigoRate / 100)); 
 
-  // --- 1. MOTEUR DE CALCUL REVENUS (Les 4 champs liés) ---
-  
-  // A. Calculs automatiques de base (Source de vérité = grossAnnual)
+  // --- 1. MOTEUR DE CALCUL REVENUS ---
   const autoValues = useMemo(() => {
-    const grossMonth = grossAnnual / 12;
-    const netBeforeTax = (grossMonth * (1 - SALARY_CHARGES_RATE)) + navigoRefund + extraMonthlyIncome;
+    // A. Salaire
+    const grossMonth = grossAnnual / 12; // 3360
+    const socialCharges = grossMonth * SALARY_CHARGES_RATE; // ~750
+    const netSalaryOnly = grossMonth - socialCharges; // ~2610
     
-    // Calcul Impôt
+    // B. Revenu Net Avant Impôt (C'est ce qui arrive sur le compte)
+    // = Salaire Net + Remboursement Navigo + Revenus Annexes
+    const netBeforeTax = netSalaryOnly + navigoRefund + extraMonthlyIncome; // ~2671
+    
+    // C. Fiscalité (Basée sur le Net Imposable Annuel)
+    // Note : Le remboursement Navigo est souvent non-imposable, mais simplifions ici.
+    // Assiette impôt = Brut - Abattement 10% + Extras
     const netTaxableYear = (grossAnnual * (1 - STANDARD_ALLOWANCE)) + (extraMonthlyIncome * 12);
     const quotient = netTaxableYear;
     
-    // Taux Moyen & Montant
+    // Calcul Impôt Progressif
     let taxAmount = 0;
     let previousLimit = 0;
     for (const bracket of TAX_BRACKETS) {
@@ -91,32 +95,43 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
       }
     }
     const monthlyTax = taxAmount / 12;
-    const superNet = netBeforeTax - monthlyTax;
     const autoRate = (taxAmount / netTaxableYear) * 100;
 
-    return { grossMonth, netBeforeTax, superNet, taxAmount, monthlyTax, autoRate, netTaxableYear };
+    return { 
+      grossMonth, 
+      socialCharges,
+      netSalaryOnly,
+      netBeforeTax, 
+      taxAmount, 
+      monthlyTax, 
+      autoRate, 
+      netTaxableYear 
+    };
   }, [grossAnnual, extraMonthlyIncome, navigoRefund]);
 
-  // Taux d'imposition effectif (Manuel ou Auto)
+  // D. Application du Taux Manuel (si défini) ou Auto
+  // Si tu indiques 6.1% manuel, on applique 6.1% sur le Net Imposable théorique mensuel
   const effectiveTaxRate = taxRateManual > 0 ? taxRateManual : autoValues.autoRate;
-  const effectiveMonthlyTax = taxRateManual > 0 ? (autoValues.netTaxableYear * (taxRateManual/100))/12 : autoValues.monthlyTax;
+  
+  // L'impôt mensuel réel prélevé
+  const effectiveMonthlyTax = taxRateManual > 0 
+    ? (autoValues.netBeforeTax * (taxRateManual/100)) // Simplification : Taux appliqué au Net perçu souvent
+    : autoValues.monthlyTax;
+
+  // E. Super Net (Ce qu'il reste vraiment dans la poche)
   const effectiveSuperNet = autoValues.netBeforeTax - effectiveMonthlyTax;
 
-  // B. Handlers pour la mise à jour bi-directionnelle
+  // Handlers
   const updateFromGrossAnnual = (val: number) => setGrossAnnual(val);
-  
   const updateFromGrossMonth = (val: number) => setGrossAnnual(val * 12);
-  
   const updateFromNet = (val: number) => {
-    // Net = (BrutMois * (1-Charges)) + Navigo + Extra
-    // BrutMois = (Net - Navigo - Extra) / (1-Charges)
+    // Inverse : NetAvantImpot -> Brut
+    // Val = (BrutMois * (1 - Charges)) + Refund + Extra
+    // BrutMois = (Val - Refund - Extra) / (1 - Charges)
     const targetGrossMonth = (val - navigoRefund - extraMonthlyIncome) / (1 - SALARY_CHARGES_RATE);
     setGrossAnnual(targetGrossMonth * 12);
   };
-
   const updateFromSuperNet = (val: number) => {
-    // SuperNet = Net - Impot
-    // On approxime en rajoutant l'impôt actuel pour retrouver le Net
     const estimatedNet = val + effectiveMonthlyTax;
     updateFromNet(estimatedNet);
   };
@@ -125,100 +140,78 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
   // --- 2. CAPACITÉ D'ÉPARGNE ---
   const budgetData = useMemo(() => {
     const totalFixed = expenses.reduce((sum, e) => sum + e.amount, 0);
-    // On compte le reste à charge Navigo dans les charges fixes implicites ou on l'affiche à part ?
-    // Ici on considère que "Net" inclut le remboursement, donc on paie le Navigo plein pot en charge
-    // OU ALORS on considère que le Net est déjà "Net de Navigo".
-    // Restons simple : Le SuperNet est ce qui rentre sur le compte bancaire.
-    // Les charges sortent du compte.
     
-    const theoreticalCapacity = effectiveSuperNet - totalFixed - navigoBase - leisureBudget - projectSavings;
+    // NOTE : On ne compte PAS le coût du Navigo ici automatiquement, comme demandé.
+    // L'utilisateur doit l'ajouter manuellement dans ses charges fixes s'il le souhaite.
     
-    // Valeur utilisée pour la cascade (Manuel ou Calculé)
+    const theoreticalCapacity = effectiveSuperNet - totalFixed - leisureBudget - projectSavings;
+    
     const finalCapacity = manualSavingsCapacity !== null ? parseFloat(manualSavingsCapacity) : theoreticalCapacity;
     const totalToInvest = Math.max(0, finalCapacity + externalSavings);
 
     return { totalFixed, theoreticalCapacity, finalCapacity, totalToInvest };
-  }, [effectiveSuperNet, expenses, navigoBase, leisureBudget, projectSavings, manualSavingsCapacity, externalSavings]);
+  }, [effectiveSuperNet, expenses, leisureBudget, projectSavings, manualSavingsCapacity, externalSavings]);
 
 
   // --- 3. ALGORITHME DE CASCADE ---
   const strategy = useMemo(() => {
     const steps: any[] = [];
     let remaining = budgetData.totalToInvest;
-
     const getOwned = (t: AccountType) => accounts.find(a => a.type === t)?.ownedAmount || 0;
 
-    // Étape 1 : LEP (Si revenu fiscal < seuil approx 22k)
+    // A. LEP (Si revenu fiscal < seuil)
     if (autoValues.netTaxableYear < 22000) {
       const current = getOwned(AccountType.LEP);
       const max = ACCOUNT_CEILINGS.LEP;
       const space = Math.max(0, max - current);
       const fill = Math.min(remaining, space);
-      
-      steps.push({
-        name: "LEP (Prioritaire)",
-        current, max, space, fill,
-        type: AccountType.LEP
-      });
+      steps.push({ name: "LEP (Prioritaire)", current, max, space, fill, type: AccountType.LEP });
       if (space > 0) remaining -= fill;
     }
 
-    // Étape 2 : Livret A
+    // B. Livret A
     const laCurrent = getOwned(AccountType.LIVRET_A);
     const laMax = ACCOUNT_CEILINGS.LIVRET_A;
     const laSpace = Math.max(0, laMax - laCurrent);
     const laFill = Math.min(remaining, laSpace);
-    
-    steps.push({
-      name: "Livret A (Sécurité)",
-      current: laCurrent, max: laMax, space: laSpace, fill: laFill,
-      type: AccountType.LIVRET_A
-    });
+    steps.push({ name: "Livret A (Sécurité)", current: laCurrent, max: laMax, space: laSpace, fill: laFill, type: AccountType.LIVRET_A });
     if (laSpace > 0) remaining -= laFill;
 
-    // Étape 3 : LDDS
+    // C. LDDS
     const lddsCurrent = getOwned(AccountType.LDDS);
     const lddsMax = ACCOUNT_CEILINGS.LDDS;
     const lddsSpace = Math.max(0, lddsMax - lddsCurrent);
     const lddsFill = Math.min(remaining, lddsSpace);
-
-    steps.push({
-      name: "LDDS (Complément)",
-      current: lddsCurrent, max: lddsMax, space: lddsSpace, fill: lddsFill,
-      type: AccountType.LDDS
-    });
+    steps.push({ name: "LDDS (Complément)", current: lddsCurrent, max: lddsMax, space: lddsSpace, fill: lddsFill, type: AccountType.LDDS });
     if (lddsSpace > 0) remaining -= lddsFill;
 
-    // Étape 4 : Surplus (PEA / AV)
+    // D. Surplus
     if (remaining > 0) {
-      steps.push({
-        name: "PEA / Assurance Vie (Long Terme)",
-        current: getOwned(AccountType.PEA) + getOwned(AccountType.ASSURANCE_VIE),
-        max: Infinity, space: Infinity, fill: remaining,
-        type: AccountType.PEA,
-        isBonus: true
-      });
+      steps.push({ name: "PEA / Assurance Vie", current: getOwned(AccountType.PEA) + getOwned(AccountType.ASSURANCE_VIE), max: Infinity, space: Infinity, fill: remaining, type: AccountType.PEA, isBonus: true });
     }
 
     return steps;
   }, [budgetData.totalToInvest, accounts, autoValues.netTaxableYear]);
 
 
-  // --- 4. RÉSILIENCE (SURVIE) ---
+  // --- 4. RÉSILIENCE ---
   const survival = useMemo(() => {
     const liquidMoney = accounts
       .filter(a => !a.contractEndDate && ![AccountType.IMMOBILIER, AccountType.PER, AccountType.PEE].includes(a.type))
       .reduce((sum, a) => sum + a.ownedAmount, 0);
     
-    const monthlyBurn = budgetData.totalFixed + navigoBase; // Charges vitales strictes
-    if (monthlyBurn === 0) return { days: 0, color: 'text-slate-500', label: "Infini" };
+    // Pour la survie, on suppose qu'il faut payer les charges fixes déclarées
+    // Si l'utilisateur n'a pas mis le Navigo dans les charges, on ne le compte pas ici non plus (cohérence)
+    const monthlyBurn = budgetData.totalFixed + leisureBudget; 
+    
+    if (monthlyBurn === 0) return { days: 0, color: 'text-slate-500', label: "Infini", totalMonths: 999 };
 
     const totalDays = (liquidMoney / monthlyBurn) * 30;
     const years = Math.floor(totalDays / 365);
     const months = Math.floor((totalDays % 365) / 30);
     const days = Math.floor(totalDays % 30);
-
     const totalMonths = liquidMoney / monthlyBurn;
+
     let color = 'text-emerald-500';
     let borderColor = 'border-emerald-500';
     let bg = 'bg-emerald-50';
@@ -227,8 +220,8 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
     else if (totalMonths < 6) { color = 'text-orange-500'; borderColor = 'border-orange-500'; bg = 'bg-orange-50'; }
     else if (totalMonths >= 12) { color = 'text-amber-500'; borderColor = 'border-amber-500'; bg = 'bg-amber-50'; } // Doré
 
-    return { years, months, days, color, borderColor, bg, totalMonths };
-  }, [accounts, budgetData.totalFixed, navigoBase]);
+    return { years, months, days, color, borderColor, bg, totalMonths, monthlyBurn };
+  }, [accounts, budgetData.totalFixed, leisureBudget]);
 
 
   // --- 5. HORLOGE FISCALE ---
@@ -263,17 +256,9 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
             timeLeft = `${years > 0 ? years + ' ans ' : ''}${months} mois`;
         }
 
-        return { 
-          id: acc.id, 
-          name: acc.name, 
-          type: acc.type, 
-          date: endDate.toLocaleDateString(), 
-          timeLeft, 
-          isAvailable,
-          label 
-        };
+        return { id: acc.id, name: acc.name, type: acc.type, date: endDate.toLocaleDateString(), timeLeft, isAvailable, label };
       })
-      .filter(item => item !== null); // Retire ceux sans date
+      .filter(item => item !== null);
   }, [accounts]);
 
 
@@ -296,7 +281,7 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
           {/* SECTION 1 : CALCULATEUR DE REVENUS 4-SENS */}
           <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
             <h3 className="text-lg font-black text-slate-800 mb-6 flex items-center gap-2">
-              <Calculator className="w-5 h-5 text-indigo-600" /> Revenus & Fiscalité
+              <Calculator className="w-5 h-5 text-indigo-600" /> Revenus & Salaires
             </h3>
             
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
@@ -310,15 +295,15 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
               </div>
               <div className="bg-indigo-50 p-3 rounded-xl border border-indigo-100">
                 <label className="text-[10px] font-black text-indigo-400 uppercase">Net Avant Impôt</label>
-                <input type="number" value={Math.round(autoValues.netBeforeTax)} onChange={e => updateFromNet(parseFloat(e.target.value)||0)} className="w-full bg-transparent font-black text-indigo-700 text-lg outline-none" />
+                <input type="number" value={Math.round(autoValues.netBeforeTax * 100)/100} onChange={e => updateFromNet(parseFloat(e.target.value)||0)} className="w-full bg-transparent font-black text-indigo-700 text-lg outline-none" />
               </div>
               <div className="bg-emerald-50 p-3 rounded-xl border border-emerald-100 relative">
                 <label className="text-[10px] font-black text-emerald-600 uppercase flex items-center gap-1">Super Net (Poche) <Info className="w-3 h-3 cursor-pointer" onClick={() => setShowDetails(!showDetails)}/></label>
-                <input type="number" value={Math.round(effectiveSuperNet)} onChange={e => updateFromSuperNet(parseFloat(e.target.value)||0)} className="w-full bg-transparent font-black text-emerald-700 text-2xl outline-none" />
+                <input type="number" value={Math.round(effectiveSuperNet * 100)/100} onChange={e => updateFromSuperNet(parseFloat(e.target.value)||0)} className="w-full bg-transparent font-black text-emerald-700 text-2xl outline-none" />
               </div>
             </div>
 
-            <div className="flex items-center gap-4 text-sm text-slate-500 mb-4">
+            <div className="flex flex-wrap items-center gap-4 text-sm text-slate-500 mb-4 bg-slate-50 p-3 rounded-lg">
               <div className="flex items-center gap-2">
                 <span>Taux Impôt :</span>
                 {taxRateManual > 0 ? (
@@ -328,8 +313,8 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
                 )}
               </div>
               <input 
-                type="range" min="0" max="45" step="0.5" 
-                value={taxRateManual || autoValues.autoRate} 
+                type="range" min="0" max="20" step="0.1" 
+                value={taxRateManual > 0 ? taxRateManual : autoValues.autoRate} 
                 onChange={e => setTaxRateManual(parseFloat(e.target.value))}
                 className="w-32 h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer"
               />
@@ -337,15 +322,37 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
             </div>
 
             {showDetails && (
-              <div className="bg-slate-50 p-4 rounded-xl text-xs space-y-2 border border-slate-200 animate-in slide-in-from-top-2">
-                <p className="font-bold text-slate-700 border-b pb-1">Détail des calculs mensuels :</p>
-                <div className="flex justify-between"><span>Brut</span> <span>{Math.round(autoValues.grossMonth)} €</span></div>
-                <div className="flex justify-between text-rose-500"><span>Charges Sociales (~22%)</span> <span>- {Math.round(autoValues.grossMonth * SALARY_CHARGES_RATE)} €</span></div>
-                <div className="flex justify-between text-emerald-600"><span>Remboursement Navigo</span> <span>+ {navigoRefund.toFixed(2)} €</span></div>
-                <div className="flex justify-between text-emerald-600"><span>Revenus Annexes</span> <span>+ {extraMonthlyIncome} €</span></div>
-                <div className="flex justify-between font-bold border-t pt-1"><span>= Net Avant Impôt</span> <span>{Math.round(autoValues.netBeforeTax)} €</span></div>
-                <div className="flex justify-between text-amber-600"><span>Impôt Source ({effectiveTaxRate.toFixed(1)}%)</span> <span>- {Math.round(effectiveMonthlyTax)} €</span></div>
-                <div className="flex justify-between font-black text-emerald-700 bg-emerald-100 p-1 rounded"><span>= Super Net</span> <span>{Math.round(effectiveSuperNet)} €</span></div>
+              <div className="bg-white p-4 rounded-xl text-xs space-y-2 border border-slate-200 animate-in slide-in-from-top-2 shadow-inner">
+                <p className="font-bold text-slate-700 border-b pb-1">Détail du calcul (Mensuel) :</p>
+                <div className="flex justify-between"><span>Salaire Brut</span> <span>{Math.round(autoValues.grossMonth)} €</span></div>
+                <div className="flex justify-between text-rose-500">
+                  <span>Charges Sociales (~{(SALARY_CHARGES_RATE*100).toFixed(1)}%)</span> 
+                  <span>- {Math.round(autoValues.socialCharges)} €</span>
+                </div>
+                <div className="flex justify-between font-bold text-slate-600 border-t border-slate-100 pt-1">
+                  <span>= Salaire Net</span> 
+                  <span>{Math.round(autoValues.netSalaryOnly)} €</span>
+                </div>
+                <div className="flex justify-between text-emerald-600">
+                  <span>Remboursement Navigo (~67% de {navigoBase}€)</span> 
+                  <span>+ {navigoRefund.toFixed(2)} €</span>
+                </div>
+                <div className="flex justify-between text-emerald-600">
+                  <span>Revenus Annexes</span> 
+                  <span>+ {extraMonthlyIncome} €</span>
+                </div>
+                <div className="flex justify-between font-bold border-t border-slate-200 pt-1 text-indigo-700">
+                  <span>= Net Avant Impôt (Perçu)</span> 
+                  <span>{autoValues.netBeforeTax.toFixed(2)} €</span>
+                </div>
+                <div className="flex justify-between text-amber-600">
+                  <span>Impôt Source ({effectiveTaxRate.toFixed(1)}%)</span> 
+                  <span>- {effectiveMonthlyTax.toFixed(2)} €</span>
+                </div>
+                <div className="flex justify-between font-black text-emerald-700 bg-emerald-50 p-1 rounded mt-1">
+                  <span>= Super Net</span> 
+                  <span>{effectiveSuperNet.toFixed(2)} €</span>
+                </div>
               </div>
             )}
           </div>
@@ -353,7 +360,6 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
           {/* SECTION 2 : CHARGES & CAPACITÉ D'ÉPARGNE */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             
-            {/* Colonne Gauche : Charges Fixes */}
             <div className="lg:col-span-1 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
               <div className="flex justify-between items-center mb-4">
                 <h4 className="font-bold text-slate-700 flex items-center gap-2"><TrendingUp className="w-4 h-4 text-rose-500"/> Charges Fixes</h4>
@@ -372,18 +378,14 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
                     </div>
                   </div>
                 ))}
-                <div className="flex justify-between text-sm p-2 bg-indigo-50 rounded text-indigo-700 font-bold">
-                  <span>Pass Navigo (Reste)</span>
-                  <span>{navigoBase}€</span>
-                </div>
+                {expenses.length === 0 && <p className="text-slate-400 text-xs italic">Ajoutez vos charges fixes manuellement (Loyer, Elec, etc.)</p>}
               </div>
               <div className="mt-4 pt-4 border-t flex justify-between font-black text-rose-600">
-                <span>TOTAL</span>
-                <span>{Math.round(budgetData.totalFixed + navigoBase)} €</span>
+                <span>TOTAL CHARGES</span>
+                <span>{Math.round(budgetData.totalFixed)} €</span>
               </div>
             </div>
 
-            {/* Colonne Droite : Calculateur Budget */}
             <div className="lg:col-span-2 space-y-6">
               <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm grid grid-cols-2 gap-4">
                  <div>
@@ -396,7 +398,6 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
                  </div>
               </div>
 
-              {/* Résultat Capacité */}
               <div className="bg-slate-900 p-6 rounded-2xl shadow-lg text-white grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
                  <div>
                    <p className="text-slate-400 text-xs font-bold uppercase mb-2">Capacité d'Épargne Réelle</p>
@@ -433,7 +434,7 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
           {/* SECTION 3 : CASCADE D'INVESTISSEMENT */}
           <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
              <h3 className="text-lg font-black text-slate-800 mb-6 flex items-center gap-2">
-               <Target className="w-5 h-5 text-indigo-600" /> Stratégie d'Placement ({Math.round(budgetData.totalToInvest)} € à placer)
+               <Target className="w-5 h-5 text-indigo-600" /> Stratégie de Placement ({Math.round(budgetData.totalToInvest)} € à placer)
              </h3>
              <div className="space-y-3">
                {strategy.map((step, idx) => (
@@ -469,7 +470,7 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
                {survival.months}m {survival.days}j
              </div>
              <p className={`font-bold ${survival.color} opacity-80`}>
-               Avec {budgetData.totalFixed + navigoBase}€ de charges / mois
+               Avec {survival.monthlyBurn}€ de dépenses / mois (Charges + Plaisir)
              </p>
           </div>
         </>
