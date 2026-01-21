@@ -53,24 +53,46 @@ const App: React.FC = () => {
   const [showForm, setShowForm] = useState(false);
   const [maturityAlerts, setMaturityAlerts] = useState<string[]>([]);
 
-  // --- INITIALISATION GOOGLE API ---
+ // --- INITIALISATION GOOGLE API & RECONNEXION AUTO ---
   useEffect(() => {
     initGoogleApi()
-      .then(() => setIsApiLoaded(true))
+      .then(async () => {
+        setIsApiLoaded(true);
+        
+        // Vérification de la session persistante
+        const persisted = localStorage.getItem('auth_persistence') === 'true';
+        const timestamp = parseInt(localStorage.getItem('auth_timestamp') || '0');
+        const isStillValid = Date.now() - timestamp < 24 * 60 * 60 * 1000;
+
+        if (persisted && isStillValid) {
+          try {
+            // Si la session est valide, on simule l'état connecté
+            // Le SDK Google gérera le jeton en arrière-plan
+            setIsAuthenticated(true);
+            loadDriveData(); 
+          } catch (e) {
+            console.error("Échec de la reconnexion automatique", e);
+            localStorage.removeItem('auth_persistence');
+          }
+        }
+      })
       .catch(err => console.error("Erreur init Google API", err));
   }, []);
 
   // --- GESTION CONNEXION ---
   const handleLogin = async () => {
-    try {
-      await handleAuthClick();
-      setIsAuthenticated(true);
-      loadDriveData();
-    } catch (error) {
-      console.error("Erreur de connexion", error);
-      alert("Échec de la connexion à Google Drive.");
-    }
-  };
+  try {
+    await handleAuthClick();
+    setIsAuthenticated(true);
+    // On garde une trace de la connexion réussie
+    localStorage.setItem('auth_persistence', 'true');
+    localStorage.setItem('auth_timestamp', Date.now().toString());
+    loadDriveData();
+  } catch (error) {
+    console.error("Erreur de connexion", error);
+    alert("Échec de la connexion à Google Drive.");
+  }
+};
 
   const handleLogout = () => {
     handleSignOut();
