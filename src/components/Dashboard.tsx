@@ -4,7 +4,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, AreaChart, Area 
 } from 'recharts';
 import { SavingsAccount, PortfolioSnapshot, AccountType, Expense } from '../types';
-import { Euro, TrendingUp, Lock, Wallet, Calendar, Filter, Unlock, Save, Download } from 'lucide-react';
+import { Euro, Lock, Wallet, Calendar, Filter, Unlock, Save } from 'lucide-react';
 import { Button } from './Button';
 
 interface DashboardProps {
@@ -20,7 +20,6 @@ interface DashboardProps {
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expenses, config }) => {
-  // Persistance de la plage de dates
   const [dateRange, setDateRange] = useState(() => {
     try {
         const stored = localStorage.getItem('dashboard_date_range');
@@ -73,36 +72,26 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
   }, [accounts]);
 
   const filteredHistory = useMemo(() => {
-  const todayStr = new Date().toISOString().split('T')[0];
-  
-  // 1. On liste toutes les dates de mouvements + aujourd'hui + le 1er janvier
-  const movementDates = accounts.flatMap(acc => (acc.movements || []).map(m => m.date));
-  const uniqueDates = Array.from(new Set(['2026-01-01', ...movementDates, todayStr])).sort();
+    const todayStr = new Date().toISOString().split('T')[0];
+    const movementDates = accounts.flatMap(acc => (acc.movements || []).map(m => m.date));
+    const uniqueDates = Array.from(new Set(['2026-01-01', ...movementDates, todayStr])).sort();
 
-  // 2. Calcul du solde cumulé
-  return uniqueDates.map(date => {
-    const ownedAtDate = accounts.reduce((sum, acc) => {
-      // On calcule la somme des mouvements jusqu'à cette date
-      const totalMovements = (acc.movements || [])
-        .filter(m => m.date <= date)
-        .reduce((accSum, m) => accSum + (m.type === 'IN' ? m.amount : -m.amount), 0);
-      
-      // RÉMÉDIATION : Si on est au point de départ (1er janv) et qu'il n'y a pas de mouvements,
-      // on peut considérer que le solde actuel est notre base.
-      // Mais le plus propre est d'ajouter le solde actuel si aucun mouvement d'INIT n'existe.
-      return sum + totalMovements;
-    }, 0);
+    return uniqueDates.map(date => {
+      const ownedAtDate = accounts.reduce((sum, acc) => {
+        const totalMovements = (acc.movements || [])
+          .filter(m => m.date <= date)
+          .reduce((accSum, m) => accSum + (m.type === 'IN' ? m.amount : -m.amount), 0);
+        return sum + totalMovements;
+      }, 0);
 
-    return {
-      date,
-      ownedAmount: ownedAtDate,
-      displayDate: new Date(date).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })
-    };
-  })
-  .filter(item => item.date >= dateRange.start && item.date <= dateRange.end);
-}, [accounts, dateRange]);
-  }).filter(item => item.date >= dateRange.start && item.date <= dateRange.end);
-}, [accounts, dateRange]);
+      return {
+        date,
+        ownedAmount: ownedAtDate,
+        displayDate: new Date(date).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })
+      };
+    }).filter(item => item.date >= dateRange.start && item.date <= dateRange.end);
+  }, [accounts, dateRange]);
+
   const dataByType = Object.values(accounts.reduce((acc, curr) => {
     if (!acc[curr.type]) acc[curr.type] = { name: curr.type, value: 0 };
     acc[curr.type].value += curr.ownedAmount;
@@ -118,30 +107,21 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
 
   const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4'];
 
-  // Fonction d'exportation CSV
   const exportSession = () => {
     const now = new Date();
     const timestamp = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}h${String(now.getMinutes()).padStart(2, '0')}`;
-    
     let csvContent = "Catégorie,Désignation,Valeur,Détail\n";
-    
-    // Paramètres
     csvContent += `Configuration,Brut Annuel,${config.grossAnnual},€\n`;
     csvContent += `Configuration,Navigo Base,${config.navigoBase},€\n`;
     csvContent += `Configuration,Navigo Remboursement,${config.navigoRate},%\n`;
     csvContent += `Configuration,Taux Impôt Manuel,${config.taxRateManual},%\n`;
-
-    // Comptes
     accounts.forEach(acc => {
       csvContent += `Compte,${acc.name},${acc.ownedAmount},${acc.institution} (${acc.type})\n`;
       if(acc.parentalCapital > 0) csvContent += `Compte (Parents),${acc.name},${acc.parentalCapital},${acc.institution}\n`;
     });
-
-    // Dépenses
     expenses.forEach(exp => {
       csvContent += `Dépense Fixe,${exp.name},${exp.amount},€/mois\n`;
     });
-
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -169,17 +149,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
     </div>
   );
 
-  if (accounts.length === 0) {
-    return (
-      <div className="text-center py-20">
-        <h2 className="text-xl text-slate-600">Aucune donnée disponible. Ajoutez vos comptes pour commencer.</h2>
-      </div>
-    );
-  }
+  if (accounts.length === 0) return <div className="text-center py-20 text-slate-600">Aucune donnée disponible.</div>;
 
   return (
     <div className="space-y-6">
-      {/* Date Filter & Export */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-4 rounded-xl shadow-sm border border-slate-200">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2 text-slate-700 font-medium">
@@ -192,80 +165,57 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
           </Button>
         </div>
         <div className="flex items-center gap-2">
-          <div className="flex items-center gap-2 bg-slate-50 px-3 py-2 rounded-lg border border-slate-200">
-            <Calendar className="w-4 h-4 text-slate-400" />
-            <input 
-              type="date" 
-              value={dateRange.start}
-              onChange={(e) => setDateRange(prev => ({ ...prev, start: e.target.value }))}
-              className="bg-transparent text-sm outline-none w-32"
-            />
-          </div>
-          <span className="text-slate-400">à</span>
-          <div className="flex items-center gap-2 bg-slate-50 px-3 py-2 rounded-lg border border-slate-200">
-             <Calendar className="w-4 h-4 text-slate-400" />
-            <input 
-              type="date" 
-              value={dateRange.end}
-              onChange={(e) => setDateRange(prev => ({ ...prev, end: e.target.value }))}
-              className="bg-transparent text-sm outline-none w-32"
-            />
-          </div>
+          <input type="date" value={dateRange.start} onChange={(e) => setDateRange((prev: any) => ({ ...prev, start: e.target.value }))} className="bg-slate-50 text-sm border p-2 rounded-lg" />
+          <span className="text-slate-400 text-sm">à</span>
+          <input type="date" value={dateRange.end} onChange={(e) => setDateRange((prev: any) => ({ ...prev, end: e.target.value }))} className="bg-slate-50 text-sm border p-2 rounded-lg" />
         </div>
       </div>
 
-      {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard title="Mon Épargne Nette" amount={mySavings} icon={Wallet} color="bg-indigo-600" subtext="Capital réel" />
-        <StatCard title="Disponibilité Immédiate" amount={availabilityStats.available} icon={Unlock} color="bg-emerald-500" subtext="Liquide sans frais" />
-        <StatCard title="Contrainte Fiscale" amount={availabilityStats.taxLocked} icon={Euro} color="bg-amber-500" subtext="AV < 8 ans / PEA < 5 ans" />
-        <StatCard title="Bloqué (Retraite/PEE)" amount={availabilityStats.hardLocked} icon={Lock} color="bg-slate-800" subtext="Indisponible" />
+        <StatCard title="Disponibilité Immédiate" amount={availabilityStats.available} icon={Unlock} color="bg-emerald-500" subtext="Liquide" />
+        <StatCard title="Contrainte Fiscale" amount={availabilityStats.taxLocked} icon={Euro} color="bg-amber-500" subtext="AV/PEA récents" />
+        <StatCard title="Bloqué" amount={availabilityStats.hardLocked} icon={Lock} color="bg-slate-800" subtext="Retraite/PEE" />
       </div>
 
-      {/* Evolution Chart */}
       <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 h-96">
         <h3 className="text-lg font-semibold text-slate-800 mb-4">Évolution de mon Épargne Nette</h3>
         <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={filteredHistory} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+          <AreaChart data={filteredHistory}>
             <defs>
               <linearGradient id="colorOwned" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#6366f1" stopOpacity={0.8}/>
+                <stop offset="5%" stopColor="#6366f1" stopOpacity={0.1}/>
                 <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
               </linearGradient>
             </defs>
-            <XAxis dataKey="displayDate" tick={{ fontSize: 12 }} />
-            <YAxis tickFormatter={(val) => `${val / 1000}k€`} tick={{ fontSize: 12 }} />
-            <CartesianGrid strokeDasharray="3 3" vertical={false} />
-            <RechartsTooltip formatter={(value: number) => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(value)} labelStyle={{ color: '#1e293b' }} />
-            <Legend />
-            <Area type="monotone" dataKey="ownedAmount" name="Net à moi" stroke="#6366f1" strokeWidth={3} fillOpacity={1} fill="url(#colorOwned)" />
+            <XAxis dataKey="displayDate" tick={{ fontSize: 10 }} />
+            <YAxis tickFormatter={(val) => `${val / 1000}k`} tick={{ fontSize: 10 }} />
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+            <RechartsTooltip formatter={(v: number) => `${v.toLocaleString()}€`} />
+            <Area type="monotone" dataKey="ownedAmount" stroke="#6366f1" strokeWidth={2} fill="url(#colorOwned)" />
           </AreaChart>
         </ResponsiveContainer>
       </div>
 
-      {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 h-96">
-          <h3 className="text-lg font-semibold text-slate-800 mb-4">Répartition par Type</h3>
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 h-80">
+          <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-4">Répartition par Type</h3>
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
-              <Pie data={dataByType} cx="50%" cy="50%" innerRadius={60} outerRadius={100} paddingAngle={5} dataKey="value">
-                {dataByType.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
+              <Pie data={dataByType} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
+                {dataByType.map((_, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
               </Pie>
-              <RechartsTooltip formatter={(value: number) => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(value)} />
-              <Legend />
+              <RechartsTooltip />
             </PieChart>
           </ResponsiveContainer>
         </div>
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 h-96">
-          <h3 className="text-lg font-semibold text-slate-800 mb-4">Par Établissement</h3>
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 h-80">
+          <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-4">Par Établissement</h3>
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={dataByInstitution} layout="vertical" margin={{ left: 20 }}>
-              <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+            <BarChart data={dataByInstitution} layout="vertical">
               <XAxis type="number" hide />
-              <YAxis dataKey="name" type="category" width={100} tick={{fontSize: 12}} />
-              <RechartsTooltip formatter={(value: number) => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(value)} cursor={{fill: 'transparent'}} />
-              <Bar dataKey="value" fill="#6366f1" radius={[0, 4, 4, 0]} barSize={30} />
+              <YAxis dataKey="name" type="category" width={100} tick={{fontSize: 10}} />
+              <Bar dataKey="value" fill="#6366f1" radius={[0, 4, 4, 0]} barSize={20} />
             </BarChart>
           </ResponsiveContainer>
         </div>
