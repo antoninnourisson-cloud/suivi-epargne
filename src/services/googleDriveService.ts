@@ -13,10 +13,16 @@ export const initGoogleApi = async (): Promise<void> => {
     const gapiLoaded = () => {
       (window as any).gapi.load('client', async () => {
         await (window as any).gapi.client.init({
-          // Note: API Key is not strictly needed here if we rely on Access Token for Drive, 
-          // but discoveryDocs are needed.
           discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'],
         });
+
+        // --- AJOUT : Recharger le jeton s'il existe ---
+        const savedToken = localStorage.getItem('google_token');
+        if (savedToken) {
+          (window as any).gapi.client.setToken(JSON.parse(savedToken));
+        }
+        // ----------------------------------------------
+
         gapiInited = true;
         checkResolve();
       });
@@ -47,11 +53,16 @@ export const handleAuthClick = (): Promise<void> => {
     tokenClient.callback = async (resp: any) => {
       if (resp.error) {
         reject(resp);
+        return;
       }
+      // --- AJOUT : Sauvegarde du jeton et du timestamp ---
+      localStorage.setItem('google_token', JSON.stringify(resp));
+      localStorage.setItem('auth_persistence', 'true');
+      localStorage.setItem('auth_timestamp', Date.now().toString());
+      // --------------------------------------------------
       resolve();
     };
 
-    // Vérifie si un token existe ou demande un nouveau
     if ((window as any).gapi.client.getToken() === null) {
       tokenClient.requestAccessToken({ prompt: 'consent' });
     } else {
@@ -66,6 +77,11 @@ export const handleSignOut = () => {
   if (token !== null) {
     (window as any).google.accounts.oauth2.revoke(token.access_token);
     (window as any).gapi.client.setToken('');
+    // --- AJOUT : Nettoyage du stockage ---
+    localStorage.removeItem('google_token');
+    localStorage.removeItem('auth_persistence');
+    localStorage.removeItem('auth_timestamp');
+    // -------------------------------------
   }
 };
 

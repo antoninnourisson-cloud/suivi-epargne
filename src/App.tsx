@@ -98,7 +98,10 @@ const App: React.FC = () => {
     handleSignOut();
     setIsAuthenticated(false);
     setDriveFileId(null);
-    setAccounts([]); // Reset data for security
+    setAccounts([]); 
+    // IMPORTANT : Effacer la persistance
+    localStorage.removeItem('auth_persistence');
+    localStorage.removeItem('auth_timestamp');
   };
 
   // --- CHARGEMENT DES DONNÉES DEPUIS DRIVE ---
