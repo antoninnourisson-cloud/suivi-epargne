@@ -1,31 +1,8 @@
-import React, { useState, useMemo } from 'react';
-import { SavingsAccount, AccountType, Expense, PaymentMethod } from '../types';
-import { 
-  ShieldCheck, 
-  Zap, 
-  PlusCircle,
-  Trash2,
-  Coffee,
-  Plane,
-  ChevronDown,
-  ChevronUp,
-  ReceiptEuro,
-  Timer,
-  Clock,
-  Unlock,
-  TrendingUp,
-  History,
-  Coins,
-  ArrowRight,
-  Calculator,
-  Navigation,
-  HeartPulse,
-  AlertTriangle,
-  TramFront,
-  CheckCircle2,
-  XCircle,
-  UserCheck
-} from 'lucide-react';
+import React, { useMemo } from 'react';
+import { SavingsAccount, Expense, AccountType } from '../types';
+import { TAX_BRACKETS, STANDARD_ALLOWANCE, SALARY_CHARGES_RATE } from '../constants';
+import { AlertTriangle, TrendingUp, PiggyBank, ShieldCheck, Target, Calculator } from 'lucide-react';
+import { Button } from './Button';
 
 interface AssistantPilotProps {
   accounts: SavingsAccount[];
@@ -47,11 +24,11 @@ interface AssistantPilotProps {
   setExtraMonthlyIncome: (val: number) => void;
 }
 
-export const AssistantPilot: React.FC<AssistantPilotProps> = ({ 
-  accounts, 
-  expenses, 
-  onUpdateExpenses, 
-  grossAnnual, 
+export const AssistantPilot: React.FC<AssistantPilotProps> = ({
+  accounts,
+  expenses,
+  onUpdateExpenses,
+  grossAnnual,
   setGrossAnnual,
   leisureBudget,
   setLeisureBudget,
@@ -66,396 +43,210 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
   extraMonthlyIncome,
   setExtraMonthlyIncome
 }) => {
-  const [showDetails, setShowDetails] = useState(false);
-  const [newExpenseName, setNewExpenseName] = useState('');
-  const [newExpenseAmount, setNewExpenseAmount] = useState('');
+  
+  // --- 1. CALCULS FISCAUX & REVENUS (UTILISATION CONSTANTES) ---
+  const fiscalData = useMemo(() => {
+    // A. Calcul du Net Imposable (avec abattement forfaitaire)
+    // Revenu Brut - Abattement + Revenus annexes (déjà nets ou à intégrer selon cas)
+    const netTaxable = grossAnnual * (1 - STANDARD_ALLOWANCE) + (extraMonthlyIncome * 12);
+    const quotient = netTaxable; // 1 part fiscale
 
-  const financialDetails = useMemo(() => {
-    const SOCIAL_CHARGES_RATE = 0.2233;
-    const ABATTEMENT_10 = 0.10;
-    
-    // Sécurisation des entrées par Number()
-    const currentGross = Number(grossAnnual) || 0;
-    const grossMonthly = currentGross / 12;
-    const netSocial = grossMonthly * (1 - SOCIAL_CHARGES_RATE);
-    const navigoReimbursement = (Number(navigoBase) || 0) * ((Number(navigoRate) || 0) / 100);
-    const netBeforeTax = netSocial + navigoReimbursement;
+    // B. Identification du TMI (Taux Marginal d'Imposition)
+    // On trouve la tranche dans laquelle tombe le dernier euro
+    // find renvoie la première tranche dont la limite est >= quotient
+    const currentBracket = TAX_BRACKETS.find(b => quotient <= b.limit) || TAX_BRACKETS[TAX_BRACKETS.length - 1];
+    const tmi = currentBracket.rate * 100;
 
-    const netAnnualImposable = netSocial * 12 * (1 - ABATTEMENT_10);
-    let theoreticalTax = 0;
-    const tranches = [
-      { limit: 11294, rate: 0 },
-      { limit: 28797, rate: 0.11 },
-      { limit: 82341, rate: 0.30 },
-      { limit: 177106, rate: 0.41 },
-      { limit: Infinity, rate: 0.45 }
-    ];
-
+    // C. Calcul de l'impôt théorique (Progressif par tranches)
+    let tax = 0;
     let previousLimit = 0;
-    for (const t of tranches) {
-      if (netAnnualImposable > previousLimit) {
-        const taxableInTranche = Math.min(netAnnualImposable, t.limit) - previousLimit;
-        theoreticalTax += taxableInTranche * t.rate;
-        previousLimit = t.limit;
+    for (const bracket of TAX_BRACKETS) {
+      if (quotient > previousLimit) {
+        // La part de revenu taxable dans cette tranche
+        const taxableAmount = Math.min(quotient, bracket.limit) - previousLimit;
+        tax += taxableAmount * bracket.rate;
+        previousLimit = bracket.limit;
       }
     }
 
-    const calculatedTaxRate = (theoreticalTax / (netSocial * 12)) * 100;
-    const effectiveRate = Number(taxRateManual) > 0 ? Number(taxRateManual) : calculatedTaxRate;
-    const monthlyTaxAmount = netSocial * (effectiveRate / 100);
-    const netAfterTax = netSocial - monthlyTaxAmount + navigoReimbursement;
+    // D. Calcul du Super Net Mensuel
+    // D. Calcul du Super Net Mensuel
+    // On retire les charges sociales (22.3%) du Brut pour avoir le Net, puis on lisse sur 12 mois
+    const netMensuelAvantImpot = (grossAnnual * (1 - SALARY_CHARGES_RATE) / 12) + extraMonthlyIncome;
+    const superNet = netMensuelAvantImpot - (tax / 12);
 
     return { 
-      grossMonthly, 
-      netSocial,
-      netBeforeTax,
-      monthlyTaxAmount, 
-      netAfterTax,
-      calculatedTaxRate,
-      isRateValid: Math.abs(calculatedTaxRate - Number(taxRateManual)) < 1.0,
-      navigoReimbursement
+      tmi: Math.round(tmi), 
+      annualTax: Math.round(tax), 
+      superNetMonthly: Math.round(superNet),
+      netBeforeTax: Math.round(netMensuelAvantImpot)
     };
-  }, [grossAnnual, navigoBase, navigoRate, taxRateManual]);
+  }, [grossAnnual, extraMonthlyIncome]);
 
+  // --- 2. CALCUL DU RESTE À VIVRE ---
+  const budgetStats = useMemo(() => {
+    const totalFixedExpenses = expenses.reduce((acc, curr) => acc + curr.amount, 0);
+    const navigoCost = navigoBase * (1 - navigoRate / 100);
+    const totalCharges = totalFixedExpenses + navigoCost;
+    
+    // Capacité d'épargne théorique
+    const savingsCapacity = fiscalData.superNetMonthly - totalCharges - leisureBudget;
+    const realSavingsRate = (savingsCapacity / fiscalData.superNetMonthly) * 100;
 
-// 1. Somme des charges (avec repli sur vos 1350€ de base si la liste est vide)
-  const totalFixedCharges = useMemo(() => {
-    const sum = expenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
-    return sum > 0 ? sum : 1350; 
-  }, [expenses]);
-  
-  // 2. Calcul de la capacité d'investissement (Revenus - Sorties)
-  const investmentCapacity = useMemo(() => {
-    const net = Number(financialDetails.netAfterTax) || 0;
-    const extra = Number(extraMonthlyIncome) || 0;
-    const charges = Number(totalFixedCharges) || 0;
-    const loisirs = Number(leisureBudget) || 0;
-    const projets = Number(projectSavings) || 0;
+    return { 
+      totalCharges: Math.round(totalCharges), 
+      savingsCapacity: Math.round(savingsCapacity),
+      realSavingsRate: realSavingsRate.toFixed(1)
+    };
+  }, [expenses, navigoBase, navigoRate, leisureBudget, fiscalData.superNetMonthly]);
 
-    const totalRevenus = net + extra;
-    const totalSorties = charges + loisirs + projets;
-
-    // On s'assure de retourner un nombre positif
-    return Math.max(0, totalRevenus - totalSorties);
-  }, [financialDetails.netAfterTax, extraMonthlyIncome, totalFixedCharges, leisureBudget, projectSavings]);
-
-  // 3. Logique de survie (Analyse de résilience)
-  
-  
-  const getSurvivalData = (savings: number, charges: number) => {
-    if (charges <= 0) return { years: 99, months: 0, days: 0, totalMonths: 999, status: 'GREEN' as const };
-    const totalMonths = savings / charges;
-    const years = Math.floor(totalMonths / 12);
-    const months = Math.floor(totalMonths % 12);
-    const days = Math.floor((totalMonths % 1) * 30.44);
-    let status: 'RED' | 'ORANGE' | 'GREEN' = 'GREEN';
-    if (totalMonths < 3) status = 'RED';
-    else if (totalMonths <= 6) status = 'ORANGE';
-    return { years, months, days, totalMonths, status };
-  };
-
-  const survivalStats = useMemo(() => {
-    const liquidAccounts = [AccountType.LIVRET_A, AccountType.LDDS, AccountType.LEP, AccountType.COMPTE_COURANT];
+  // --- 3. ANALYSE DE RÉSILIENCE ---
+  const resilience = useMemo(() => {
     const liquidSavings = accounts
-      .filter(a => liquidAccounts.includes(a.type))
+      .filter(a => !a.contractEndDate && a.type !== AccountType.IMMOBILIER && a.type !== AccountType.PER) // On exclut le bloqué
       .reduce((sum, a) => sum + a.ownedAmount, 0);
     
-    const liquidData = getSurvivalData(liquidSavings, totalFixedCharges);
+    const monthlyBurnRate = budgetStats.totalCharges + leisureBudget; // Ce qu'il faut pour vivre a minima
+    const survivalMonths = monthlyBurnRate > 0 ? (liquidSavings / monthlyBurnRate).toFixed(1) : 'Infini';
 
-    const classes = {
-      RED: { text: 'text-rose-600', bg: 'bg-rose-50', border: 'border-rose-200', icon: AlertTriangle },
-      ORANGE: { text: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-200', icon: Timer },
-      GREEN: { text: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-emerald-200', icon: HeartPulse }
-    };
+    return { liquidSavings, survivalMonths };
+  }, [accounts, budgetStats.totalCharges, leisureBudget]);
 
-    return { 
-      liquid: { ...liquidData, style: classes[liquidData.status], amount: liquidSavings }
-    };
-  }, [accounts, totalFixedCharges]);
-
-  // ALGORITHME DE CASCADE
-  const investmentStrategy = useMemo(() => {
-    const sortedAccounts = [...accounts]
-      .filter(a => a.ceiling && a.totalAmount < a.ceiling)
-      .sort((a, b) => {
-        const prio = (type: AccountType) => {
-          if (type === AccountType.LEP) return 3;
-          if (type === AccountType.LIVRET_A) return 2;
-          if (type === AccountType.LDDS) return 1;
-          return 0;
-        };
-        const pA = prio(a.type);
-        const pB = prio(b.type);
-        if (pA !== pB) return pB - pA;
-        return (b.interestRate || 0) - (a.interestRate || 0);
-      });
-
-    let remainingCapacity = investmentCapacity;
-    const steps: { target: string; amount: number; reason: string }[] = [];
-
-    for (const acc of sortedAccounts) {
-      if (remainingCapacity <= 0) break;
-      const space = (acc.ceiling || 0) - acc.totalAmount;
-      const fillAmount = Math.min(remainingCapacity, space);
-      if (fillAmount > 0) {
-        steps.push({ target: acc.name, amount: Math.floor(fillAmount), reason: `Remplir le plafond (${acc.interestRate}% net).` });
-        remainingCapacity -= fillAmount;
+  // --- 4. GESTION DES DÉPENSES ---
+  const handleAddExpense = () => {
+    const name = prompt("Nom de la dépense :");
+    const amountStr = prompt("Montant mensuel (€) :");
+    if (name && amountStr) {
+      const amount = parseFloat(amountStr);
+      if (!isNaN(amount)) {
+        onUpdateExpenses([...expenses, { id: crypto.randomUUID(), name, amount }]);
       }
     }
+  };
 
-    if (remainingCapacity > 0) {
-      const longTermAcc = accounts
-        .filter(a => [AccountType.PEA, AccountType.ASSURANCE_VIE].includes(a.type))
-        .sort((a, b) => (b.interestRate || 0) - (a.interestRate || 0))[0];
-      if (longTermAcc) steps.push({ target: longTermAcc.name, amount: Math.floor(remainingCapacity), reason: "Optimisation enveloppes long-terme." });
+  const handleRemoveExpense = (id: string) => {
+    if (confirm("Supprimer cette dépense ?")) {
+      onUpdateExpenses(expenses.filter(e => e.id !== id));
     }
-    return steps;
-  }, [accounts, investmentCapacity]);
-
-  // HORLOGES FISCALES (Optimisation PEE incluse)
-  const fiscalClocks = useMemo(() => {
-    const today = new Date();
-    return accounts
-      .filter(a => [AccountType.PEA, AccountType.ASSURANCE_VIE, AccountType.PEE, AccountType.PER].includes(a.type))
-      .map(acc => {
-        if (acc.type === AccountType.PER) {
-          return { id: acc.id, name: acc.name, type: acc.type, isMature: false, progress: 30, label: 'BLOQUÉ (RETRAITE)' };
-        }
-
-        let maturityYears = acc.type === AccountType.ASSURANCE_VIE ? 8 : 5;
-        let progress = 0;
-        let isMature = false;
-        let label = '';
-
-        // Logique spécifique PEE
-        if (acc.type === AccountType.PEE && acc.contractEndDate) {
-            const endDate = new Date(acc.contractEndDate);
-            if (endDate <= today) {
-                isMature = true;
-                progress = 100;
-                label = 'LIBÉRÉ (FIN CONTRAT)';
-            } else if (acc.openingDate) {
-                const openDate = new Date(acc.openingDate);
-                const totalDuration = endDate.getTime() - openDate.getTime();
-                const currentDuration = today.getTime() - openDate.getTime();
-                progress = Math.min(100, Math.max(0, (currentDuration / totalDuration) * 100));
-                const diffDays = Math.ceil((endDate.getTime() - today.getTime()) / (1000 * 3600 * 24));
-                label = diffDays > 30 ? `${Math.floor(diffDays/30.44)} mois restants` : `${diffDays} jours restants`;
-            }
-        } else if (acc.openingDate) {
-          const openDate = new Date(acc.openingDate);
-          const ageInYears = (today.getTime() - openDate.getTime()) / (1000 * 3600 * 24 * 365.25);
-          progress = Math.min(100, (ageInYears / maturityYears) * 100);
-          isMature = ageInYears >= maturityYears;
-          
-          if (isMature) {
-            label = 'MATURE (FISCALITÉ OK)';
-          } else {
-            const remaining = maturityYears - ageInYears;
-            label = remaining > 1 ? `${remaining.toFixed(1)} ans restants` : `${(remaining * 12).toFixed(0)} mois restants`;
-          }
-        } else {
-            label = 'DATE INCONNUE';
-            progress = 0;
-        }
-
-        return { id: acc.id, name: acc.name, type: acc.type, isMature, progress, label };
-      });
-  }, [accounts]);
-
-  const handleAddExpense = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newExpenseName || !newExpenseAmount) return;
-    onUpdateExpenses([...expenses, { id: crypto.randomUUID(), name: newExpenseName, amount: parseFloat(newExpenseAmount), paymentMethod: PaymentMethod.PRELEVEMENT }]);
-    setNewExpenseName(''); setNewExpenseAmount('');
   };
 
   return (
-    <div className="space-y-8 animate-fade-in pb-12">
-      {/* SECTION REVENUS */}
-      <section className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
-        <div className="flex justify-between items-start mb-6">
-          <h3 className="text-xl font-black text-slate-800 flex items-center gap-2">
-            <ReceiptEuro className="w-6 h-6 text-indigo-600" /> Revenus & Fiscalité
-          </h3>
-          <button onClick={() => setShowDetails(!showDetails)} className="text-xs font-bold text-indigo-600 flex items-center gap-1">
-            {showDetails ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-            {showDetails ? 'Masquer détails' : 'Détails calculs'}
-          </button>
-        </div>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
-          <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 lg:col-span-2 grid grid-cols-2 gap-4">
-             <div>
-               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Brut Annuel</label>
-               <input type="number" value={grossAnnual} onChange={e => setGrossAnnual(parseFloat(e.target.value) || 0)} className="w-full bg-transparent font-black text-slate-800 text-xl outline-none" />
-             </div>
-             <div>
-               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Brut Mensuel</label>
-               <div className="text-xl font-black text-slate-600">{Math.floor(financialDetails.grossMonthly).toLocaleString()} €</div>
-             </div>
-          </div>
-
-          <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 relative">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2 flex justify-between">
-              Taux Impôts Actuel (%)
-              {taxRateManual > 0 && (
-                <span className={`flex items-center gap-1 ${financialDetails.isRateValid ? 'text-emerald-500' : 'text-rose-500'}`}>
-                  {financialDetails.isRateValid ? <CheckCircle2 className="w-3 h-3" /> : <XCircle className="w-3 h-3" />}
-                  {financialDetails.isRateValid ? 'Validé' : 'Divergent'}
-                </span>
-              )}
-            </label>
-            <input type="number" step="0.01" value={taxRateManual} onChange={e => setTaxRateManual(parseFloat(e.target.value) || 0)} className="w-full bg-transparent font-black text-slate-800 text-xl outline-none" />
-            <div className="text-[9px] text-slate-400 mt-1 font-bold">Théorique : {financialDetails.calculatedTaxRate.toFixed(1)}%</div>
-          </div>
-
-          <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Net Avant Impôts</label>
-            <div className="text-xl font-black text-slate-800">{financialDetails.netBeforeTax.toFixed(2)} €</div>
-          </div>
-
-          <div className="bg-indigo-600 p-4 rounded-2xl text-white shadow-lg shadow-indigo-100 flex flex-col justify-center">
-            <label className="text-[10px] font-bold text-indigo-200 uppercase tracking-widest block mb-2">Net Après Impôts</label>
-            <div className="text-2xl font-black">{financialDetails.netAfterTax.toFixed(2)} €</div>
-          </div>
-        </div>
-
-        {showDetails && (
-          <div className="mt-6 p-5 bg-slate-900 rounded-2xl text-slate-300 text-xs font-mono space-y-3 border-l-4 border-indigo-500 shadow-inner">
-            <div className="flex justify-between items-center border-b border-slate-800 pb-2"><span>Cotisations Sociales (22,33%)</span><span className="text-rose-400 font-bold">-{Math.floor(financialDetails.grossMonthly * 0.2233).toLocaleString()} €</span></div>
-            <div className="flex justify-between items-center"><span>Remboursement Navigo ({navigoRate}% de {navigoBase}€)</span><span className="text-emerald-400 font-bold">+{financialDetails.navigoReimbursement.toFixed(2)} €</span></div>
-            <div className="flex justify-between items-center"><span className="text-indigo-400 font-black uppercase">Net Social</span><span className="text-white font-bold">{financialDetails.netSocial.toFixed(2)} €</span></div>
-          </div>
-        )}
-      </section>
-
-      {/* RÉSILIENCE */}
-      <section className="space-y-4">
-        <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 px-2">
-          <HeartPulse className="w-4 h-4" /> Analyse de Résilience
+    <div className="space-y-6 animate-fade-in">
+      {/* SECTION 1 : CONFIGURATION REVENUS */}
+      <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+        <h3 className="text-lg font-black text-slate-800 mb-6 flex items-center gap-2">
+          <Calculator className="w-5 h-5 text-indigo-600" /> Paramètres Financiers
         </h3>
-        <div className="max-w-2xl">
-          <div className={`p-6 rounded-3xl shadow-sm border ${survivalStats.liquid.style.border} ${survivalStats.liquid.style.bg} transition-all`}>
-            <div className="flex justify-between items-center gap-4">
-              <div className="flex items-center gap-4">
-                <div className={`p-3 rounded-2xl bg-white shadow-sm ${survivalStats.liquid.style.text}`}>
-                  <Unlock className="w-6 h-6" />
-                </div>
-                <div>
-                  <h4 className={`text-sm font-black ${survivalStats.liquid.style.text} uppercase`}>Liquidités Immédiates</h4>
-                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">Livret A, LDDS, LEP, Compte Courant</p>
-                </div>
-              </div>
-              <div className="text-right">
-                <div className={`text-2xl font-black ${survivalStats.liquid.style.text}`}>
-                  {survivalStats.liquid.years > 0 && `${survivalStats.liquid.years} an${survivalStats.liquid.years > 1 ? 's' : ''}, `}
-                  {survivalStats.liquid.months} mois
-                </div>
-                <p className="text-[9px] font-bold text-slate-400 tracking-wider uppercase">Survie basée sur {survivalStats.liquid.amount.toLocaleString()} € dispos</p>
-              </div>
-            </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div>
+            <label className="text-[10px] font-black text-slate-400 uppercase mb-1">Brut Annuel (€)</label>
+            <input type="number" value={grossAnnual} onChange={e => setGrossAnnual(parseFloat(e.target.value) || 0)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold" />
+          </div>
+          <div>
+            <label className="text-[10px] font-black text-slate-400 uppercase mb-1">Revenus Annexes Mensuels (€)</label>
+            <input type="number" value={extraMonthlyIncome} onChange={e => setExtraMonthlyIncome(parseFloat(e.target.value) || 0)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold" />
+          </div>
+          <div>
+            <label className="text-[10px] font-black text-slate-400 uppercase mb-1">Budget Loisirs (€)</label>
+            <input type="number" value={leisureBudget} onChange={e => setLeisureBudget(parseFloat(e.target.value) || 0)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold" />
           </div>
         </div>
-      </section>
-
-      {/* CHARGES & PROJETS */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <section className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
-          <h4 className="font-black text-slate-800 mb-4 flex items-center gap-2"><ShieldCheck className="w-5 h-5 text-slate-400" /> Charges Fixes</h4>
-          <div className="space-y-2 mb-4 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
-            {expenses.map(e => (
-              <div key={e.id} className="flex justify-between items-center p-3 bg-slate-50 hover:bg-slate-100 rounded-xl transition-all">
-                <span className="text-sm font-bold text-slate-700">{e.name}</span>
-                <div className="flex items-center gap-3"><span className="font-black text-rose-600">-{e.amount.toLocaleString()}€</span><button onClick={() => onUpdateExpenses(expenses.filter(ex => ex.id !== e.id))} className="text-slate-300 hover:text-rose-600"><Trash2 className="w-4 h-4" /></button></div>
-              </div>
-            ))}
-          </div>
-          <form onSubmit={handleAddExpense} className="flex gap-2">
-            <input type="text" placeholder="Loyer..." value={newExpenseName} onChange={e => setNewExpenseName(e.target.value)} className="flex-1 p-2 bg-slate-50 border border-slate-200 rounded-xl text-sm" />
-            <input type="number" placeholder="€" value={newExpenseAmount} onChange={e => setNewExpenseAmount(e.target.value)} className="w-20 p-2 bg-slate-50 border border-slate-200 rounded-xl text-sm" />
-            <button type="submit" className="bg-indigo-600 text-white p-2 rounded-xl"><PlusCircle className="w-5 h-5" /></button>
-          </form>
-        </section>
-
-        <section className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
-          <h4 className="font-black text-slate-800 mb-6 flex items-center gap-2"><Zap className="w-5 h-5 text-amber-500" /> Arbitrage Plaisirs & Projets</h4>
-          <div className="space-y-8">
-            <div className="space-y-3">
-              <div className="flex justify-between items-center"><label className="text-xs font-black text-slate-500 uppercase flex items-center gap-2"><Coffee className="w-4 h-4 text-amber-600" /> Budget Loisirs</label><div className="bg-amber-50 px-3 py-1 rounded-full text-amber-700 font-black">{leisureBudget.toLocaleString()} €</div></div>
-              <input type="range" min="0" max="2000" step="50" value={leisureBudget} onChange={e => setLeisureBudget(parseFloat(e.target.value))} className="w-full h-2 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-amber-500" />
-            </div>
-            <div className="space-y-3">
-              <div className="flex justify-between items-center"><label className="text-xs font-black text-slate-500 uppercase flex items-center gap-2"><Plane className="w-4 h-4 text-cyan-600" /> Épargne Projets</label><div className="bg-cyan-50 px-3 py-1 rounded-full text-cyan-700 font-black">{projectSavings.toLocaleString()} €</div></div>
-              <input type="range" min="0" max="3000" step="50" value={projectSavings} onChange={e => setProjectSavings(parseFloat(e.target.value))} className="w-full h-2 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-cyan-500" />
-            </div>
-          </div>
-        </section>
       </div>
 
-      {/* STRATÉGIE ET CASCADE */}
-      <section className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
-        <h4 className="font-black text-slate-800 mb-6 flex items-center gap-2"><History className="w-5 h-5 text-indigo-500" /> Stratégie d'Investissement</h4>
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <div className="lg:col-span-1 space-y-4">
-            <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200">
-              <label className="text-[10px] font-black text-slate-500 uppercase block mb-3">Revenu supplémentaire / mois</label>
-              <div className="flex items-center gap-4"><div className="bg-emerald-100 p-3 rounded-xl"><Coins className="w-6 h-6 text-emerald-600" /></div><div className="flex-1"><input type="number" value={extraMonthlyIncome} onChange={e => setExtraMonthlyIncome(parseFloat(e.target.value) || 0)} className="bg-transparent text-3xl font-black text-slate-800 outline-none w-full" /></div></div>
+      {/* SECTION 2 : ANALYSE FISCALE & BUDGETAIRE */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* CARTE FISCALITÉ */}
+        <div className="bg-indigo-900 text-white p-6 rounded-2xl shadow-lg relative overflow-hidden">
+          <div className="absolute top-0 right-0 p-32 bg-white opacity-5 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none"></div>
+          <h3 className="text-sm font-bold text-indigo-200 uppercase tracking-widest mb-6 flex items-center gap-2"><ShieldCheck className="w-4 h-4" /> Analyse Fiscale</h3>
+          
+          <div className="space-y-6">
+            <div className="flex justify-between items-end border-b border-indigo-800 pb-4">
+              <span className="text-indigo-200 text-sm">Net avant impôt (est.)</span>
+              <span className="text-xl font-bold">{fiscalData.netBeforeTax} €/mois</span>
             </div>
-            <div className="bg-indigo-600 rounded-2xl p-6 text-white shadow-xl">
-              <p className="text-[10px] font-bold text-indigo-100 uppercase mb-1">Capacité d'Investissement Nette</p>
-              <div className="text-4xl font-black">{Math.floor(investmentCapacity).toLocaleString()} €</div>
+            <div className="flex justify-between items-end border-b border-indigo-800 pb-4">
+              <span className="text-indigo-200 text-sm">Impôt Annuel Estimé</span>
+              <span className="text-xl font-bold text-amber-400">{fiscalData.annualTax} €</span>
+            </div>
+            <div className="flex justify-between items-end">
+              <span className="text-indigo-200 text-sm font-black uppercase">Super Net (Poche)</span>
+              <span className="text-3xl font-black text-emerald-400">{fiscalData.superNetMonthly} €</span>
+            </div>
+            
+            <div className="mt-4 bg-indigo-800/50 p-3 rounded-lg flex justify-between items-center">
+              <span className="text-xs font-bold text-indigo-300">Tranche Marginale (TMI)</span>
+              <span className="bg-white text-indigo-900 px-3 py-1 rounded-full text-xs font-black">{fiscalData.tmi}%</span>
             </div>
           </div>
-          <div className="lg:col-span-2 space-y-4">
-            <p className="text-xs font-black text-slate-400 uppercase flex items-center gap-2"><Calculator className="w-4 h-4" /> Plan de versement (Cascade)</p>
-            {investmentStrategy.map((step, idx) => (
-              <div key={idx} className="flex items-center gap-5 bg-slate-50 p-5 rounded-2xl border border-slate-200">
-                <div className="bg-white p-3 rounded-2xl shadow-sm font-black text-indigo-600">#{idx + 1}</div>
-                <div className="flex-1">
-                  <div className="flex justify-between items-center mb-1"><span className="font-black text-slate-800 text-lg">{step.target}</span><span className="text-emerald-600 font-black text-xl">+{step.amount.toLocaleString()}€</span></div>
-                  <p className="text-xs text-slate-500 font-bold">{step.reason}</p>
-                </div>
+        </div>
+
+        {/* CARTE BUDGET & RESTE À VIVRE */}
+        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
+          <div>
+            <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-6 flex items-center gap-2"><Target className="w-4 h-4" /> Capacité d'Épargne</h3>
+            <div className="flex items-center gap-4 mb-8">
+              <div className="flex-1">
+                <p className="text-xs text-slate-500 font-bold mb-1">Charges Fixes</p>
+                <p className="text-2xl font-black text-slate-800">{budgetStats.totalCharges} €</p>
               </div>
-            ))}
+              <div className="flex-1">
+                <p className="text-xs text-slate-500 font-bold mb-1">Loisirs</p>
+                <p className="text-2xl font-black text-slate-800">{leisureBudget} €</p>
+              </div>
+            </div>
+          </div>
+          
+          <div className="bg-emerald-50 border border-emerald-100 p-5 rounded-2xl">
+            <div className="flex justify-between items-start">
+              <div>
+                <p className="text-xs font-black text-emerald-600 uppercase mb-1">Épargne Mensuelle Possible</p>
+                <p className="text-4xl font-black text-emerald-700">{budgetStats.savingsCapacity} €</p>
+              </div>
+              <div className="text-right">
+                <p className="text-xs font-bold text-emerald-600">Taux d'effort</p>
+                <p className="text-xl font-black text-emerald-700">{budgetStats.realSavingsRate}%</p>
+              </div>
+            </div>
           </div>
         </div>
-      </section>
+      </div>
 
-      {/* REMPLISSAGE LIVRETS */}
-      <section className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
-        <h4 className="font-black text-slate-800 mb-6 flex items-center gap-2"><TrendingUp className="w-5 h-5 text-emerald-500" /> Remplissage des livrets</h4>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {accounts.filter(a => a.ceiling).map(acc => {
-            const ownedPct = acc.ceiling ? (acc.ownedAmount / acc.ceiling) * 100 : 0;
-            const parentalPct = acc.ceiling ? (acc.parentalCapital / acc.ceiling) * 100 : 0;
-            const remaining = Math.max(0, (acc.ceiling || 0) - acc.totalAmount);
-            return (
-              <div key={acc.id} className="bg-slate-50 border border-slate-200 p-5 rounded-3xl">
-                <div className="flex justify-between items-center mb-4"><div><span className="text-sm font-black text-slate-800">{acc.name}</span></div><span className={`text-[10px] font-black px-3 py-1 rounded-full ${remaining <= 1 ? 'bg-rose-100 text-rose-600' : 'bg-emerald-100 text-emerald-600'}`}>{remaining <= 1 ? 'PLEIN' : `RESTE ${Math.floor(remaining).toLocaleString()} €`}</span></div>
-                <div className="w-full bg-white h-5 rounded-full overflow-hidden flex border border-slate-200 p-1 shadow-inner"><div className="h-full bg-emerald-500 rounded-l-full" style={{ width: `${ownedPct}%` }} /><div className="h-full bg-slate-300" style={{ width: `${parentalPct}%` }} /></div>
-                <div className="mt-4 grid grid-cols-2 gap-3">
-                  <div className="bg-white p-2 rounded-xl border text-center"><p className="text-[9px] font-black text-emerald-600 uppercase mb-1">Moi</p><p className="text-xs font-black text-slate-800">{Math.floor(acc.ownedAmount).toLocaleString()} €</p></div>
-                  <div className="bg-white p-2 rounded-xl border text-center"><p className="text-[9px] font-black text-slate-400 uppercase mb-1">Parents</p><p className="text-xs font-black text-slate-800">{Math.floor(acc.parentalCapital).toLocaleString()} €</p></div>
-                </div>
-              </div>
-            );
-          })}
+      {/* SECTION 3 : RÉSILIENCE & CHARGES */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+           <div className="flex justify-between items-center mb-6">
+              <h3 className="text-lg font-black text-slate-800 flex items-center gap-2">
+                <TrendingUp className="w-5 h-5 text-rose-500" /> Charges Fixes
+              </h3>
+              <Button variant="ghost" className="text-xs h-8" onClick={handleAddExpense}>+ Ajouter</Button>
+           </div>
+           
+           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+             {expenses.map(exp => (
+               <div key={exp.id} className="flex justify-between items-center p-3 bg-slate-50 rounded-xl border border-slate-100 group">
+                 <span className="font-bold text-slate-700">{exp.name}</span>
+                 <div className="flex items-center gap-3">
+                   <span className="font-mono font-bold text-slate-900">{exp.amount} €</span>
+                   <button onClick={() => handleRemoveExpense(exp.id)} className="text-slate-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-all">×</button>
+                 </div>
+               </div>
+             ))}
+             {expenses.length === 0 && <p className="text-slate-400 text-sm italic">Aucune charge fixe enregistrée.</p>}
+           </div>
         </div>
-      </section>
 
-      {/* HORLOGES FISCALES */}
-      <section className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
-        <h4 className="font-black text-slate-800 mb-6 flex items-center gap-2"><Clock className="w-5 h-5 text-amber-500" /> Horloges & Verrous Temporels</h4>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {fiscalClocks.map(clock => (
-            <div key={clock.id} className="bg-slate-50 p-5 rounded-3xl border border-slate-200 relative overflow-hidden group">
-              <div className="flex justify-between items-start mb-3"><div><span className="text-sm font-black text-slate-800">{clock.name}</span><p className="text-[10px] text-slate-400 font-bold uppercase">{clock.type}</p></div><div className={`flex items-center gap-1.5 text-[10px] font-black px-3 py-1 rounded-full ${clock.isMature ? 'bg-emerald-100 text-emerald-600' : 'bg-amber-100 text-amber-600'}`}>{clock.isMature ? <Unlock className="w-3.5 h-3.5" /> : <Timer className="w-3.5 h-3.5 animate-pulse" />}{clock.label}</div></div>
-              <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden"><div className={`h-full transition-all duration-1000 ${clock.isMature ? 'bg-emerald-500' : 'bg-amber-500'}`} style={{ width: `${clock.progress}%` }} /></div>
-            </div>
-          ))}
+        <div className="bg-slate-900 text-white p-6 rounded-2xl shadow-lg flex flex-col justify-center items-center text-center relative overflow-hidden">
+          <AlertTriangle className="w-12 h-12 text-amber-400 mb-4 relative z-10" />
+          <h3 className="text-lg font-black relative z-10">Filet de Sécurité</h3>
+          <p className="text-slate-400 text-xs mb-6 relative z-10">Durée de vie sans aucun revenu</p>
+          <div className="text-5xl font-black text-white mb-2 relative z-10">{resilience.survivalMonths} <span className="text-lg">mois</span></div>
+          <p className="text-xs text-slate-500 relative z-10">Basé sur {new Intl.NumberFormat('fr-FR').format(resilience.liquidSavings)}€ liquides</p>
+          
+          {/* Background decoration */}
+          <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900 to-indigo-900/20"></div>
         </div>
-      </section>
+      </div>
     </div>
   );
 };

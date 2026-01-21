@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { AccountType, SavingsAccount } from '../types';
 import { Button } from './Button';
-import { PlusCircle, Save, Percent, Users, Calendar, Calculator, ShieldCheck, TrendingUp, TrendingDown } from 'lucide-react';
+import { ACCOUNT_CEILINGS } from '../constants'; // <--- IMPORT CONSTANTES
+import { PlusCircle, Save, Users, Calculator, ShieldCheck, TrendingUp, TrendingDown } from 'lucide-react';
 
 interface AccountFormProps {
   onSave: (account: SavingsAccount) => void;
@@ -26,11 +27,12 @@ export const AccountForm: React.FC<AccountFormProps> = ({ onSave, initialData, o
 
   const isTaxableType = [AccountType.ASSURANCE_VIE, AccountType.PEA, AccountType.PEE, AccountType.CRYPTO, AccountType.IMMOBILIER].includes(type);
 
+  // --- MISE À JOUR : UTILISATION DES CONSTANTES ---
   useEffect(() => {
     if (!initialData) {
-      if (type === AccountType.LIVRET_A) setCeiling('22950');
-      else if (type === AccountType.LDDS) setCeiling('12000');
-      else if (type === AccountType.LEP) setCeiling('10000');
+      if (type === AccountType.LIVRET_A) setCeiling(ACCOUNT_CEILINGS.LIVRET_A.toString());
+      else if (type === AccountType.LDDS) setCeiling(ACCOUNT_CEILINGS.LDDS.toString());
+      else if (type === AccountType.LEP) setCeiling(ACCOUNT_CEILINGS.LEP.toString());
       else setCeiling('');
     }
   }, [type, initialData]);
