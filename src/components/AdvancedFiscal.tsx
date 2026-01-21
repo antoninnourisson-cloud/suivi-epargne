@@ -137,7 +137,7 @@ export const AdvancedFiscal: React.FC<AdvancedFiscalProps> = ({ accounts, grossA
               <p className="text-2xl font-black text-slate-800">30%</p>
             </div>
             <div className="bg-emerald-50 p-4 rounded-xl text-center">
-              <p className="text-[10px] text-emerald-600 font-bold uppercase mb-1">Taux Réduit > 8 ans</p>
+              <p className="text-[10px] text-emerald-600 font-bold uppercase mb-1">Taux Réduit {'>'} 8 ans</p>
               <p className="text-2xl font-black text-emerald-700">24,7%</p>
             </div>
           </div>
