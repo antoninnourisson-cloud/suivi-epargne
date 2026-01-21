@@ -73,16 +73,23 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
   }, [accounts]);
 
   const filteredHistory = useMemo(() => {
-  // 1. Lister toutes les dates où il y a eu un mouvement
-  const allDates = accounts.flatMap(acc => (acc.movements || []).map(m => m.date));
-  const uniqueDates = Array.from(new Set([...allDates, new Date().toISOString().split('T')[0]])).sort();
+  const todayStr = new Date().toISOString().split('T')[0];
+  
+  // 1. On liste toutes les dates de mouvements + aujourd'hui + le 1er janvier
+  const movementDates = accounts.flatMap(acc => (acc.movements || []).map(m => m.date));
+  const uniqueDates = Array.from(new Set(['2026-01-01', ...movementDates, todayStr])).sort();
 
-  // 2. Pour chaque date, sommer tous les mouvements de tous les comptes jusqu'à cette date
+  // 2. Calcul du solde cumulé
   return uniqueDates.map(date => {
     const ownedAtDate = accounts.reduce((sum, acc) => {
+      // On calcule la somme des mouvements jusqu'à cette date
       const totalMovements = (acc.movements || [])
         .filter(m => m.date <= date)
         .reduce((accSum, m) => accSum + (m.type === 'IN' ? m.amount : -m.amount), 0);
+      
+      // RÉMÉDIATION : Si on est au point de départ (1er janv) et qu'il n'y a pas de mouvements,
+      // on peut considérer que le solde actuel est notre base.
+      // Mais le plus propre est d'ajouter le solde actuel si aucun mouvement d'INIT n'existe.
       return sum + totalMovements;
     }, 0);
 
@@ -91,6 +98,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
       ownedAmount: ownedAtDate,
       displayDate: new Date(date).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })
     };
+  })
+  .filter(item => item.date >= dateRange.start && item.date <= dateRange.end);
+}, [accounts, dateRange]);
   }).filter(item => item.date >= dateRange.start && item.date <= dateRange.end);
 }, [accounts, dateRange]);
   const dataByType = Object.values(accounts.reduce((acc, curr) => {
