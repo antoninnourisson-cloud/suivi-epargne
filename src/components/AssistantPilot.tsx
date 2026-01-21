@@ -71,12 +71,14 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
   const [newExpenseAmount, setNewExpenseAmount] = useState('');
 
   const financialDetails = useMemo(() => {
-    const SOCIAL_CHARGES_RATE = 0.2233; // Votre taux actuel conservé
+    const SOCIAL_CHARGES_RATE = 0.2233;
     const ABATTEMENT_10 = 0.10;
     
-    const grossMonthly = Number(grossAnnual) / 12;
+    // Sécurisation des entrées par Number()
+    const currentGross = Number(grossAnnual) || 0;
+    const grossMonthly = currentGross / 12;
     const netSocial = grossMonthly * (1 - SOCIAL_CHARGES_RATE);
-    const navigoReimbursement = Number(navigoBase) * (Number(navigoRate) / 100);
+    const navigoReimbursement = (Number(navigoBase) || 0) * ((Number(navigoRate) || 0) / 100);
     const netBeforeTax = netSocial + navigoReimbursement;
 
     const netAnnualImposable = netSocial * 12 * (1 - ABATTEMENT_10);
@@ -113,18 +115,33 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
       isRateValid: Math.abs(calculatedTaxRate - Number(taxRateManual)) < 1.0,
       navigoReimbursement
     };
-}, [grossAnnual, navigoBase, navigoRate, taxRateManual]);
+  }, [grossAnnual, navigoBase, navigoRate, taxRateManual]);
 
-  const totalFixedCharges = useMemo(() => 
-    expenses.reduce((sum, e) => sum + Number(e.amount), 0)
-, [expenses]);
 
-// Capacité d'investissement recalculée avec sécurité
-const investmentCapacity = useMemo(() => {
-    const totalRevenu = financialDetails.netAfterTax + Number(extraMonthlyIncome);
-    const totalSorties = totalFixedCharges + Number(leisureBudget) + Number(projectSavings);
-    return Math.max(0, totalRevenu - totalSorties);
-}, [financialDetails.netAfterTax, extraMonthlyIncome, totalFixedCharges, leisureBudget, projectSavings]);
+// 1. Somme des charges (avec repli sur vos 1350€ de base si la liste est vide)
+  const totalFixedCharges = useMemo(() => {
+    const sum = expenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+    return sum > 0 ? sum : 1350; 
+  }, [expenses]);
+  
+  // 2. Calcul de la capacité d'investissement (Revenus - Sorties)
+  const investmentCapacity = useMemo(() => {
+    const net = Number(financialDetails.netAfterTax) || 0;
+    const extra = Number(extraMonthlyIncome) || 0;
+    const charges = Number(totalFixedCharges) || 0;
+    const loisirs = Number(leisureBudget) || 0;
+    const projets = Number(projectSavings) || 0;
+
+    const totalRevenus = net + extra;
+    const totalSorties = charges + loisirs + projets;
+
+    // On s'assure de retourner un nombre positif
+    return Math.max(0, totalRevenus - totalSorties);
+  }, [financialDetails.netAfterTax, extraMonthlyIncome, totalFixedCharges, leisureBudget, projectSavings]);
+
+  // 3. Logique de survie (Analyse de résilience)
+  
+  
   const getSurvivalData = (savings: number, charges: number) => {
     if (charges <= 0) return { years: 99, months: 0, days: 0, totalMonths: 999, status: 'GREEN' as const };
     const totalMonths = savings / charges;
