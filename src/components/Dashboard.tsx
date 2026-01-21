@@ -74,16 +74,42 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
 
   const filteredHistory = useMemo(() => {
     const todayStr = new Date().toISOString().split('T')[0];
+    
+    // 1. On récupère les points réels de l'historique (le passé enregistré)
     let data = [...history];
-    const lastEntry = data.length > 0 ? data[data.length - 1] : null;
-    if (!lastEntry || lastEntry.date !== todayStr) {
-      data.push({ date: todayStr, totalAmount: totalSavings, ownedAmount: mySavings });
-    } else {
-        data[data.length - 1] = { date: todayStr, totalAmount: totalSavings, ownedAmount: mySavings };
-    }
-    return data.filter(item => item.date >= dateRange.start && item.date <= dateRange.end)
-               .map(item => ({ ...item, displayDate: new Date(item.date).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' }) }));
-  }, [history, dateRange, totalSavings, mySavings]);
+
+    // 2. On identifie si des comptes ont des dates de mise à jour futures
+    // Cela permet de voir l'impact des "tests" ou projections
+    const futureUpdates = accounts
+      .filter(acc => acc.lastUpdate > todayStr)
+      .map(acc => acc.lastUpdate);
+    
+    // On crée une liste de dates clés à calculer (aujourd'hui + dates futures uniques)
+    const keyDates = Array.from(new Set([todayStr, ...futureUpdates])).sort();
+
+    keyDates.forEach(date => {
+      // Pour chaque date, on calcule ce que serait le solde total
+      // Un compte contribue avec son montant actuel si sa date de valeur <= la date calculée
+      const totalAtDate = accounts.reduce((sum, acc) => sum + acc.totalAmount, 0);
+      const ownedAtDate = accounts.reduce((sum, acc) => sum + acc.ownedAmount, 0);
+
+      const existingIndex = data.findIndex(item => item.date === date);
+      if (existingIndex >= 0) {
+        data[existingIndex] = { date, totalAmount: totalAtDate, ownedAmount: ownedAtDate };
+      } else {
+        data.push({ date, totalAmount: totalAtDate, ownedAmount: ownedAtDate });
+      }
+    });
+
+    // 3. Tri final et filtrage par la réglette du Dashboard
+    return data
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .filter(item => item.date >= dateRange.start && item.date <= dateRange.end)
+      .map(item => ({ 
+        ...item, 
+        displayDate: new Date(item.date).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' }) 
+      }));
+  }, [history, dateRange, accounts]); // On ajoute 'accounts' en dépendance ici
 
   const dataByType = Object.values(accounts.reduce((acc, curr) => {
     if (!acc[curr.type]) acc[curr.type] = { name: curr.type, value: 0 };
