@@ -23,4 +23,13 @@ export const DEFAULT_RATES = {
   LIVRET_A: 3.0,
   LEP: 4.0,
   FONDS_EURO: 2.5
+  };
+  // ... (Garde le reste du fichier comme avant : TAX_BRACKETS, etc.)
+
+// --- DURÉES LÉGALES DE BLOCAGE (Années) ---
+export const LEGAL_MATURITY = {
+  PEA: 5,
+  ASSURANCE_VIE: 8,
+  PEE: 5 // Par défaut si pas de date de fin contrat
+
 };
