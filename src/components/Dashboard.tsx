@@ -20,7 +20,6 @@ interface DashboardProps {
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expenses, config }) => {
-  // --- 1. GESTION DES DATES ---
   const [dateRange, setDateRange] = useState(() => {
     try {
         const stored = localStorage.getItem('dashboard_date_range');
@@ -37,7 +36,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
     localStorage.setItem('dashboard_date_range', JSON.stringify(dateRange));
   }, [dateRange]);
 
-  // --- 2. STATISTIQUES GLOBALES ---
   const mySavings = accounts.reduce((acc, curr) => acc + curr.ownedAmount, 0);
   
   const getAccountStatus = (account: SavingsAccount): 'AVAILABLE' | 'TAX_LOCKED' | 'HARD_LOCKED' => {
@@ -72,24 +70,36 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
     return { available, taxLocked, hardLocked };
   }, [accounts]);
 
-  // Helper pour identifier les comptes à hachurer
   const isConstrainedAccount = (type: AccountType) => {
     return [AccountType.ASSURANCE_VIE, AccountType.PEA, AccountType.PEE, AccountType.PER].includes(type);
   };
 
-  // --- 3. CALCUL DE L'ÉVOLUTION (REVERSE ENGINEERING) ---
+  // --- LOGIQUE CORRIGÉE : GESTION DU FUTUR ---
   const stackedData = useMemo(() => {
     const data: any[] = [];
     const endDate = new Date(dateRange.end);
     const startDate = new Date(dateRange.start);
+    const endDateStr = dateRange.end;
     
-    // On part des montants ACTUELS (Aujourd'hui) -> C'est notre point de vérité
+    // 1. DÉPART : On prend les montants FINAUX du fichier
     const currentBalances = new Map<string, number>();
     accounts.forEach(acc => {
-      currentBalances.set(acc.id, acc.ownedAmount);
+      let balanceAtEndDate = acc.ownedAmount;
+      
+      // 2. CORRECTION FUTUR : On retire les mouvements qui n'ont pas encore eu lieu (ceux > dateRange.end)
+      const futureMovements = (acc.movements || []).filter(m => m.date > endDateStr);
+      futureMovements.forEach(m => {
+        if (m.type === 'IN') {
+           balanceAtEndDate -= m.amount; // On annule l'ajout futur
+        } else {
+           balanceAtEndDate += m.amount; // On annule le retrait futur
+        }
+      });
+      
+      currentBalances.set(acc.id, balanceAtEndDate);
     });
 
-    // On remonte le temps jour par jour (de Fin -> Début)
+    // 3. BOUCLE : On remonte le temps
     for (let d = new Date(endDate); d >= startDate; d.setDate(d.getDate() - 1)) {
       const dateStr = d.toISOString().split('T')[0];
       
@@ -108,7 +118,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
       
       data.unshift(daySnapshot);
 
-      // Calcul de l'état J-1
       accounts.forEach(acc => {
         const movesOnDate = (acc.movements || []).filter(m => m.date === dateStr);
         if (movesOnDate.length > 0) {
@@ -122,7 +131,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
     return data;
   }, [accounts, dateRange]);
 
-  // --- 4. DONNÉES STATIQUES (BARRES) ---
   const dataByInstitution = Object.values(accounts.reduce((acc, curr) => {
     const key = curr.institution;
     if (!acc[key]) acc[key] = { name: key, value: 0 };
@@ -130,15 +138,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
     return acc;
   }, {} as Record<string, { name: string, value: number }>));
 
-  // --- 5. UTILITAIRES GRAPHIQUES ---
   const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4'];
   const getAccountColor = (index: number) => COLORS[index % COLORS.length];
 
   const exportSession = () => {
     const now = new Date();
-    const timestamp = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}h${String(now.getMinutes()).padStart(2, '0')}`;
+    const timestamp = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
     let csvContent = "Catégorie,Désignation,Valeur,Détail\n";
-    // ... (Logique export inchangée) ...
     accounts.forEach(acc => {
       csvContent += `Compte,${acc.name},${acc.ownedAmount},${acc.institution} (${acc.type})\n`;
       if(acc.parentalCapital > 0) csvContent += `Compte (Parents),${acc.name},${acc.parentalCapital},${acc.institution}\n`;
@@ -174,7 +180,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
 
   return (
     <div className="space-y-6">
-      {/* Filtres & Export */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-4 rounded-xl shadow-sm border border-slate-200">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2 text-slate-700 font-medium">
@@ -193,7 +198,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
         </div>
       </div>
 
-      {/* KPIs */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard title="Mon Épargne Nette" amount={mySavings} icon={Wallet} color="bg-indigo-600" subtext="Capital réel" />
         <StatCard title="Disponibilité Immédiate" amount={availabilityStats.available} icon={Unlock} color="bg-emerald-500" subtext="Liquide" />
@@ -201,7 +205,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
         <StatCard title="Bloqué" amount={availabilityStats.hardLocked} icon={Lock} color="bg-slate-800" subtext="Retraite/PEE" />
       </div>
 
-      {/* Graphique principal (Stacked Area) */}
       <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 h-96">
         <h3 className="text-lg font-semibold text-slate-800 mb-4">Évolution de mon Épargne Nette (Empilé)</h3>
         <ResponsiveContainer width="100%" height="100%">
@@ -210,16 +213,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
               {accounts.map((acc, index) => {
                 const color = getAccountColor(index);
                 const isHatched = isConstrainedAccount(acc.type);
-                
                 return (
                   <React.Fragment key={acc.id}>
-                    {/* 1. Dégradé Standard (Pour comptes liquides) */}
                     <linearGradient id={`color-${acc.id}`} x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor={color} stopOpacity={0.8}/>
                       <stop offset="95%" stopColor={color} stopOpacity={0.1}/>
                     </linearGradient>
-
-                    {/* 2. Motif Hachuré (Pour comptes contraints) */}
                     <pattern id={`stripe-${acc.id}`} patternUnits="userSpaceOnUse" width="8" height="8" patternTransform="rotate(45)">
                        <rect width="100%" height="100%" fill="white" fillOpacity="0" />
                        <path d="M 0 0 L 0 8" stroke={color} strokeWidth="3" strokeOpacity="0.5" />
@@ -232,7 +231,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
             <XAxis dataKey="displayDate" tick={{ fontSize: 10 }} minTickGap={30} />
             <YAxis tickFormatter={(val) => `${(val/1000).toFixed(1)}k`} tick={{ fontSize: 10 }} />
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-            
             <RechartsTooltip 
               contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
               itemStyle={{ fontSize: '12px', padding: 0 }}
@@ -243,9 +241,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
               }}
               labelStyle={{ color: '#64748b', marginBottom: '0.5rem', fontWeight: 'bold' }}
             />
-            
             <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} formatter={(value) => accounts.find(a => a.id === value)?.name || value} />
-            
             {accounts.map((acc, index) => (
               <Area 
                 key={acc.id}
@@ -254,7 +250,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
                 name={acc.id} 
                 stackId="1" 
                 stroke={getAccountColor(index)} 
-                // Application conditionnelle du remplissage : Hachures ou Dégradé
                 fill={isConstrainedAccount(acc.type) ? `url(#stripe-${acc.id})` : `url(#color-${acc.id})`}
                 fillOpacity={1}
               />
@@ -263,7 +258,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
         </ResponsiveContainer>
       </div>
 
-      {/* Bar Chart (Pleine largeur maintenant) */}
       <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 h-80">
         <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-4">Par Établissement</h3>
         <ResponsiveContainer width="100%" height="100%">

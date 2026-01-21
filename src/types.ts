@@ -18,6 +18,7 @@ export interface AccountMovement {
   amount: number;      // Positif pour crédit, négatif pour débit
   label: string;      // Ex: "Virement salaire", "Dépôt test +500", etc.
   type: 'IN' | 'OUT'; // Flux entrant ou sortant
+  linkId?: string;
 }
 export interface SavingsAccount {
   id: string;

@@ -1,14 +1,16 @@
 import React, { useState } from 'react';
 import { SavingsAccount } from '../types';
 import { Button } from './Button';
-import { ArrowRightLeft, Download, Wallet, AlertCircle, ArrowDown, Calendar } from 'lucide-react';
+import { ArrowRightLeft, Download, Calendar, ArrowDown } from 'lucide-react';
 
 interface TransferManagerProps {
   accounts: SavingsAccount[];
   onUpdateAccountsComplex: (updates: { account: SavingsAccount, date: string }[]) => void;
+  // Nouvelle prop pour les virements liés
+  onLinkedTransfer: (sourceId: string, destId: string, amount: number, date: string) => void;
 }
 
-export const TransferManager: React.FC<TransferManagerProps> = ({ accounts, onUpdateAccountsComplex }) => {
+export const TransferManager: React.FC<TransferManagerProps> = ({ accounts, onUpdateAccountsComplex, onLinkedTransfer }) => {
   const today = new Date().toISOString().split('T')[0];
   const [activeTab, setActiveTab] = useState<'deposit' | 'transfer'>('deposit');
   const [opDate, setOpDate] = useState<string>(today);
@@ -50,30 +52,15 @@ export const TransferManager: React.FC<TransferManagerProps> = ({ accounts, onUp
 
     const amount = parseFloat(transferAmount);
     const sourceAcc = accounts.find(a => a.id === sourceAccountId);
-    const destAcc = accounts.find(a => a.id === destAccountId);
-
-    if (isNaN(amount) || amount <= 0 || !sourceAcc || !destAcc) return;
+    
+    if (isNaN(amount) || amount <= 0 || !sourceAcc) return;
     if (sourceAcc.totalAmount < amount) {
         alert("Fonds insuffisants.");
         return;
     }
 
-    const updatedSource: SavingsAccount = {
-      ...sourceAcc,
-      totalAmount: sourceAcc.totalAmount - amount,
-      ownedAmount: Math.max(0, sourceAcc.ownedAmount - amount)
-    };
-
-    const updatedDest: SavingsAccount = {
-      ...destAcc,
-      totalAmount: destAcc.totalAmount + amount,
-      ownedAmount: destAcc.ownedAmount + amount
-    };
-
-    onUpdateAccountsComplex([
-      { account: updatedSource, date: opDate },
-      { account: updatedDest, date: opDate }
-    ]);
+    // ON UTILISE LA NOUVELLE FONCTION QUI LIE LES MOUVEMENTS
+    onLinkedTransfer(sourceAccountId, destAccountId, amount, opDate);
     
     setTransferAmount('');
     alert("Virement enregistré !");
@@ -93,7 +80,6 @@ export const TransferManager: React.FC<TransferManagerProps> = ({ accounts, onUp
       </div>
 
       <div className="p-6 max-w-lg mx-auto space-y-6">
-        {/* Champ Date Partagé */}
         <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 flex items-center gap-4">
           <Calendar className="w-5 h-5 text-slate-400" />
           <div className="flex-1">

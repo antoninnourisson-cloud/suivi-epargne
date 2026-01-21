@@ -26,7 +26,6 @@ import {
 } from 'lucide-react';
 
 const App: React.FC = () => {
-  // --- ÉTATS D'AUTHENTIFICATION & SYSTÈME ---
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isApiLoaded, setIsApiLoaded] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(false);
@@ -34,12 +33,10 @@ const App: React.FC = () => {
   const [driveFileId, setDriveFileId] = useState<string | null>(null);
   const saveTimeoutRef = useRef<any>(null);
 
-  // --- ÉTATS DE L'APPLICATION ---
   const [accounts, setAccounts] = useState<SavingsAccount[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [history, setHistory] = useState<PortfolioSnapshot[]>([]);
   
-  // Configuration globale
   const [grossAnnual, setGrossAnnual] = useState<number>(45000);
   const [leisureBudget, setLeisureBudget] = useState<number>(300);
   const [projectSavings, setProjectSavings] = useState<number>(200);
@@ -48,13 +45,11 @@ const App: React.FC = () => {
   const [taxRateManual, setTaxRateManual] = useState<number>(6.1);
   const [extraMonthlyIncome, setExtraMonthlyIncome] = useState<number>(0);
 
-  // Navigation et UI
   const [view, setView] = useState<'dashboard' | 'accounts' | 'transfers' | 'comparator' | 'pilot' | 'update' | 'financing'>('dashboard');
   const [editingAccount, setEditingAccount] = useState<SavingsAccount | undefined>(undefined);
   const [showForm, setShowForm] = useState(false);
   const [maturityAlerts, setMaturityAlerts] = useState<string[]>([]);
 
-  // --- INITIALISATION GOOGLE API ---
   useEffect(() => {
     initGoogleApi()
       .then(async () => {
@@ -149,7 +144,6 @@ const App: React.FC = () => {
     }
   };
 
-  // --- SAUVEGARDE AUTO ---
   useEffect(() => {
     if (!isAuthenticated || !driveFileId || isLoadingData) return;
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
@@ -187,12 +181,10 @@ const App: React.FC = () => {
     return () => clearTimeout(saveTimeoutRef.current);
   }, [accounts, expenses, history, grossAnnual, leisureBudget, projectSavings, navigoBase, navigoRate, taxRateManual, extraMonthlyIncome, view, isAuthenticated, driveFileId]);
 
-  // --- LOGIQUE MÉTIER ---
   useEffect(() => {
     if (accounts.length === 0) return;
     const todayStr = new Date().toISOString().split('T')[0];
     
-    // Snapshot historique journalier
     setHistory(prev => {
       const existingIndex = prev.findIndex(h => h.date === todayStr);
       const totalAmount = accounts.reduce((sum, a) => sum + a.totalAmount, 0);
@@ -209,7 +201,6 @@ const App: React.FC = () => {
       }
     });
 
-    // Alertes maturité PEE
     const alerts: string[] = [];
     accounts.forEach(acc => {
       const today = new Date();
@@ -219,8 +210,6 @@ const App: React.FC = () => {
     });
     setMaturityAlerts(alerts);
   }, [accounts]);
-
-  // --- HANDLERS (Gestion des données) ---
 
   const handleUpdateAccountsComplex = useCallback((updates: { account: SavingsAccount, date: string }[]) => {
     setAccounts(prev => {
@@ -253,6 +242,59 @@ const App: React.FC = () => {
     setView('dashboard');
   }, []);
 
+  // --- NOUVELLE FONCTION : CRÉATION DE VIREMENT LIÉ ---
+  const handleLinkedTransfer = (sourceId: string, destId: string, amount: number, date: string) => {
+    const linkId = crypto.randomUUID(); // Le secret : un ID commun
+    
+    setAccounts(prev => {
+      const next = [...prev];
+      const sourceIdx = next.findIndex(a => a.id === sourceId);
+      const destIdx = next.findIndex(a => a.id === destId);
+
+      if (sourceIdx === -1 || destIdx === -1) return prev;
+
+      const source = next[sourceIdx];
+      const dest = next[destIdx];
+
+      // Mise à jour Source (Retrait)
+      const moveOut: AccountMovement = {
+        id: crypto.randomUUID(),
+        date: date,
+        amount: amount,
+        label: `Virement vers ${dest.name}`,
+        type: 'OUT',
+        linkId: linkId // <--- LIEN
+      };
+      
+      next[sourceIdx] = {
+        ...source,
+        ownedAmount: source.ownedAmount - amount,
+        totalAmount: source.totalAmount - amount,
+        movements: [...(source.movements || []), moveOut]
+      };
+
+      // Mise à jour Destination (Ajout)
+      const moveIn: AccountMovement = {
+        id: crypto.randomUUID(),
+        date: date,
+        amount: amount,
+        label: `Virement de ${source.name}`,
+        type: 'IN',
+        linkId: linkId // <--- LIEN
+      };
+
+      next[destIdx] = {
+        ...dest,
+        ownedAmount: dest.ownedAmount + amount,
+        totalAmount: dest.totalAmount + amount,
+        movements: [...(dest.movements || []), moveIn]
+      };
+
+      return next;
+    });
+    setView('dashboard');
+  };
+
   const handleSaveAccount = (acc: SavingsAccount) => {
     setAccounts(prev => {
       const isNew = !prev.find(a => a.id === acc.id);
@@ -271,7 +313,7 @@ const App: React.FC = () => {
     setEditingAccount(undefined);
   };
 
-  // 1. SUPPRIMER UN MOUVEMENT (Avec recalcul du solde)
+  // --- SUPPRESSION INTELLIGENTE (Gère les virements liés) ---
   const handleDeleteMovement = (accountId: string, movementId: string) => {
     const account = accounts.find(a => a.id === accountId);
     if (!account) return;
@@ -279,31 +321,37 @@ const App: React.FC = () => {
     const movement = account.movements?.find(m => m.id === movementId);
     if (!movement) return;
 
-    if (!confirm(`Supprimer le mouvement "${movement.label}" de ${movement.amount}€ ?\nCela ajustera le solde actuel du compte.`)) {
-      return;
-    }
+    // On vérifie s'il y a un lien
+    const linkId = movement.linkId;
+    let confirmMessage = `Supprimer le mouvement "${movement.label}" de ${movement.amount}€ ?`;
+    if (linkId) confirmMessage += `\n⚠️ Ce mouvement est lié à un autre compte. L'autre opération sera aussi annulée.`;
+
+    if (!confirm(confirmMessage)) return;
 
     setAccounts(prev => prev.map(acc => {
-      if (acc.id !== accountId) return acc;
+      // 1. On cherche si ce compte contient le mouvement ciblé OU le mouvement lié
+      const movToDelete = acc.movements?.find(m => m.id === movementId || (linkId && m.linkId === linkId));
+      
+      if (!movToDelete) return acc; // Ce compte n'est pas concerné
 
+      // 2. On annule l'effet financier
       let newOwned = acc.ownedAmount;
-      // Logique inversée : si j'efface une entrée, je perds de l'argent. Si j'efface une sortie, je regagne de l'argent.
-      if (movement.type === 'IN') {
-        newOwned -= movement.amount;
+      if (movToDelete.type === 'IN') {
+        newOwned -= movToDelete.amount; // On retire l'argent qu'on avait reçu
       } else {
-        newOwned += movement.amount;
+        newOwned += movToDelete.amount; // On remet l'argent qu'on avait envoyé
       }
 
+      // 3. On met à jour le compte en supprimant le mouvement
       return {
         ...acc,
         ownedAmount: newOwned,
-        totalAmount: newOwned + acc.parentalCapital,
-        movements: acc.movements?.filter(m => m.id !== movementId) || []
+        totalAmount: newOwned + acc.parentalCapital, // Hypothèse: impacte toujours ta part
+        movements: acc.movements?.filter(m => m.id !== movToDelete.id) || []
       };
     }));
   };
 
-  // 2. RENOMMER UN MOUVEMENT
   const handleRenameMovement = (accountId: string, movementId: string, currentLabel: string) => {
     const newLabel = window.prompt("Renommer l'opération :", currentLabel);
     if (newLabel === null || newLabel.trim() === "") return;
@@ -318,9 +366,6 @@ const App: React.FC = () => {
       };
     }));
   };
-
-
-  // --- RENDU UI ---
 
   if (!isAuthenticated) {
     return (
@@ -420,7 +465,15 @@ const App: React.FC = () => {
         {view === 'pilot' && <AssistantPilot accounts={accounts} expenses={expenses} onUpdateExpenses={setExpenses} grossAnnual={grossAnnual} setGrossAnnual={setGrossAnnual} leisureBudget={leisureBudget} setLeisureBudget={setLeisureBudget} projectSavings={projectSavings} setProjectSavings={setProjectSavings} navigoBase={navigoBase} setNavigoBase={setNavigoBase} navigoRate={navigoRate} setNavigoRate={setNavigoRate} taxRateManual={taxRateManual} setTaxRateManual={setTaxRateManual} extraMonthlyIncome={extraMonthlyIncome} setExtraMonthlyIncome={setExtraMonthlyIncome} />}
         {view === 'financing' && <Financing expenses={expenses} grossAnnual={grossAnnual} />}
         {view === 'comparator' && <Comparator accounts={accounts} />}
-        {view === 'transfers' && <TransferManager accounts={accounts} onUpdateAccountsComplex={handleUpdateAccountsComplex} />}
+        
+        {view === 'transfers' && (
+          <TransferManager 
+             accounts={accounts} 
+             onUpdateAccountsComplex={handleUpdateAccountsComplex} 
+             onLinkedTransfer={handleLinkedTransfer} // NOUVEAU
+          />
+        )}
+        
         {view === 'update' && <AccountUpdate accounts={accounts} onUpdateAccountsComplex={handleUpdateAccountsComplex} />}
         
         {view === 'accounts' && (
@@ -460,7 +513,6 @@ const App: React.FC = () => {
                   <tbody className="divide-y divide-slate-100">
                     {accounts.map(account => (
                       <React.Fragment key={account.id}>
-                        {/* LIGNE PRINCIPALE DU COMPTE */}
                         <tr 
                           className="hover:bg-slate-50 cursor-pointer border-b border-slate-100 group transition-colors"
                           onClick={() => setEditingAccount(editingAccount?.id === account.id ? undefined : account)}
@@ -473,39 +525,23 @@ const App: React.FC = () => {
                           <td className="px-6 py-4 text-right font-bold text-amber-500">{account.parentalCapital.toLocaleString()} €</td>
                           <td className="px-6 py-4 text-right">
                             <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <button 
-                                onClick={(e) => { e.stopPropagation(); setEditingAccount(account); setShowForm(true); }} 
-                                className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg"
-                              >
-                                <Edit2 className="w-4 h-4" />
-                              </button>
-                              <button 
-                                onClick={(e) => { e.stopPropagation(); if(confirm('Supprimer ?')) setAccounts(prev => prev.filter(a => a.id !== account.id)) }} 
-                                className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
+                              <button onClick={(e) => { e.stopPropagation(); setEditingAccount(account); setShowForm(true); }} className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg"><Edit2 className="w-4 h-4" /></button>
+                              <button onClick={(e) => { e.stopPropagation(); if(confirm('Supprimer ?')) setAccounts(prev => prev.filter(a => a.id !== account.id)) }} className="p-2 text-red-600 hover:bg-red-50 rounded-lg"><Trash2 className="w-4 h-4" /></button>
                             </div>
                           </td>
                         </tr>
-
-                        {/* ACCORDEON HISTORIQUE */}
                         {editingAccount?.id === account.id && !showForm && (
                           <tr className="animate-in fade-in slide-in-from-top-2 duration-200">
                             <td colSpan={4} className="bg-slate-50 p-4">
                               <div className="p-4 pl-8 max-h-96 overflow-y-auto">
                                 <div className="flex items-center justify-between mb-3">
                                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Journal des mouvements</p>
-                                  <span className="text-[10px] bg-slate-200 text-slate-600 px-2 py-1 rounded-full font-bold">
-                                    {account.movements?.length || 0} opération(s)
-                                  </span>
+                                  <span className="text-[10px] bg-slate-200 text-slate-600 px-2 py-1 rounded-full font-bold">{account.movements?.length || 0} opération(s)</span>
                                 </div>
                                 <div className="space-y-2">
                                   {account.movements && account.movements.length > 0 ? (
                                     [...account.movements].sort((a,b) => b.date.localeCompare(a.date)).map(m => (
                                       <div key={m.id} className="flex justify-between items-center bg-white p-3 rounded-lg border border-slate-200 text-xs shadow-sm group hover:border-indigo-300 transition-all">
-                                        
-                                        {/* GAUCHE: Date & Libellé + Edit */}
                                         <div className="flex flex-col gap-1">
                                           <span className="text-[10px] text-slate-400 font-mono flex items-center gap-1">
                                             <CalendarClock className="w-3 h-3" />
@@ -522,8 +558,6 @@ const App: React.FC = () => {
                                             </button>
                                           </div>
                                         </div>
-
-                                        {/* DROITE: Montant & Delete */}
                                         <div className="flex items-center gap-4">
                                           <span className={`font-black text-sm ${m.type === 'IN' ? 'text-emerald-600' : 'text-rose-600'}`}>
                                             {m.type === 'IN' ? '+' : '-'}{m.amount.toLocaleString()} €
@@ -531,18 +565,14 @@ const App: React.FC = () => {
                                           <button 
                                             onClick={(e) => { e.stopPropagation(); handleDeleteMovement(account.id, m.id); }}
                                             className="text-slate-200 hover:text-red-500 transition-colors p-2 rounded-full hover:bg-red-50"
-                                            title="Supprimer (Ajuste le solde actuel)"
+                                            title="Supprimer (Ajuste le solde et annule l'opération liée)"
                                           >
                                             <Trash2 className="w-4 h-4" />
                                           </button>
                                         </div>
                                       </div>
                                     ))
-                                  ) : (
-                                    <div className="text-center py-6 text-slate-400 italic text-xs border-2 border-dashed border-slate-200 rounded-lg bg-slate-50/50">
-                                      Aucun historique disponible pour ce compte.
-                                    </div>
-                                  )}
+                                  ) : <div className="text-center py-6 text-slate-400 italic text-xs border-2 border-dashed border-slate-200 rounded-lg bg-slate-50/50">Aucun historique disponible.</div>}
                                 </div>
                               </div>
                             </td>
