@@ -1,67 +1,39 @@
+// Définition des types de comptes disponibles
 export enum AccountType {
   LIVRET_A = 'Livret A',
   LDDS = 'LDDS',
   LEP = 'LEP',
-  ASSURANCE_VIE = 'Assurance Vie',
-  PEE = 'PEE (Plan Epargne Entreprise)',
+  CEL = 'CEL',
+  PEL = 'PEL',
+  AV = 'Assurance Vie',
   PEA = 'PEA',
   PER = 'PER',
-  COMPTE_COURANT = 'Compte Courant',
-  IMMOBILIER = 'Immobilier (SCPI/Physique)',
-  CRYPTO = 'Cryptomonnaies',
+  PEE = 'PEE',
+  CTO = 'Compte Titres',
+  CAT = 'Compte à Terme',
+  IMMOBILIER = 'Immobilier', // <--- C'est cette ligne qui manquait !
   AUTRE = 'Autre'
-}
-
-export interface AccountMovement {
-  id: string;
-  date: string;
-  amount: number;      // Positif pour crédit, négatif pour débit
-  label: string;       // Ex: "Virement salaire", "Dépôt test +500", etc.
-  type: 'IN' | 'OUT'; // Flux entrant ou sortant
-  linkId?: string;
 }
 
 export interface SavingsAccount {
   id: string;
   name: string;
   type: AccountType;
-  institution: string; 
-  totalAmount: number; 
-  ownedAmount: number; 
-  parentalCapital: number; 
-  interestRate?: number; 
-  recentHighRate?: number;
-  recentLowRate?: number;
-  openingDate?: string; 
-  contractEndDate?: string; 
-  ceiling?: number; 
-  isRevolut?: boolean; 
-  isTaxable?: boolean;
-  movements: AccountMovement[]; 
-}
-
-export interface PortfolioSnapshot {
-  date: string; 
-  totalAmount: number;
   ownedAmount: number;
-}
-
-export enum PaymentMethod {
-  VIREMENT = 'Virement Permanent',
-  PRELEVEMENT = 'Prélèvement',
-  CARTE = 'Carte Bancaire',
-  CHEQUE = 'Chèque',
-  AUTRE = 'Autre'
+  interestRate: number;
+  ceiling?: number;
+  openingDate?: string;
+  contractEndDate?: string;
+  notes?: string;
 }
 
 export interface Expense {
   id: string;
   name: string;
   amount: number;
-  paymentMethod: PaymentMethod;
+  category?: string;
 }
 
-// --- NOUVEAU : STRUCTURE DU CHAT ---
 export interface ChatMessage {
   id: string;
   role: 'user' | 'model';
@@ -69,37 +41,23 @@ export interface ChatMessage {
   timestamp: number;
 }
 
-// Configuration for generating an image (Conservé pour compatibilité si besoin)
-export interface ImageGenerationConfig {
-  prompt: string;
-  size: '1K' | '2K' | '4K';
-}
-
-export interface ImageEditConfig {
-  prompt: string;
-  base64Image: string;
-  mimeType: string;
-}
-
-// Structure globale du fichier sauvegardé sur Drive
+// Interface globale pour la sauvegarde JSON
 export interface GlobalAppData {
   accounts: SavingsAccount[];
   expenses: Expense[];
-  history: PortfolioSnapshot[];
-  config: {
-    grossAnnual: number;
-    leisureBudget: number;
-    projectSavings: number;
-    navigoBase: number;
-    navigoRate: number;
-    taxRateManual: number;
-    extraMonthlyIncome: number;
-  };
-  goalPrompt?: string;
-  financing?: {
-    interestRate: number;
-    insuranceRate: number;
-  };
-  lastView?: string;
-  chatHistory?: ChatMessage[]; // <--- AJOUTÉ POUR SAUVEGARDER LA CONVERSATION
+  config: any;
+  history: ChatMessage[];
+}
+
+export interface AccountMovement {
+  id: string;
+  date: string;
+  amount: number;
+  type: 'DEPOSIT' | 'WITHDRAWAL' | 'INTEREST';
+}
+
+export interface PortfolioSnapshot {
+  date: string;
+  totalAmount: number;
+  breakdown: Record<string, number>;
 }

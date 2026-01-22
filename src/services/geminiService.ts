@@ -1,15 +1,24 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { SavingsAccount, Expense, ChatMessage, AccountType } from "../types";
+import { SavingsAccount, Expense, ChatMessage } from "../types";
 
 const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
-
-// --- CONFIGURATION DU MODÈLE ---
-// Tu veux tester la version "Gemini 3 Flash Preview".
-// Note : Si ce nom exact renvoie une erreur 404, c'est que l'ID technique est légèrement différent.
-// Autres possibilités courantes : "gemini-2.0-flash-exp", "gemini-experimental"
-const MODEL_ID = "gemini-3-flash-preview"; 
+// On utilise le modèle Flash pour la rapidité et la faible consommation de tokens
+const MODEL_ID = "gemini-1.5-flash"; 
 
 const genAI = new GoogleGenerativeAI(API_KEY || '');
+
+// Structure exacte des données calculées reçues de App.tsx
+export interface ComputedFinancials {
+  grossAnnual: number;
+  netMonthlyBeforeTax: number;
+  superNetMonthly: number;
+  totalExpenses: number;
+  resteAVivre: number;
+  totalParent: number;
+  totalMine: number;
+  myLiquidities: number;
+  runway: string;
+}
 
 export const generateFinancialAdvice = async (
   userPrompt: string,
@@ -18,53 +27,71 @@ export const generateFinancialAdvice = async (
     expenses: Expense[];
     config: any;
     history: ChatMessage[];
+    computed: ComputedFinancials; // Les données omniscientes
   }
 ): Promise<string> => {
   
-  // Petit check console pour être sûr que la nouvelle clé est bien prise
-  if (API_KEY) console.log(`🚀 Tentative avec modèle : ${MODEL_ID}`);
+  if (!API_KEY) return "Erreur : Clé API manquante. Vérifiez votre fichier .env.local";
 
   try {
-    // On force l'utilisation de la version 'v1beta' qui est souvent requise pour les modèles Preview
-    const model = genAI.getGenerativeModel({ model: MODEL_ID }, { apiVersion: 'v1beta' });
+    const model = genAI.getGenerativeModel({ model: MODEL_ID });
 
-    // --- 1. PRÉPARATION DES DONNÉES ---
-    const totalOwned = context.accounts.reduce((sum, a) => sum + a.ownedAmount, 0);
-    const liquidSavings = context.accounts
-      .filter(a => !a.contractEndDate && ![AccountType.IMMOBILIER, AccountType.PER, AccountType.PEE].includes(a.type))
-      .reduce((sum, a) => sum + a.ownedAmount, 0);
-    const totalExpenses = context.expenses.reduce((sum, e) => sum + e.amount, 0);
+    // Fonction helper pour l'affichage (réplique la logique de l'App pour l'affichage texte)
+    const isParentAccount = (name: string) => /parent|papa|maman|usufruit/i.test(name);
 
     const systemInstruction = `
-      TU ES UN CONSEILLER FINANCIER D'ÉLITE (Profil : Prudence Absolue).
-      
-      DONNÉES CLIENT :
-      - Revenus : ${context.config.grossAnnual} €/an
-      - Charges : ${totalExpenses} €/mois
-      - Patrimoine Net : ${totalOwned.toLocaleString()} €
-      - Liquidités : ${liquidSavings.toLocaleString()} €
-      
-      COMPTES :
-      ${context.accounts.map(a => `- ${a.name} (${a.type}): ${a.ownedAmount}€`).join('\n')}
-      
+      RÔLE : Tu es le Directeur Financier (CFO) personnel de l'utilisateur.
+      Tu as accès aux données certifiées de l'application (onglet Pilotage).
+
+      === 🚨 DISTINCTION CAPITAUX (TRES IMPORTANT) ===
+      - Capital PARENTS (Intouchable/Usufruit) : ${context.computed.totalParent.toLocaleString()} €
+      - Capital UTILISATEUR (Disponible) : ${context.computed.totalMine.toLocaleString()} €
+      -> RÈGLE D'OR : Ne jamais inclure le capital Parents dans le calcul de survie ou d'achat. Ce n'est pas son argent.
+
+      === 📊 FLUX MENSUELS (PILOTAGE) ===
+      - Brut Annuel : ${context.computed.grossAnnual.toLocaleString()} €
+      - Net Mensuel (Avant Impôt) : ${Math.round(context.computed.netMonthlyBeforeTax).toLocaleString()} €
+      - Super Net (Dans la poche) : ${Math.round(context.computed.superNetMonthly).toLocaleString()} €
+
+      === 💸 BUDGET & CHARGES ===
+      - Total Charges Fixes : -${context.computed.totalExpenses.toLocaleString()} €
+      - Détail Charges : ${context.expenses.map(e => `${e.name} (${e.amount}€)`).join(', ')}
+      -------------------------------------------------------
+      = RESTE À VIVRE RÉEL : ${Math.round(context.computed.resteAVivre).toLocaleString()} € / mois
+      (C'est la somme disponible pour les Plaisirs et l'Épargne).
+
+      === 🛡️ SÉCURITÉ & RUNWAY ===
+      - Liquidités Personnelles : ${context.computed.myLiquidities.toLocaleString()} €
+      - RUNWAY (Autonomie sans salaire) : ${context.computed.runway} MOIS
+      (Calculé strictement sur : Liquidités Persos / Charges Fixes).
+
+      === 🏦 PLACEMENTS & BLOCAGES ===
+      ${context.accounts.map(a => {
+        const owner = isParentAccount(a.name) ? "[PARENTS 🚫]" : "[MOI ✅]";
+        let status = "Disponible";
+        if (a.contractEndDate) {
+            const date = new Date(a.contractEndDate);
+            // Vérifie si la date est future
+            status = date > new Date() ? `🔒 BLOQUÉ jusqu'au ${date.toLocaleDateString()}` : "🔓 DÉBLOQUÉ";
+        }
+        return `- ${owner} ${a.name} (${a.type}) : ${a.ownedAmount.toLocaleString()}€ | ${status} | Taux: ${a.interestRate}%`;
+      }).join('\n')}
+
       DIRECTIVES :
-      1. Sécurité totale du capital.
-      2. Optimisation fiscale via livrets réglementés (LEP/A/LDDS).
-      3. Analyse fine et proactive.
+      1. Tes réponses doivent être basées sur ces chiffres EXACTS.
+      2. Si je veux acheter un objet cher, regarde mon "Reste à Vivre" et mon "Runway".
+      3. Sois direct, mathématique mais bienveillant.
     `;
 
-    const historyForGemini = context.history.slice(-10).map(msg => ({
-      role: msg.role === 'user' ? 'user' : 'model',
-      parts: [{ text: msg.content }]
-    }));
-
-    // --- 2. CHAT ---
     const chat = model.startChat({
       history: [
-        { role: "user", parts: [{ text: `INSTRUCTION SYSTÈME : ${systemInstruction}` }] },
-        { role: "model", parts: [{ text: "Bien reçu. Je suis prêt à optimiser votre situation." }] },
-        ...historyForGemini
-      ],
+        { role: "user", parts: [{ text: systemInstruction }] },
+        { role: "model", parts: [{ text: "Bien reçu. J'ai intégré vos données financières exactes et la distinction stricte des capitaux. Je suis prêt." }] },
+        ...context.history.slice(-10).map(m => ({
+          role: m.role === 'user' ? 'user' : 'model',
+          parts: [{ text: m.content }]
+        }))
+      ]
     });
 
     const result = await chat.sendMessage(userPrompt);
@@ -72,19 +99,7 @@ export const generateFinancialAdvice = async (
     return response.text();
 
   } catch (error: any) {
-    console.error("Erreur Gemini:", error);
-    
-    // Aide au diagnostic si le nom du modèle est faux
-    if (error.message?.includes('404') || error.message?.includes('not found')) {
-      return `⚠️ Erreur Modèle (404) : Le nom "${MODEL_ID}" n'est pas reconnu.
-      
-      👉 SOLUTION : 
-      1. Va sur Google AI Studio.
-      2. Sélectionne le modèle "Gemini 3 Flash" dans la liste à droite.
-      3. Clique sur le bouton "< > Get Code".
-      4. Copie le nom exact qui est entre guillemets (ex: "models/gemini-...") et mets-le dans le code.`;
-    }
-
-    return "Désolé, une erreur technique est survenue.";
+    console.error("Gemini Error:", error);
+    return "Désolé, une erreur technique m'empêche d'analyser vos finances pour le moment.";
   }
 };
