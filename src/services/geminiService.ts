@@ -26,7 +26,7 @@ export const generateFinancialAdvice = async (
   }
 
   // Utilisation du modèle Flash pour la rapidité et le coût
-  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
 
   // --- 1. PRÉPARATION DES DONNÉES FINANCIÈRES (Le "System Context") ---
   
