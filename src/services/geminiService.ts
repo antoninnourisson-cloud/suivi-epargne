@@ -20,7 +20,7 @@ export const generateFinancialAdvice = async (
   }
 
   // MODIFICATION ICI : Utilisation de la version "001" qui est la plus stable
-  const model = genAI.getGenerativeModel({ model: "gemini-3-pro-preview" });
+  const model = genAI.getGenerativeModel({ model: "gemini-2.5-pro" });
 
   // --- 1. PRÉPARATION DES DONNÉES FINANCIÈRES ---
   const totalOwned = context.accounts.reduce((sum, a) => sum + a.ownedAmount, 0);
