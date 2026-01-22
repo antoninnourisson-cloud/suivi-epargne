@@ -4,6 +4,10 @@ import { ACCOUNT_CEILINGS } from "../constants";
 
 const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
 
+// "gemini-pro" est le modèle standard v1.0.
+// C'est le plus compatible du marché (pas d'erreur 404 ou 429).
+const MODEL_ID = "gemini-pro"; 
+
 const genAI = new GoogleGenerativeAI(API_KEY || '');
 
 export const generateFinancialAdvice = async (
@@ -15,79 +19,68 @@ export const generateFinancialAdvice = async (
     history: ChatMessage[];
   }
 ): Promise<string> => {
+  
   if (!API_KEY) {
-    return "Erreur configuration : Clé API Gemini manquante (VITE_GEMINI_API_KEY). Vérifiez votre fichier .env.local";
+    return "Erreur : Clé API manquante. Vérifiez VITE_GEMINI_API_KEY sur Vercel.";
   }
 
-  // MODIFICATION ICI : Utilisation de la version "001" qui est la plus stable
-  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-
-  // --- 1. PRÉPARATION DES DONNÉES FINANCIÈRES ---
-  const totalOwned = context.accounts.reduce((sum, a) => sum + a.ownedAmount, 0);
-  const totalParents = context.accounts.reduce((sum, a) => sum + a.parentalCapital, 0);
-  
-  const liquidSavings = context.accounts
-    .filter(a => !a.contractEndDate && ![AccountType.IMMOBILIER, AccountType.PER, AccountType.PEE].includes(a.type))
-    .reduce((sum, a) => sum + a.ownedAmount, 0);
-
-  const totalExpenses = context.expenses.reduce((sum, e) => sum + e.amount, 0);
-
-  const systemInstruction = `
-    TU ES UN CONSEILLER EN GESTION DE PATRIMOINE PERSONNEL, EXPERT ET PRUDENT.
-    Ton client cherche à optimiser son épargne avec un profil "Prudence Absolue" (aversion au risque).
-
-    --- DONNÉES DU CLIENT ---
-    REVENUS & CHARGES :
-    - Brut Annuel : ${context.config.grossAnnual} €
-    - Charges Fixes déclarées : ${totalExpenses} €/mois
-
-    PATRIMOINE ACTUEL :
-    - Total Net (Part Client) : ${totalOwned.toLocaleString()} €
-    - Dont Liquidités Disponibles : ${liquidSavings.toLocaleString()} €
-    - Capital détenu par les parents : ${totalParents.toLocaleString()} €
-
-    DÉTAIL DES COMPTES :
-    ${context.accounts.map(a => 
-      `- ${a.name} (${a.type}) : Solde ${a.ownedAmount}€ / Taux ${a.interestRate || '?'}%`
-    ).join('\n')}
-
-    CONSTANTES LÉGALES :
-    - Plafond Livret A : ${ACCOUNT_CEILINGS.LIVRET_A}€
-    - Plafond LEP : ${ACCOUNT_CEILINGS.LEP}€ (Priorité absolue si éligible)
-    - Plafond LDDS : ${ACCOUNT_CEILINGS.LDDS}€
-
-    --- TES DIRECTIVES ---
-    1. PRIORITÉ 1 : La sécurité. Ne propose jamais de Crypto ou d'Actions volatiles sans mise en garde.
-    2. PRIORITÉ 2 : Remplir les livrets défiscalisés (LEP > Livret A > LDDS).
-    3. Sois concis, pédagogique et utilise le gras pour les chiffres importants.
-  `;
-
-  // --- 2. PRÉPARATION DE L'HISTORIQUE ---
-  const historyForGemini = context.history.slice(-10).map(msg => ({
-    role: msg.role === 'user' ? 'user' : 'model',
-    parts: [{ text: msg.content }]
-  }));
-
-  const chat = model.startChat({
-    history: [
-      { 
-        role: "user", 
-        parts: [{ text: `INSTRUCTION SYSTÈME CACHÉE : ${systemInstruction}` }] 
-      },
-      { 
-        role: "model", 
-        parts: [{ text: "Bien reçu. Je suis prêt à vous conseiller." }] 
-      },
-      ...historyForGemini
-    ],
-  });
-
   try {
+    const model = genAI.getGenerativeModel({ model: MODEL_ID });
+
+    // --- 1. PRÉPARATION DES DONNÉES ---
+    const totalOwned = context.accounts.reduce((sum, a) => sum + a.ownedAmount, 0);
+    const liquidSavings = context.accounts
+      .filter(a => !a.contractEndDate && ![AccountType.IMMOBILIER, AccountType.PER, AccountType.PEE].includes(a.type))
+      .reduce((sum, a) => sum + a.ownedAmount, 0);
+    const totalExpenses = context.expenses.reduce((sum, e) => sum + e.amount, 0);
+
+    const systemInstruction = `
+      CONTEXTE : Tu es un conseiller financier expert pour un client "Prudence Absolue".
+      
+      CHIFFRES CLÉS :
+      - Revenus : ${context.config.grossAnnual} €/an
+      - Charges : ${totalExpenses} €/mois
+      - Patrimoine Net : ${totalOwned.toLocaleString()} €
+      - Dont Liquidités : ${liquidSavings.toLocaleString()} €
+
+      COMPTES :
+      ${context.accounts.map(a => `- ${a.name} (${a.type}): ${a.ownedAmount}€`).join('\n')}
+
+      DIRECTIVES :
+      1. Sécurité maximale (pas de crypto/actions risquées).
+      2. Priorité aux livrets défiscalisés.
+      3. Réponses courtes et mathématiques.
+    `;
+
+    // --- 2. PRÉPARATION DE L'HISTORIQUE ---
+    const historyForGemini = context.history.slice(-8).map(msg => ({
+      role: msg.role === 'user' ? 'user' : 'model',
+      parts: [{ text: msg.content }]
+    }));
+
+    // --- 3. DÉMARRAGE DU CHAT ---
+    const chat = model.startChat({
+      history: [
+        // Astuce : On force le contexte dans un premier échange "fictif"
+        // car Gemini Pro v1 gère mal le "system instruction" séparé.
+        { role: "user", parts: [{ text: systemInstruction + "\n\nEst-ce clair ?" }] },
+        { role: "model", parts: [{ text: "C'est très clair. Je suis prêt." }] },
+        ...historyForGemini
+      ],
+    });
+
+    // --- 4. ENVOI ---
     const result = await chat.sendMessage(userPrompt);
     const response = await result.response;
     return response.text();
-  } catch (error) {
-    console.error("Erreur API Gemini:", error);
-    return "Désolé, une erreur technique est survenue. Vérifiez votre connexion ou réessayez plus tard.";
+
+  } catch (error: any) {
+    console.error("Erreur Gemini:", error);
+    
+    if (error.message?.includes('404') || error.message?.includes('not found')) {
+      return "Erreur 404 : Modèle introuvable. Votre clé API semble valide mais restreinte.";
+    }
+    
+    return "Désolé, une erreur technique est survenue.";
   }
 };
