@@ -324,12 +324,58 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
             </div>
             
             {showDetails && (
-              <div className="bg-white p-4 rounded-xl text-xs space-y-2 border border-slate-200 animate-in slide-in-from-top-2 shadow-inner mb-4">
-                 <div className="flex justify-between font-bold border-b pb-1"><span>Salaire Brut</span> <span>{Math.round(autoValues.grossMonth)} €</span></div>
-                <div className="flex justify-between text-rose-500"><span>Charges ({(fiscalConfig.salaryChargesRate*100).toFixed(2)}%)</span> <span>- {Math.round(autoValues.socialCharges)} €</span></div>
-                <div className="flex justify-between text-emerald-600"><span>Remboursement Navigo</span> <span>+ {navigoRefund.toFixed(2)} €</span></div>
-                <div className="flex justify-between font-bold text-indigo-700 pt-1"><span>= Net Avant Impôt</span> <span>{autoValues.netBeforeTax.toFixed(2)} €</span></div>
-                <div className="flex justify-between text-amber-600"><span>Impôt Source ({effectiveTaxRate.toFixed(1)}%)</span> <span>- {effectiveMonthlyTax.toFixed(2)} €</span></div>
+              <div className="bg-white p-4 rounded-xl text-xs space-y-3 border border-slate-200 animate-in slide-in-from-top-2 shadow-inner mb-4">
+                 <div className="flex justify-between font-bold border-b pb-1">
+                   <span>Salaire Brut Mensuel</span> 
+                   <span>{Math.round(autoValues.grossMonth).toLocaleString()} €</span>
+                 </div>
+                 
+                 <div className="flex justify-between text-rose-500">
+                   <span>Charges Salariales ({(fiscalConfig.salaryChargesRate*100).toFixed(2)}%)</span> 
+                   <span>- {Math.round(autoValues.socialCharges).toLocaleString()} €</span>
+                 </div>
+                 
+                 <div className="flex justify-between text-emerald-600">
+                   <span>Remboursement Navigo</span> 
+                   <span>+ {navigoRefund.toFixed(2)} €</span>
+                 </div>
+                 
+                 <div className="flex justify-between font-bold text-indigo-700 pt-1 border-t border-slate-100">
+                   <span>= Net Avant Impôt</span> 
+                   <span>{autoValues.netBeforeTax.toFixed(2)} €</span>
+                 </div>
+
+                 {/* ZONE DE GESTION DE L'IMPÔT */}
+                 <div className="bg-amber-50 p-2 rounded-lg border border-amber-100">
+                    <div className="flex justify-between items-center mb-2">
+                        <span className="text-amber-800 font-bold">Impôt à la source</span>
+                        <span className="text-amber-600 font-mono font-black">- {effectiveMonthlyTax.toFixed(2)} €</span>
+                    </div>
+                    
+                    <div className="flex items-center justify-between text-[10px] gap-2">
+                        <div className="flex flex-col">
+                            <span className="text-slate-500">Taux Barème (Auto) : <strong>{autoValues.autoRate.toFixed(1)}%</strong></span>
+                            {taxRateManual > 0 && <span className="text-amber-600">Force à : <strong>{taxRateManual}%</strong></span>}
+                        </div>
+                        <div className="flex items-center gap-1">
+                            <label className="text-slate-400">Forcer taux :</label>
+                            <input 
+                                type="number" 
+                                step="0.1" 
+                                value={taxRateManual} 
+                                onChange={(e) => setTaxRateManual(parseFloat(e.target.value) || 0)} 
+                                className="w-12 p-1 text-right bg-white border border-amber-200 rounded font-bold outline-none focus:ring-1 focus:ring-amber-500"
+                                placeholder="Auto"
+                            />
+                            <span className="text-slate-400">%</span>
+                        </div>
+                    </div>
+                    {taxRateManual === 0 && (
+                        <p className="text-[9px] text-slate-400 mt-1 italic">
+                            *Calculé sur un net imposable annuel de {Math.round(autoValues.netTaxableYear).toLocaleString()}€ (Barème progressif).
+                        </p>
+                    )}
+                 </div>
               </div>
             )}
           </div>

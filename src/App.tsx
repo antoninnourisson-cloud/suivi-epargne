@@ -51,7 +51,7 @@ const App: React.FC = () => {
   const [projectSavings, setProjectSavings] = useState<number>(200);
   const [navigoBase, setNavigoBase] = useState<number>(90.80);
   const [navigoRate, setNavigoRate] = useState<number>(67.24);
-  const [taxRateManual, setTaxRateManual] = useState<number>(6.1);
+  const [taxRateManual, setTaxRateManual] = useState<number>(0);
   const [extraMonthlyIncome, setExtraMonthlyIncome] = useState<number>(0);
   
   // NOUVEAU : Configuration Fiscale Dynamique
