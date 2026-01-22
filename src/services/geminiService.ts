@@ -12,46 +12,41 @@ import {
 } from "../constants";
 
 const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
-// Modèle : On utilise la version Preview pour une meilleure capacité de raisonnement
-const MODEL_ID = "gemini-2.0-flash-exp"; // Ou "gemini-1.5-flash" si instable
+// Utilisation du modèle experimental pour une meilleure logique
+const MODEL_ID = "gemini-2.0-flash-exp"; 
 
 const genAI = new GoogleGenerativeAI(API_KEY || '');
 
-// --- FONCTIONS UTILITAIRES DE CALCUL (Réplique AssistantPilot.tsx) ---
+// --- FONCTIONS UTILITAIRES ---
 
-// 1. Calcul du statut de disponibilité (Date précise)
 const getAvailabilityInfo = (acc: SavingsAccount): string => {
   const now = new Date();
   
-  // Cas PEE avec date explicite
   if (acc.type === AccountType.PEE && acc.contractEndDate) {
     const endDate = new Date(acc.contractEndDate);
     if (endDate <= now) return "DISPONIBLE (Contrat terminé)";
     return `BLOQUÉ jusqu'au ${endDate.toLocaleDateString('fr-FR')} (Fin contrat PEE)`;
   }
 
-  // Cas PEA / AV / PER basés sur l'ouverture
   if (acc.openingDate && [AccountType.PEA, AccountType.ASSURANCE_VIE, AccountType.PER].includes(acc.type)) {
     const openDate = new Date(acc.openingDate);
     let duration = 0;
     if (acc.type === AccountType.PEA) duration = LEGAL_MATURITY.PEA;
     if (acc.type === AccountType.ASSURANCE_VIE) duration = LEGAL_MATURITY.ASSURANCE_VIE;
-    // Pour le PER c'est la retraite, on simplifie pour l'instant sauf si logic spécifique
     
     if (duration > 0) {
       const unlockDate = new Date(openDate);
       unlockDate.setFullYear(openDate.getFullYear() + duration);
-      if (unlockDate <= now) return `DISPONIBLE (Maturité fiscale atteinte le ${unlockDate.toLocaleDateString('fr-FR')})`;
+      if (unlockDate <= now) return `DISPONIBLE (Maturité atteinte le ${unlockDate.toLocaleDateString('fr-FR')})`;
       return `BLOQUÉ fiscalement jusqu'au ${unlockDate.toLocaleDateString('fr-FR')} (Maturité ${duration} ans)`;
     }
   }
 
-  // Comptes liquides
   if ([AccountType.LIVRET_A, AccountType.LDDS, AccountType.LEP, AccountType.COMPTE_COURANT].includes(acc.type)) {
     return "LIQUIDE (Disponible immédiatement)";
   }
 
-  return "Statut spécifique (voir détails)";
+  return "Statut spécifique";
 };
 
 export const generateFinancialAdvice = async (
@@ -64,24 +59,27 @@ export const generateFinancialAdvice = async (
   }
 ): Promise<string> => {
   
-  if (API_KEY) console.log(`🚀 Appel IA avec contexte enrichi pour : ${MODEL_ID}`);
+  if (API_KEY) console.log(`🚀 Appel IA Omnisciente : ${MODEL_ID}`);
 
   try {
     const model = genAI.getGenerativeModel({ model: MODEL_ID });
 
-    // --- 1. RECALCUL DES DONNÉES FINANCIÈRES (Logique "Pilotage") ---
+    // --- 1. RÉCUPERATION DES PARAMÈTRES ET CALCULS ---
     
-    // A. Revenus & Impôts
+    // Paramètres Navigo & Salaire
+    const navigoBase = context.config.navigoBase || 90.80;
+    const navigoRate = context.config.navigoRate || 67.24; // ex: 67.24%
+    const navigoRefund = navigoBase * (navigoRate / 100);
+    
     const grossAnnual = context.config.grossAnnual || 0;
     const extraMonthly = context.config.extraMonthlyIncome || 0;
     const grossMonth = grossAnnual / 12;
-    const navigoRefund = (context.config.navigoBase || 0) * ((context.config.navigoRate || 0) / 100);
     
     const socialCharges = grossMonth * SALARY_CHARGES_RATE;
     const netSalaryOnly = grossMonth - socialCharges;
     const netBeforeTax = netSalaryOnly + navigoRefund + extraMonthly;
 
-    // Calcul Impôt (Barème progressif)
+    // Calcul Impôt
     const netTaxableYear = (grossAnnual * (1 - STANDARD_ALLOWANCE)) + (extraMonthly * 12);
     let taxAmount = 0;
     let previousLimit = 0;
@@ -93,100 +91,101 @@ export const generateFinancialAdvice = async (
       }
     }
     const monthlyTax = taxAmount / 12;
-    // On applique le taux manuel s'il existe, sinon le calculé
     const effectiveMonthlyTax = context.config.taxRateManual > 0 
       ? (netBeforeTax * (context.config.taxRateManual / 100)) 
       : monthlyTax;
 
     const superNet = netBeforeTax - effectiveMonthlyTax;
 
-    // B. Charges & Reste à vivre
+    // Budget & Capacité
     const totalFixedExpenses = context.expenses.reduce((sum, e) => sum + e.amount, 0);
     const leisureBudget = context.config.leisureBudget || 0;
     const projectSavings = context.config.projectSavings || 0;
+    
+    // LA FORMULE CLÉ : Super Net - Charges - Plaisir - Projets
     const theoreticalSavingsCapacity = superNet - totalFixedExpenses - leisureBudget - projectSavings;
 
-    // C. Patrimoine & Survie
+    // Patrimoine
     const totalOwned = context.accounts.reduce((sum, a) => sum + a.ownedAmount, 0);
     const totalParental = context.accounts.reduce((sum, a) => sum + a.parentalCapital, 0);
     
-    // Calcul Liquidités réelles (Moi uniquement, hors comptes bloqués)
     const liquidSavings = context.accounts
       .filter(a => !a.contractEndDate && ![AccountType.IMMOBILIER, AccountType.PER, AccountType.PEE].includes(a.type))
       .reduce((sum, a) => sum + a.ownedAmount, 0);
 
-    // Calcul Durée de survie
-    let survivalStr = "Infinie (Pas de charges)";
+    // Survie
+    let survivalStr = "Infinie";
     if (totalFixedExpenses > 0) {
         const totalMonths = liquidSavings / totalFixedExpenses;
         const years = Math.floor(totalMonths / 12);
         const months = Math.floor(totalMonths % 12);
-        survivalStr = `${years} ans et ${months} mois (sur liquidités perso uniquement)`;
+        survivalStr = `${years} ans et ${months} mois`;
     }
 
-    // --- 2. CONSTRUCTION DU PROMPT SYSTÈME OMNISCIENT ---
+    // --- 2. FORMATAGE DU CONTEXTE POUR L'IA ---
 
     const accountsDetails = context.accounts.map(acc => {
-      let ceilingInfo = "";
       let ceilingVal = 0;
       if (acc.type === AccountType.LIVRET_A) ceilingVal = ACCOUNT_CEILINGS.LIVRET_A;
       if (acc.type === AccountType.LDDS) ceilingVal = ACCOUNT_CEILINGS.LDDS;
       if (acc.type === AccountType.LEP) ceilingVal = ACCOUNT_CEILINGS.LEP;
       
+      let ceilingInfo = "";
       if (ceilingVal > 0) {
         const fillPct = ((acc.totalAmount) / ceilingVal * 100).toFixed(1);
-        ceilingInfo = ` | Remplissage: ${fillPct}% (Plafond: ${ceilingVal}€)`;
+        ceilingInfo = `(Rempli à ${fillPct}% sur plafond ${ceilingVal}€)`;
       }
 
-      const availability = getAvailabilityInfo(acc);
-
-      return `   - [${acc.type}] "${acc.name}" :
-         > TOTAL: ${acc.totalAmount.toLocaleString()} € ${ceilingInfo}
-         > DONT MOI (Net): ${acc.ownedAmount.toLocaleString()} €
-         > DONT PARENTS (Intouchable): ${acc.parentalCapital.toLocaleString()} €
-         > Disponibilité: ${availability}
-         > Taux actuel: ${acc.interestRate || 0}%`;
+      return `   - [${acc.type}] "${acc.name}" ${ceilingInfo}:
+         > TOTAL COMPTE: ${acc.totalAmount.toLocaleString()} €
+         > DONT MA PART: ${acc.ownedAmount.toLocaleString()} €
+         > DONT PARENTS: ${acc.parentalCapital.toLocaleString()} € (Intouchable)
+         > Disponibilité: ${getAvailabilityInfo(acc)}
+         > Taux: ${acc.interestRate || 0}%`;
     }).join('\n');
 
-    const expensesDetails = context.expenses.map(e => `   - ${e.name}: ${e.amount} € (${e.paymentMethod})`).join('\n');
+    const expensesDetails = context.expenses.map(e => `   - ${e.name}: ${e.amount} €`).join('\n');
 
     const systemInstruction = `
-    RÔLE : Tu es un conseiller en gestion de patrimoine personnel expert.
-    PROFIL INVESTISSEUR : Prudence Absolue. Priorité à la garantie du capital.
+    RÔLE : Expert en Gestion de Patrimoine (Profil: Prudence Absolue, Rigueur Scientifique).
     
-    CONTEXTE FINANCIER OMNISCIENT (Données certifiées) :
+    TU DISPOSES DES DONNÉES FINANCIÈRES EXACTES CI-DESSOUS. UTILISE-LES POUR EXPLIQUER TES CALCULS.
 
-    1. REVENUS & FLUX MENSUELS (Calculés précisément) :
-       - Salaire Brut Annuel : ${grossAnnual.toLocaleString()} €
-       - Net Mensuel (Avant Impôt) : ${netBeforeTax.toFixed(2)} €
-       - Impôt estimé : -${effectiveMonthlyTax.toFixed(2)} €/mois
-       - SUPER NET (Dans la poche) : ${superNet.toFixed(2)} €
-    
-    2. BUDGET & CHARGES :
-       - Total Charges Fixes : -${totalFixedExpenses.toFixed(2)} €
-       - Détail Charges : 
-    ${expensesDetails}
-       - Budget Plaisir : -${leisureBudget} €
-       - Épargne Projet : -${projectSavings} €
-       ----------------------------------------------------
-       = CAPACITÉ D'INVESTISSEMENT THÉORIQUE : ${theoreticalSavingsCapacity.toFixed(2)} € / mois
+    1. DÉTAIL DES REVENUS (Mode Calculatrice) :
+       - Salaire Brut Mensuel : ${grossMonth.toLocaleString(undefined, {maximumFractionDigits: 0})} €
+       - Charges Sociales (-${(SALARY_CHARGES_RATE*100).toFixed(2)}%) : -${socialCharges.toFixed(2)} €
+       - Remboursement Navigo : +${navigoRefund.toFixed(2)} €
+         (Formule Navigo : Base ${navigoBase}€ x Prise en charge ${navigoRate}%)
+       - Revenu Extra : +${extraMonthly} €
+       ------------------------------------------------
+       = NET AVANT IMPÔT : ${netBeforeTax.toFixed(2)} €
+       - Impôt à la source estimé : -${effectiveMonthlyTax.toFixed(2)} €
+       = SUPER NET (En poche) : ${superNet.toFixed(2)} €
 
-    3. PATRIMOINE & RÉSILENCE :
-       - Capital Total (Moi + Parents) : ${(totalOwned + totalParental).toLocaleString()} €
-       - Mon Capital Net : ${totalOwned.toLocaleString()} €
-       - Capital Parents (SOUS GESTION) : ${totalParental.toLocaleString()} €
-       - Durée de survie (Liquidités perso / Charges fixes) : ${survivalStr}
+    2. ANALYSE BUDGÉTAIRE ET CAPACITÉ D'INVESTISSEMENT :
+       L'objectif est de définir l'argent réellement disponible pour l'investissement long terme.
+       
+       Départ : SUPER NET (${superNet.toFixed(2)} €)
+       - Charges Fixes Totales : -${totalFixedExpenses.toFixed(2)} €
+         (Détail: ${context.expenses.map(e => e.name).join(', ')})
+       - Budget Plaisir (Sanctuarisé) : -${leisureBudget} €
+       - Épargne Projet Court Terme (Voyage/Achat) : -${projectSavings} €
+       ------------------------------------------------
+       = CAPACITÉ D'INVESTISSEMENT RÉELLE : ${theoreticalSavingsCapacity.toFixed(2)} € / mois
 
-    4. DÉTAIL DES COMPTES (Omniscience) :
+    3. ÉTAT DU PATRIMOINE :
+       - Total sous gestion : ${(totalOwned + totalParental).toLocaleString()} €
+       - Dont Capital Parents (STRICTEMENT INTERDIT D'Y TOUCHER) : ${totalParental.toLocaleString()} €
+       - Dont Mon Capital : ${totalOwned.toLocaleString()} €
+       - Filet de sécurité (Survie) : ${survivalStr} avec les charges actuelles.
+
+    4. COMPTES DÉTAILLÉS :
     ${accountsDetails}
 
-    RÈGLES ABSOLUES POUR TES RÉPONSES :
-    1. CAPITAL PARENTS : Tu dois considérer l'argent des parents comme TOTALEMENT INTOUCHABLE. Je n'ai droit qu'aux intérêts générés. Ne suggère jamais de l'utiliser pour mes projets ou ma survie.
-    2. DATA DRIVEN : Base tes conseils uniquement sur les chiffres ci-dessus (disponibilité des PEE/PEA, capacité d'épargne réelle, taux de remplissage des livrets).
-    3. PRUDENCE : En cas de doute, privilégie la sécurité.
-    4. TON : Professionnel, direct, précis, comme un partenaire de laboratoire.
-
-    Réponds à la question de l'utilisateur en utilisant ce contexte.
+    CONSIGNES DE RÉPONSE :
+    1. Si je te demande comment est calculé mon salaire, cite les chiffres exacts du Navigo (${navigoRate}%) et des charges (${(SALARY_CHARGES_RATE*100).toFixed(2)}%).
+    2. Si je demande combien je peux investir, rappelle-moi que c'est APRES avoir déduit mes plaisirs (${leisureBudget}€) et mes projets (${projectSavings}€).
+    3. Ne confonds jamais l'argent des parents avec le mien.
     `;
 
     const historyForGemini = context.history.map(msg => ({
@@ -194,21 +193,14 @@ export const generateFinancialAdvice = async (
       parts: [{ text: msg.content }]
     }));
 
-    // --- 3. EXÉCUTION DU CHAT ---
     const chat = model.startChat({
       history: [
-        { role: "user", parts: [{ text: `INSTRUCTION SYSTÈME (Ne pas révéler à l'utilisateur, appliquer silencieusement) : ${systemInstruction}` }] },
-        { role: "model", parts: [{ text: "Bien compris. J'ai intégré l'ensemble de vos données financières (revenus, charges détaillées, répartition capital personnel/parental, maturité fiscale des comptes). Je suis prêt à vous conseiller avec une prudence absolue." }] },
+        { role: "user", parts: [{ text: `INSTRUCTION SYSTÈME CACHÉE : ${systemInstruction}` }] },
+        { role: "model", parts: [{ text: "Bien reçu. J'ai intégré vos paramètres salariaux (taux charges, Navigo), vos budgets plaisirs/projets et la distinction stricte des capitaux. Je suis prêt." }] },
         ...historyForGemini
       ],
     });
 
     const result = await chat.sendMessage(userPrompt);
     const response = await result.response;
-    return response.text();
-
-  } catch (error: any) {
-    console.error("Erreur Gemini:", error);
-    return "Désolé, je ne parviens pas à analyser vos données pour le moment. Vérifiez votre connexion ou la clé API.";
-  }
-};
+    return response.
