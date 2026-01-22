@@ -203,4 +203,10 @@ export const generateFinancialAdvice = async (
 
     const result = await chat.sendMessage(userPrompt);
     const response = await result.response;
-    return response.
+    return response.text();
+
+  } catch (error: any) {
+    console.error("Erreur Gemini:", error);
+    return "Erreur technique IA (Vérifiez la clé API ou la connexion).";
+  }
+};
