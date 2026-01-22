@@ -70,9 +70,9 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
     const socialCharges = grossMonth * fiscalConfig.salaryChargesRate;
     const netSalaryOnly = grossMonth - socialCharges;
     const netBeforeTax = netSalaryOnly + navigoRefund + extraMonthlyIncome;
-    
     // Calcul Impôt Dynamique
-    const netTaxableYear = (grossAnnual * (1 - fiscalConfig.standardAllowance)) + (extraMonthlyIncome * 12);
+    const netTaxableYear = ((netSalaryOnly + extraMonthlyIncome) * 12) * (1 - fiscalConfig.standardAllowance);
+
     let taxAmount = 0;
     let previousLimit = 0;
     

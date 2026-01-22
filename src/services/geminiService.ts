@@ -72,9 +72,9 @@ export const generateFinancialAdvice = async (
     
     const netSalaryOnly = grossMonth - socialCharges;
     const netBeforeTax = netSalaryOnly + navigoRefund + extraMonthly;
-
     // Calcul Impôt DYNAMIQUE
-    const netTaxableYear = (grossAnnual * (1 - fiscalConfig.standardAllowance)) + (extraMonthly * 12);
+    const netTaxableYear = ((netSalaryOnly + extraMonthly) * 12) * (1 - fiscalConfig.standardAllowance);
+    
     let taxAmount = 0;
     let previousLimit = 0;
     
