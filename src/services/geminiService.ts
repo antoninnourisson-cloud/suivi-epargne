@@ -1,11 +1,13 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { SavingsAccount, Expense, ChatMessage, AccountType } from "../types";
-import { ACCOUNT_CEILINGS } from "../constants";
 
 const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
 
-// ON REPASSE SUR FLASH (Maintenant que tu as une nouvelle clé, ça va marcher)
-const MODEL_ID = "gemini-1.5-flash"; 
+// --- CONFIGURATION DU MODÈLE ---
+// Tu veux tester la version "Gemini 3 Flash Preview".
+// Note : Si ce nom exact renvoie une erreur 404, c'est que l'ID technique est légèrement différent.
+// Autres possibilités courantes : "gemini-2.0-flash-exp", "gemini-experimental"
+const MODEL_ID = "gemini-3-flash-preview"; 
 
 const genAI = new GoogleGenerativeAI(API_KEY || '');
 
@@ -19,19 +21,14 @@ export const generateFinancialAdvice = async (
   }
 ): Promise<string> => {
   
-  // --- DIAGNOSTIC CLÉ (Regarde ta console navigateur !) ---
-  if (API_KEY) {
-    console.log(`🔑 Clé utilisée par Vercel : ${API_KEY.substring(0, 8)}...`);
-  } else {
-    console.error("❌ AUCUNE CLÉ DÉTECTÉE DANS VERCEL");
-    return "Erreur : Clé API manquante dans Vercel.";
-  }
-  // -------------------------------------------------------
+  // Petit check console pour être sûr que la nouvelle clé est bien prise
+  if (API_KEY) console.log(`🚀 Tentative avec modèle : ${MODEL_ID}`);
 
   try {
-    const model = genAI.getGenerativeModel({ model: MODEL_ID });
+    // On force l'utilisation de la version 'v1beta' qui est souvent requise pour les modèles Preview
+    const model = genAI.getGenerativeModel({ model: MODEL_ID }, { apiVersion: 'v1beta' });
 
-    // --- 1. PRÉPARATION ---
+    // --- 1. PRÉPARATION DES DONNÉES ---
     const totalOwned = context.accounts.reduce((sum, a) => sum + a.ownedAmount, 0);
     const liquidSavings = context.accounts
       .filter(a => !a.contractEndDate && ![AccountType.IMMOBILIER, AccountType.PER, AccountType.PEE].includes(a.type))
@@ -39,7 +36,7 @@ export const generateFinancialAdvice = async (
     const totalExpenses = context.expenses.reduce((sum, e) => sum + e.amount, 0);
 
     const systemInstruction = `
-      TU ES UN CONSEILLER FINANCIER "PRUDENCE ABSOLUE".
+      TU ES UN CONSEILLER FINANCIER D'ÉLITE (Profil : Prudence Absolue).
       
       DONNÉES CLIENT :
       - Revenus : ${context.config.grossAnnual} €/an
@@ -50,23 +47,22 @@ export const generateFinancialAdvice = async (
       COMPTES :
       ${context.accounts.map(a => `- ${a.name} (${a.type}): ${a.ownedAmount}€`).join('\n')}
       
-      RÈGLES :
-      1. Sécurité totale.
-      2. Remplir LEP > Livret A > LDDS en priorité.
-      3. Réponses courtes.
+      DIRECTIVES :
+      1. Sécurité totale du capital.
+      2. Optimisation fiscale via livrets réglementés (LEP/A/LDDS).
+      3. Analyse fine et proactive.
     `;
 
-    // --- 2. HISTORIQUE ---
-    const historyForGemini = context.history.slice(-8).map(msg => ({
+    const historyForGemini = context.history.slice(-10).map(msg => ({
       role: msg.role === 'user' ? 'user' : 'model',
       parts: [{ text: msg.content }]
     }));
 
-    // --- 3. CHAT ---
+    // --- 2. CHAT ---
     const chat = model.startChat({
       history: [
-        { role: "user", parts: [{ text: `INSTRUCTION : ${systemInstruction}` }] },
-        { role: "model", parts: [{ text: "Bien reçu." }] },
+        { role: "user", parts: [{ text: `INSTRUCTION SYSTÈME : ${systemInstruction}` }] },
+        { role: "model", parts: [{ text: "Bien reçu. Je suis prêt à optimiser votre situation." }] },
         ...historyForGemini
       ],
     });
@@ -78,10 +74,17 @@ export const generateFinancialAdvice = async (
   } catch (error: any) {
     console.error("Erreur Gemini:", error);
     
-    // Si Flash ne marche pas, on tente de lister les modèles dispos pour t'aider
-    if (error.message?.includes('404')) {
-      return `Erreur 404 : Le modèle ${MODEL_ID} n'est pas activé sur ce projet Google.`;
+    // Aide au diagnostic si le nom du modèle est faux
+    if (error.message?.includes('404') || error.message?.includes('not found')) {
+      return `⚠️ Erreur Modèle (404) : Le nom "${MODEL_ID}" n'est pas reconnu.
+      
+      👉 SOLUTION : 
+      1. Va sur Google AI Studio.
+      2. Sélectionne le modèle "Gemini 3 Flash" dans la liste à droite.
+      3. Clique sur le bouton "< > Get Code".
+      4. Copie le nom exact qui est entre guillemets (ex: "models/gemini-...") et mets-le dans le code.`;
     }
-    return "Désolé, erreur technique.";
+
+    return "Désolé, une erreur technique est survenue.";
   }
 };
