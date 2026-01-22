@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { SavingsAccount, PortfolioSnapshot, AccountType, Expense, GlobalAppData, AccountMovement } from './types';
+import { SavingsAccount, PortfolioSnapshot, AccountType, Expense, GlobalAppData, AccountMovement, ChatMessage } from './types';
 import { Dashboard } from './components/Dashboard';
 import { AccountForm } from './components/AccountForm';
 import { AccountUpdate } from './components/AccountUpdate';
@@ -7,6 +7,7 @@ import { Comparator } from './components/Comparator';
 import { AssistantPilot } from './components/AssistantPilot';
 import { TransferManager } from './components/TransferManager';
 import { Financing } from './components/Financing';
+import { AIAdvisor } from './components/AIAdvisor'; // <--- NOUVEAU COMPOSANT
 import { initGoogleApi, handleAuthClick, handleSignOut, findConfigFile, createConfigFile, readConfigFile, updateConfigFile } from './services/googleDriveService';
 import { 
   LayoutDashboard, 
@@ -22,7 +23,8 @@ import {
   PlusCircle,
   Cloud,
   LogOut,
-  Loader2
+  Loader2,
+  BrainCircuit // <--- NOUVELLE ICÔNE
 } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -38,6 +40,7 @@ const App: React.FC = () => {
   const [accounts, setAccounts] = useState<SavingsAccount[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [history, setHistory] = useState<PortfolioSnapshot[]>([]);
+  const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]); // <--- ÉTAT DU CHAT
   
   // Configuration globale
   const [grossAnnual, setGrossAnnual] = useState<number>(45000);
@@ -49,7 +52,7 @@ const App: React.FC = () => {
   const [extraMonthlyIncome, setExtraMonthlyIncome] = useState<number>(0);
 
   // Navigation et UI
-  const [view, setView] = useState<'dashboard' | 'accounts' | 'transfers' | 'comparator' | 'pilot' | 'update' | 'financing'>('dashboard');
+  const [view, setView] = useState<'dashboard' | 'accounts' | 'transfers' | 'comparator' | 'pilot' | 'update' | 'financing' | 'advisor'>('dashboard');
   const [editingAccount, setEditingAccount] = useState<SavingsAccount | undefined>(undefined);
   const [showForm, setShowForm] = useState(false);
   const [maturityAlerts, setMaturityAlerts] = useState<string[]>([]);
@@ -92,6 +95,7 @@ const App: React.FC = () => {
     setIsAuthenticated(false);
     setDriveFileId(null);
     setAccounts([]); 
+    setChatHistory([]); // <--- VIDER LE CHAT À LA DÉCONNEXION
     localStorage.removeItem('auth_persistence');
     localStorage.removeItem('auth_timestamp');
   };
@@ -106,6 +110,7 @@ const App: React.FC = () => {
           accounts: [],
           expenses: [],
           history: [],
+          chatHistory: [], // <--- INITIALISATION CHAT VIDE
           config: {
             grossAnnual: 45000,
             leisureBudget: 300,
@@ -126,6 +131,8 @@ const App: React.FC = () => {
         setAccounts((data.accounts || []).map(acc => ({ ...acc, movements: acc.movements || [] })));
         setExpenses(data.expenses || []);
         setHistory(data.history || []);
+        setChatHistory(data.chatHistory || []); // <--- CHARGEMENT DU CHAT
+        
         if (data.config) {
           setGrossAnnual(data.config.grossAnnual ?? 45000);
           setLeisureBudget(data.config.leisureBudget ?? 300);
@@ -137,7 +144,6 @@ const App: React.FC = () => {
         }
         if (data.lastView) setView(data.lastView as any);
         
-        // Chargement configuration financement
         if (data.financing) {
            localStorage.setItem('financing_interest', data.financing.interestRate.toString());
            localStorage.setItem('financing_insurance', data.financing.insuranceRate.toString());
@@ -161,6 +167,7 @@ const App: React.FC = () => {
         accounts,
         expenses,
         history,
+        chatHistory, // <--- SAUVEGARDE DU CHAT
         config: {
           grossAnnual,
           leisureBudget,
@@ -185,7 +192,7 @@ const App: React.FC = () => {
       }
     }, 2000);
     return () => clearTimeout(saveTimeoutRef.current);
-  }, [accounts, expenses, history, grossAnnual, leisureBudget, projectSavings, navigoBase, navigoRate, taxRateManual, extraMonthlyIncome, view, isAuthenticated, driveFileId]);
+  }, [accounts, expenses, history, chatHistory, grossAnnual, leisureBudget, projectSavings, navigoBase, navigoRate, taxRateManual, extraMonthlyIncome, view, isAuthenticated, driveFileId]);
 
   // --- LOGIQUE MÉTIER ---
   useEffect(() => {
@@ -445,6 +452,7 @@ const App: React.FC = () => {
           </div>
           <NavButton active={view === 'pilot'} onClick={() => setView('pilot')} icon={ShieldCheck} label="Pilotage" />
           <NavButton active={view === 'comparator'} onClick={() => setView('comparator')} icon={BarChart2} label="Simulation Gain" />
+          <NavButton active={view === 'advisor'} onClick={() => setView('advisor')} icon={BrainCircuit} label="Conseiller IA" />
 
           <div className="pt-4 pb-2 px-4">
             <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Gestion</p>
@@ -490,6 +498,16 @@ const App: React.FC = () => {
         
         {view === 'update' && <AccountUpdate accounts={accounts} onUpdateAccountsComplex={handleUpdateAccountsComplex} />}
         
+        {view === 'advisor' && (
+          <AIAdvisor 
+            accounts={accounts} 
+            expenses={expenses} 
+            config={{ grossAnnual, navigoBase, navigoRate, taxRateManual }}
+            chatHistory={chatHistory}
+            onUpdateHistory={setChatHistory}
+          />
+        )}
+        
         {view === 'accounts' && (
           <div className="space-y-6">
             <div className="flex justify-between items-center">
@@ -527,7 +545,6 @@ const App: React.FC = () => {
                   <tbody className="divide-y divide-slate-100">
                     {accounts.map(account => (
                       <React.Fragment key={account.id}>
-                        {/* LIGNE PRINCIPALE DU COMPTE */}
                         <tr 
                           className="hover:bg-slate-50 cursor-pointer border-b border-slate-100 group transition-colors"
                           onClick={() => setEditingAccount(editingAccount?.id === account.id ? undefined : account)}
@@ -555,8 +572,6 @@ const App: React.FC = () => {
                             </div>
                           </td>
                         </tr>
-
-                        {/* ACCORDEON HISTORIQUE */}
                         {editingAccount?.id === account.id && !showForm && (
                           <tr className="animate-in fade-in slide-in-from-top-2 duration-200">
                             <td colSpan={4} className="bg-slate-50 p-4">
@@ -571,8 +586,6 @@ const App: React.FC = () => {
                                   {account.movements && account.movements.length > 0 ? (
                                     [...account.movements].sort((a,b) => b.date.localeCompare(a.date)).map(m => (
                                       <div key={m.id} className="flex justify-between items-center bg-white p-3 rounded-lg border border-slate-200 text-xs shadow-sm group hover:border-indigo-300 transition-all">
-                                        
-                                        {/* GAUCHE: Date & Libellé + Edit */}
                                         <div className="flex flex-col gap-1">
                                           <span className="text-[10px] text-slate-400 font-mono flex items-center gap-1">
                                             <CalendarClock className="w-3 h-3" />
@@ -589,8 +602,6 @@ const App: React.FC = () => {
                                             </button>
                                           </div>
                                         </div>
-
-                                        {/* DROITE: Montant & Delete */}
                                         <div className="flex items-center gap-4">
                                           <span className={`font-black text-sm ${m.type === 'IN' ? 'text-emerald-600' : 'text-rose-600'}`}>
                                             {m.type === 'IN' ? '+' : '-'}{m.amount.toLocaleString()} €

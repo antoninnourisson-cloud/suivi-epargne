@@ -1,4 +1,3 @@
-
 export enum AccountType {
   LIVRET_A = 'Livret A',
   LDDS = 'LDDS',
@@ -12,14 +11,16 @@ export enum AccountType {
   CRYPTO = 'Cryptomonnaies',
   AUTRE = 'Autre'
 }
+
 export interface AccountMovement {
   id: string;
   date: string;
   amount: number;      // Positif pour crédit, négatif pour débit
-  label: string;      // Ex: "Virement salaire", "Dépôt test +500", etc.
+  label: string;       // Ex: "Virement salaire", "Dépôt test +500", etc.
   type: 'IN' | 'OUT'; // Flux entrant ou sortant
   linkId?: string;
 }
+
 export interface SavingsAccount {
   id: string;
   name: string;
@@ -38,6 +39,7 @@ export interface SavingsAccount {
   isTaxable?: boolean;
   movements: AccountMovement[]; 
 }
+
 export interface PortfolioSnapshot {
   date: string; 
   totalAmount: number;
@@ -59,13 +61,20 @@ export interface Expense {
   paymentMethod: PaymentMethod;
 }
 
-// Configuration for generating an image with Gemini 3 Pro Image Preview
+// --- NOUVEAU : STRUCTURE DU CHAT ---
+export interface ChatMessage {
+  id: string;
+  role: 'user' | 'model';
+  content: string;
+  timestamp: number;
+}
+
+// Configuration for generating an image (Conservé pour compatibilité si besoin)
 export interface ImageGenerationConfig {
   prompt: string;
   size: '1K' | '2K' | '4K';
 }
 
-// Configuration for editing an image with Gemini 2.5 Flash Image
 export interface ImageEditConfig {
   prompt: string;
   base64Image: string;
@@ -92,4 +101,5 @@ export interface GlobalAppData {
     insuranceRate: number;
   };
   lastView?: string;
+  chatHistory?: ChatMessage[]; // <--- AJOUTÉ POUR SAUVEGARDER LA CONVERSATION
 }
