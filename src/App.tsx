@@ -502,7 +502,9 @@ const App: React.FC = () => {
           <AIAdvisor 
             accounts={accounts} 
             expenses={expenses} 
-            config={{ grossAnnual, navigoBase, navigoRate, taxRateManual }}
+            config={{ grossAnnual, navigoBase, navigoRate, taxRateManual, leisureBudget,
+              projectSavings,
+              extraMonthlyIncome }}
             chatHistory={chatHistory}
             onUpdateHistory={setChatHistory}
           />
