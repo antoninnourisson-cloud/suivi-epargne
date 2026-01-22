@@ -1,24 +1,18 @@
 import React, { useState, useMemo } from 'react';
-import { SavingsAccount, Expense, AccountType } from '../types';
-import { TAX_BRACKETS, STANDARD_ALLOWANCE, SALARY_CHARGES_RATE, ACCOUNT_CEILINGS, LEGAL_MATURITY } from '../constants';
+import { SavingsAccount, Expense, AccountType, FiscalConfig } from '../types';
 import { 
   Calculator, 
   TrendingUp, 
-  ShieldCheck, 
   Target, 
-  Clock, 
   Lock, 
   Unlock, 
   Info,
   Plus,
   Trash2,
-  AlertTriangle,
   Hourglass,
   Coins,
-  BarChart3,
-  Wallet
+  BarChart3
 } from 'lucide-react';
-import { Button } from './Button';
 
 interface AssistantPilotProps {
   accounts: SavingsAccount[];
@@ -38,6 +32,7 @@ interface AssistantPilotProps {
   setTaxRateManual: (val: number) => void;
   extraMonthlyIncome: number;
   setExtraMonthlyIncome: (val: number) => void;
+  fiscalConfig: FiscalConfig; // Ajout prop
 }
 
 export const AssistantPilot: React.FC<AssistantPilotProps> = ({
@@ -57,7 +52,8 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
   taxRateManual,
   setTaxRateManual,
   extraMonthlyIncome,
-  setExtraMonthlyIncome
+  setExtraMonthlyIncome,
+  fiscalConfig
 }) => {
   
   // --- ÉTATS LOCAUX ---
@@ -65,33 +61,36 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
   const [externalSavings, setExternalSavings] = useState<number>(0);
   const [manualSavingsCapacity, setManualSavingsCapacity] = useState<string | null>(null); 
   const [activeTab, setActiveTab] = useState<'budget' | 'fiscal'>('budget');
-
   const navigoRefund = (navigoBase * (navigoRate / 100)); 
 
-  // --- 1. MOTEUR DE CALCUL REVENUS ---
+  // --- 1. MOTEUR DE CALCUL REVENUS (UTILISANT FISCAL CONFIG) ---
   const autoValues = useMemo(() => {
     const grossMonth = grossAnnual / 12;
-    const socialCharges = grossMonth * SALARY_CHARGES_RATE;
+    // Utilisation dynamique du taux
+    const socialCharges = grossMonth * fiscalConfig.salaryChargesRate;
     const netSalaryOnly = grossMonth - socialCharges;
     const netBeforeTax = netSalaryOnly + navigoRefund + extraMonthlyIncome;
     
-    const netTaxableYear = (grossAnnual * (1 - STANDARD_ALLOWANCE)) + (extraMonthlyIncome * 12);
-    const quotient = netTaxableYear;
-    
+    // Calcul Impôt Dynamique
+    const netTaxableYear = (grossAnnual * (1 - fiscalConfig.standardAllowance)) + (extraMonthlyIncome * 12);
     let taxAmount = 0;
     let previousLimit = 0;
-    for (const bracket of TAX_BRACKETS) {
-      if (quotient > previousLimit) {
-        const taxable = Math.min(quotient, bracket.limit) - previousLimit;
-        taxAmount += taxable * bracket.rate;
-        previousLimit = bracket.limit;
-      }
+    
+    // Boucle sur les tranches dynamiques
+    for (const bracket of fiscalConfig.taxBrackets) {
+        const limit = bracket.limit === null || bracket.limit === undefined ? Infinity : bracket.limit;
+        if (netTaxableYear > previousLimit) {
+            const taxable = Math.min(netTaxableYear, limit) - previousLimit;
+            taxAmount += taxable * bracket.rate;
+            previousLimit = limit;
+        }
     }
+
     const monthlyTax = taxAmount / 12;
     const autoRate = (taxAmount / netTaxableYear) * 100;
 
     return { grossMonth, socialCharges, netSalaryOnly, netBeforeTax, taxAmount, monthlyTax, autoRate, netTaxableYear };
-  }, [grossAnnual, extraMonthlyIncome, navigoRefund]);
+  }, [grossAnnual, extraMonthlyIncome, navigoRefund, fiscalConfig]);
 
   const effectiveTaxRate = taxRateManual > 0 ? taxRateManual : autoValues.autoRate;
   const effectiveMonthlyTax = taxRateManual > 0 ? (autoValues.netBeforeTax * (taxRateManual/100)) : autoValues.monthlyTax;
@@ -100,7 +99,7 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
   const updateFromGrossAnnual = (val: number) => setGrossAnnual(val);
   const updateFromGrossMonth = (val: number) => setGrossAnnual(val * 12);
   const updateFromNet = (val: number) => {
-    const targetGrossMonth = (val - navigoRefund - extraMonthlyIncome) / (1 - SALARY_CHARGES_RATE);
+    const targetGrossMonth = (val - navigoRefund - extraMonthlyIncome) / (1 - fiscalConfig.salaryChargesRate);
     setGrossAnnual(targetGrossMonth * 12);
   };
   const updateFromSuperNet = (val: number) => {
@@ -111,7 +110,6 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
   // --- 2. CAPACITÉ D'ÉPARGNE ---
   const budgetData = useMemo(() => {
     const totalFixed = expenses.reduce((sum, e) => sum + e.amount, 0);
-    // On retire loisirs et projets pour trouver la capacité nette d'investissement
     const theoreticalCapacity = effectiveSuperNet - totalFixed - leisureBudget - projectSavings;
     const finalCapacity = manualSavingsCapacity !== null ? parseFloat(manualSavingsCapacity) : theoreticalCapacity;
     const totalToInvest = Math.max(0, finalCapacity + externalSavings);
@@ -119,24 +117,19 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
     return { totalFixed, theoreticalCapacity, finalCapacity, totalToInvest };
   }, [effectiveSuperNet, expenses, leisureBudget, projectSavings, manualSavingsCapacity, externalSavings]);
 
-
-  // --- 3. ALGORITHME DE CASCADE (Corrigé & Trié par Taux) ---
+  // --- 3. ALGORITHME DE CASCADE (Utilisant Plafonds Dynamiques) ---
   const strategy = useMemo(() => {
     let remainingMoney = budgetData.totalToInvest;
     const steps: any[] = [];
 
-    // Séparation des comptes
     const liquidTypes = [AccountType.LEP, AccountType.LIVRET_A, AccountType.LDDS];
     const userLiquidAccounts = accounts.filter(a => liquidTypes.includes(a.type));
     const userOtherAccounts = accounts.filter(a => !liquidTypes.includes(a.type) && ![AccountType.COMPTE_COURANT, AccountType.IMMOBILIER].includes(a.type));
 
-    // TRI PAR TAUX D'INTÉRÊT DÉCROISSANT (Le plus rentable en premier)
-    // Si taux égal, ordre de préférence : LEP > Livret A > LDDS
     const sortAccounts = (a: SavingsAccount, b: SavingsAccount) => {
       const rateA = a.interestRate || 0;
       const rateB = b.interestRate || 0;
-      if (rateA !== rateB) return rateB - rateA; // Plus grand taux d'abord
-      // Ordre par défaut si taux égaux
+      if (rateA !== rateB) return rateB - rateA;
       const priority = { [AccountType.LEP]: 3, [AccountType.LIVRET_A]: 2, [AccountType.LDDS]: 1 };
       return (priority[b.type] || 0) - (priority[a.type] || 0);
     };
@@ -144,17 +137,15 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
     userLiquidAccounts.sort(sortAccounts);
     userOtherAccounts.sort(sortAccounts);
 
-    // ÉTAPE 1 : REMPLIR LES LIVRETS (Priorité absolue)
     userLiquidAccounts.forEach(acc => {
       if (remainingMoney <= 0) return;
 
-      // Plafond spécifique ou par défaut
+      // Utilisation dynamique des plafonds
       let ceiling = acc.ceiling || 0;
-      if (acc.type === AccountType.LEP) ceiling = ACCOUNT_CEILINGS.LEP;
-      if (acc.type === AccountType.LIVRET_A) ceiling = ACCOUNT_CEILINGS.LIVRET_A;
-      if (acc.type === AccountType.LDDS) ceiling = ACCOUNT_CEILINGS.LDDS;
+      if (acc.type === AccountType.LEP) ceiling = fiscalConfig.ceilings.lep;
+      if (acc.type === AccountType.LIVRET_A) ceiling = fiscalConfig.ceilings.livretA;
+      if (acc.type === AccountType.LDDS) ceiling = fiscalConfig.ceilings.ldds;
 
-      // Espace disponible (Plafond - (Ma Part + Part Parents))
       const availableSpace = Math.max(0, ceiling - acc.totalAmount);
 
       if (availableSpace > 0) {
@@ -171,11 +162,8 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
       }
     });
 
-    // ÉTAPE 2 : AUTRES COMPTES (Si surplus)
     if (remainingMoney > 0) {
-      // S'il y a des comptes longs termes (PEA, AV), on met dessus
       if (userOtherAccounts.length > 0) {
-        // On met tout sur le meilleur compte long terme dispo (ou on divise, ici on met sur le top 1)
         const bestAccount = userOtherAccounts[0];
         steps.push({
           accountName: bestAccount.name,
@@ -187,7 +175,6 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
         });
         remainingMoney = 0;
       } else {
-        // Pas de compte pour le surplus
         steps.push({
           accountName: "Ouvrir un PEA/AV",
           type: AccountType.AUTRE,
@@ -201,23 +188,22 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
     }
 
     return steps;
-  }, [budgetData.totalToInvest, accounts]);
+  }, [budgetData.totalToInvest, accounts, fiscalConfig]);
 
-
-  // --- 4. DATA VISUALISATION LIVRETS (Remplissage) ---
+  // --- 4. DATA VISUALISATION LIVRETS (Remplissage Dynamique) ---
   const bookletStats = useMemo(() => {
     return [AccountType.LEP, AccountType.LIVRET_A, AccountType.LDDS].map(type => {
       const acc = accounts.find(a => a.type === type);
       if (!acc) return null;
       
       let ceiling = acc.ceiling;
-      if (type === AccountType.LEP) ceiling = ACCOUNT_CEILINGS.LEP;
-      if (type === AccountType.LIVRET_A) ceiling = ACCOUNT_CEILINGS.LIVRET_A;
-      if (type === AccountType.LDDS) ceiling = ACCOUNT_CEILINGS.LDDS;
+      // Utilisation dynamique
+      if (type === AccountType.LEP) ceiling = fiscalConfig.ceilings.lep;
+      if (type === AccountType.LIVRET_A) ceiling = fiscalConfig.ceilings.livretA;
+      if (type === AccountType.LDDS) ceiling = fiscalConfig.ceilings.ldds;
       
-      if (!ceiling) ceiling = 10000; // Fallback
+      if (!ceiling) ceiling = 10000; 
 
-      // Pourcentages pour la barre
       const parentPct = (acc.parentalCapital / ceiling) * 100;
       const ownedPct = (acc.ownedAmount / ceiling) * 100;
       const totalPct = parentPct + ownedPct;
@@ -235,16 +221,14 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
         remainingSpace
       };
     }).filter(x => x !== null);
-  }, [accounts]);
+  }, [accounts, fiscalConfig]);
 
-
-  // --- 5. RÉSILIENCE (SURVIE) ---
+  // --- 5. RÉSILIENCE ---
   const survival = useMemo(() => {
     const liquidMoney = accounts
       .filter(a => !a.contractEndDate && ![AccountType.IMMOBILIER, AccountType.PER, AccountType.PEE].includes(a.type))
       .reduce((sum, a) => sum + a.ownedAmount, 0);
     
-    // STRICTEMENT CHARGES FIXES (pas de loisirs)
     const monthlyBurn = budgetData.totalFixed; 
     
     if (monthlyBurn === 0) return { label: "Infini", color: "text-slate-500", bg: "bg-slate-50", border: "border-slate-200" };
@@ -261,14 +245,14 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
 
     if (totalMonths < 3) { color = 'text-rose-600'; border = 'border-rose-200'; bg = 'bg-rose-50'; }
     else if (totalMonths < 6) { color = 'text-orange-600'; border = 'border-orange-200'; bg = 'bg-orange-50'; }
-    else if (totalMonths < 12) { color = 'text-emerald-600'; border = 'border-emerald-200'; bg = 'bg-emerald-50'; } // Vert standard
-    else { color = 'text-amber-600'; border = 'border-amber-200'; bg = 'bg-amber-50'; } // Doré > 1 an
+    else if (totalMonths < 12) { color = 'text-emerald-600'; border = 'border-emerald-200'; bg = 'bg-emerald-50'; } 
+    else { color = 'text-amber-600'; border = 'border-amber-200'; bg = 'bg-amber-50'; } 
 
     return { years, months, days, color, border, bg, monthlyBurn, totalMonths };
   }, [accounts, budgetData.totalFixed]);
 
 
-  // --- 6. HORLOGE FISCALE ---
+  // --- 6. HORLOGE FISCALE (Dynamique) ---
   const fiscalClock = useMemo(() => {
     return accounts
       .filter(a => [AccountType.PEE, AccountType.PEA, AccountType.ASSURANCE_VIE].includes(a.type))
@@ -280,7 +264,8 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
           endDate = new Date(acc.contractEndDate);
           label = "Fin Contrat";
         } else if (acc.openingDate) {
-          const duration = acc.type === AccountType.PEA ? LEGAL_MATURITY.PEA : LEGAL_MATURITY.ASSURANCE_VIE;
+          // Utilisation dynamique
+          const duration = acc.type === AccountType.PEA ? fiscalConfig.legalMaturity.pea : fiscalConfig.legalMaturity.assuranceVie;
           endDate = new Date(acc.openingDate);
           endDate.setFullYear(endDate.getFullYear() + duration);
           label = `Maturité fiscale (${duration} ans)`;
@@ -301,12 +286,10 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
         }
 
         return { id: acc.id, name: acc.name, type: acc.type, date: endDate.toLocaleDateString(), timeLeft, isAvailable, label };
-      })
+    })
       .filter(item => item !== null);
-  }, [accounts]);
+  }, [accounts, fiscalConfig]);
 
-
-  // --- RENDU UI ---
   return (
     <div className="space-y-8 animate-fade-in pb-20">
       
@@ -342,8 +325,8 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
             
             {showDetails && (
               <div className="bg-white p-4 rounded-xl text-xs space-y-2 border border-slate-200 animate-in slide-in-from-top-2 shadow-inner mb-4">
-                <div className="flex justify-between font-bold border-b pb-1"><span>Salaire Brut</span> <span>{Math.round(autoValues.grossMonth)} €</span></div>
-                <div className="flex justify-between text-rose-500"><span>Charges ({(SALARY_CHARGES_RATE*100).toFixed(2)}%)</span> <span>- {Math.round(autoValues.socialCharges)} €</span></div>
+                 <div className="flex justify-between font-bold border-b pb-1"><span>Salaire Brut</span> <span>{Math.round(autoValues.grossMonth)} €</span></div>
+                <div className="flex justify-between text-rose-500"><span>Charges ({(fiscalConfig.salaryChargesRate*100).toFixed(2)}%)</span> <span>- {Math.round(autoValues.socialCharges)} €</span></div>
                 <div className="flex justify-between text-emerald-600"><span>Remboursement Navigo</span> <span>+ {navigoRefund.toFixed(2)} €</span></div>
                 <div className="flex justify-between font-bold text-indigo-700 pt-1"><span>= Net Avant Impôt</span> <span>{autoValues.netBeforeTax.toFixed(2)} €</span></div>
                 <div className="flex justify-between text-amber-600"><span>Impôt Source ({effectiveTaxRate.toFixed(1)}%)</span> <span>- {effectiveMonthlyTax.toFixed(2)} €</span></div>
@@ -356,7 +339,9 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
             <div className="lg:col-span-1 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
               <div className="flex justify-between items-center mb-4">
                 <h4 className="font-bold text-slate-700 flex items-center gap-2"><TrendingUp className="w-4 h-4 text-rose-500"/> Charges Fixes</h4>
-                <button onClick={() => { const n = prompt("Nom ?"); const a = prompt("Montant ?"); if(n && a) onUpdateExpenses([...expenses, {id: crypto.randomUUID(), name: n, amount: parseFloat(a)}]); }} className="p-1 bg-slate-100 rounded hover:bg-slate-200"><Plus className="w-4 h-4"/></button>
+                <button onClick={() => { const n = prompt("Nom ?");
+                  const a = prompt("Montant ?"); if(n && a) onUpdateExpenses([...expenses, {id: crypto.randomUUID(), name: n, amount: parseFloat(a)}]);
+                }} className="p-1 bg-slate-100 rounded hover:bg-slate-200"><Plus className="w-4 h-4"/></button>
               </div>
               <div className="space-y-2 max-h-60 overflow-y-auto pr-2">
                 {expenses.map(e => (
@@ -383,7 +368,7 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
                    </div>
                  </div>
                  <div className="bg-slate-800 p-4 rounded-xl border border-slate-700">
-                   <label className="text-[10px] font-black text-indigo-300 uppercase flex items-center gap-2"><Coins className="w-3 h-3"/> Ajout Somme Externe</label>
+                    <label className="text-[10px] font-black text-indigo-300 uppercase flex items-center gap-2"><Coins className="w-3 h-3"/> Ajout Somme Externe</label>
                    <input type="number" value={externalSavings} onChange={e => setExternalSavings(parseFloat(e.target.value)||0)} className="w-full bg-slate-900 border border-slate-600 rounded-lg p-2 mt-2 text-white font-bold focus:ring-2 focus:ring-indigo-500 outline-none" />
                  </div>
               </div>
@@ -428,7 +413,7 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
                      <div className="h-full bg-indigo-600" style={{ width: `${b?.ownedPct}%` }} title={`Moi: ${b?.ownedAmount}€`}></div>
                    </div>
                    <div className="flex justify-between text-[10px] text-slate-400 font-bold">
-                     <span className="text-amber-500">Parents {b?.parentAmount.toLocaleString()}€</span>
+                      <span className="text-amber-500">Parents {b?.parentAmount.toLocaleString()}€</span>
                      <span className="text-indigo-600">Moi {b?.ownedAmount.toLocaleString()}€</span>
                      <span>Max {b?.ceiling.toLocaleString()}€</span>
                    </div>

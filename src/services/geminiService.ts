@@ -2,24 +2,15 @@
 // FILE: src/services/geminiService.ts
 // ================================================
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { SavingsAccount, Expense, ChatMessage, AccountType } from "../types";
-import { 
-  TAX_BRACKETS, 
-  STANDARD_ALLOWANCE, 
-  SALARY_CHARGES_RATE, 
-  ACCOUNT_CEILINGS, 
-  LEGAL_MATURITY 
-} from "../constants";
+import { SavingsAccount, Expense, ChatMessage, AccountType, FiscalConfig } from "../types";
 
 const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
-// Utilisation du modèle experimental pour une meilleure logique
 const MODEL_ID = "gemini-2.0-flash-exp"; 
 
 const genAI = new GoogleGenerativeAI(API_KEY || '');
 
-// --- FONCTIONS UTILITAIRES ---
-
-const getAvailabilityInfo = (acc: SavingsAccount): string => {
+// On change la signature pour accepter la config fiscale
+const getAvailabilityInfo = (acc: SavingsAccount, fiscalConfig: FiscalConfig): string => {
   const now = new Date();
   
   if (acc.type === AccountType.PEE && acc.contractEndDate) {
@@ -31,8 +22,9 @@ const getAvailabilityInfo = (acc: SavingsAccount): string => {
   if (acc.openingDate && [AccountType.PEA, AccountType.ASSURANCE_VIE, AccountType.PER].includes(acc.type)) {
     const openDate = new Date(acc.openingDate);
     let duration = 0;
-    if (acc.type === AccountType.PEA) duration = LEGAL_MATURITY.PEA;
-    if (acc.type === AccountType.ASSURANCE_VIE) duration = LEGAL_MATURITY.ASSURANCE_VIE;
+    // UTILISATION DE LA CONFIG DYNAMIQUE
+    if (acc.type === AccountType.PEA) duration = fiscalConfig.legalMaturity.pea;
+    if (acc.type === AccountType.ASSURANCE_VIE) duration = fiscalConfig.legalMaturity.assuranceVie;
     
     if (duration > 0) {
       const unlockDate = new Date(openDate);
@@ -56,40 +48,48 @@ export const generateFinancialAdvice = async (
     expenses: Expense[];
     config: any;
     history: ChatMessage[];
+    fiscalConfig: FiscalConfig; // <--- AJOUT IMPORTANT
   }
 ): Promise<string> => {
   
-  if (API_KEY) console.log(`🚀 Appel IA Omnisciente : ${MODEL_ID}`);
-
   try {
     const model = genAI.getGenerativeModel({ model: MODEL_ID });
+    const { fiscalConfig } = context; // Extraction
 
     // --- 1. RÉCUPERATION DES PARAMÈTRES ET CALCULS ---
     
     // Paramètres Navigo & Salaire
     const navigoBase = context.config.navigoBase || 90.80;
-    const navigoRate = context.config.navigoRate || 67.24; // ex: 67.24%
+    const navigoRate = context.config.navigoRate || 67.24; 
     const navigoRefund = navigoBase * (navigoRate / 100);
     
     const grossAnnual = context.config.grossAnnual || 0;
     const extraMonthly = context.config.extraMonthlyIncome || 0;
     const grossMonth = grossAnnual / 12;
     
-    const socialCharges = grossMonth * SALARY_CHARGES_RATE;
+    // UTILISATION DE LA CONFIG DYNAMIQUE
+    const socialCharges = grossMonth * fiscalConfig.salaryChargesRate;
+    
     const netSalaryOnly = grossMonth - socialCharges;
     const netBeforeTax = netSalaryOnly + navigoRefund + extraMonthly;
 
-    // Calcul Impôt
-    const netTaxableYear = (grossAnnual * (1 - STANDARD_ALLOWANCE)) + (extraMonthly * 12);
+    // Calcul Impôt DYNAMIQUE
+    const netTaxableYear = (grossAnnual * (1 - fiscalConfig.standardAllowance)) + (extraMonthly * 12);
     let taxAmount = 0;
     let previousLimit = 0;
-    for (const bracket of TAX_BRACKETS) {
-      if (netTaxableYear > previousLimit) {
-        const taxable = Math.min(netTaxableYear, bracket.limit) - previousLimit;
-        taxAmount += taxable * bracket.rate;
-        previousLimit = bracket.limit;
-      }
+    
+    // Boucle sur les tranches dynamiques
+    for (const bracket of fiscalConfig.taxBrackets) {
+        // Gestion de l'infini
+        const limit = bracket.limit === null || bracket.limit === undefined ? Infinity : bracket.limit;
+        
+        if (netTaxableYear > previousLimit) {
+            const taxable = Math.min(netTaxableYear, limit) - previousLimit;
+            taxAmount += taxable * bracket.rate;
+            previousLimit = limit;
+        }
     }
+
     const monthlyTax = taxAmount / 12;
     const effectiveMonthlyTax = context.config.taxRateManual > 0 
       ? (netBeforeTax * (context.config.taxRateManual / 100)) 
@@ -97,23 +97,16 @@ export const generateFinancialAdvice = async (
 
     const superNet = netBeforeTax - effectiveMonthlyTax;
 
-    // Budget & Capacité
+    // ... (Budget & Capacité, Patrimoine : INCHANGÉS)
     const totalFixedExpenses = context.expenses.reduce((sum, e) => sum + e.amount, 0);
     const leisureBudget = context.config.leisureBudget || 0;
     const projectSavings = context.config.projectSavings || 0;
-    
-    // LA FORMULE CLÉ : Super Net - Charges - Plaisir - Projets
     const theoreticalSavingsCapacity = superNet - totalFixedExpenses - leisureBudget - projectSavings;
-
-    // Patrimoine
     const totalOwned = context.accounts.reduce((sum, a) => sum + a.ownedAmount, 0);
     const totalParental = context.accounts.reduce((sum, a) => sum + a.parentalCapital, 0);
-    
     const liquidSavings = context.accounts
       .filter(a => !a.contractEndDate && ![AccountType.IMMOBILIER, AccountType.PER, AccountType.PEE].includes(a.type))
       .reduce((sum, a) => sum + a.ownedAmount, 0);
-
-    // Survie
     let survivalStr = "Infinie";
     if (totalFixedExpenses > 0) {
         const totalMonths = liquidSavings / totalFixedExpenses;
@@ -126,9 +119,10 @@ export const generateFinancialAdvice = async (
 
     const accountsDetails = context.accounts.map(acc => {
       let ceilingVal = 0;
-      if (acc.type === AccountType.LIVRET_A) ceilingVal = ACCOUNT_CEILINGS.LIVRET_A;
-      if (acc.type === AccountType.LDDS) ceilingVal = ACCOUNT_CEILINGS.LDDS;
-      if (acc.type === AccountType.LEP) ceilingVal = ACCOUNT_CEILINGS.LEP;
+      // UTILISATION DE LA CONFIG DYNAMIQUE
+      if (acc.type === AccountType.LIVRET_A) ceilingVal = fiscalConfig.ceilings.livretA;
+      if (acc.type === AccountType.LDDS) ceilingVal = fiscalConfig.ceilings.ldds;
+      if (acc.type === AccountType.LEP) ceilingVal = fiscalConfig.ceilings.lep;
       
       let ceilingInfo = "";
       if (ceilingVal > 0) {
@@ -136,56 +130,53 @@ export const generateFinancialAdvice = async (
         ceilingInfo = `(Rempli à ${fillPct}% sur plafond ${ceilingVal}€)`;
       }
 
+      // Passe la config à getAvailabilityInfo
       return `   - [${acc.type}] "${acc.name}" ${ceilingInfo}:
          > TOTAL COMPTE: ${acc.totalAmount.toLocaleString()} €
          > DONT MA PART: ${acc.ownedAmount.toLocaleString()} €
          > DONT PARENTS: ${acc.parentalCapital.toLocaleString()} € (Intouchable)
-         > Disponibilité: ${getAvailabilityInfo(acc)}
+         > Disponibilité: ${getAvailabilityInfo(acc, fiscalConfig)}
          > Taux: ${acc.interestRate || 0}%`;
     }).join('\n');
 
     const expensesDetails = context.expenses.map(e => `   - ${e.name}: ${e.amount} €`).join('\n');
 
     const systemInstruction = `
-    RÔLE : Expert en Gestion de Patrimoine (Profil: Prudence Absolue, Rigueur Scientifique).
+    RÔLE : Expert en Gestion de Patrimoine (Profil: Prudence Absolue).
     
-    TU DISPOSES DES DONNÉES FINANCIÈRES EXACTES CI-DESSOUS. UTILISE-LES POUR EXPLIQUER TES CALCULS.
+    PARAMÈTRES LÉGAUX ACTUELS (CONFIGURÉS PAR L'UTILISATEUR) :
+    - Taux Charges Sociales Salariales : ${(fiscalConfig.salaryChargesRate * 100).toFixed(2)}%
+    - Plafond Livret A : ${fiscalConfig.ceilings.livretA}€
+    - Plafond LEP : ${fiscalConfig.ceilings.lep}€
 
-    1. DÉTAIL DES REVENUS (Mode Calculatrice) :
+    1. DÉTAIL DES REVENUS (Calcul Dynamique) :
        - Salaire Brut Mensuel : ${grossMonth.toLocaleString(undefined, {maximumFractionDigits: 0})} €
-       - Charges Sociales (-${(SALARY_CHARGES_RATE*100).toFixed(2)}%) : -${socialCharges.toFixed(2)} €
+       - Charges Sociales : -${socialCharges.toFixed(2)} €
        - Remboursement Navigo : +${navigoRefund.toFixed(2)} €
-         (Formule Navigo : Base ${navigoBase}€ x Prise en charge ${navigoRate}%)
        - Revenu Extra : +${extraMonthly} €
        ------------------------------------------------
        = NET AVANT IMPÔT : ${netBeforeTax.toFixed(2)} €
-       - Impôt à la source estimé : -${effectiveMonthlyTax.toFixed(2)} €
-       = SUPER NET (En poche) : ${superNet.toFixed(2)} €
+       - Impôt estimé (Selon barème perso) : -${effectiveMonthlyTax.toFixed(2)} €
+       = SUPER NET : ${superNet.toFixed(2)} €
 
-    2. ANALYSE BUDGÉTAIRE ET CAPACITÉ D'INVESTISSEMENT :
-       L'objectif est de définir l'argent réellement disponible pour l'investissement long terme.
-       
-       Départ : SUPER NET (${superNet.toFixed(2)} €)
-       - Charges Fixes Totales : -${totalFixedExpenses.toFixed(2)} €
-         (Détail: ${context.expenses.map(e => e.name).join(', ')})
-       - Budget Plaisir (Sanctuarisé) : -${leisureBudget} €
-       - Épargne Projet Court Terme (Voyage/Achat) : -${projectSavings} €
+    2. CAPACITÉ D'INVESTISSEMENT RÉELLE :
+       - Super Net : ${superNet.toFixed(2)} €
+       - Charges Fixes : -${totalFixedExpenses.toFixed(2)} €
+       - Budget Plaisir : -${leisureBudget} €
+       - Épargne Projet : -${projectSavings} €
        ------------------------------------------------
-       = CAPACITÉ D'INVESTISSEMENT RÉELLE : ${theoreticalSavingsCapacity.toFixed(2)} € / mois
+       = RESTE À INVESTIR : ${theoreticalSavingsCapacity.toFixed(2)} € / mois
 
-    3. ÉTAT DU PATRIMOINE :
-       - Total sous gestion : ${(totalOwned + totalParental).toLocaleString()} €
-       - Dont Capital Parents (STRICTEMENT INTERDIT D'Y TOUCHER) : ${totalParental.toLocaleString()} €
-       - Dont Mon Capital : ${totalOwned.toLocaleString()} €
-       - Filet de sécurité (Survie) : ${survivalStr} avec les charges actuelles.
+    3. PATRIMOINE :
+       - Capital Parents (Intouchable) : ${totalParental.toLocaleString()} €
+       - Mon Capital : ${totalOwned.toLocaleString()} €
+       - Survie : ${survivalStr}
 
-    4. COMPTES DÉTAILLÉS :
+    4. COMPTES :
     ${accountsDetails}
 
-    CONSIGNES DE RÉPONSE :
-    1. Si je te demande comment est calculé mon salaire, cite les chiffres exacts du Navigo (${navigoRate}%) et des charges (${(SALARY_CHARGES_RATE*100).toFixed(2)}%).
-    2. Si je demande combien je peux investir, rappelle-moi que c'est APRES avoir déduit mes plaisirs (${leisureBudget}€) et mes projets (${projectSavings}€).
-    3. Ne confonds jamais l'argent des parents avec le mien.
+    CONSIGNES :
+    Utilise ces paramètres dynamiques pour tes calculs. Si le taux de charges est élevé (ex: 25%), note-le comme une hypothèse "Secteur Privé" si pertinent.
     `;
 
     const historyForGemini = context.history.map(msg => ({
@@ -195,8 +186,8 @@ export const generateFinancialAdvice = async (
 
     const chat = model.startChat({
       history: [
-        { role: "user", parts: [{ text: `INSTRUCTION SYSTÈME CACHÉE : ${systemInstruction}` }] },
-        { role: "model", parts: [{ text: "Bien reçu. J'ai intégré vos paramètres salariaux (taux charges, Navigo), vos budgets plaisirs/projets et la distinction stricte des capitaux. Je suis prêt." }] },
+        { role: "user", parts: [{ text: `INSTRUCTION SYSTÈME : ${systemInstruction}` }] },
+        { role: "model", parts: [{ text: "Bien reçu. J'utilise vos paramètres fiscaux personnalisés pour l'analyse." }] },
         ...historyForGemini
       ],
     });
@@ -207,6 +198,6 @@ export const generateFinancialAdvice = async (
 
   } catch (error: any) {
     console.error("Erreur Gemini:", error);
-    return "Erreur technique IA (Vérifiez la clé API ou la connexion).";
+    return "Erreur technique IA.";
   }
 };

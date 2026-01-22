@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { SavingsAccount, Expense, ChatMessage } from '../types';
+import { SavingsAccount, Expense, ChatMessage, FiscalConfig } from '../types';
 import { generateFinancialAdvice } from '../services/geminiService';
 import { Send, Bot, User, Trash2, Loader2, BrainCircuit } from 'lucide-react';
 import { Button } from './Button';
@@ -10,9 +10,10 @@ interface AIAdvisorProps {
   config: any;
   chatHistory: ChatMessage[];
   onUpdateHistory: (history: ChatMessage[]) => void;
+  fiscalConfig: FiscalConfig; // Ajout prop
 }
 
-export const AIAdvisor: React.FC<AIAdvisorProps> = ({ accounts, expenses, config, chatHistory, onUpdateHistory }) => {
+export const AIAdvisor: React.FC<AIAdvisorProps> = ({ accounts, expenses, config, chatHistory, onUpdateHistory, fiscalConfig }) => {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -44,7 +45,8 @@ export const AIAdvisor: React.FC<AIAdvisorProps> = ({ accounts, expenses, config
       accounts,
       expenses,
       config,
-      history: chatHistory
+      history: chatHistory,
+      fiscalConfig // Passage de la config à Gemini
     });
 
     const aiMsg: ChatMessage = {
@@ -89,9 +91,10 @@ export const AIAdvisor: React.FC<AIAdvisorProps> = ({ accounts, expenses, config
             <div className="w-20 h-20 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-6">
               <Bot className="w-10 h-10 text-indigo-500" />
             </div>
-            <p className="text-slate-600 font-bold text-lg">Bonjour !</p>
+             <p className="text-slate-600 font-bold text-lg">Bonjour !</p>
             <p className="text-sm text-slate-500 max-w-xs mx-auto mt-2">
-              Je connais vos finances par cœur (soldes, charges, fiscalité). Posez-moi une question sur votre stratégie.
+              Je connais vos finances par cœur (soldes, charges, fiscalité).
+              Posez-moi une question sur votre stratégie.
             </p>
           </div>
         )}
@@ -99,7 +102,7 @@ export const AIAdvisor: React.FC<AIAdvisorProps> = ({ accounts, expenses, config
         {chatHistory.map((msg) => (
           <div key={msg.id} className={`flex gap-4 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
             <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 shadow-sm ${msg.role === 'user' ? 'bg-slate-700 text-white' : 'bg-indigo-600 text-white'}`}>
-              {msg.role === 'user' ? <User className="w-4 h-4" /> : <Bot className="w-4 h-4" />}
+               {msg.role === 'user' ? <User className="w-4 h-4" /> : <Bot className="w-4 h-4" />}
             </div>
             <div className={`max-w-[85%] p-4 rounded-2xl text-sm leading-relaxed shadow-sm whitespace-pre-wrap ${msg.role === 'user' ? 'bg-white text-slate-800 rounded-tr-none border border-slate-100' : 'bg-indigo-600 text-indigo-50 rounded-tl-none shadow-indigo-200'}`}>
               {msg.content}

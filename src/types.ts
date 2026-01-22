@@ -80,12 +80,34 @@ export interface ImageEditConfig {
   base64Image: string;
   mimeType: string;
 }
+export interface TaxBracket {
+  limit: number;
+  rate: number;
+}
 
-// Structure globale du fichier sauvegardé sur Drive
+export interface FiscalConfig {
+  salaryChargesRate: number;     // Ex: 0.2232
+  socialChargesCapital: number;  // Ex: 0.172
+  standardAllowance: number;     // Ex: 0.10
+  ceilings: {
+    livretA: number;
+    ldds: number;
+    lep: number;
+  };
+  legalMaturity: {
+    pea: number;
+    assuranceVie: number;
+    pee: number;
+  };
+  taxBrackets: TaxBracket[];
+}
+
 export interface GlobalAppData {
   accounts: SavingsAccount[];
   expenses: Expense[];
   history: PortfolioSnapshot[];
+  // Ajout de la config fiscale
+  fiscalConfig?: FiscalConfig; 
   config: {
     grossAnnual: number;
     leisureBudget: number;
@@ -101,5 +123,5 @@ export interface GlobalAppData {
     insuranceRate: number;
   };
   lastView?: string;
-  chatHistory?: ChatMessage[]; // <--- AJOUTÉ POUR SAUVEGARDER LA CONVERSATION
+  chatHistory?: ChatMessage[];
 }

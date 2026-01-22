@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { SavingsAccount, PortfolioSnapshot, AccountType, Expense, GlobalAppData, AccountMovement, ChatMessage } from './types';
+import { SavingsAccount, PortfolioSnapshot, AccountType, Expense, GlobalAppData, AccountMovement, ChatMessage, FiscalConfig } from './types';
+import { DEFAULT_FISCAL_CONFIG } from './constants'; 
 import { Dashboard } from './components/Dashboard';
 import { AccountForm } from './components/AccountForm';
 import { AccountUpdate } from './components/AccountUpdate';
@@ -7,7 +8,8 @@ import { Comparator } from './components/Comparator';
 import { AssistantPilot } from './components/AssistantPilot';
 import { TransferManager } from './components/TransferManager';
 import { Financing } from './components/Financing';
-import { AIAdvisor } from './components/AIAdvisor'; // <--- NOUVEAU COMPOSANT
+import { AIAdvisor } from './components/AIAdvisor';
+import { Settings } from './components/Settings';
 import { initGoogleApi, handleAuthClick, handleSignOut, findConfigFile, createConfigFile, readConfigFile, updateConfigFile } from './services/googleDriveService';
 import { 
   LayoutDashboard, 
@@ -24,7 +26,8 @@ import {
   Cloud,
   LogOut,
   Loader2,
-  BrainCircuit // <--- NOUVELLE ICÔNE
+  BrainCircuit,
+  Settings as SettingsIcon
 } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -40,7 +43,7 @@ const App: React.FC = () => {
   const [accounts, setAccounts] = useState<SavingsAccount[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [history, setHistory] = useState<PortfolioSnapshot[]>([]);
-  const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]); // <--- ÉTAT DU CHAT
+  const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   
   // Configuration globale
   const [grossAnnual, setGrossAnnual] = useState<number>(45000);
@@ -50,9 +53,12 @@ const App: React.FC = () => {
   const [navigoRate, setNavigoRate] = useState<number>(67.24);
   const [taxRateManual, setTaxRateManual] = useState<number>(6.1);
   const [extraMonthlyIncome, setExtraMonthlyIncome] = useState<number>(0);
+  
+  // NOUVEAU : Configuration Fiscale Dynamique
+  const [fiscalConfig, setFiscalConfig] = useState<FiscalConfig>(DEFAULT_FISCAL_CONFIG);
 
   // Navigation et UI
-  const [view, setView] = useState<'dashboard' | 'accounts' | 'transfers' | 'comparator' | 'pilot' | 'update' | 'financing' | 'advisor'>('dashboard');
+  const [view, setView] = useState<'dashboard' | 'accounts' | 'transfers' | 'comparator' | 'pilot' | 'update' | 'financing' | 'advisor' | 'settings'>('dashboard');
   const [editingAccount, setEditingAccount] = useState<SavingsAccount | undefined>(undefined);
   const [showForm, setShowForm] = useState(false);
   const [maturityAlerts, setMaturityAlerts] = useState<string[]>([]);
@@ -95,7 +101,7 @@ const App: React.FC = () => {
     setIsAuthenticated(false);
     setDriveFileId(null);
     setAccounts([]); 
-    setChatHistory([]); // <--- VIDER LE CHAT À LA DÉCONNEXION
+    setChatHistory([]);
     localStorage.removeItem('auth_persistence');
     localStorage.removeItem('auth_timestamp');
   };
@@ -104,13 +110,13 @@ const App: React.FC = () => {
     setIsLoadingData(true);
     try {
       let fileId = await findConfigFile();
-      
       if (!fileId) {
         const defaultData: GlobalAppData = {
           accounts: [],
           expenses: [],
           history: [],
-          chatHistory: [], // <--- INITIALISATION CHAT VIDE
+          chatHistory: [],
+          fiscalConfig: DEFAULT_FISCAL_CONFIG, // Init avec défauts
           config: {
             grossAnnual: 45000,
             leisureBudget: 300,
@@ -126,12 +132,18 @@ const App: React.FC = () => {
 
       setDriveFileId(fileId);
       const data: GlobalAppData = await readConfigFile(fileId);
-
       if (data) {
         setAccounts((data.accounts || []).map(acc => ({ ...acc, movements: acc.movements || [] })));
         setExpenses(data.expenses || []);
         setHistory(data.history || []);
-        setChatHistory(data.chatHistory || []); // <--- CHARGEMENT DU CHAT
+        setChatHistory(data.chatHistory || []);
+        
+        // Chargement config fiscale
+        if (data.fiscalConfig) {
+            setFiscalConfig(data.fiscalConfig);
+        } else {
+            setFiscalConfig(DEFAULT_FISCAL_CONFIG);
+        }
         
         if (data.config) {
           setGrossAnnual(data.config.grossAnnual ?? 45000);
@@ -143,7 +155,6 @@ const App: React.FC = () => {
           setExtraMonthlyIncome(data.config.extraMonthlyIncome ?? 0);
         }
         if (data.lastView) setView(data.lastView as any);
-        
         if (data.financing) {
            localStorage.setItem('financing_interest', data.financing.interestRate.toString());
            localStorage.setItem('financing_insurance', data.financing.insuranceRate.toString());
@@ -167,7 +178,8 @@ const App: React.FC = () => {
         accounts,
         expenses,
         history,
-        chatHistory, // <--- SAUVEGARDE DU CHAT
+        chatHistory,
+        fiscalConfig, // Sauvegarde de la config fiscale
         config: {
           grossAnnual,
           leisureBudget,
@@ -192,14 +204,13 @@ const App: React.FC = () => {
       }
     }, 2000);
     return () => clearTimeout(saveTimeoutRef.current);
-  }, [accounts, expenses, history, chatHistory, grossAnnual, leisureBudget, projectSavings, navigoBase, navigoRate, taxRateManual, extraMonthlyIncome, view, isAuthenticated, driveFileId]);
+  }, [accounts, expenses, history, chatHistory, fiscalConfig, grossAnnual, leisureBudget, projectSavings, navigoBase, navigoRate, taxRateManual, extraMonthlyIncome, view, isAuthenticated, driveFileId]);
 
   // --- LOGIQUE MÉTIER ---
   useEffect(() => {
     if (accounts.length === 0) return;
     const todayStr = new Date().toISOString().split('T')[0];
     
-    // Snapshot historique journalier
     setHistory(prev => {
       const existingIndex = prev.findIndex(h => h.date === todayStr);
       const totalAmount = accounts.reduce((sum, a) => sum + a.totalAmount, 0);
@@ -216,7 +227,6 @@ const App: React.FC = () => {
       }
     });
 
-    // Alertes maturité PEE
     const alerts: string[] = [];
     accounts.forEach(acc => {
       const today = new Date();
@@ -227,7 +237,10 @@ const App: React.FC = () => {
     setMaturityAlerts(alerts);
   }, [accounts]);
 
-  // --- HANDLERS (Gestion des données) ---
+  const handleUpdateFiscalConfig = (newConfig: FiscalConfig) => {
+      setFiscalConfig(newConfig);
+      setView('settings'); // Rester sur la vue ou rediriger
+  };
 
   const handleUpdateAccountsComplex = useCallback((updates: { account: SavingsAccount, date: string }[]) => {
     setAccounts(prev => {
@@ -260,10 +273,8 @@ const App: React.FC = () => {
     setView('dashboard');
   }, []);
 
-  // CRÉATION DE VIREMENT LIÉ
   const handleLinkedTransfer = (sourceId: string, destId: string, amount: number, date: string) => {
-    const linkId = crypto.randomUUID(); 
-    
+    const linkId = crypto.randomUUID();
     setAccounts(prev => {
       const next = [...prev];
       const sourceIdx = next.findIndex(a => a.id === sourceId);
@@ -274,7 +285,6 @@ const App: React.FC = () => {
       const source = next[sourceIdx];
       const dest = next[destIdx];
 
-      // Mise à jour Source (Retrait)
       const moveOut: AccountMovement = {
         id: crypto.randomUUID(),
         date: date,
@@ -291,7 +301,6 @@ const App: React.FC = () => {
         movements: [...(source.movements || []), moveOut]
       };
 
-      // Mise à jour Destination (Ajout)
       const moveIn: AccountMovement = {
         id: crypto.randomUUID(),
         date: date,
@@ -307,7 +316,6 @@ const App: React.FC = () => {
         totalAmount: dest.totalAmount + amount,
         movements: [...(dest.movements || []), moveIn]
       };
-
       return next;
     });
     setView('dashboard');
@@ -331,7 +339,6 @@ const App: React.FC = () => {
     setEditingAccount(undefined);
   };
 
-  // SUPPRESSION INTELLIGENTE (Gère les virements liés)
   const handleDeleteMovement = (accountId: string, movementId: string) => {
     const account = accounts.find(a => a.id === accountId);
     if (!account) return;
@@ -342,16 +349,12 @@ const App: React.FC = () => {
     const linkId = movement.linkId;
     let confirmMessage = `Supprimer le mouvement "${movement.label}" de ${movement.amount}€ ?`;
     if (linkId) confirmMessage += `\n⚠️ Ce mouvement est lié à un autre compte. L'autre opération sera aussi annulée.`;
-
     if (!confirm(confirmMessage)) return;
 
     setAccounts(prev => prev.map(acc => {
-      // 1. On cherche si ce compte contient le mouvement ciblé OU le mouvement lié
       const movToDelete = acc.movements?.find(m => m.id === movementId || (linkId && m.linkId === linkId));
-      
       if (!movToDelete) return acc; 
 
-      // 2. On annule l'effet financier
       let newOwned = acc.ownedAmount;
       if (movToDelete.type === 'IN') {
         newOwned -= movToDelete.amount; 
@@ -359,7 +362,6 @@ const App: React.FC = () => {
         newOwned += movToDelete.amount; 
       }
 
-      // 3. On met à jour le compte
       return {
         ...acc,
         ownedAmount: newOwned,
@@ -369,7 +371,6 @@ const App: React.FC = () => {
     }));
   };
 
-  // RENOMMER UN MOUVEMENT
   const handleRenameMovement = (accountId: string, movementId: string, currentLabel: string) => {
     const newLabel = window.prompt("Renommer l'opération :", currentLabel);
     if (newLabel === null || newLabel.trim() === "") return;
@@ -465,6 +466,8 @@ const App: React.FC = () => {
             <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Système</p>
           </div>
           <NavButton active={view === 'financing'} onClick={() => setView('financing')} icon={Home} label="Financement" />
+          <NavButton active={view === 'settings'} onClick={() => setView('settings')} icon={SettingsIcon} label="Paramètres" />
+          
           <button onClick={handleLogout} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm text-rose-400 hover:bg-slate-800 hover:text-rose-300 mt-2">
             <LogOut className="w-5 h-5" /> Déconnexion
           </button>
@@ -484,7 +487,28 @@ const App: React.FC = () => {
         )}
 
         {view === 'dashboard' && <Dashboard accounts={accounts} history={history} expenses={expenses} config={{ grossAnnual, navigoBase, navigoRate, taxRateManual }} />}
-        {view === 'pilot' && <AssistantPilot accounts={accounts} expenses={expenses} onUpdateExpenses={setExpenses} grossAnnual={grossAnnual} setGrossAnnual={setGrossAnnual} leisureBudget={leisureBudget} setLeisureBudget={setLeisureBudget} projectSavings={projectSavings} setProjectSavings={setProjectSavings} navigoBase={navigoBase} setNavigoBase={setNavigoBase} navigoRate={navigoRate} setNavigoRate={setNavigoRate} taxRateManual={taxRateManual} setTaxRateManual={setTaxRateManual} extraMonthlyIncome={extraMonthlyIncome} setExtraMonthlyIncome={setExtraMonthlyIncome} />}
+        
+        {view === 'pilot' && <AssistantPilot 
+            accounts={accounts} 
+            expenses={expenses} 
+            onUpdateExpenses={setExpenses} 
+            grossAnnual={grossAnnual} 
+            setGrossAnnual={setGrossAnnual} 
+            leisureBudget={leisureBudget} 
+            setLeisureBudget={setLeisureBudget} 
+            projectSavings={projectSavings} 
+            setProjectSavings={setProjectSavings} 
+            navigoBase={navigoBase} 
+            setNavigoBase={setNavigoBase} 
+            navigoRate={navigoRate} 
+            setNavigoRate={setNavigoRate} 
+            taxRateManual={taxRateManual} 
+            setTaxRateManual={setTaxRateManual} 
+            extraMonthlyIncome={extraMonthlyIncome} 
+            setExtraMonthlyIncome={setExtraMonthlyIncome}
+            fiscalConfig={fiscalConfig} // PASSAGE DE LA CONFIG
+        />}
+        
         {view === 'financing' && <Financing expenses={expenses} grossAnnual={grossAnnual} />}
         {view === 'comparator' && <Comparator accounts={accounts} />}
         
@@ -502,12 +526,23 @@ const App: React.FC = () => {
           <AIAdvisor 
             accounts={accounts} 
             expenses={expenses} 
-            config={{ grossAnnual, navigoBase, navigoRate, taxRateManual, leisureBudget,
-              projectSavings,
-              extraMonthlyIncome }}
+            config={{ 
+              grossAnnual, 
+              navigoBase, 
+              navigoRate, 
+              taxRateManual, 
+              leisureBudget, 
+              projectSavings, 
+              extraMonthlyIncome 
+            }}
             chatHistory={chatHistory}
             onUpdateHistory={setChatHistory}
+            fiscalConfig={fiscalConfig} // PASSAGE DE LA CONFIG
           />
+        )}
+
+        {view === 'settings' && (
+            <Settings config={fiscalConfig} onSave={handleUpdateFiscalConfig} />
         )}
         
         {view === 'accounts' && (
