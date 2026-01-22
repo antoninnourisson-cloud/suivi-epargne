@@ -1,16 +1,20 @@
+// ================================================
+// FILE: src/components/AccountForm.tsx
+// ================================================
 import React, { useState, useEffect } from 'react';
-import { AccountType, SavingsAccount } from '../types';
+import { AccountType, SavingsAccount, FiscalConfig } from '../types'; // Ajout FiscalConfig
 import { Button } from './Button';
-import { ACCOUNT_CEILINGS } from '../constants'; // <--- IMPORT CONSTANTES
+// RETRAIT DE L'IMPORT ACCOUNT_CEILINGS QUI FAISAIT PLANTER
 import { PlusCircle, Save, Users, Calculator, ShieldCheck, TrendingUp, TrendingDown } from 'lucide-react';
 
 interface AccountFormProps {
   onSave: (account: SavingsAccount) => void;
   initialData?: SavingsAccount;
   onCancel?: () => void;
+  fiscalConfig: FiscalConfig; // <--- NOUVELLE PROP OBLIGATOIRE
 }
 
-export const AccountForm: React.FC<AccountFormProps> = ({ onSave, initialData, onCancel }) => {
+export const AccountForm: React.FC<AccountFormProps> = ({ onSave, initialData, onCancel, fiscalConfig }) => {
   const [type, setType] = useState<AccountType>(initialData?.type || AccountType.LIVRET_A);
   const [name, setName] = useState(initialData?.name || '');
   const [institution, setInstitution] = useState(initialData?.institution || '');
@@ -24,18 +28,19 @@ export const AccountForm: React.FC<AccountFormProps> = ({ onSave, initialData, o
   const [contractEndDate, setContractEndDate] = useState(initialData?.contractEndDate || '');
   const [ceiling, setCeiling] = useState<string>(initialData?.ceiling?.toString() || '');
   const [isRevolut, setIsRevolut] = useState(initialData?.isRevolut || false);
-
+  
   const isTaxableType = [AccountType.ASSURANCE_VIE, AccountType.PEA, AccountType.PEE, AccountType.CRYPTO, AccountType.IMMOBILIER].includes(type);
 
-  // --- MISE À JOUR : UTILISATION DES CONSTANTES ---
+  // --- MISE À JOUR : UTILISATION DE LA CONFIG DYNAMIQUE ---
   useEffect(() => {
     if (!initialData) {
-      if (type === AccountType.LIVRET_A) setCeiling(ACCOUNT_CEILINGS.LIVRET_A.toString());
-      else if (type === AccountType.LDDS) setCeiling(ACCOUNT_CEILINGS.LDDS.toString());
-      else if (type === AccountType.LEP) setCeiling(ACCOUNT_CEILINGS.LEP.toString());
+      // On pioche dans fiscalConfig.ceilings au lieu de la constante
+      if (type === AccountType.LIVRET_A) setCeiling(fiscalConfig.ceilings.livretA.toString());
+      else if (type === AccountType.LDDS) setCeiling(fiscalConfig.ceilings.ldds.toString());
+      else if (type === AccountType.LEP) setCeiling(fiscalConfig.ceilings.lep.toString());
       else setCeiling('');
     }
-  }, [type, initialData]);
+  }, [type, initialData, fiscalConfig]); // Ajout dépendance
 
   const handleTotalChange = (val: string) => {
     setTotalAmount(val);

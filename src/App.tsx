@@ -566,7 +566,8 @@ const App: React.FC = () => {
               <AccountForm 
                 onSave={handleSaveAccount} 
                 initialData={editingAccount} 
-                onCancel={() => { setShowForm(false); setEditingAccount(undefined); }} 
+                onCancel={() => { setShowForm(false); setEditingAccount(undefined); }}
+                fiscalConfig={fiscalConfig} // <--- AJOUT IMPORTANT ICI
               />
             ) : (
               <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
