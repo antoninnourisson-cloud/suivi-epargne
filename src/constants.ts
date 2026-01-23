@@ -1,14 +1,11 @@
 // ================================================
 // FILE: src/constants.ts
 // ================================================
-import { FiscalConfig } from './types';
+import { FiscalConfig, WorkBenefits } from './types';
 
 export const DEFAULT_FISCAL_CONFIG: FiscalConfig = {
-  // Ajusté pour profil Pasteur/Post-doc (~22.32%)
   salaryChargesRate: 0.2232, 
-  // Prélèvements sociaux sur capital (17.2%)
   socialChargesCapital: 0.172,
-  // Abattement forfaire 10%
   standardAllowance: 0.10,
   
   ceilings: {
@@ -23,7 +20,6 @@ export const DEFAULT_FISCAL_CONFIG: FiscalConfig = {
     pee: 5
   },
 
-  // Barème 2025 sur revenus 2024
   taxBrackets: [
     { limit: 11294, rate: 0 },
     { limit: 28797, rate: 0.11 },
@@ -33,7 +29,26 @@ export const DEFAULT_FISCAL_CONFIG: FiscalConfig = {
   ]
 };
 
-// On garde ça pour les taux par défaut à l'ouverture de compte
+// --- NOUVELLE CONSTANTE ---
+export const DEFAULT_WORK_BENEFITS: WorkBenefits = {
+  navigo: {
+    active: true,
+    basePrice: 90.80,
+    refundRate: 67.24
+  },
+  mutuelle: {
+    active: true,
+    totalCost: 50.00,
+    employerRate: 50.00
+  },
+  mealVouchers: {
+    active: true,
+    faceValue: 10.00,
+    employerRate: 60.00,
+    daysPerMonth: 20
+  }
+};
+
 export const DEFAULT_RATES = {
   LIVRET_A: 3.0,
   LEP: 4.0,

@@ -1,67 +1,62 @@
+// ================================================
+// FILE: src/types.ts
+// ================================================
+
 export enum AccountType {
   LIVRET_A = 'Livret A',
   LDDS = 'LDDS',
   LEP = 'LEP',
-  ASSURANCE_VIE = 'Assurance Vie',
-  PEE = 'PEE (Plan Epargne Entreprise)',
+  COMPTE_COURANT = 'Compte Courant',
   PEA = 'PEA',
   PER = 'PER',
-  COMPTE_COURANT = 'Compte Courant',
-  IMMOBILIER = 'Immobilier (SCPI/Physique)',
-  CRYPTO = 'Cryptomonnaies',
+  ASSURANCE_VIE = 'Assurance Vie',
+  PEE = 'PEE',
+  CRYPTO = 'Crypto',
+  IMMOBILIER = 'Immobilier',
   AUTRE = 'Autre'
 }
 
 export interface AccountMovement {
   id: string;
   date: string;
-  amount: number;      // Positif pour crédit, négatif pour débit
-  label: string;       // Ex: "Virement salaire", "Dépôt test +500", etc.
-  type: 'IN' | 'OUT'; // Flux entrant ou sortant
-  linkId?: string;
+  amount: number;
+  label: string;
+  type: 'IN' | 'OUT';
+  linkId?: string; 
 }
 
 export interface SavingsAccount {
   id: string;
   name: string;
   type: AccountType;
-  institution: string; 
-  totalAmount: number; 
-  ownedAmount: number; 
-  parentalCapital: number; 
-  interestRate?: number; 
+  institution: string;
+  totalAmount: number;
+  ownedAmount: number;
+  parentalCapital: number;
+  interestRate?: number;
   recentHighRate?: number;
   recentLowRate?: number;
-  openingDate?: string; 
-  contractEndDate?: string; 
-  ceiling?: number; 
-  isRevolut?: boolean; 
+  openingDate?: string;
+  contractEndDate?: string;
+  ceiling?: number;
+  movements?: AccountMovement[];
+  isRevolut?: boolean;
   isTaxable?: boolean;
-  movements: AccountMovement[]; 
 }
 
 export interface PortfolioSnapshot {
-  date: string; 
+  date: string;
   totalAmount: number;
   ownedAmount: number;
-}
-
-export enum PaymentMethod {
-  VIREMENT = 'Virement Permanent',
-  PRELEVEMENT = 'Prélèvement',
-  CARTE = 'Carte Bancaire',
-  CHEQUE = 'Chèque',
-  AUTRE = 'Autre'
 }
 
 export interface Expense {
   id: string;
   name: string;
   amount: number;
-  paymentMethod: PaymentMethod;
+  paymentMethod?: string;
 }
 
-// --- NOUVEAU : STRUCTURE DU CHAT ---
 export interface ChatMessage {
   id: string;
   role: 'user' | 'model';
@@ -69,26 +64,15 @@ export interface ChatMessage {
   timestamp: number;
 }
 
-// Configuration for generating an image (Conservé pour compatibilité si besoin)
-export interface ImageGenerationConfig {
-  prompt: string;
-  size: '1K' | '2K' | '4K';
-}
-
-export interface ImageEditConfig {
-  prompt: string;
-  base64Image: string;
-  mimeType: string;
-}
 export interface TaxBracket {
   limit: number;
   rate: number;
 }
 
 export interface FiscalConfig {
-  salaryChargesRate: number;     // Ex: 0.2232
-  socialChargesCapital: number;  // Ex: 0.172
-  standardAllowance: number;     // Ex: 0.10
+  salaryChargesRate: number;
+  socialChargesCapital: number;
+  standardAllowance: number;
   ceilings: {
     livretA: number;
     ldds: number;
@@ -102,18 +86,38 @@ export interface FiscalConfig {
   taxBrackets: TaxBracket[];
 }
 
+// --- NOUVELLE INTERFACE ---
+export interface WorkBenefits {
+  navigo: {
+    active: boolean;
+    basePrice: number;    // ex: 90.80
+    refundRate: number;   // ex: 67.24
+  };
+  mutuelle: {
+    active: boolean;
+    totalCost: number;    // Coût total mensuel contrat
+    employerRate: number; // % prise en charge employeur
+  };
+  mealVouchers: {
+    active: boolean;
+    faceValue: number;    // Valeur faciale titre
+    employerRate: number; // % prise en charge employeur
+    daysPerMonth: number; // Nb jours moyen
+  };
+}
+
 export interface GlobalAppData {
   accounts: SavingsAccount[];
   expenses: Expense[];
   history: PortfolioSnapshot[];
-  // Ajout de la config fiscale
-  fiscalConfig?: FiscalConfig; 
+  fiscalConfig?: FiscalConfig;
+  workBenefits?: WorkBenefits; // <--- AJOUT
   config: {
     grossAnnual: number;
     leisureBudget: number;
     projectSavings: number;
-    navigoBase: number;
-    navigoRate: number;
+    navigoBase?: number; // Gardé pour rétrocompatibilité
+    navigoRate?: number; // Gardé pour rétrocompatibilité
     taxRateManual: number;
     extraMonthlyIncome: number;
   };

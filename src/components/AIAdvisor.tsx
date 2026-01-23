@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { SavingsAccount, Expense, ChatMessage, FiscalConfig } from '../types';
+import { SavingsAccount, Expense, ChatMessage, FiscalConfig, WorkBenefits } from '../types';
 import { generateFinancialAdvice } from '../services/geminiService';
 import { Send, Bot, User, Trash2, Loader2, BrainCircuit } from 'lucide-react';
 import { Button } from './Button';
@@ -11,9 +11,10 @@ interface AIAdvisorProps {
   chatHistory: ChatMessage[];
   onUpdateHistory: (history: ChatMessage[]) => void;
   fiscalConfig: FiscalConfig; // Ajout prop
+  workBenefits: WorkBenefits;
 }
 
-export const AIAdvisor: React.FC<AIAdvisorProps> = ({ accounts, expenses, config, chatHistory, onUpdateHistory, fiscalConfig }) => {
+export const AIAdvisor: React.FC<AIAdvisorProps> = ({ accounts, expenses, config, chatHistory, onUpdateHistory, fiscalConfig, workBenefits }) => {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -46,7 +47,8 @@ export const AIAdvisor: React.FC<AIAdvisorProps> = ({ accounts, expenses, config
       expenses,
       config,
       history: chatHistory,
-      fiscalConfig // Passage de la config à Gemini
+      fiscalConfig,
+      workBenefits // <--- C'EST L'AJOUT MANQUANT
     });
 
     const aiMsg: ChatMessage = {
