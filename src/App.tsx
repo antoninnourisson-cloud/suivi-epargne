@@ -13,7 +13,16 @@ import { TransferManager } from './components/TransferManager';
 import { Financing } from './components/Financing';
 import { AIAdvisor } from './components/AIAdvisor';
 import { Settings } from './components/Settings';
-import { initGoogleApi, handleAuthClick, handleSignOut, findConfigFile, createConfigFile, readConfigFile, updateConfigFile } from './services/googleDriveService';
+import { 
+  initGoogleApi, 
+  handleAuthClick, 
+  handleSignOut, 
+  findConfigFile, 
+  createConfigFile, 
+  readConfigFile, 
+  updateConfigFile,
+  isTokenValid // <--- IMPORT CRUCIAL
+} from './services/googleDriveService';
 import { 
   LayoutDashboard, 
   Wallet, 
@@ -22,7 +31,6 @@ import {
   BarChart2, 
   ShieldCheck, 
   ArrowRightLeft, 
-  CalendarClock, 
   RefreshCcw,
   Home,
   PlusCircle,
@@ -34,6 +42,7 @@ import {
 } from 'lucide-react';
 
 const App: React.FC = () => {
+  // --- 1. ÉTATS (STATE) ---
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isApiLoaded, setIsApiLoaded] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(false);
@@ -49,63 +58,21 @@ const App: React.FC = () => {
   const [grossAnnual, setGrossAnnual] = useState<number>(45000);
   const [leisureBudget, setLeisureBudget] = useState<number>(300);
   const [projectSavings, setProjectSavings] = useState<number>(200);
-  // Navigo gardé ici temporairement pour compatibilité Dashboard, mais Pilotage utilisera workBenefits
   const [navigoBase, setNavigoBase] = useState<number>(90.80);
   const [navigoRate, setNavigoRate] = useState<number>(67.24);
   const [taxRateManual, setTaxRateManual] = useState<number>(0); // 0 = Auto
   const [extraMonthlyIncome, setExtraMonthlyIncome] = useState<number>(0);
   
   const [fiscalConfig, setFiscalConfig] = useState<FiscalConfig>(DEFAULT_FISCAL_CONFIG);
-  const [workBenefits, setWorkBenefits] = useState<WorkBenefits>(DEFAULT_WORK_BENEFITS); // <--- NOUVEL ÉTAT
+  const [workBenefits, setWorkBenefits] = useState<WorkBenefits>(DEFAULT_WORK_BENEFITS);
 
   const [view, setView] = useState<'dashboard' | 'accounts' | 'transfers' | 'comparator' | 'pilot' | 'update' | 'financing' | 'advisor' | 'settings'>('dashboard');
   const [editingAccount, setEditingAccount] = useState<SavingsAccount | undefined>(undefined);
   const [showForm, setShowForm] = useState(false);
   const [maturityAlerts, setMaturityAlerts] = useState<string[]>([]);
 
-  useEffect(() => {
-    initGoogleApi()
-      .then(async () => {
-        setIsApiLoaded(true);
-        const persisted = localStorage.getItem('auth_persistence') === 'true';
-        const timestamp = parseInt(localStorage.getItem('auth_timestamp') || '0');
-        const isStillValid = Date.now() - timestamp < 24 * 60 * 60 * 1000;
-
-        if (persisted && isStillValid) {
-          try {
-            setIsAuthenticated(true);
-            loadDriveData(); 
-          } catch (e) {
-            localStorage.removeItem('auth_persistence');
-          }
-        }
-      })
-      .catch(err => console.error("Erreur init Google API", err));
-  }, []);
-
-  const handleLogin = async () => {
-    try {
-      await handleAuthClick();
-      setIsAuthenticated(true);
-      localStorage.setItem('auth_persistence', 'true');
-      localStorage.setItem('auth_timestamp', Date.now().toString());
-      loadDriveData();
-    } catch (error) {
-      alert("Échec de la connexion à Google Drive.");
-    }
-  };
-
-  const handleLogout = () => {
-    handleSignOut();
-    setIsAuthenticated(false);
-    setDriveFileId(null);
-    setAccounts([]); 
-    setChatHistory([]);
-    localStorage.removeItem('auth_persistence');
-    localStorage.removeItem('auth_timestamp');
-  };
-
-  const loadDriveData = async () => {
+  // --- 2. FONCTION DE CHARGEMENT ---
+  const loadDriveData = useCallback(async () => {
     setIsLoadingData(true);
     try {
       let fileId = await findConfigFile();
@@ -141,11 +108,10 @@ const App: React.FC = () => {
         if (data.fiscalConfig) setFiscalConfig(data.fiscalConfig);
         else setFiscalConfig(DEFAULT_FISCAL_CONFIG);
         
-        // Chargement WorkBenefits avec fallback
         if (data.workBenefits) {
             setWorkBenefits(data.workBenefits);
         } else {
-            // Migration douce : si ancien user, on init avec ses valeurs Navigo existantes
+            // Migration douce legacy
             const legacyNavigoBase = data.config.navigoBase || 90.80;
             const legacyNavigoRate = data.config.navigoRate || 67.24;
             setWorkBenefits({
@@ -174,8 +140,59 @@ const App: React.FC = () => {
     } finally {
       setIsLoadingData(false);
     }
+  }, []);
+
+  const handleLogin = async () => {
+    try {
+      await handleAuthClick(false); // False = Popup si besoin
+      setIsAuthenticated(true);
+      loadDriveData();
+    } catch (error) {
+      alert("Échec de la connexion à Google Drive.");
+    }
   };
 
+  const handleLogout = () => {
+    handleSignOut();
+    setIsAuthenticated(false);
+    setDriveFileId(null);
+    setAccounts([]); 
+    setChatHistory([]);
+    localStorage.removeItem('auth_persistence');
+    localStorage.removeItem('auth_timestamp');
+    localStorage.removeItem('token_expiry');
+  };
+
+  // --- 3. INITIALISATION & SILENT REFRESH ---
+  useEffect(() => {
+    initGoogleApi()
+      .then(async () => {
+        setIsApiLoaded(true);
+        
+        const storedToken = localStorage.getItem('google_token');
+        const persistence = localStorage.getItem('auth_persistence') === 'true';
+
+        if (storedToken && persistence) {
+           if (isTokenValid()) {
+               setIsAuthenticated(true);
+               loadDriveData();
+           } 
+           else {
+               try {
+                   console.log("Token expiré, refresh silencieux...");
+                   await handleAuthClick(true); // True = Silent
+                   setIsAuthenticated(true);
+                   loadDriveData();
+               } catch (e) {
+                   console.log("Refresh silencieux échoué. Login requis.");
+               }
+           }
+        }
+      })
+      .catch(err => console.error("Erreur init Google API", err));
+  }, [loadDriveData]);
+
+  // --- 4. SAUVEGARDE AUTO ---
   useEffect(() => {
     if (!isAuthenticated || !driveFileId || isLoadingData) return;
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
@@ -188,7 +205,7 @@ const App: React.FC = () => {
         history,
         chatHistory,
         fiscalConfig,
-        workBenefits, // <--- SAUVEGARDE
+        workBenefits,
         config: {
           grossAnnual,
           leisureBudget,
@@ -213,9 +230,9 @@ const App: React.FC = () => {
       }
     }, 2000);
     return () => clearTimeout(saveTimeoutRef.current);
-  }, [accounts, expenses, history, chatHistory, fiscalConfig, workBenefits, grossAnnual, leisureBudget, projectSavings, navigoBase, navigoRate, taxRateManual, extraMonthlyIncome, view, isAuthenticated, driveFileId]);
+  }, [accounts, expenses, history, chatHistory, fiscalConfig, workBenefits, grossAnnual, leisureBudget, projectSavings, navigoBase, navigoRate, taxRateManual, extraMonthlyIncome, view, isAuthenticated, driveFileId, isLoadingData]);
 
-  // Logic update, etc...
+  // --- 5. UPDATES LOCAUX ---
   useEffect(() => {
     if (accounts.length === 0) return;
     const todayStr = new Date().toISOString().split('T')[0];
@@ -246,19 +263,16 @@ const App: React.FC = () => {
     setMaturityAlerts(alerts);
   }, [accounts]);
 
-  // Modifié pour accepter aussi workBenefits
   const handleUpdateSettings = (newFiscal: FiscalConfig, newBenefits: WorkBenefits) => {
-      setFiscalConfig(newFiscal);
-      setWorkBenefits(newBenefits);
-      // MAJ des variables locales navigo pour Dashboard
-      if(newBenefits.navigo.active) {
-          setNavigoBase(newBenefits.navigo.basePrice);
-          setNavigoRate(newBenefits.navigo.refundRate);
-      }
-      alert("Paramètres mis à jour !");
+       setFiscalConfig(newFiscal);
+       setWorkBenefits(newBenefits);
+       if(newBenefits.navigo.active) {
+           setNavigoBase(newBenefits.navigo.basePrice);
+           setNavigoRate(newBenefits.navigo.refundRate);
+       }
+       alert("Paramètres mis à jour !");
   };
 
-  // ... (Fonctions accounts updates, movements...)
   const handleUpdateAccountsComplex = useCallback((updates: { account: SavingsAccount, date: string }[]) => {
     setAccounts(prev => {
       const newAccounts = [...prev];
@@ -338,6 +352,7 @@ const App: React.FC = () => {
     setAccounts(prev => prev.map(acc => (acc.id !== accountId ? acc : { ...acc, movements: acc.movements?.map(m => m.id === movementId ? { ...m, label: newLabel } : m) })));
   };
 
+  // --- 6. RENDU (JSX) ---
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-4">
@@ -407,7 +422,7 @@ const App: React.FC = () => {
             extraMonthlyIncome={extraMonthlyIncome} 
             setExtraMonthlyIncome={setExtraMonthlyIncome}
             fiscalConfig={fiscalConfig} 
-            workBenefits={workBenefits} // <--- PASSAGE PROP
+            workBenefits={workBenefits} 
         />}
         
         {view === 'financing' && <Financing expenses={expenses} grossAnnual={grossAnnual} />}
@@ -425,12 +440,12 @@ const App: React.FC = () => {
             chatHistory={chatHistory}
             onUpdateHistory={setChatHistory}
             fiscalConfig={fiscalConfig} 
-            workBenefits={workBenefits} // <--- PASSAGE PROP
+            workBenefits={workBenefits}
           />
         )}
 
         {view === 'settings' && (
-            <Settings config={fiscalConfig} workBenefits={workBenefits} onSave={handleUpdateSettings} /> // <--- PASSAGE PROP
+            <Settings config={fiscalConfig} workBenefits={workBenefits} onSave={handleUpdateSettings} />
         )}
         
         {view === 'accounts' && (

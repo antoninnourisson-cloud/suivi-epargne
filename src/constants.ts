@@ -29,7 +29,6 @@ export const DEFAULT_FISCAL_CONFIG: FiscalConfig = {
   ]
 };
 
-// --- NOUVELLE CONSTANTE ---
 export const DEFAULT_WORK_BENEFITS: WorkBenefits = {
   navigo: {
     active: true,
