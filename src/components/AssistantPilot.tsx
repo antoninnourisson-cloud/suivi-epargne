@@ -1,9 +1,7 @@
-// ================================================
-// FILE: src/components/AssistantPilot.tsx
-// ================================================
+// src/components/AssistantPilot.tsx
 import React, { useState, useMemo } from 'react';
 import { SavingsAccount, Expense, AccountType, FiscalConfig, WorkBenefits } from '../types';
-import { Calculator, TrendingUp, Target, Lock, Unlock, Info, Plus, Trash2, Hourglass, Coins, BarChart3 } from 'lucide-react';
+import { Calculator, TrendingUp, Target, Lock, Unlock, Info, Plus, Trash2, Hourglass, Coins, BarChart3, X, Check } from 'lucide-react';
 
 interface AssistantPilotProps {
   accounts: SavingsAccount[];
@@ -15,16 +13,16 @@ interface AssistantPilotProps {
   setLeisureBudget: (val: number) => void;
   projectSavings: number;
   setProjectSavings: (val: number) => void;
-  navigoBase: number; // Ignoré si benefits actif
+  navigoBase: number;
   setNavigoBase: (val: number) => void;
-  navigoRate: number; // Ignoré si benefits actif
+  navigoRate: number;
   setNavigoRate: (val: number) => void;
   taxRateManual: number;
   setTaxRateManual: (val: number) => void;
   extraMonthlyIncome: number;
   setExtraMonthlyIncome: (val: number) => void;
   fiscalConfig: FiscalConfig;
-  workBenefits: WorkBenefits; // <--- PROP OBLIGATOIRE
+  workBenefits: WorkBenefits;
 }
 
 export const AssistantPilot: React.FC<AssistantPilotProps> = ({
@@ -37,19 +35,21 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
   const [externalSavings, setExternalSavings] = useState<number>(0);
   const [manualSavingsCapacity, setManualSavingsCapacity] = useState<string | null>(null); 
   const [activeTab, setActiveTab] = useState<'budget' | 'fiscal'>('budget');
+  
+  // UX State pour ajout dépense
+  const [isAddingExpense, setIsAddingExpense] = useState(false);
+  const [newExpenseName, setNewExpenseName] = useState('');
+  const [newExpenseAmount, setNewExpenseAmount] = useState('');
 
-  // --- MOTEUR DE CALCUL AVANCÉ ---
   const autoValues = useMemo(() => {
     const grossMonth = grossAnnual / 12;
     const socialCharges = grossMonth * fiscalConfig.salaryChargesRate;
     const netSalaryOnly = grossMonth - socialCharges;
 
-    // 1. Calcul Avantages & Coûts
     let navigoGain = 0;
     if (workBenefits.navigo.active) {
         navigoGain = workBenefits.navigo.basePrice * (workBenefits.navigo.refundRate / 100);
     } else {
-        // Fallback rétrocompatible
         navigoGain = navigoBase * (navigoRate / 100);
     }
 
@@ -63,10 +63,7 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
         swileCost = workBenefits.mealVouchers.faceValue * workBenefits.mealVouchers.daysPerMonth * (1 - workBenefits.mealVouchers.employerRate / 100);
     }
 
-    // Le Net sur fiche de paie avant impôt inclut le remboursement navigo
     const netBeforeTax = netSalaryOnly + navigoGain + extraMonthlyIncome;
-
-    // Assiette fiscale (Abattement 10% sur le Net Imposable estimé hors Navigo)
     const netTaxableYear = ((netSalaryOnly + extraMonthlyIncome) * 12) * (1 - fiscalConfig.standardAllowance);
 
     let taxAmount = 0;
@@ -82,11 +79,10 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
     const monthlyTax = taxAmount / 12;
     const autoRate = netTaxableYear > 0 ? (taxAmount / netTaxableYear) * 100 : 0;
 
-    // SUPER NET = Ce qui rentre vraiment sur le compte bancaire après tout
     return { 
         grossMonth, socialCharges, netSalaryOnly, netBeforeTax, taxAmount, monthlyTax, autoRate, netTaxableYear,
         navigoGain, mutuelleCost, swileCost,
-        superNetRaw: netBeforeTax - mutuelleCost - swileCost // Avant impôt
+        superNetRaw: netBeforeTax - mutuelleCost - swileCost 
     };
   }, [grossAnnual, extraMonthlyIncome, fiscalConfig, workBenefits, navigoBase, navigoRate]);
 
@@ -96,10 +92,17 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
   const updateFromGrossAnnual = (val: number) => setGrossAnnual(val);
   const updateFromGrossMonth = (val: number) => setGrossAnnual(val * 12);
   const updateFromNet = (val: number) => {
-    // Inverse approx : Net = (Gross * (1-charges)) + Navigo + Extra
-    // Gross = (Net - Navigo - Extra) / (1-charges)
     const targetGrossMonth = (val - autoValues.navigoGain - extraMonthlyIncome) / (1 - fiscalConfig.salaryChargesRate);
     setGrossAnnual(targetGrossMonth * 12);
+  };
+
+  const handleAddExpense = () => {
+      if(newExpenseName && newExpenseAmount) {
+          onUpdateExpenses([...expenses, {id: crypto.randomUUID(), name: newExpenseName, amount: parseFloat(newExpenseAmount)}]);
+          setNewExpenseName('');
+          setNewExpenseAmount('');
+          setIsAddingExpense(false);
+      }
   };
 
   const budgetData = useMemo(() => {
@@ -110,13 +113,13 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
     return { totalFixed, theoreticalCapacity, finalCapacity, totalToInvest };
   }, [effectiveSuperNet, expenses, leisureBudget, projectSavings, manualSavingsCapacity, externalSavings]);
 
-  // Strategy & Survival & Clock (Code inchangé ou presque, juste les dépendances)
   const strategy = useMemo(() => {
     let remainingMoney = budgetData.totalToInvest;
     const steps: any[] = [];
     const liquidTypes = [AccountType.LEP, AccountType.LIVRET_A, AccountType.LDDS];
     const userLiquidAccounts = accounts.filter(a => liquidTypes.includes(a.type));
     const userOtherAccounts = accounts.filter(a => !liquidTypes.includes(a.type) && ![AccountType.COMPTE_COURANT, AccountType.IMMOBILIER].includes(a.type));
+
     const sortAccounts = (a: SavingsAccount, b: SavingsAccount) => {
       const rateA = a.interestRate || 0;
       const rateB = b.interestRate || 0;
@@ -124,14 +127,17 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
       const priority = { [AccountType.LEP]: 3, [AccountType.LIVRET_A]: 2, [AccountType.LDDS]: 1 };
       return (priority[b.type] || 0) - (priority[a.type] || 0);
     };
+
     userLiquidAccounts.sort(sortAccounts);
     userOtherAccounts.sort(sortAccounts);
+
     userLiquidAccounts.forEach(acc => {
       if (remainingMoney <= 0) return;
       let ceiling = acc.ceiling || 0;
       if (acc.type === AccountType.LEP) ceiling = fiscalConfig.ceilings.lep;
       if (acc.type === AccountType.LIVRET_A) ceiling = fiscalConfig.ceilings.livretA;
       if (acc.type === AccountType.LDDS) ceiling = fiscalConfig.ceilings.ldds;
+      
       const availableSpace = Math.max(0, ceiling - acc.totalAmount);
       if (availableSpace > 0) {
         const amountAllocated = Math.min(remainingMoney, availableSpace);
@@ -139,6 +145,7 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
         remainingMoney -= amountAllocated;
       }
     });
+
     if (remainingMoney > 0) {
       if (userOtherAccounts.length > 0) {
         steps.push({ accountName: userOtherAccounts[0].name, type: userOtherAccounts[0].type, rate: userOtherAccounts[0].interestRate, fillAmount: remainingMoney, isFullAfter: false, isLiquid: false });
@@ -158,6 +165,7 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
       if (type === AccountType.LIVRET_A) ceiling = fiscalConfig.ceilings.livretA;
       if (type === AccountType.LDDS) ceiling = fiscalConfig.ceilings.ldds;
       if (!ceiling) ceiling = 10000; 
+      
       const parentPct = (acc.parentalCapital / ceiling) * 100;
       const ownedPct = (acc.ownedAmount / ceiling) * 100;
       return { name: acc.name, type, ceiling, parentAmount: acc.parentalCapital, ownedAmount: acc.ownedAmount, parentPct, ownedPct, totalPct: parentPct + ownedPct, remainingSpace: ceiling - acc.totalAmount };
@@ -167,14 +175,18 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
   const survival = useMemo(() => {
     const liquidMoney = accounts.filter(a => !a.contractEndDate && ![AccountType.IMMOBILIER, AccountType.PER, AccountType.PEE].includes(a.type)).reduce((sum, a) => sum + a.ownedAmount, 0);
     const monthlyBurn = budgetData.totalFixed; 
+    
     if (monthlyBurn === 0) return { label: "Infini", color: "text-slate-500", bg: "bg-slate-50", border: "border-slate-200" };
+    
     const totalMonths = liquidMoney / monthlyBurn;
     const years = Math.floor(totalMonths / 12);
     const months = Math.floor(totalMonths % 12);
     const days = Math.floor((totalMonths * 30) % 30);
+    
     let color = 'text-emerald-600'; let border = 'border-emerald-200'; let bg = 'bg-emerald-50';
     if (totalMonths < 3) { color = 'text-rose-600'; border = 'border-rose-200'; bg = 'bg-rose-50'; }
     else if (totalMonths < 6) { color = 'text-orange-600'; border = 'border-orange-200'; bg = 'bg-orange-50'; }
+    
     return { years, months, days, color, border, bg, monthlyBurn, totalMonths };
   }, [accounts, budgetData.totalFixed]);
 
@@ -187,6 +199,7 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
           endDate = new Date(acc.openingDate); endDate.setFullYear(endDate.getFullYear() + duration);
         }
         if (!endDate) return null;
+        
         const now = new Date(); const diffTime = endDate.getTime() - now.getTime(); const isAvailable = diffTime <= 0;
         const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
         const years = Math.floor(diffDays / 365); const months = Math.floor((diffDays % 365) / 30);
@@ -211,18 +224,15 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
               <div className="bg-indigo-50 p-3 rounded-xl border border-indigo-100"><label className="text-[10px] font-black text-indigo-400 uppercase">Net Avant Impôt</label><input type="number" value={Math.round(autoValues.netBeforeTax * 100)/100} onChange={e => updateFromNet(parseFloat(e.target.value)||0)} className="w-full bg-transparent font-black text-indigo-700 text-lg outline-none" /></div>
               <div className="bg-emerald-50 p-3 rounded-xl border border-emerald-100 relative"><label className="text-[10px] font-black text-emerald-600 uppercase flex items-center gap-1">Super Net (Poche) <Info className="w-3 h-3 cursor-pointer" onClick={() => setShowDetails(!showDetails)}/></label><input type="number" value={Math.round(effectiveSuperNet * 100)/100} readOnly className="w-full bg-transparent font-black text-emerald-700 text-2xl outline-none" /></div>
             </div>
-            
+
             {showDetails && (
               <div className="bg-white p-4 rounded-xl text-xs space-y-3 border border-slate-200 animate-in slide-in-from-top-2 shadow-inner mb-4">
                  <div className="flex justify-between font-bold border-b pb-1"><span>Salaire Brut Mensuel</span> <span>{Math.round(autoValues.grossMonth).toLocaleString()} €</span></div>
                  <div className="flex justify-between text-rose-500"><span>Charges Salariales ({(fiscalConfig.salaryChargesRate*100).toFixed(2)}%)</span> <span>- {Math.round(autoValues.socialCharges).toLocaleString()} €</span></div>
                  <div className="flex justify-between text-emerald-600"><span>Remboursement Navigo</span> <span>+ {autoValues.navigoGain.toFixed(2)} €</span></div>
-                 
                  {workBenefits.mutuelle.active && <div className="flex justify-between text-rose-500"><span>Mutuelle (Part Salarié)</span><span>- {autoValues.mutuelleCost.toFixed(2)} €</span></div>}
                  {workBenefits.mealVouchers.active && <div className="flex justify-between text-rose-500"><span>Titres Resto (Part Salarié)</span><span>- {autoValues.swileCost.toFixed(2)} €</span></div>}
-
                  <div className="flex justify-between font-bold text-indigo-700 pt-1 border-t border-slate-100"><span>= Net Cash Avant Impôt</span> <span>{(autoValues.superNetRaw).toFixed(2)} €</span></div>
-
                  <div className="bg-amber-50 p-2 rounded-lg border border-amber-100">
                     <div className="flex justify-between items-center mb-2"><span className="text-amber-800 font-bold">Impôt à la source</span><span className="text-amber-600 font-mono font-black">- {effectiveMonthlyTax.toFixed(2)} €</span></div>
                     <div className="flex items-center justify-between text-[10px] gap-2">
@@ -236,34 +246,76 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-1 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-              <div className="flex justify-between items-center mb-4"><h4 className="font-bold text-slate-700 flex items-center gap-2"><TrendingUp className="w-4 h-4 text-rose-500"/> Charges Fixes</h4><button onClick={() => { const n = prompt("Nom ?"); const a = prompt("Montant ?"); if(n && a) onUpdateExpenses([...expenses, {id: crypto.randomUUID(), name: n, amount: parseFloat(a)}]); }} className="p-1 bg-slate-100 rounded hover:bg-slate-200"><Plus className="w-4 h-4"/></button></div>
-              <div className="space-y-2 max-h-60 overflow-y-auto pr-2">{expenses.map(e => (<div key={e.id} className="flex justify-between text-sm p-2 bg-slate-50 rounded group"><span>{e.name}</span><div className="flex gap-2"><span className="font-mono font-bold">{e.amount}€</span><Trash2 className="w-4 h-4 text-slate-300 hover:text-rose-500 cursor-pointer opacity-0 group-hover:opacity-100" onClick={() => onUpdateExpenses(expenses.filter(x => x.id !== e.id))} /></div></div>))}</div>
+              <div className="flex justify-between items-center mb-4">
+                  <h4 className="font-bold text-slate-700 flex items-center gap-2"><TrendingUp className="w-4 h-4 text-rose-500"/> Charges Fixes</h4>
+                  <button onClick={() => setIsAddingExpense(true)} className="p-1 bg-slate-100 rounded hover:bg-slate-200"><Plus className="w-4 h-4"/></button>
+              </div>
+              
+              {/* Formulaire Ajout Rapide */}
+              {isAddingExpense && (
+                  <div className="bg-indigo-50 p-2 rounded-lg mb-2 flex flex-col gap-2">
+                      <input type="text" placeholder="Nom..." className="p-1 rounded text-xs border border-indigo-100" value={newExpenseName} onChange={e => setNewExpenseName(e.target.value)} autoFocus />
+                      <div className="flex gap-1">
+                          <input type="number" placeholder="€..." className="p-1 rounded text-xs border border-indigo-100 w-20" value={newExpenseAmount} onChange={e => setNewExpenseAmount(e.target.value)} />
+                          <button onClick={handleAddExpense} className="flex-1 bg-indigo-600 text-white rounded flex items-center justify-center"><Check className="w-3 h-3"/></button>
+                          <button onClick={() => setIsAddingExpense(false)} className="bg-slate-300 text-white rounded p-1"><X className="w-3 h-3"/></button>
+                      </div>
+                  </div>
+              )}
+
+              <div className="space-y-2 max-h-60 overflow-y-auto pr-2">
+                  {expenses.map(e => (
+                      <div key={e.id} className="flex justify-between text-sm p-2 bg-slate-50 rounded group">
+                          <span>{e.name}</span>
+                          <div className="flex gap-2">
+                              <span className="font-mono font-bold">{e.amount}€</span>
+                              <Trash2 className="w-4 h-4 text-slate-300 hover:text-rose-500 cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => onUpdateExpenses(expenses.filter(x => x.id !== e.id))} />
+                          </div>
+                      </div>
+                  ))}
+              </div>
               <div className="mt-4 pt-4 border-t flex justify-between font-black text-rose-600"><span>TOTAL CHARGES</span><span>{Math.round(budgetData.totalFixed)} €</span></div>
             </div>
 
             <div className="lg:col-span-2 space-y-6">
               <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm grid grid-cols-2 gap-4">
-                 <div><label className="text-[10px] font-black text-slate-400 uppercase">Argent Plaisir</label><input type="number" value={leisureBudget} onChange={e => setLeisureBudget(parseFloat(e.target.value)||0)} className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg font-bold" /></div>
-                 <div><label className="text-[10px] font-black text-slate-400 uppercase">Épargne Projets</label><input type="number" value={projectSavings} onChange={e => setProjectSavings(parseFloat(e.target.value)||0)} className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg font-bold" /></div>
+                  <div><label className="text-[10px] font-black text-slate-400 uppercase">Argent Plaisir</label><input type="number" value={leisureBudget} onChange={e => setLeisureBudget(parseFloat(e.target.value)||0)} className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg font-bold" /></div>
+                  <div><label className="text-[10px] font-black text-slate-400 uppercase">Épargne Projets</label><input type="number" value={projectSavings} onChange={e => setProjectSavings(parseFloat(e.target.value)||0)} className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg font-bold" /></div>
               </div>
+
               <div className="bg-slate-900 p-6 rounded-2xl shadow-lg text-white grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
-                 <div><p className="text-slate-400 text-xs font-bold uppercase mb-2">Capacité d'Épargne Réelle</p><div className="flex items-baseline gap-2"><input type="number" value={manualSavingsCapacity !== null ? manualSavingsCapacity : Math.round(budgetData.theoreticalCapacity)} onChange={(e) => setManualSavingsCapacity(e.target.value)} className="bg-transparent text-5xl font-black text-emerald-400 w-40 outline-none border-b border-slate-700 focus:border-emerald-400" /><span className="text-xl">€</span></div></div>
-                 <div className="bg-slate-800 p-4 rounded-xl border border-slate-700"><label className="text-[10px] font-black text-indigo-300 uppercase flex items-center gap-2"><Coins className="w-3 h-3"/> Ajout Somme Externe</label><input type="number" value={externalSavings} onChange={e => setExternalSavings(parseFloat(e.target.value)||0)} className="w-full bg-slate-900 border border-slate-600 rounded-lg p-2 mt-2 text-white font-bold focus:ring-2 focus:ring-indigo-500 outline-none" /></div>
+                  <div>
+                      <p className="text-slate-400 text-xs font-bold uppercase mb-2">Capacité d'Épargne Réelle</p>
+                      <div className="flex items-baseline gap-2">
+                          <input type="number" value={manualSavingsCapacity !== null ? manualSavingsCapacity : Math.round(budgetData.theoreticalCapacity)} onChange={(e) => setManualSavingsCapacity(e.target.value)} className="bg-transparent text-5xl font-black text-emerald-400 w-40 outline-none border-b border-slate-700 focus:border-emerald-400" />
+                          <span className="text-xl">€</span>
+                      </div>
+                  </div>
+                  <div className="bg-slate-800 p-4 rounded-xl border border-slate-700">
+                      <label className="text-[10px] font-black text-indigo-300 uppercase flex items-center gap-2"><Coins className="w-3 h-3"/> Ajout Somme Externe</label>
+                      <input type="number" value={externalSavings} onChange={e => setExternalSavings(parseFloat(e.target.value)||0)} className="w-full bg-slate-900 border border-slate-600 rounded-lg p-2 mt-2 text-white font-bold focus:ring-2 focus:ring-indigo-500 outline-none" />
+                  </div>
               </div>
             </div>
           </div>
-          
+
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
                <h3 className="text-lg font-black text-slate-800 mb-6 flex items-center gap-2"><Target className="w-5 h-5 text-indigo-600" /> Placement ({Math.round(budgetData.totalToInvest)} €)</h3>
-               <div className="space-y-3">{strategy.length > 0 ? strategy.map((step, idx) => (<div key={idx} className="flex items-center justify-between p-4 rounded-xl border-l-4 bg-indigo-50 border-indigo-600"><div className="flex items-center gap-4"><div className="w-6 h-6 rounded-full flex center bg-indigo-600 text-white font-bold text-xs">{idx + 1}</div><div><p className="font-bold text-slate-800">{step.accountName}</p><p className="text-xs text-slate-500">{step.type} • Taux {step.rate}%</p></div></div><p className="text-xl font-black text-indigo-600">+ {Math.round(step.fillAmount)} €</p></div>)) : <p className="text-sm text-slate-400 italic">Rien à placer.</p>}</div>
+               <div className="space-y-3">{strategy.length > 0 ? strategy.map((step, idx) => (<div key={idx} className="flex items-center justify-between p-4 rounded-xl border-l-4 bg-indigo-50 border-indigo-600"><div className="flex items-center gap-4"><div className="w-6 h-6 rounded-full flex center items-center justify-center bg-indigo-600 text-white font-bold text-xs">{idx + 1}</div><div><p className="font-bold text-slate-800">{step.accountName}</p><p className="text-xs text-slate-500">{step.type} • Taux {step.rate}%</p></div></div><p className="text-xl font-black text-indigo-600">+ {Math.round(step.fillAmount)} €</p></div>)) : <p className="text-sm text-slate-400 italic">Rien à placer.</p>}</div>
             </div>
+
             <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-6">
                <h3 className="text-lg font-black text-slate-800 mb-2 flex items-center gap-2"><BarChart3 className="w-5 h-5 text-indigo-600" /> Remplissage Livrets</h3>
                {bookletStats.map((b, i) => (<div key={i} className="space-y-2"><div className="flex justify-between text-sm font-bold text-slate-700"><span>{b?.name}</span><span>{Math.round(b?.totalPct || 0)}%</span></div><div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden flex"><div className="h-full bg-amber-400" style={{ width: `${b?.parentPct}%` }} title={`Parents: ${b?.parentAmount}€`}></div><div className="h-full bg-indigo-600" style={{ width: `${b?.ownedPct}%` }} title={`Moi: ${b?.ownedAmount}€`}></div></div><div className="flex justify-between text-[10px] text-slate-400 font-bold"><span className="text-amber-500">Parents {b?.parentAmount}€</span><span className="text-indigo-600">Moi {b?.ownedAmount}€</span><span>Max {b?.ceiling}€</span></div></div>))}
             </div>
           </div>
-          <div className={`p-8 rounded-3xl border-2 shadow-sm text-center transition-colors ${survival.bg} ${survival.border}`}><h3 className="text-sm font-black uppercase tracking-widest opacity-60 mb-4 flex center gap-2"><Hourglass className="w-4 h-4" /> Durée de Survie</h3><div className={`text-6xl font-black ${survival.color} mb-2`}>{survival.years > 0 && <span>{survival.years}a </span>}{survival.months}m {survival.days}j</div><p className={`font-bold ${survival.color} opacity-80`}>Avec {survival.monthlyBurn}€ de charges fixes / mois</p></div>
+
+          <div className={`p-8 rounded-3xl border-2 shadow-sm text-center transition-colors ${survival.bg} ${survival.border}`}>
+            <h3 className="text-sm font-black uppercase tracking-widest opacity-60 mb-4 flex justify-center items-center gap-2"><Hourglass className="w-4 h-4" /> Durée de Survie</h3>
+            <div className={`text-6xl font-black ${survival.color} mb-2`}>{survival.years > 0 && <span>{survival.years}a </span>}{survival.months}m {survival.days}j</div>
+            <p className={`font-bold ${survival.color} opacity-80`}>Avec {survival.monthlyBurn}€ de charges fixes / mois</p>
+          </div>
         </>
       )}
 

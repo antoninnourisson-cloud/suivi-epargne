@@ -1,8 +1,8 @@
+// src/components/AIAdvisor.tsx
 import React, { useState, useRef, useEffect } from 'react';
 import { SavingsAccount, Expense, ChatMessage, FiscalConfig, WorkBenefits } from '../types';
 import { generateFinancialAdvice } from '../services/geminiService';
-import { Send, Bot, User, Trash2, Loader2, BrainCircuit } from 'lucide-react';
-import { Button } from './Button';
+import { Send, Bot, User, Loader2 } from 'lucide-react';
 
 interface AIAdvisorProps {
   accounts: SavingsAccount[];
@@ -10,11 +10,13 @@ interface AIAdvisorProps {
   config: any;
   chatHistory: ChatMessage[];
   onUpdateHistory: (history: ChatMessage[]) => void;
-  fiscalConfig: FiscalConfig; // Ajout prop
+  fiscalConfig: FiscalConfig;
   workBenefits: WorkBenefits;
 }
 
-export const AIAdvisor: React.FC<AIAdvisorProps> = ({ accounts, expenses, config, chatHistory, onUpdateHistory, fiscalConfig, workBenefits }) => {
+export const AIAdvisor: React.FC<AIAdvisorProps> = ({
+  accounts, expenses, config, chatHistory, onUpdateHistory, fiscalConfig, workBenefits
+}) => {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -25,62 +27,54 @@ export const AIAdvisor: React.FC<AIAdvisorProps> = ({ accounts, expenses, config
 
   useEffect(() => {
     scrollToBottom();
-  }, [history]);
+  }, [chatHistory]); // Correction de dépendance: history -> chatHistory
 
   const handleSendMessage = async () => {
     if (!input.trim()) return;
 
-    // CORRECTION 1 : Ajout de l'ID et utilisation de 'user'
-    const userMessage: ChatMessage = { 
-      id: Date.now().toString(), 
-      role: 'user', 
-      content: input, 
-      timestamp: Date.now() 
-    };
-    
-    const newHistory = [...history, userMessage];
-    onSaveHistory(newHistory);
-    setInput('');
-    setIsLoading(true);
-
-    const responseText = await generateFinancialAdvice(input, {
-      accounts,
-      expenses,
-      config,
-      history: chatHistory,
-      fiscalConfig,
-      workBenefits // <--- C'EST L'AJOUT MANQUANT
-    });
-
-    const aiMsg: ChatMessage = {
-      id: crypto.randomUUID(),
-      role: 'model',
-      content: responseText,
+    // 1. Message Utilisateur
+    const userMessage: ChatMessage = {
+      id: Date.now().toString(),
+      role: 'user',
+      content: input,
       timestamp: Date.now()
     };
 
-    onUpdateHistory([...newHistory, aiMsg]);
-    setIsLoading(false);
-  };
+    const newHistory = [...chatHistory, userMessage];
+    onUpdateHistory(newHistory); // Utilisation de la bonne prop
+    setInput('');
+    setIsLoading(true);
 
-      // CORRECTION 2 : Ajout de l'ID et utilisation de 'model' (pas 'assistant')
-      const aiMessage: ChatMessage = { 
-        id: (Date.now() + 1).toString(), 
-        role: 'model', 
-        content: response, 
-        timestamp: Date.now() 
+    try {
+      // 2. Appel Gemini
+      const responseText = await generateFinancialAdvice(input, {
+        accounts,
+        expenses,
+        config,
+        history: newHistory,
+        fiscalConfig,
+        workBenefits
+      });
+
+      // 3. Message IA
+      const aiMsg: ChatMessage = {
+        id: crypto.randomUUID(),
+        role: 'model',
+        content: responseText,
+        timestamp: Date.now()
       };
-      
-      onSaveHistory([...newHistory, aiMessage]);
+
+      onUpdateHistory([...newHistory, aiMsg]);
+
     } catch (error) {
       console.error(error);
-      const errorMessage: ChatMessage = { 
+      const errorMessage: ChatMessage = {
         id: Date.now().toString(),
-        role: 'model', 
-        content: "Désolé, je ne peux pas répondre pour le moment.", 
-        timestamp: Date.now() 
+        role: 'model',
+        content: "Désolé, une erreur technique est survenue.",
+        timestamp: Date.now()
       };
-      onSaveHistory([...newHistory, errorMessage]);
+      onUpdateHistory([...newHistory, errorMessage]);
     } finally {
       setIsLoading(false);
     }
@@ -98,7 +92,6 @@ export const AIAdvisor: React.FC<AIAdvisorProps> = ({ accounts, expenses, config
         </div>
       </div>
 
-      {/* Zone de Messages */}
       <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-slate-50">
         {chatHistory.length === 0 && (
           <div className="text-center py-20 opacity-60">
@@ -107,12 +100,11 @@ export const AIAdvisor: React.FC<AIAdvisorProps> = ({ accounts, expenses, config
             </div>
              <p className="text-slate-600 font-bold text-lg">Bonjour !</p>
             <p className="text-sm text-slate-500 max-w-xs mx-auto mt-2">
-              Je connais vos finances par cœur (soldes, charges, fiscalité).
-              Posez-moi une question sur votre stratégie.
+              Je connais vos finances par cœur. Posez-moi une question sur votre stratégie.
             </p>
           </div>
         )}
-        
+
         {chatHistory.map((msg) => (
           <div key={msg.id} className={`flex gap-4 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
             <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 shadow-sm ${msg.role === 'user' ? 'bg-slate-700 text-white' : 'bg-indigo-600 text-white'}`}>
@@ -123,6 +115,7 @@ export const AIAdvisor: React.FC<AIAdvisorProps> = ({ accounts, expenses, config
             </div>
           </div>
         ))}
+
         {isLoading && (
           <div className="flex justify-start">
             <div className="bg-slate-100 rounded-2xl rounded-tl-none p-4 flex items-center gap-2">

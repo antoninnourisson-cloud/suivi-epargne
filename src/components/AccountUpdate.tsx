@@ -1,17 +1,19 @@
+// src/components/AccountUpdate.tsx
 import React, { useState } from 'react';
 import { SavingsAccount } from '../types';
 import { Button } from './Button';
-import { Save, AlertCircle, TrendingUp, TrendingDown, RefreshCw, Calendar, User, Users } from 'lucide-react';
+import { Save, AlertCircle, RefreshCw, Calendar, User, Users, CheckCircle } from 'lucide-react';
 
 interface AccountUpdateProps {
   accounts: SavingsAccount[];
   onUpdateAccountsComplex: (updates: { account: SavingsAccount, date: string }[]) => void;
+  onCancel?: () => void; // Ajout prop optionnelle pour cohérence
 }
 
 export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdateAccountsComplex }) => {
   const today = new Date().toISOString().split('T')[0];
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
-  // Store update state per account
   const [updates, setUpdates] = useState<Record<string, { owned: string, parental: string, date: string }>>(
     accounts.reduce((acc, account) => ({ 
       ...acc, 
@@ -25,10 +27,12 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
 
   const handleOwnedChange = (id: string, val: string) => {
     setUpdates(prev => ({ ...prev, [id]: { ...prev[id], owned: val } }));
+    setSuccessMsg(null);
   };
 
   const handleParentalChange = (id: string, val: string) => {
     setUpdates(prev => ({ ...prev, [id]: { ...prev[id], parental: val } }));
+    setSuccessMsg(null);
   };
 
   const handleDateChange = (id: string, val: string) => {
@@ -40,19 +44,18 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
       const u = updates[account.id];
       const newOwned = parseFloat(u.owned) || 0;
       const newParental = parseFloat(u.parental) || 0;
-      
       const updatedAccount: SavingsAccount = {
         ...account,
         ownedAmount: newOwned,
         parentalCapital: newParental,
         totalAmount: newOwned + newParental
       };
-
       return { account: updatedAccount, date: u.date };
     });
-
+    
     onUpdateAccountsComplex(payloads);
-    alert("Tous les montants et historiques ont été actualisés avec succès !");
+    setSuccessMsg("Comptes actualisés avec succès !");
+    setTimeout(() => setSuccessMsg(null), 3000);
   };
 
   if (accounts.length === 0) {
@@ -76,9 +79,13 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
             Indiquez vos nouveaux soldes et la date du constat. Vos graphiques s'adapteront automatiquement.
           </p>
         </div>
-        <Button onClick={handleSaveAll} className="bg-white text-indigo-600 hover:bg-indigo-50 border-none font-black px-8 py-3 shadow-xl">
-          <Save className="w-5 h-5 mr-2" /> Tout Enregistrer
-        </Button>
+        <div className="flex flex-col items-end gap-2">
+             <Button onClick={handleSaveAll} className="bg-white text-indigo-600 hover:bg-indigo-50 border-none font-black px-8 py-3 shadow-xl">
+                <Save className="w-5 h-5 mr-2" /> Tout Enregistrer
+            </Button>
+            {successMsg && <span className="text-emerald-300 font-bold text-sm flex items-center gap-1"><CheckCircle className="w-4 h-4"/> {successMsg}</span>}
+        </div>
+       
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -160,15 +167,6 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
             </div>
           );
         })}
-      </div>
-
-      <div className="bg-white p-8 rounded-2xl border border-slate-200 text-center shadow-sm">
-        <p className="text-slate-500 text-sm mb-6 max-w-md mx-auto">
-          En cliquant sur valider, les montants actuels seront mis à jour et de nouveaux points seront créés dans votre graphique d'évolution à la date indiquée.
-        </p>
-        <Button onClick={handleSaveAll} className="w-full md:w-auto px-16 py-4 text-lg">
-          Valider les actualisations
-        </Button>
       </div>
     </div>
   );

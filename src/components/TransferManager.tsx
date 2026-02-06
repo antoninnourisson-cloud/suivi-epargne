@@ -1,12 +1,12 @@
+// src/components/TransferManager.tsx
 import React, { useState } from 'react';
 import { SavingsAccount } from '../types';
 import { Button } from './Button';
-import { ArrowRightLeft, Download, Calendar, ArrowDown } from 'lucide-react';
+import { ArrowRightLeft, Download, Calendar, ArrowDown, CheckCircle } from 'lucide-react';
 
 interface TransferManagerProps {
   accounts: SavingsAccount[];
   onUpdateAccountsComplex: (updates: { account: SavingsAccount, date: string }[]) => void;
-  // Nouvelle prop pour les virements liés
   onLinkedTransfer: (sourceId: string, destId: string, amount: number, date: string) => void;
 }
 
@@ -14,7 +14,8 @@ export const TransferManager: React.FC<TransferManagerProps> = ({ accounts, onUp
   const today = new Date().toISOString().split('T')[0];
   const [activeTab, setActiveTab] = useState<'deposit' | 'transfer'>('deposit');
   const [opDate, setOpDate] = useState<string>(today);
-  
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
   // Deposit State
   const [depositAccountId, setDepositAccountId] = useState<string>('');
   const [depositAmount, setDepositAmount] = useState<string>('');
@@ -23,6 +24,11 @@ export const TransferManager: React.FC<TransferManagerProps> = ({ accounts, onUp
   const [sourceAccountId, setSourceAccountId] = useState<string>('');
   const [destAccountId, setDestAccountId] = useState<string>('');
   const [transferAmount, setTransferAmount] = useState<string>('');
+
+  const showSuccess = (msg: string) => {
+      setSuccessMsg(msg);
+      setTimeout(() => setSuccessMsg(null), 3000);
+  };
 
   const handleDeposit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -42,7 +48,7 @@ export const TransferManager: React.FC<TransferManagerProps> = ({ accounts, onUp
 
     onUpdateAccountsComplex([{ account: updatedAcc, date: opDate }]);
     setDepositAmount('');
-    alert("Dépôt enregistré !");
+    showSuccess("Dépôt enregistré avec succès !");
   };
 
   const handleTransfer = (e: React.FormEvent) => {
@@ -52,18 +58,17 @@ export const TransferManager: React.FC<TransferManagerProps> = ({ accounts, onUp
 
     const amount = parseFloat(transferAmount);
     const sourceAcc = accounts.find(a => a.id === sourceAccountId);
-    
+
     if (isNaN(amount) || amount <= 0 || !sourceAcc) return;
+
     if (sourceAcc.totalAmount < amount) {
-        alert("Fonds insuffisants.");
+        alert("Fonds insuffisants."); // Exception: ici alert ok car erreur blocante
         return;
     }
 
-    // ON UTILISE LA NOUVELLE FONCTION QUI LIE LES MOUVEMENTS
     onLinkedTransfer(sourceAccountId, destAccountId, amount, opDate);
-    
     setTransferAmount('');
-    alert("Virement enregistré !");
+    showSuccess("Virement exécuté avec succès !");
   };
 
   if (accounts.length === 0) return null;
@@ -87,6 +92,12 @@ export const TransferManager: React.FC<TransferManagerProps> = ({ accounts, onUp
             <input type="date" value={opDate} onChange={e => setOpDate(e.target.value)} className="w-full bg-transparent font-bold text-slate-700 outline-none" />
           </div>
         </div>
+
+        {successMsg && (
+            <div className="bg-emerald-100 text-emerald-800 p-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2 animate-pulse">
+                <CheckCircle className="w-4 h-4"/> {successMsg}
+            </div>
+        )}
 
         {activeTab === 'deposit' ? (
           <form onSubmit={handleDeposit} className="space-y-4">
