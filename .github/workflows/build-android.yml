@@ -21,10 +21,20 @@ jobs:
           
       - uses: android-actions/setup-android@v3
       
-      - name: Install and Build Web
+      # ETAPE CORRIGÉE : On force la correction du package.json à la volée
+      - name: Force Version Fix and Install
         run: |
+          # Cette commande remplace le mot "latest" par "^6.0.0" directement dans le fichier
+          sed -i 's/"latest"/"^6.0.0"/g' package.json
+          
+          # On affiche le contenu du fichier dans les logs pour vérifier (si ça plante encore)
+          cat package.json
+          
+          # On installe
           npm install
-          npm run build
+          
+      - name: Build Web App
+        run: npm run build
           
       - name: Generate and Build Android
         run: |
