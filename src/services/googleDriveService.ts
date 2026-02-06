@@ -1,8 +1,8 @@
-// ================================================
-// FILE: src/services/googleDriveService.ts
-// ================================================
+import { Capacitor } from '@capacitor/core';
+import { GoogleAuth } from '@capacitor-community/google-sign-in';
+
+// Ton Client ID Web (Reste le même, même pour Android !)
 const CLIENT_ID = '763862877733-hl1an9vcn0ibnoq2iq035927528mimd5.apps.googleusercontent.com';
-// Ajout du scope gmail.send
 const SCOPES = 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/gmail.send';
 const FILE_NAME = 'suivi_epargne.json';
 
@@ -10,195 +10,174 @@ let tokenClient: any;
 let gapiInited = false;
 let gisInited = false;
 
-// Initialisation des API Google
+// --- INITIALISATION ---
 export const initGoogleApi = async (): Promise<void> => {
+  // 1. Mobile Natif
+  if (Capacitor.isNativePlatform()) {
+    try {
+      await GoogleAuth.initialize({
+        clientId: CLIENT_ID,
+        scopes: ['https://www.googleapis.com/auth/drive.file', 'https://www.googleapis.com/auth/gmail.send'],
+        grantOfflineAccess: false,
+      });
+      console.log('GoogleAuth Native initialized');
+    } catch (e) {
+      console.error('Erreur init GoogleAuth Native', e);
+    }
+    return;
+  }
+
+  // 2. Web Classique
   return new Promise((resolve) => {
-    const gapiLoaded = () => {
-      (window as any).gapi.load('client', async () => {
-        await (window as any).gapi.client.init({
-          discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'],
+    const loadGapi = () => {
+        (window as any).gapi.load('client', async () => {
+            await (window as any).gapi.client.init({
+                discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'],
+            });
+            gapiInited = true;
+            check();
         });
-        const savedToken = localStorage.getItem('google_token');
-        if (savedToken) {
-          (window as any).gapi.client.setToken(JSON.parse(savedToken));
-        }
-        gapiInited = true;
-        checkResolve();
-      });
     };
-    const gisLoaded = () => {
-      tokenClient = (window as any).google.accounts.oauth2.initTokenClient({
-        client_id: CLIENT_ID,
-        scope: SCOPES,
-        callback: '', // défini à la demande
-      });
-      gisInited = true;
-      checkResolve();
+    const loadGis = () => {
+        tokenClient = (window as any).google.accounts.oauth2.initTokenClient({
+            client_id: CLIENT_ID,
+            scope: SCOPES,
+            callback: '',
+        });
+        gisInited = true;
+        check();
     };
-    const checkResolve = () => {
-      if (gapiInited && gisInited) resolve();
-    };
-    if ((window as any).gapi) gapiLoaded();
-    if ((window as any).google) gisLoaded();
+    const check = () => { if (gapiInited && gisInited) resolve(); };
+    
+    if ((window as any).gapi) loadGapi();
+    if ((window as any).google) loadGis();
   });
 };
 
+// --- VÉRIFICATION TOKEN ---
 export const isTokenValid = (): boolean => {
+  if (Capacitor.isNativePlatform()) {
+    // En natif, on considère que le plugin gère la session
+    return !!localStorage.getItem('google_token');
+  }
   const expiry = localStorage.getItem('token_expiry');
-  if (!expiry) return false;
-  return parseInt(expiry) > Date.now();
+  return expiry ? parseInt(expiry) > Date.now() : false;
 };
 
-export const handleAuthClick = (silent: boolean = false): Promise<void> => {
+// --- CONNEXION ---
+export const handleAuthClick = async (silent: boolean = false): Promise<void> => {
+  if (Capacitor.isNativePlatform()) {
+    try {
+      const user = await GoogleAuth.signIn();
+      // On stocke le token d'accès pour les appels API fetch
+      const tokenData = { access_token: user.authentication.accessToken };
+      localStorage.setItem('google_token', JSON.stringify(tokenData));
+      localStorage.setItem('auth_persistence', 'true');
+    } catch (error) {
+      console.error("Erreur Auth Native", error);
+      throw error;
+    }
+    return;
+  }
+
+  // Web Fallback
   return new Promise((resolve, reject) => {
     tokenClient.callback = async (resp: any) => {
-      if (resp.error) {
-        reject(resp);
-        return;
-      }
+      if (resp.error) { reject(resp); return; }
       localStorage.setItem('google_token', JSON.stringify(resp));
-      // Expiration dans 3500s (~1h de marge)
-      const expiryTime = Date.now() + 3500 * 1000;
-      localStorage.setItem('token_expiry', expiryTime.toString());
+      localStorage.setItem('token_expiry', (Date.now() + 3500 * 1000).toString());
       localStorage.setItem('auth_persistence', 'true');
-      localStorage.setItem('auth_timestamp', Date.now().toString());
       resolve();
     };
-    if (silent) {
-      // Mode silencieux : aucune popup
-      tokenClient.requestAccessToken({ prompt: 'none' });
-    } else {
-      // Mode normal : popup si nécessaire
-      if ((window as any).gapi.client.getToken() === null) {
-        tokenClient.requestAccessToken({ prompt: 'consent' });
-      } else {
-        tokenClient.requestAccessToken({ prompt: '' });
-      }
-    }
+    if (silent) tokenClient.requestAccessToken({ prompt: 'none' });
+    else tokenClient.requestAccessToken({ prompt: 'consent' });
   });
 };
 
-export const handleSignOut = () => {
-  const token = (window as any).gapi.client.getToken();
-  if (token !== null) {
-    (window as any).google.accounts.oauth2.revoke(token.access_token);
-    (window as any).gapi.client.setToken('');
-    localStorage.removeItem('google_token');
-    localStorage.removeItem('auth_persistence');
-    localStorage.removeItem('auth_timestamp');
-    localStorage.removeItem('token_expiry');
+// --- DÉCONNEXION ---
+export const handleSignOut = async () => {
+  localStorage.removeItem('google_token');
+  localStorage.removeItem('token_expiry');
+  localStorage.removeItem('auth_persistence');
+  
+  if (Capacitor.isNativePlatform()) {
+    await GoogleAuth.signOut();
+  } else {
+    const token = (window as any).gapi.client.getToken();
+    if (token) {
+      (window as any).google.accounts.oauth2.revoke(token.access_token);
+      (window as any).gapi.client.setToken('');
+    }
   }
+};
+
+// --- HELPERS API (FETCH) ---
+const getAccessToken = async (): Promise<string> => {
+    // TODO: En natif, implémenter ici un refresh automatique via GoogleAuth.refresh() si besoin
+    const stored = localStorage.getItem('google_token');
+    if (!stored) throw new Error("No token found");
+    return JSON.parse(stored).access_token;
+};
+
+const apiRequest = async (url: string, options: RequestInit = {}) => {
+    const token = await getAccessToken();
+    const headers = { ...options.headers, Authorization: `Bearer ${token}` };
+    const res = await fetch(url, { ...options, headers });
+    return await res.json();
 };
 
 export const findConfigFile = async (): Promise<string | null> => {
   try {
-    const response = await (window as any).gapi.client.drive.files.list({
-      q: `name = '${FILE_NAME}' and trashed = false`,
-      fields: 'files(id, name)',
-      spaces: 'drive',
-    });
-    const files = response.result.files;
-    if (files && files.length > 0) {
-      return files[0].id;
-    }
-    return null;
-  } catch (err) {
-    console.error('Erreur recherche fichier Drive', err);
-    throw err;
-  }
+      const q = encodeURIComponent(`name = '${FILE_NAME}' and trashed = false`);
+      const data = await apiRequest(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)`);
+      return (data.files && data.files.length > 0) ? data.files[0].id : null;
+  } catch (e) { return null; }
 };
 
 export const readConfigFile = async (fileId: string): Promise<any> => {
-  try {
-    const response = await (window as any).gapi.client.drive.files.get({
-      fileId: fileId,
-      alt: 'media',
-    });
-    return response.result;
-  } catch (err) {
-    console.error('Erreur lecture fichier Drive', err);
-    throw err;
-  }
+  const token = await getAccessToken(); // Appel direct pour le param alt=media
+  const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
+      headers: { Authorization: `Bearer ${token}` }
+  });
+  return await res.json();
 };
 
 export const createConfigFile = async (data: any): Promise<string> => {
-  try {
-    const fileContent = JSON.stringify(data, null, 2);
-    const metadata = {
-      name: FILE_NAME,
-      mimeType: 'application/json',
-    };
-    const form = new FormData();
-    form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
-    form.append('file', new Blob([fileContent], { type: 'application/json' }));
-    const accessToken = (window as any).gapi.client.getToken().access_token;
-    const response = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
-      method: 'POST',
-      headers: new Headers({ 'Authorization': 'Bearer ' + accessToken }),
-      body: form,
-    });
-    const result = await response.json();
-    return result.id;
-  } catch (err) {
-    console.error('Erreur création fichier Drive', err);
-    throw err;
-  }
+  const token = await getAccessToken();
+  const metadata = { name: FILE_NAME, mimeType: 'application/json' };
+  const form = new FormData();
+  form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+  form.append('file', new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
+  
+  const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+  });
+  const result = await res.json();
+  return result.id;
 };
 
 export const updateConfigFile = async (fileId: string, data: any): Promise<void> => {
-  try {
-    const fileContent = JSON.stringify(data, null, 2);
-    const accessToken = (window as any).gapi.client.getToken().access_token;
-    await fetch(`https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`, {
-      method: 'PATCH',
-      headers: new Headers({ 
-        'Authorization': 'Bearer ' + accessToken,
-        'Content-Type': 'application/json'
-      }),
-      body: fileContent,
-    });
-  } catch (err) {
-    console.error('Erreur mise à jour fichier Drive', err);
-    throw err;
-  }
+  const token = await getAccessToken();
+  await fetch(`https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(data, null, 2),
+  });
 };
 
-// --- NOUVELLE FONCTION (Bien séparée de la précédente) ---
 export const sendGmail = async (to: string, subject: string, body: string): Promise<void> => {
   try {
-    // Construction du mail au format RFC 2822
-    const utf8Subject = `=?utf-8?B?${btoa(unescape(encodeURIComponent(subject)))}?=`;
-    const messageParts = [
-      `To: ${to}`,
-      "Content-Type: text/html; charset=utf-8",
-      "MIME-Version: 1.0",
-      `Subject: ${utf8Subject}`,
-      "",
-      body
-    ];
-    const message = messageParts.join("\n");
-
-    // Encodage Base64URL requis par l'API Gmail
-    const encodedMessage = btoa(unescape(encodeURIComponent(message)))
-      .replace(/\+/g, '-')
-      .replace(/\//g, '_')
-      .replace(/=+$/, '');
-
-    const accessToken = (window as any).gapi.client.getToken().access_token;
-
-    await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        raw: encodedMessage
-      })
-    });
-    console.log("Email envoyé avec succès via Gmail API");
-  } catch (err) {
-    console.error("Erreur lors de l'envoi de l'email", err);
-    // On ne throw pas d'erreur pour ne pas bloquer l'UI si le mail échoue
-  }
+      const utf8Subject = `=?utf-8?B?${btoa(unescape(encodeURIComponent(subject)))}?=`;
+      const message = [`To: ${to}`, "Content-Type: text/html; charset=utf-8", "MIME-Version: 1.0", `Subject: ${utf8Subject}`, "", body].join("\n");
+      const raw = btoa(unescape(encodeURIComponent(message))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+      
+      await apiRequest('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ raw })
+      });
+      console.log("Mail envoyé");
+  } catch (e) { console.error("Erreur mail", e); }
 };

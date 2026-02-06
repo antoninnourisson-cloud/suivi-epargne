@@ -9,6 +9,9 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@capacitor/android": "latest",
+    "@capacitor/core": "latest",
+    "@capacitor-community/google-sign-in": "latest",
     "@google/generative-ai": "^0.21.0",
     "lucide-react": "^0.562.0",
     "react-dom": "^19.2.3",
@@ -16,6 +19,7 @@
     "react": "^19.2.3"
   },
   "devDependencies": {
+    "@capacitor/cli": "latest",
     "@types/node": "^22.14.0",
     "@vitejs/plugin-react": "^5.0.0",
     "typescript": "~5.8.2",
