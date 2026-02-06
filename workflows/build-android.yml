@@ -3,8 +3,8 @@ name: Build Android APK
 on:
   push:
     branches:
-      - main  # Vérifie bien si ta branche s'appelle 'main' ou 'master'
-  workflow_dispatch: # Permet de lancer manuellement depuis l'onglet Actions
+      - main
+  workflow_dispatch:
 
 jobs:
   build:
@@ -12,7 +12,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # 1. Configuration de l'environnement (Future-proof 2026)
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -22,33 +21,32 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
-          java-version: '21' # Requis pour les outils Android récents
+          java-version: '21'
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      # 2. Installation et Build Web
       - name: Install Dependencies
         run: npm install
+
+      - name: Update to Latest
+        run: npm update
 
       - name: Build Web Assets
         run: npm run build
 
-      # 3. Génération du projet Android (Spécifique GitHub Online)
       - name: Init Capacitor Android
         run: |
           npx cap init "Suivi Epargne" com.suiviepargne.app --web-dir dist
           npx cap add android
           npx cap sync
 
-      # 4. Compilation de l'APK
       - name: Build Debug APK
-        cd android
         run: |
+          cd android
           chmod +x gradlew
           ./gradlew assembleDebug
 
-      # 5. Sauvegarde de l'APK pour téléchargement
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
