@@ -9,45 +9,54 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      
     steps:
-      - uses: actions/checkout@v4
+      # 1. Récupération du code
+      - name: Checkout Source
+        uses: actions/checkout@v4
 
-      # Setup Environnement
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
+      # 2. Installation Java (Requis pour Android)
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
           java-version: '17'
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+      # 3. Installation Node.js
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
 
-      # Installation & Build Web
+      # 4. Installation des dépendances du projet
       - name: Install Dependencies
         run: npm install
 
-      - name: Build Web Assets
+      # 5. Construction de l'app Web (Vite -> dist/)
+      - name: Build Web App
         run: npm run build
 
-      # Génération Android (Tout sur une ligne pour éviter les erreurs YAML)
-      - name: Init Capacitor Android
-        run: npx cap init "Suivi Epargne" com.suiviepargne.app --web-dir dist && npx cap add android && npx cap sync
+      # 6. Ajout du moteur Android (puisque tu ne l'as pas sur GitHub)
+      - name: Add Android Platform
+        run: npx cap add android
 
-      # Compilation APK (Signature Debug par défaut)
+      # 7. Synchronisation (Copie du dossier dist/ vers android/)
+      - name: Sync Capacitor
+        run: npx cap sync
+
+      # 8. Permission Exécution Gradle (Crucial)
+      # On utilise working-directory pour être sûr d'être au bon endroit
+      - name: Make Gradlew Executable
+        working-directory: ./android
+        run: chmod +x gradlew
+
+      # 9. Compilation de l'APK
       - name: Build Debug APK
-        run: cd android && chmod +x gradlew && ./gradlew assembleDebug
+        working-directory: ./android
+        run: ./gradlew assembleDebug
 
-      # Sauvegarde de l'APK
+      # 10. Sauvegarde du fichier pour téléchargement
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: suivi-epargne-debug.apk
+          name: suivi-epargne-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
