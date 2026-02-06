@@ -1,25 +1,20 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Bot, Loader2, Sparkles } from 'lucide-react';
-import { SavingsAccount, Expense, ChatMessage } from '../types';
-import { generateFinancialAdvice, ComputedFinancials } from '../services/geminiService';
+import { SavingsAccount, Expense, ChatMessage, FiscalConfig, WorkBenefits } from '../types';
+import { generateFinancialAdvice } from '../services/geminiService';
+import { Send, Bot, User, Trash2, Loader2, BrainCircuit } from 'lucide-react';
+import { Button } from './Button';
 
 interface AIAdvisorProps {
   accounts: SavingsAccount[];
   expenses: Expense[];
   config: any;
-  history: ChatMessage[];
-  onSaveHistory: (history: ChatMessage[]) => void;
-  computedData: ComputedFinancials;
+  chatHistory: ChatMessage[];
+  onUpdateHistory: (history: ChatMessage[]) => void;
+  fiscalConfig: FiscalConfig; // Ajout prop
+  workBenefits: WorkBenefits;
 }
 
-export const AIAdvisor: React.FC<AIAdvisorProps> = ({ 
-  accounts, 
-  expenses, 
-  config, 
-  history, 
-  onSaveHistory,
-  computedData 
-}) => {
+export const AIAdvisor: React.FC<AIAdvisorProps> = ({ accounts, expenses, config, chatHistory, onUpdateHistory, fiscalConfig, workBenefits }) => {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -48,14 +43,25 @@ export const AIAdvisor: React.FC<AIAdvisorProps> = ({
     setInput('');
     setIsLoading(true);
 
-    try {
-      const response = await generateFinancialAdvice(input, {
-        accounts,
-        expenses,
-        config,
-        history,
-        computed: computedData
-      });
+    const responseText = await generateFinancialAdvice(input, {
+      accounts,
+      expenses,
+      config,
+      history: chatHistory,
+      fiscalConfig,
+      workBenefits // <--- C'EST L'AJOUT MANQUANT
+    });
+
+    const aiMsg: ChatMessage = {
+      id: crypto.randomUUID(),
+      role: 'model',
+      content: responseText,
+      timestamp: Date.now()
+    };
+
+    onUpdateHistory([...newHistory, aiMsg]);
+    setIsLoading(false);
+  };
 
       // CORRECTION 2 : Ajout de l'ID et utilisation de 'model' (pas 'assistant')
       const aiMessage: ChatMessage = { 
@@ -92,22 +98,28 @@ export const AIAdvisor: React.FC<AIAdvisorProps> = ({
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {history.length === 0 && (
-          <div className="text-center text-slate-400 mt-10 space-y-2">
-            <Sparkles className="w-8 h-8 mx-auto opacity-50" />
-            <p className="text-sm">Je connais vos comptes et votre budget.<br/>Posez-moi une question.</p>
+      {/* Zone de Messages */}
+      <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-slate-50">
+        {chatHistory.length === 0 && (
+          <div className="text-center py-20 opacity-60">
+            <div className="w-20 h-20 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-6">
+              <Bot className="w-10 h-10 text-indigo-500" />
+            </div>
+             <p className="text-slate-600 font-bold text-lg">Bonjour !</p>
+            <p className="text-sm text-slate-500 max-w-xs mx-auto mt-2">
+              Je connais vos finances par cœur (soldes, charges, fiscalité).
+              Posez-moi une question sur votre stratégie.
+            </p>
           </div>
         )}
         
-        {history.map((msg) => (
-          <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`max-w-[85%] rounded-2xl p-4 ${
-              msg.role === 'user' 
-                ? 'bg-indigo-600 text-white rounded-tr-none' 
-                : 'bg-slate-100 text-slate-800 rounded-tl-none'
-            }`}>
-              <p className="whitespace-pre-wrap text-sm leading-relaxed">{msg.content}</p>
+        {chatHistory.map((msg) => (
+          <div key={msg.id} className={`flex gap-4 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 shadow-sm ${msg.role === 'user' ? 'bg-slate-700 text-white' : 'bg-indigo-600 text-white'}`}>
+               {msg.role === 'user' ? <User className="w-4 h-4" /> : <Bot className="w-4 h-4" />}
+            </div>
+            <div className={`max-w-[85%] p-4 rounded-2xl text-sm leading-relaxed shadow-sm whitespace-pre-wrap ${msg.role === 'user' ? 'bg-white text-slate-800 rounded-tr-none border border-slate-100' : 'bg-indigo-600 text-indigo-50 rounded-tl-none shadow-indigo-200'}`}>
+              {msg.content}
             </div>
           </div>
         ))}

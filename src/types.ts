@@ -1,37 +1,60 @@
-// Définition des types de comptes disponibles
+// ================================================
+// FILE: src/types.ts
+// ================================================
+
 export enum AccountType {
   LIVRET_A = 'Livret A',
   LDDS = 'LDDS',
   LEP = 'LEP',
-  CEL = 'CEL',
-  PEL = 'PEL',
-  AV = 'Assurance Vie',
+  COMPTE_COURANT = 'Compte Courant',
   PEA = 'PEA',
   PER = 'PER',
+  ASSURANCE_VIE = 'Assurance Vie',
   PEE = 'PEE',
-  CTO = 'Compte Titres',
-  CAT = 'Compte à Terme',
-  IMMOBILIER = 'Immobilier', // <--- C'est cette ligne qui manquait !
+  CRYPTO = 'Crypto',
+  IMMOBILIER = 'Immobilier',
   AUTRE = 'Autre'
+}
+
+export interface AccountMovement {
+  id: string;
+  date: string;
+  amount: number;
+  label: string;
+  type: 'IN' | 'OUT';
+  linkId?: string; 
 }
 
 export interface SavingsAccount {
   id: string;
   name: string;
   type: AccountType;
+  institution: string;
+  totalAmount: number;
   ownedAmount: number;
-  interestRate: number;
-  ceiling?: number;
+  parentalCapital: number;
+  interestRate?: number;
+  recentHighRate?: number;
+  recentLowRate?: number;
   openingDate?: string;
   contractEndDate?: string;
-  notes?: string;
+  ceiling?: number;
+  movements?: AccountMovement[];
+  isRevolut?: boolean;
+  isTaxable?: boolean;
+}
+
+export interface PortfolioSnapshot {
+  date: string;
+  totalAmount: number;
+  ownedAmount: number;
 }
 
 export interface Expense {
   id: string;
   name: string;
   amount: number;
-  category?: string;
+  paymentMethod?: string;
 }
 
 export interface ChatMessage {
@@ -41,23 +64,68 @@ export interface ChatMessage {
   timestamp: number;
 }
 
-// Interface globale pour la sauvegarde JSON
+export interface TaxBracket {
+  limit: number;
+  rate: number;
+}
+
+export interface FiscalConfig {
+  salaryChargesRate: number;
+  socialChargesCapital: number;
+  standardAllowance: number;
+  ceilings: {
+    livretA: number;
+    ldds: number;
+    lep: number;
+  };
+  legalMaturity: {
+    pea: number;
+    assuranceVie: number;
+    pee: number;
+  };
+  taxBrackets: TaxBracket[];
+}
+
+// --- NOUVELLE INTERFACE ---
+export interface WorkBenefits {
+  navigo: {
+    active: boolean;
+    basePrice: number;    // ex: 90.80
+    refundRate: number;   // ex: 67.24
+  };
+  mutuelle: {
+    active: boolean;
+    totalCost: number;    // Coût total mensuel contrat
+    employerRate: number; // % prise en charge employeur
+  };
+  mealVouchers: {
+    active: boolean;
+    faceValue: number;    // Valeur faciale titre
+    employerRate: number; // % prise en charge employeur
+    daysPerMonth: number; // Nb jours moyen
+  };
+}
+
 export interface GlobalAppData {
   accounts: SavingsAccount[];
   expenses: Expense[];
-  config: any;
-  history: ChatMessage[];
-}
-
-export interface AccountMovement {
-  id: string;
-  date: string;
-  amount: number;
-  type: 'DEPOSIT' | 'WITHDRAWAL' | 'INTEREST';
-}
-
-export interface PortfolioSnapshot {
-  date: string;
-  totalAmount: number;
-  breakdown: Record<string, number>;
+  history: PortfolioSnapshot[];
+  fiscalConfig?: FiscalConfig;
+  workBenefits?: WorkBenefits; // <--- AJOUT
+  config: {
+    grossAnnual: number;
+    leisureBudget: number;
+    projectSavings: number;
+    navigoBase?: number; // Gardé pour rétrocompatibilité
+    navigoRate?: number; // Gardé pour rétrocompatibilité
+    taxRateManual: number;
+    extraMonthlyIncome: number;
+  };
+  goalPrompt?: string;
+  financing?: {
+    interestRate: number;
+    insuranceRate: number;
+  };
+  lastView?: string;
+  chatHistory?: ChatMessage[];
 }

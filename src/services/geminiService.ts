@@ -1,24 +1,36 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
-import { SavingsAccount, Expense, ChatMessage } from "../types";
 
-const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
-// On utilise le modèle Flash pour la rapidité et la faible consommation de tokens
-const MODEL_ID = "gemini-1.5-flash"; 
+import { GoogleGenerativeAI } from "@google/generative-ai";
+// RETRAIT de LEGAL_MATURITY et ACCOUNT_CEILINGS des imports
+import { SavingsAccount, Expense, ChatMessage, AccountType, FiscalConfig, WorkBenefits } from "../types";
+
+const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;const MODEL_ID = "gemini-2.0-flash-exp"; 
 
 const genAI = new GoogleGenerativeAI(API_KEY || '');
 
-// Structure exacte des données calculées reçues de App.tsx
-export interface ComputedFinancials {
-  grossAnnual: number;
-  netMonthlyBeforeTax: number;
-  superNetMonthly: number;
-  totalExpenses: number;
-  resteAVivre: number;
-  totalParent: number;
-  totalMine: number;
-  myLiquidities: number;
-  runway: string;
-}
+const getAvailabilityInfo = (acc: SavingsAccount, fiscalConfig: FiscalConfig): string => {
+  const now = new Date();
+  if (acc.type === AccountType.PEE && acc.contractEndDate) {
+    const endDate = new Date(acc.contractEndDate);
+    if (endDate <= now) return "DISPONIBLE (Contrat terminé)";
+    return `BLOQUÉ jusqu'au ${endDate.toLocaleDateString('fr-FR')} (Fin contrat PEE)`;
+  }
+  if (acc.openingDate && [AccountType.PEA, AccountType.ASSURANCE_VIE, AccountType.PER].includes(acc.type)) {
+    const openDate = new Date(acc.openingDate);
+    let duration = 0;
+    if (acc.type === AccountType.PEA) duration = fiscalConfig.legalMaturity.pea;
+    if (acc.type === AccountType.ASSURANCE_VIE) duration = fiscalConfig.legalMaturity.assuranceVie;
+    if (duration > 0) {
+      const unlockDate = new Date(openDate);
+      unlockDate.setFullYear(openDate.getFullYear() + duration);
+      if (unlockDate <= now) return `DISPONIBLE (Maturité atteinte le ${unlockDate.toLocaleDateString('fr-FR')})`;
+      return `BLOQUÉ fiscalement jusqu'au ${unlockDate.toLocaleDateString('fr-FR')} (Maturité ${duration} ans)`;
+    }
+  }
+  if ([AccountType.LIVRET_A, AccountType.LDDS, AccountType.LEP, AccountType.COMPTE_COURANT].includes(acc.type)) {
+    return "LIQUIDE (Disponible immédiatement)";
+  }
+  return "Statut spécifique";
+};
 
 export const generateFinancialAdvice = async (
   userPrompt: string,
@@ -27,79 +39,113 @@ export const generateFinancialAdvice = async (
     expenses: Expense[];
     config: any;
     history: ChatMessage[];
-    computed: ComputedFinancials; // Les données omniscientes
+    fiscalConfig: FiscalConfig;
+    workBenefits: WorkBenefits; // <--- AJOUT
   }
 ): Promise<string> => {
   
-  if (!API_KEY) return "Erreur : Clé API manquante. Vérifiez votre fichier .env.local";
-
   try {
     const model = genAI.getGenerativeModel({ model: MODEL_ID });
+    const { fiscalConfig, workBenefits } = context;
 
-    // Fonction helper pour l'affichage (réplique la logique de l'App pour l'affichage texte)
-    const isParentAccount = (name: string) => /parent|papa|maman|usufruit/i.test(name);
+    // --- 1. CALCULS REVENUS & AVANTAGES ---
+    const grossAnnual = context.config.grossAnnual || 0;
+    const extraMonthly = context.config.extraMonthlyIncome || 0;
+    const grossMonth = grossAnnual / 12;
+    const socialCharges = grossMonth * fiscalConfig.salaryChargesRate;
+    const netSalaryOnly = grossMonth - socialCharges;
+
+    // Calcul Gains/Coûts Benefits
+    let navigoGain = 0;
+    if (workBenefits.navigo.active) navigoGain = workBenefits.navigo.basePrice * (workBenefits.navigo.refundRate / 100);
+    else navigoGain = (context.config.navigoBase || 90.80) * ((context.config.navigoRate || 67.24) / 100);
+
+    let mutuelleCost = 0;
+    if (workBenefits.mutuelle.active) mutuelleCost = workBenefits.mutuelle.totalCost * (1 - workBenefits.mutuelle.employerRate / 100);
+
+    let swileCost = 0;
+    if (workBenefits.mealVouchers.active) swileCost = workBenefits.mealVouchers.faceValue * workBenefits.mealVouchers.daysPerMonth * (1 - workBenefits.mealVouchers.employerRate / 100);
+
+    const netBeforeTax = netSalaryOnly + navigoGain + extraMonthly;
+
+    // Calcul Impôt
+    const netTaxableYear = ((netSalaryOnly + extraMonthly) * 12) * (1 - fiscalConfig.standardAllowance);
+    let taxAmount = 0;
+    let previousLimit = 0;
+    for (const bracket of fiscalConfig.taxBrackets) {
+        const limit = bracket.limit === null || bracket.limit === undefined ? Infinity : bracket.limit;
+        if (netTaxableYear > previousLimit) {
+            const taxable = Math.min(netTaxableYear, limit) - previousLimit;
+            taxAmount += taxable * bracket.rate;
+            previousLimit = limit;
+        }
+    }
+    const monthlyTax = taxAmount / 12;
+    const effectiveMonthlyTax = context.config.taxRateManual > 0 ? (netBeforeTax * (context.config.taxRateManual / 100)) : monthlyTax;
+
+    // SUPER NET RÉEL (Déduit tout ce qui sort de la poche)
+    const superNet = netBeforeTax - effectiveMonthlyTax - mutuelleCost - swileCost;
+
+    const totalFixedExpenses = context.expenses.reduce((sum, e) => sum + e.amount, 0);
+    const leisureBudget = context.config.leisureBudget || 0;
+    const projectSavings = context.config.projectSavings || 0;
+    const theoreticalSavingsCapacity = superNet - totalFixedExpenses - leisureBudget - projectSavings;
+
+    const totalOwned = context.accounts.reduce((sum, a) => sum + a.ownedAmount, 0);
+    const totalParental = context.accounts.reduce((sum, a) => sum + a.parentalCapital, 0);
+    const liquidSavings = context.accounts.filter(a => !a.contractEndDate && ![AccountType.IMMOBILIER, AccountType.PER, AccountType.PEE].includes(a.type)).reduce((sum, a) => sum + a.ownedAmount, 0);
+    let survivalStr = totalFixedExpenses > 0 ? `${Math.floor(liquidSavings/totalFixedExpenses)} mois` : "Infinie";
+
+    // --- 2. FORMATAGE ---
+    const accountsDetails = context.accounts.map(acc => {
+      let ceilingVal = 0;
+      if (acc.type === AccountType.LIVRET_A) ceilingVal = fiscalConfig.ceilings.livretA;
+      if (acc.type === AccountType.LDDS) ceilingVal = fiscalConfig.ceilings.ldds;
+      if (acc.type === AccountType.LEP) ceilingVal = fiscalConfig.ceilings.lep;
+      const fillPct = ceilingVal > 0 ? `(${(acc.totalAmount/ceilingVal*100).toFixed(1)}% de ${ceilingVal}€)` : "";
+      return `   - [${acc.type}] "${acc.name}" ${fillPct}:
+         > TOTAL: ${acc.totalAmount} € (Moi: ${acc.ownedAmount} | Parents: ${acc.parentalCapital})
+         > Dispo: ${getAvailabilityInfo(acc, fiscalConfig)}`;
+    }).join('\n');
 
     const systemInstruction = `
-      RÔLE : Tu es le Directeur Financier (CFO) personnel de l'utilisateur.
-      Tu as accès aux données certifiées de l'application (onglet Pilotage).
+    RÔLE : Expert Patrimoine (Prudence Absolue).
+    
+    PARAMÈTRES SOCIAUX :
+    - Navigo : Gain +${navigoGain.toFixed(2)}€/mois
+    - Mutuelle : Coût -${mutuelleCost.toFixed(2)}€/mois
+    - Tickets Resto : Coût -${swileCost.toFixed(2)}€/mois
 
-      === 🚨 DISTINCTION CAPITAUX (TRES IMPORTANT) ===
-      - Capital PARENTS (Intouchable/Usufruit) : ${context.computed.totalParent.toLocaleString()} €
-      - Capital UTILISATEUR (Disponible) : ${context.computed.totalMine.toLocaleString()} €
-      -> RÈGLE D'OR : Ne jamais inclure le capital Parents dans le calcul de survie ou d'achat. Ce n'est pas son argent.
+    1. REVENUS NETS RÉELS :
+       - Net Avant Impôt (inclut primes/transport) : ${netBeforeTax.toFixed(2)} €
+       - Impôt : -${effectiveMonthlyTax.toFixed(2)} €
+       - Prélèvements Sociaux (Mutuelle/Swile) : -${(mutuelleCost + swileCost).toFixed(2)} €
+       = SUPER NET (Vrai Reste à Vivre) : ${superNet.toFixed(2)} €
 
-      === 📊 FLUX MENSUELS (PILOTAGE) ===
-      - Brut Annuel : ${context.computed.grossAnnual.toLocaleString()} €
-      - Net Mensuel (Avant Impôt) : ${Math.round(context.computed.netMonthlyBeforeTax).toLocaleString()} €
-      - Super Net (Dans la poche) : ${Math.round(context.computed.superNetMonthly).toLocaleString()} €
+    2. CAPACITÉ D'ÉPARGNE :
+       - Super Net : ${superNet.toFixed(2)} €
+       - Charges Fixes : -${totalFixedExpenses.toFixed(2)} €
+       - Plaisir/Projets : -${(leisureBudget + projectSavings).toFixed(2)} €
+       = ÉPARGNE DISPONIBLE : ${theoreticalSavingsCapacity.toFixed(2)} € / mois
 
-      === 💸 BUDGET & CHARGES ===
-      - Total Charges Fixes : -${context.computed.totalExpenses.toLocaleString()} €
-      - Détail Charges : ${context.expenses.map(e => `${e.name} (${e.amount}€)`).join(', ')}
-      -------------------------------------------------------
-      = RESTE À VIVRE RÉEL : ${Math.round(context.computed.resteAVivre).toLocaleString()} € / mois
-      (C'est la somme disponible pour les Plaisirs et l'Épargne).
+    3. PATRIMOINE :
+       - Capital Parents (INTOUCHABLE) : ${totalParental.toLocaleString()} €
+       - Mon Capital : ${totalOwned.toLocaleString()} €
+       - Survie : ${survivalStr}
 
-      === 🛡️ SÉCURITÉ & RUNWAY ===
-      - Liquidités Personnelles : ${context.computed.myLiquidities.toLocaleString()} €
-      - RUNWAY (Autonomie sans salaire) : ${context.computed.runway} MOIS
-      (Calculé strictement sur : Liquidités Persos / Charges Fixes).
+    4. COMPTES :
+    ${accountsDetails}
 
-      === 🏦 PLACEMENTS & BLOCAGES ===
-      ${context.accounts.map(a => {
-        const owner = isParentAccount(a.name) ? "[PARENTS 🚫]" : "[MOI ✅]";
-        let status = "Disponible";
-        if (a.contractEndDate) {
-            const date = new Date(a.contractEndDate);
-            // Vérifie si la date est future
-            status = date > new Date() ? `🔒 BLOQUÉ jusqu'au ${date.toLocaleDateString()}` : "🔓 DÉBLOQUÉ";
-        }
-        return `- ${owner} ${a.name} (${a.type}) : ${a.ownedAmount.toLocaleString()}€ | ${status} | Taux: ${a.interestRate}%`;
-      }).join('\n')}
-
-      DIRECTIVES :
-      1. Tes réponses doivent être basées sur ces chiffres EXACTS.
-      2. Si je veux acheter un objet cher, regarde mon "Reste à Vivre" et mon "Runway".
-      3. Sois direct, mathématique mais bienveillant.
+    Utilise ces chiffres précis. Si je demande mon salaire net, donne le "Super Net" en expliquant les déductions Mutuelle/Swile.
     `;
 
-    const chat = model.startChat({
-      history: [
-        { role: "user", parts: [{ text: systemInstruction }] },
-        { role: "model", parts: [{ text: "Bien reçu. J'ai intégré vos données financières exactes et la distinction stricte des capitaux. Je suis prêt." }] },
-        ...context.history.slice(-10).map(m => ({
-          role: m.role === 'user' ? 'user' : 'model',
-          parts: [{ text: m.content }]
-        }))
-      ]
-    });
-
+    const historyForGemini = context.history.map(msg => ({ role: msg.role === 'user' ? 'user' : 'model', parts: [{ text: msg.content }] }));
+    const chat = model.startChat({ history: [{ role: "user", parts: [{ text: `SYSTÈME : ${systemInstruction}` }] }, { role: "model", parts: [{ text: "Compris. J'ai intégré les coûts de mutuelle et tickets restaurant." }] }, ...historyForGemini] });
     const result = await chat.sendMessage(userPrompt);
-    const response = await result.response;
-    return response.text();
+    return (await result.response).text();
 
   } catch (error: any) {
-    console.error("Gemini Error:", error);
-    return "Désolé, une erreur technique m'empêche d'analyser vos finances pour le moment.";
+    console.error("Erreur Gemini:", error);
+    return "Erreur technique IA.";
   }
 };
