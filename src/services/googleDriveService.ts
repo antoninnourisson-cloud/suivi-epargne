@@ -2,6 +2,7 @@
 // FILE: src/services/googleDriveService.ts
 // ================================================
 const CLIENT_ID = '763862877733-hl1an9vcn0ibnoq2iq035927528mimd5.apps.googleusercontent.com';
+// Ajout du scope gmail.send
 const SCOPES = 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/gmail.send';
 const FILE_NAME = 'suivi_epargne.json';
 
@@ -17,17 +18,14 @@ export const initGoogleApi = async (): Promise<void> => {
         await (window as any).gapi.client.init({
           discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'],
         });
-
         const savedToken = localStorage.getItem('google_token');
         if (savedToken) {
           (window as any).gapi.client.setToken(JSON.parse(savedToken));
         }
-
         gapiInited = true;
         checkResolve();
       });
     };
-
     const gisLoaded = () => {
       tokenClient = (window as any).google.accounts.oauth2.initTokenClient({
         client_id: CLIENT_ID,
@@ -37,24 +35,20 @@ export const initGoogleApi = async (): Promise<void> => {
       gisInited = true;
       checkResolve();
     };
-
     const checkResolve = () => {
       if (gapiInited && gisInited) resolve();
     };
-
     if ((window as any).gapi) gapiLoaded();
     if ((window as any).google) gisLoaded();
   });
 };
 
-// --- NOUVELLE FONCTION AJOUTÉE (Vérifie si < 1h) ---
 export const isTokenValid = (): boolean => {
   const expiry = localStorage.getItem('token_expiry');
   if (!expiry) return false;
   return parseInt(expiry) > Date.now();
 };
 
-// --- FONCTION MODIFIÉE (Silent Mode) ---
 export const handleAuthClick = (silent: boolean = false): Promise<void> => {
   return new Promise((resolve, reject) => {
     tokenClient.callback = async (resp: any) => {
@@ -70,7 +64,6 @@ export const handleAuthClick = (silent: boolean = false): Promise<void> => {
       localStorage.setItem('auth_timestamp', Date.now().toString());
       resolve();
     };
-
     if (silent) {
       // Mode silencieux : aucune popup
       tokenClient.requestAccessToken({ prompt: 'none' });
@@ -135,19 +128,15 @@ export const createConfigFile = async (data: any): Promise<string> => {
       name: FILE_NAME,
       mimeType: 'application/json',
     };
-
     const form = new FormData();
     form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
     form.append('file', new Blob([fileContent], { type: 'application/json' }));
-
     const accessToken = (window as any).gapi.client.getToken().access_token;
-    
     const response = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
       method: 'POST',
       headers: new Headers({ 'Authorization': 'Bearer ' + accessToken }),
       body: form,
     });
-    
     const result = await response.json();
     return result.id;
   } catch (err) {
@@ -160,7 +149,6 @@ export const updateConfigFile = async (fileId: string, data: any): Promise<void>
   try {
     const fileContent = JSON.stringify(data, null, 2);
     const accessToken = (window as any).gapi.client.getToken().access_token;
-    
     await fetch(`https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`, {
       method: 'PATCH',
       headers: new Headers({ 
@@ -173,6 +161,9 @@ export const updateConfigFile = async (fileId: string, data: any): Promise<void>
     console.error('Erreur mise à jour fichier Drive', err);
     throw err;
   }
+};
+
+// --- NOUVELLE FONCTION (Bien séparée de la précédente) ---
 export const sendGmail = async (to: string, subject: string, body: string): Promise<void> => {
   try {
     // Construction du mail au format RFC 2822
