@@ -25,20 +25,21 @@ export const AIAdvisor: React.FC<AIAdvisorProps> = ({ accounts, expenses, config
 
   useEffect(() => {
     scrollToBottom();
-  }, [chatHistory, isLoading]);
+  }, [history]);
 
-  const handleSend = async () => {
-    if (!input.trim() || isLoading) return;
+  const handleSendMessage = async () => {
+    if (!input.trim()) return;
 
-    const userMsg: ChatMessage = {
-      id: crypto.randomUUID(),
-      role: 'user',
-      content: input,
-      timestamp: Date.now()
+    // CORRECTION 1 : Ajout de l'ID et utilisation de 'user'
+    const userMessage: ChatMessage = { 
+      id: Date.now().toString(), 
+      role: 'user', 
+      content: input, 
+      timestamp: Date.now() 
     };
-
-    const newHistory = [...chatHistory, userMsg];
-    onUpdateHistory(newHistory);
+    
+    const newHistory = [...history, userMessage];
+    onSaveHistory(newHistory);
     setInput('');
     setIsLoading(true);
 
@@ -62,28 +63,39 @@ export const AIAdvisor: React.FC<AIAdvisorProps> = ({ accounts, expenses, config
     setIsLoading(false);
   };
 
-  const handleClear = () => {
-    if(confirm("Effacer tout l'historique de conversation ?")) {
-      onUpdateHistory([]);
+      // CORRECTION 2 : Ajout de l'ID et utilisation de 'model' (pas 'assistant')
+      const aiMessage: ChatMessage = { 
+        id: (Date.now() + 1).toString(), 
+        role: 'model', 
+        content: response, 
+        timestamp: Date.now() 
+      };
+      
+      onSaveHistory([...newHistory, aiMessage]);
+    } catch (error) {
+      console.error(error);
+      const errorMessage: ChatMessage = { 
+        id: Date.now().toString(),
+        role: 'model', 
+        content: "Désolé, je ne peux pas répondre pour le moment.", 
+        timestamp: Date.now() 
+      };
+      onSaveHistory([...newHistory, errorMessage]);
+    } finally {
+      setIsLoading(false);
     }
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-140px)] bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden animate-in fade-in">
-      {/* En-tête */}
-      <div className="bg-indigo-900 p-4 flex justify-between items-center text-white shadow-md z-10">
-        <div className="flex items-center gap-3">
-          <div className="bg-white/10 p-2 rounded-lg backdrop-blur-sm">
-            <BrainCircuit className="w-6 h-6 text-indigo-300" />
-          </div>
-          <div>
-            <h3 className="font-bold text-sm">Conseiller Patrimonial IA</h3>
-            <p className="text-[10px] text-indigo-300">Analyse basée sur vos <strong>{accounts.length} comptes</strong></p>
-          </div>
+    <div className="flex flex-col h-[600px] bg-white rounded-xl shadow-sm border border-slate-200">
+      <div className="p-4 border-b border-slate-100 flex items-center gap-3 bg-slate-50/50 rounded-t-xl">
+        <div className="p-2 bg-indigo-100 rounded-lg">
+          <Bot className="w-5 h-5 text-indigo-600" />
         </div>
-        <button onClick={handleClear} className="p-2 hover:bg-white/10 rounded-lg text-indigo-300 hover:text-white transition-colors" title="Oublier la conversation">
-          <Trash2 className="w-4 h-4" />
-        </button>
+        <div>
+          <h3 className="font-semibold text-slate-800">Conseiller Financier IA</h3>
+          <p className="text-xs text-slate-500">Expertise • Données Temps Réel</p>
+        </div>
       </div>
 
       {/* Zone de Messages */}
@@ -111,36 +123,35 @@ export const AIAdvisor: React.FC<AIAdvisorProps> = ({ accounts, expenses, config
             </div>
           </div>
         ))}
-        
         {isLoading && (
-          <div className="flex gap-4">
-            <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center"><Loader2 className="w-4 h-4 text-white animate-spin" /></div>
-            <div className="bg-indigo-50 px-4 py-3 rounded-2xl rounded-tl-none text-xs text-indigo-700 font-bold flex items-center gap-2">
-              <span className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce"></span>
-              <span className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce delay-100"></span>
-              <span className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce delay-200"></span>
-              Analyse en cours...
+          <div className="flex justify-start">
+            <div className="bg-slate-100 rounded-2xl rounded-tl-none p-4 flex items-center gap-2">
+              <Loader2 className="w-4 h-4 animate-spin text-slate-500" />
+              <span className="text-xs text-slate-500">Analyse de vos finances en cours...</span>
             </div>
           </div>
         )}
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Zone de Saisie */}
-      <div className="p-4 bg-white border-t border-slate-200">
-        <form onSubmit={(e) => { e.preventDefault(); handleSend(); }} className="flex gap-3 relative">
+      <div className="p-4 border-t border-slate-100 bg-white rounded-b-xl">
+        <div className="flex gap-2">
           <input
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Ex: Est-ce prudent de mettre 500€ sur mon PEA ce mois-ci ?"
-            className="flex-1 bg-slate-100 border-none rounded-xl pl-4 pr-4 py-4 text-sm focus:ring-2 focus:ring-indigo-500 outline-none font-medium text-slate-700 placeholder:text-slate-400"
-            disabled={isLoading}
+            onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
+            placeholder="Ex: Puis-je me permettre ce voyage ?"
+            className="flex-1 px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
           />
-          <Button type="submit" disabled={isLoading || !input.trim()} className="rounded-xl w-14 flex justify-center items-center shadow-lg shadow-indigo-200">
+          <button
+            onClick={handleSendMessage}
+            disabled={isLoading || !input.trim()}
+            className="p-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+          >
             <Send className="w-5 h-5" />
-          </Button>
-        </form>
+          </button>
+        </div>
       </div>
     </div>
   );

@@ -135,10 +135,10 @@ const App: React.FC = () => {
            localStorage.setItem('financing_insurance', data.financing.insuranceRate.toString());
         }
       }
-    } catch (err) {
-      alert("Impossible de charger votre sauvegarde Drive.");
+    } catch (error) {
+      console.error("Erreur chargement", error);
     } finally {
-      setIsLoadingData(false);
+      setIsLoading(false);
     }
   }, []);
 
@@ -194,8 +194,8 @@ const App: React.FC = () => {
 
   // --- 4. SAUVEGARDE AUTO ---
   useEffect(() => {
-    if (!isAuthenticated || !driveFileId || isLoadingData) return;
-    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    if (isAuthenticated) loadData();
+  }, [isAuthenticated, loadData]);
 
     setIsSaving(true);
     saveTimeoutRef.current = setTimeout(async () => {
@@ -243,11 +243,8 @@ const App: React.FC = () => {
       const ownedAmount = accounts.reduce((sum, a) => sum + a.ownedAmount, 0);
       const newSnapshot: PortfolioSnapshot = { date: todayStr, totalAmount, ownedAmount };
       
-      if (existingIndex >= 0) {
-        if (prev[existingIndex].totalAmount === totalAmount && prev[existingIndex].ownedAmount === ownedAmount) return prev;
-        const newHistory = [...prev];
-        newHistory[existingIndex] = newSnapshot;
-        return newHistory;
+      if (driveFileId) {
+        await updateConfigFile(driveFileId, data);
       } else {
         return [...prev, newSnapshot].sort((a, b) => a.date.localeCompare(b.date));
       }
@@ -499,14 +496,38 @@ const App: React.FC = () => {
           </div>
         )}
       </main>
+
+      {showAddAccount && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-xl w-full max-w-md">
+            <h3 className="text-lg font-bold mb-4">{editingAccount ? 'Modifier' : 'Nouveau Compte'}</h3>
+            <AccountForm 
+              initialData={editingAccount || undefined}
+              onSave={handleSaveAccount}
+              onCancel={() => { setShowAddAccount(false); setEditingAccount(null); }}
+            />
+          </div>
+        </div>
+      )}
+
+      {updatingAccount && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-xl w-full max-w-md">
+            <AccountUpdate 
+              account={updatingAccount}
+              onUpdate={(updated) => {
+                const newAccounts = accounts.map(a => a.id === updated.id ? updated : a);
+                setAccounts(newAccounts);
+                saveData(newAccounts);
+                setUpdatingAccount(null);
+              }}
+              onCancel={() => setUpdatingAccount(null)}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
-};
-
-const NavButton = ({ active, onClick, icon: Icon, label, highlight }: any) => (
-  <button onClick={onClick} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-bold text-sm ${active ? 'bg-indigo-600 text-white shadow-lg' : highlight ? 'text-indigo-400 bg-indigo-600/10' : 'text-slate-400 hover:bg-slate-800'}`}>
-    <Icon className="w-5 h-5" /> {label}
-  </button>
-);
+}
 
 export default App;
