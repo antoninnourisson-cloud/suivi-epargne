@@ -1,53 +1,39 @@
 name: Build Android APK
-
 on:
   push:
-    branches:
-      - main
+    branches: [ "main" ]
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4 # Mise à jour v3 -> v4 (standard 2025/2026)
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4 # Mise à jour v3 -> v4
-        with:
-          node-version: 22 # Version LTS standard en 2026
-
-      - name: Setup Java
-        uses: actions/setup-java@v4 # Mise à jour v3 -> v4
+      - uses: actions/checkout@v4
+      
+      - uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
-          java-version: '21' # Java 21 est requis pour les SDK Android récents
-
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install Dependencies
-        run: npm install
-
-      # Petite sécurité : on force la mise à jour des dépendances si le package-lock est vieux
-      - name: Update to Latest
-        run: npm update
-
-      - name: Build Web Assets
-        run: npm run build
-
-      - name: Init Capacitor Android
+          java-version: '17'
+          
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          
+      - uses: android-actions/setup-android@v3
+      
+      - name: Install and Build Web
+        run: |
+          npm install
+          npm run build
+          
+      - name: Generate and Build Android
         run: |
           npx cap init "Suivi Epargne" com.suiviepargne.app --web-dir dist
           npx cap add android
-          npx cap sync
-
-      - name: Build Debug APK
-        cd android
-        # On rend le script exécutable (sécurité Linux)
-        chmod +x gradlew
-        ./gradlew assembleDebug
-
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug
+          
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
