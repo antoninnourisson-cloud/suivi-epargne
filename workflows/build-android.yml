@@ -9,44 +9,43 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      
     steps:
       - uses: actions/checkout@v4
 
+      # Setup Environnement
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 20
 
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
-          java-version: '21'
+          java-version: '17'
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
+      # Installation & Build Web
       - name: Install Dependencies
         run: npm install
-
-      - name: Update to Latest
-        run: npm update
 
       - name: Build Web Assets
         run: npm run build
 
+      # Génération Android (Tout sur une ligne pour éviter les erreurs YAML)
       - name: Init Capacitor Android
-        run: |
-          npx cap init "Suivi Epargne" com.suiviepargne.app --web-dir dist
-          npx cap add android
-          npx cap sync
+        run: npx cap init "Suivi Epargne" com.suiviepargne.app --web-dir dist && npx cap add android && npx cap sync
 
+      # Compilation APK (Signature Debug par défaut)
       - name: Build Debug APK
-        run: |
-          cd android
-          chmod +x gradlew
-          ./gradlew assembleDebug
+        run: cd android && chmod +x gradlew && ./gradlew assembleDebug
 
+      # Sauvegarde de l'APK
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
