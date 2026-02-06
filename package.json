@@ -9,21 +9,25 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@capacitor/android": "latest",
-    "@capacitor/core": "latest",
-    "@capacitor-community/google-sign-in": "latest",
+    "@capacitor/android": "^6.0.0",
+    "@capacitor/core": "^6.0.0",
+    "@capacitor-community/google-sign-in": "^6.0.0",
     "@google/generative-ai": "^0.21.0",
-    "lucide-react": "^0.562.0",
-    "react-dom": "^19.2.3",
-    "recharts": "^3.6.0",
-    "react": "^19.2.3"
+    "lucide-react": "^0.363.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "recharts": "^2.12.3"
   },
   "devDependencies": {
-    "@capacitor/cli": "latest",
-    "@types/node": "^22.14.0",
-    "@vitejs/plugin-react": "^5.0.0",
-    "typescript": "~5.8.2",
-    "vite": "^6.2.0",
-    "vite-plugin-pwa": "^0.21.1"
+    "@capacitor/cli": "^6.0.0",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "autoprefixer": "^10.4.19",
+    "postcss": "^8.4.38",
+    "tailwindcss": "^3.4.4",
+    "typescript": "^5.5.3",
+    "vite": "^5.3.1",
+    "vite-plugin-pwa": "^0.20.0"
   }
 }
