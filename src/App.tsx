@@ -2,7 +2,7 @@
 // FILE: src/App.tsx
 // ================================================
 import React, { useState, useEffect } from 'react';
-import { SavingsAccount, AccountMovement } from './types';
+import { SavingsAccount } from './types';
 import { usePortfolioData } from './hooks/usePortfolioData';
 import { Dashboard } from './components/Dashboard';
 import { AccountForm } from './components/AccountForm';
@@ -51,8 +51,6 @@ const App: React.FC = () => {
   // Sync view from data
   useEffect(() => {
       if(data.lastView && view === 'dashboard') {
-          // On ne restaure la vue que si on est sur le dashboard par défaut (init)
-          // Conversion safe du string en type union
           const validViews = ['dashboard', 'accounts', 'transfers', 'comparator', 'pilot', 'update', 'financing', 'advisor', 'settings'];
           if(validViews.includes(data.lastView)) {
               setView(data.lastView as any);
@@ -90,7 +88,7 @@ const App: React.FC = () => {
         }
       })
       .catch(err => console.error("Erreur init Google API", err));
-  }, []); // Empty dependency array: run once
+  }, []);
 
   const handleLogin = async () => {
     try {
@@ -128,7 +126,6 @@ const App: React.FC = () => {
     const movement = account.movements?.find(m => m.id === movementId);
     if (!movement) return;
     
-    // Remplacement du confirm natif par une logique plus douce si besoin, mais confirm est ok pour suppression critique
     if (!window.confirm(`Supprimer le mouvement "${movement.label}" ?`)) return;
     
     const linkId = movement.linkId;
@@ -149,8 +146,6 @@ const App: React.FC = () => {
   };
 
   const handleRenameMovement = (accountId: string, movementId: string, currentLabel: string) => {
-      // Pour l'instant on garde prompt ici car c'est une action rare d'admin
-      // Idéalement à remplacer par un input inline
       const newLabel = window.prompt("Renommer :", currentLabel);
       if (!newLabel) return;
       data.setAccounts(prev => prev.map(acc => (acc.id !== accountId ? acc : { ...acc, movements: acc.movements?.map(m => m.id === movementId ? { ...m, label: newLabel } : m) })));
@@ -260,10 +255,11 @@ const App: React.FC = () => {
                 <Settings 
                     config={data.fiscalConfig} 
                     workBenefits={data.workBenefits} 
-                    onSave={(newFiscal, newBenefits) => {
+                    parentsEmail={data.parentsEmail} // <--- Injection Prop
+                    onSave={(newFiscal, newBenefits, newEmail) => {
                        data.setFiscalConfig(newFiscal);
                        data.setWorkBenefits(newBenefits);
-                       // Rétrocompatibilité
+                       data.setParentsEmail(newEmail); // <--- Save hook
                        if(newBenefits.navigo.active) {
                            data.setNavigoBase(newBenefits.navigo.basePrice);
                            data.setNavigoRate(newBenefits.navigo.refundRate);
@@ -272,6 +268,7 @@ const App: React.FC = () => {
                 />
             )}
 
+            {/* ... Reste du composant (Comptes, etc) inchangé ... */}
             {view === 'accounts' && (
               <div className="space-y-6 animate-fade-in">
                 <div className="flex justify-between items-center bg-white p-6 rounded-2xl shadow-sm border border-slate-200">

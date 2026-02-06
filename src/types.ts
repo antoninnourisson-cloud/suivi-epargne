@@ -120,6 +120,7 @@ export interface GlobalAppData {
     navigoRate?: number; // Gardé pour rétrocompatibilité
     taxRateManual: number;
     extraMonthlyIncome: number;
+    parentsEmail?: string; // <--- NOUVEAU CHAMP
   };
   goalPrompt?: string;
   financing?: {

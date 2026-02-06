@@ -4,17 +4,19 @@
 import React, { useState } from 'react';
 import { FiscalConfig, TaxBracket, WorkBenefits } from '../types';
 import { Button } from './Button';
-import { Save, AlertTriangle, Settings as SettingsIcon, Plus, Trash2 } from 'lucide-react';
+import { Save, AlertTriangle, Settings as SettingsIcon, Plus, Trash2, Mail } from 'lucide-react';
 
 interface SettingsProps {
   config: FiscalConfig;
   workBenefits: WorkBenefits;
-  onSave: (newConfig: FiscalConfig, newBenefits: WorkBenefits) => void;
+  parentsEmail: string; // <--- Prop
+  onSave: (newConfig: FiscalConfig, newBenefits: WorkBenefits, newEmail: string) => void;
 }
 
-export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, onSave }) => {
+export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parentsEmail, onSave }) => {
   const [localFiscal, setLocalFiscal] = useState<FiscalConfig>(config);
   const [localBenefits, setLocalBenefits] = useState<WorkBenefits>(workBenefits);
+  const [localEmail, setLocalEmail] = useState<string>(parentsEmail || '');
 
   const handleFiscalChange = (field: keyof FiscalConfig, value: any) => {
     setLocalFiscal(prev => ({ ...prev, [field]: value }));
@@ -47,16 +49,33 @@ export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, onSave
           <h2 className="text-xl font-black text-slate-800 flex items-center gap-2"><SettingsIcon className="w-6 h-6 text-indigo-600" /> Paramètres Globaux</h2>
           <p className="text-sm text-slate-500">Ajustez la fiscalité et vos avantages salariaux.</p>
         </div>
-        <Button onClick={() => onSave(localFiscal, localBenefits)} className="gap-2"><Save className="w-4 h-4" /> Enregistrer Tout</Button>
+        <Button onClick={() => onSave(localFiscal, localBenefits, localEmail)} className="gap-2"><Save className="w-4 h-4" /> Enregistrer Tout</Button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        
+        {/* SECTION EMAIL */}
+        <div className="bg-white p-6 rounded-2xl border border-slate-200 lg:col-span-2">
+            <h3 className="font-bold text-slate-800 mb-4 border-b pb-2 flex items-center gap-2"><Mail className="w-4 h-4 text-indigo-600"/> Notification Parents</h3>
+            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                <label className="text-[10px] font-black text-slate-400 uppercase block mb-2">Email destinataire (Alertes Livret A / LEP)</label>
+                <input 
+                    type="email" 
+                    value={localEmail} 
+                    onChange={e => setLocalEmail(e.target.value)} 
+                    placeholder="parents@exemple.com"
+                    className="w-full p-3 bg-white border border-slate-200 rounded-xl font-bold text-slate-800"
+                />
+                <p className="text-[10px] text-slate-400 mt-2 flex items-start gap-1">
+                    <span className="text-indigo-600 font-bold">Note :</span> 
+                    Un email récapitulatif sera envoyé automatiquement depuis VOTRE compte Gmail à cette adresse uniquement lorsqu'un mouvement est détecté sur un Livret A ou un LEP.
+                </p>
+            </div>
+        </div>
+
         {/* SECTION 1: AVANTAGES SALARIAUX */}
         <div className="bg-white p-6 rounded-2xl border border-slate-200 lg:col-span-2">
            <h3 className="font-bold text-slate-800 mb-4 border-b pb-2 flex items-center gap-2">🏢 Avantages & Prélèvements Entreprise</h3>
            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-               
                {/* NAVIGO */}
                <div className="bg-indigo-50/50 p-4 rounded-xl border border-indigo-100">
                    <label className="flex items-center gap-2 font-black text-xs uppercase text-indigo-600 mb-3 cursor-pointer">
@@ -71,7 +90,7 @@ export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, onSave
                        </div>
                    )}
                </div>
-
+               
                {/* MUTUELLE */}
                <div className="bg-rose-50/50 p-4 rounded-xl border border-rose-100">
                    <label className="flex items-center gap-2 font-black text-xs uppercase text-rose-600 mb-3 cursor-pointer">

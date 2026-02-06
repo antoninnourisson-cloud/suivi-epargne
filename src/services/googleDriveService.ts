@@ -2,7 +2,7 @@
 // FILE: src/services/googleDriveService.ts
 // ================================================
 const CLIENT_ID = '763862877733-hl1an9vcn0ibnoq2iq035927528mimd5.apps.googleusercontent.com';
-const SCOPES = 'https://www.googleapis.com/auth/drive.file';
+const SCOPES = 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/gmail.send';
 const FILE_NAME = 'suivi_epargne.json';
 
 let tokenClient: any;
@@ -172,5 +172,42 @@ export const updateConfigFile = async (fileId: string, data: any): Promise<void>
   } catch (err) {
     console.error('Erreur mise à jour fichier Drive', err);
     throw err;
+  }
+export const sendGmail = async (to: string, subject: string, body: string): Promise<void> => {
+  try {
+    // Construction du mail au format RFC 2822
+    const utf8Subject = `=?utf-8?B?${btoa(unescape(encodeURIComponent(subject)))}?=`;
+    const messageParts = [
+      `To: ${to}`,
+      "Content-Type: text/html; charset=utf-8",
+      "MIME-Version: 1.0",
+      `Subject: ${utf8Subject}`,
+      "",
+      body
+    ];
+    const message = messageParts.join("\n");
+
+    // Encodage Base64URL requis par l'API Gmail
+    const encodedMessage = btoa(unescape(encodeURIComponent(message)))
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '');
+
+    const accessToken = (window as any).gapi.client.getToken().access_token;
+
+    await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        raw: encodedMessage
+      })
+    });
+    console.log("Email envoyé avec succès via Gmail API");
+  } catch (err) {
+    console.error("Erreur lors de l'envoi de l'email", err);
+    // On ne throw pas d'erreur pour ne pas bloquer l'UI si le mail échoue
   }
 };

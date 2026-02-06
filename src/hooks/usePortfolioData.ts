@@ -10,11 +10,10 @@ import {
   DEFAULT_FISCAL_CONFIG, DEFAULT_WORK_BENEFITS 
 } from '../constants';
 import { 
-  findConfigFile, createConfigFile, readConfigFile, updateConfigFile 
+  findConfigFile, createConfigFile, readConfigFile, updateConfigFile, sendGmail 
 } from '../services/googleDriveService';
 
 export const usePortfolioData = (isAuthenticated: boolean) => {
-  const [isApiLoaded, setIsApiLoaded] = useState(false); // Géré par App.tsx pour l'init Google, mais on garde le status data ici
   const [isLoadingData, setIsLoadingData] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [driveFileId, setDriveFileId] = useState<string | null>(null);
@@ -35,6 +34,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
   const [extraMonthlyIncome, setExtraMonthlyIncome] = useState<number>(0);
   const [fiscalConfig, setFiscalConfig] = useState<FiscalConfig>(DEFAULT_FISCAL_CONFIG);
   const [workBenefits, setWorkBenefits] = useState<WorkBenefits>(DEFAULT_WORK_BENEFITS);
+  const [parentsEmail, setParentsEmail] = useState<string>(''); // <--- NOUVEAU
   
   const [lastView, setLastView] = useState<string>('dashboard');
   const saveTimeoutRef = useRef<any>(null);
@@ -59,7 +59,8 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
             navigoBase: 90.80,
             navigoRate: 67.24,
             taxRateManual: 0,
-            extraMonthlyIncome: 0
+            extraMonthlyIncome: 0,
+            parentsEmail: ''
           }
         };
         fileId = await createConfigFile(defaultData);
@@ -74,7 +75,6 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
         setChatHistory(data.chatHistory || []);
         setFiscalConfig(data.fiscalConfig || DEFAULT_FISCAL_CONFIG);
         
-        // Migration Legacy Navigo vers WorkBenefits
         if (data.workBenefits) {
             setWorkBenefits(data.workBenefits);
         } else {
@@ -94,10 +94,10 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
           setNavigoRate(data.config.navigoRate ?? 67.24);
           setTaxRateManual(data.config.taxRateManual ?? 0);
           setExtraMonthlyIncome(data.config.extraMonthlyIncome ?? 0);
+          setParentsEmail(data.config.parentsEmail ?? ''); // <--- CHARGEMENT EMAIL
         }
         if (data.lastView) setLastView(data.lastView);
         
-        // Init localStorage financing
         if (data.financing) {
            localStorage.setItem('financing_interest', data.financing.interestRate.toString());
            localStorage.setItem('financing_insurance', data.financing.insuranceRate.toString());
@@ -132,7 +132,8 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
           navigoBase,
           navigoRate,
           taxRateManual,
-          extraMonthlyIncome
+          extraMonthlyIncome,
+          parentsEmail // <--- SAUVEGARDE EMAIL
         },
         lastView,
         financing: {
@@ -148,17 +149,66 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
       } finally {
         setIsSaving(false);
       }
-    }, 2000); // Debounce de 2s
+    }, 2000);
 
     return () => clearTimeout(saveTimeoutRef.current);
   }, [
     accounts, expenses, history, chatHistory, fiscalConfig, workBenefits, 
     grossAnnual, leisureBudget, projectSavings, navigoBase, navigoRate, 
-    taxRateManual, extraMonthlyIncome, lastView, isAuthenticated, driveFileId, isLoadingData
+    taxRateManual, extraMonthlyIncome, parentsEmail, lastView, isAuthenticated, driveFileId, isLoadingData
   ]);
 
-  // --- LOGIQUE METIER COMPLEXE (Mouvements) ---
+  // --- LOGIQUE METIER COMPLEXE (Mouvements & Email) ---
   const updateAccountsWithMovements = (updates: { account: SavingsAccount, date: string }[]) => {
+    // 1. Préparation de l'email avant la mise à jour d'état
+    // On compare les comptes actuels (state 'accounts') avec les mises à jour demandées
+    let mailBody = `
+      <div style="font-family: sans-serif; color: #334155;">
+        <h2 style="color: #4f46e5;">Mise à jour des comptes suivis</h2>
+        <p>Bonjour,</p>
+        <p>Une opération vient d'être enregistrée sur les comptes réglementés :</p>
+        <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
+          <tr style="background-color: #f1f5f9; text-align: left;">
+            <th style="padding: 8px;">Compte</th>
+            <th style="padding: 8px;">Avant</th>
+            <th style="padding: 8px;">Après</th>
+            <th style="padding: 8px;">Mouvement</th>
+          </tr>
+    `;
+    let shouldSendMail = false;
+
+    // On parcourt les updates pour construire le mail
+    updates.forEach(upd => {
+       const oldAcc = accounts.find(a => a.id === upd.account.id);
+       if (oldAcc) {
+          // On vérifie le type et si le montant total a bougé
+          const isTarget = ['Livret A', 'LEP'].includes(oldAcc.type);
+          const diff = upd.account.totalAmount - oldAcc.totalAmount;
+          
+          if (isTarget && Math.abs(diff) > 0.001) {
+             shouldSendMail = true;
+             const color = diff > 0 ? '#10b981' : '#f43f5e';
+             const sign = diff > 0 ? '+' : '';
+             mailBody += `
+                <tr style="border-bottom: 1px solid #e2e8f0;">
+                  <td style="padding: 8px;"><strong>${oldAcc.type}</strong></td>
+                  <td style="padding: 8px;">${oldAcc.totalAmount.toFixed(2)} €</td>
+                  <td style="padding: 8px;"><strong>${upd.account.totalAmount.toFixed(2)} €</strong></td>
+                  <td style="padding: 8px; color: ${color}; font-weight: bold;">${sign}${diff.toFixed(2)} €</td>
+                </tr>
+             `;
+          }
+       }
+    });
+
+    mailBody += `</table><p style="font-size: 12px; color: #94a3b8; margin-top: 20px;">Email automatique - Suivi Épargne</p></div>`;
+
+    // 2. Envoi non-bloquant
+    if (shouldSendMail && parentsEmail) {
+        sendGmail(parentsEmail, `Mise à jour Épargne (${new Date().toLocaleDateString()})`, mailBody);
+    }
+
+    // 3. Mise à jour de l'état (classique)
     setAccounts(prev => {
       const newAccounts = [...prev];
       updates.forEach(upd => {
@@ -166,7 +216,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
         if (idx >= 0) {
           const oldAcc = newAccounts[idx];
           const diff = upd.account.ownedAmount - oldAcc.ownedAmount;
-          if (Math.abs(diff) > 0.001) { // Floating point safety
+          if (Math.abs(diff) > 0.001) {
             const movement: AccountMovement = {
               id: crypto.randomUUID(),
               date: upd.date,
@@ -242,6 +292,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
     navigoRate, setNavigoRate,
     taxRateManual, setTaxRateManual,
     extraMonthlyIncome, setExtraMonthlyIncome,
+    parentsEmail, setParentsEmail, // Export
     lastView, setLastView,
     
     // Status
