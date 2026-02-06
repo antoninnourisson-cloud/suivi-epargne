@@ -34,7 +34,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
   const [extraMonthlyIncome, setExtraMonthlyIncome] = useState<number>(0);
   const [fiscalConfig, setFiscalConfig] = useState<FiscalConfig>(DEFAULT_FISCAL_CONFIG);
   const [workBenefits, setWorkBenefits] = useState<WorkBenefits>(DEFAULT_WORK_BENEFITS);
-  const [parentsEmail, setParentsEmail] = useState<string>(''); // <--- NOUVEAU
+  const [parentsEmail, setParentsEmail] = useState<string>('');
   
   const [lastView, setLastView] = useState<string>('dashboard');
   const saveTimeoutRef = useRef<any>(null);
@@ -94,7 +94,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
           setNavigoRate(data.config.navigoRate ?? 67.24);
           setTaxRateManual(data.config.taxRateManual ?? 0);
           setExtraMonthlyIncome(data.config.extraMonthlyIncome ?? 0);
-          setParentsEmail(data.config.parentsEmail ?? ''); // <--- CHARGEMENT EMAIL
+          setParentsEmail(data.config.parentsEmail ?? '');
         }
         if (data.lastView) setLastView(data.lastView);
         
@@ -133,7 +133,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
           navigoRate,
           taxRateManual,
           extraMonthlyIncome,
-          parentsEmail // <--- SAUVEGARDE EMAIL
+          parentsEmail
         },
         lastView,
         financing: {
@@ -158,57 +158,76 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
     taxRateManual, extraMonthlyIncome, parentsEmail, lastView, isAuthenticated, driveFileId, isLoadingData
   ]);
 
-  // --- LOGIQUE METIER COMPLEXE (Mouvements & Email) ---
+  // --- LOGIQUE METIER COMPLEXE (Mouvements & Email Détaillé) ---
   const updateAccountsWithMovements = (updates: { account: SavingsAccount, date: string }[]) => {
-    // 1. Préparation de l'email avant la mise à jour d'état
-    // On compare les comptes actuels (state 'accounts') avec les mises à jour demandées
+    // 1. Préparation de l'email
     let mailBody = `
-      <div style="font-family: sans-serif; color: #334155;">
-        <h2 style="color: #4f46e5;">Mise à jour des comptes suivis</h2>
+      <div style="font-family: sans-serif; color: #1e293b;">
+        <h2 style="color: #4f46e5; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px;">Mise à jour des comptes suivis</h2>
         <p>Bonjour,</p>
         <p>Une opération vient d'être enregistrée sur les comptes réglementés :</p>
-        <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
-          <tr style="background-color: #f1f5f9; text-align: left;">
-            <th style="padding: 8px;">Compte</th>
-            <th style="padding: 8px;">Avant</th>
-            <th style="padding: 8px;">Après</th>
-            <th style="padding: 8px;">Mouvement</th>
+        <table style="width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 14px;">
+          <tr style="background-color: #f8fafc; text-align: left; border-bottom: 1px solid #e2e8f0;">
+            <th style="padding: 12px 8px; color: #64748b; font-size: 11px; text-transform: uppercase;">Compte</th>
+            <th style="padding: 12px 8px; color: #64748b; font-size: 11px; text-transform: uppercase;">Avant</th>
+            <th style="padding: 12px 8px; color: #64748b; font-size: 11px; text-transform: uppercase;">Après</th>
+            <th style="padding: 12px 8px; color: #64748b; font-size: 11px; text-transform: uppercase;">Mouvement</th>
           </tr>
     `;
     let shouldSendMail = false;
 
-    // On parcourt les updates pour construire le mail
     updates.forEach(upd => {
        const oldAcc = accounts.find(a => a.id === upd.account.id);
        if (oldAcc) {
-          // On vérifie le type et si le montant total a bougé
           const isTarget = ['Livret A', 'LEP'].includes(oldAcc.type);
           const diff = upd.account.totalAmount - oldAcc.totalAmount;
           
           if (isTarget && Math.abs(diff) > 0.001) {
              shouldSendMail = true;
-             const color = diff > 0 ? '#10b981' : '#f43f5e';
+             const color = diff > 0 ? '#10b981' : '#f43f5e'; // Vert ou Rouge
              const sign = diff > 0 ? '+' : '';
+             
+             // Styles pour les sous-lignes (détails)
+             const detailStyle = "display: block; font-size: 11px; color: #94a3b8; margin-top: 2px;";
+             
              mailBody += `
                 <tr style="border-bottom: 1px solid #e2e8f0;">
-                  <td style="padding: 8px;"><strong>${oldAcc.type}</strong></td>
-                  <td style="padding: 8px;">${oldAcc.totalAmount.toFixed(2)} €</td>
-                  <td style="padding: 8px;"><strong>${upd.account.totalAmount.toFixed(2)} €</strong></td>
-                  <td style="padding: 8px; color: ${color}; font-weight: bold;">${sign}${diff.toFixed(2)} €</td>
+                  <td style="padding: 12px 8px; vertical-align: top;">
+                    <strong>${oldAcc.type}</strong>
+                  </td>
+                  <td style="padding: 12px 8px; vertical-align: top;">
+                    <span style="font-weight: bold;">${oldAcc.totalAmount.toLocaleString('fr-FR', {style:'currency', currency:'EUR'})}</span>
+                    <span style="${detailStyle}">Parents : ${oldAcc.parentalCapital.toLocaleString('fr-FR', {style:'currency', currency:'EUR'})}</span>
+                    <span style="${detailStyle}">Moi : ${oldAcc.ownedAmount.toLocaleString('fr-FR', {style:'currency', currency:'EUR'})}</span>
+                  </td>
+                  <td style="padding: 12px 8px; vertical-align: top;">
+                    <span style="font-weight: bold;">${upd.account.totalAmount.toLocaleString('fr-FR', {style:'currency', currency:'EUR'})}</span>
+                    <span style="${detailStyle}">Parents : ${upd.account.parentalCapital.toLocaleString('fr-FR', {style:'currency', currency:'EUR'})}</span>
+                    <span style="${detailStyle}">Moi : ${upd.account.ownedAmount.toLocaleString('fr-FR', {style:'currency', currency:'EUR'})}</span>
+                  </td>
+                  <td style="padding: 12px 8px; vertical-align: top; color: ${color}; font-weight: bold;">
+                    ${sign}${diff.toLocaleString('fr-FR', {style:'currency', currency:'EUR'})}
+                  </td>
                 </tr>
              `;
           }
        }
     });
 
-    mailBody += `</table><p style="font-size: 12px; color: #94a3b8; margin-top: 20px;">Email automatique - Suivi Épargne</p></div>`;
+    mailBody += `
+        </table>
+        <div style="margin-top: 25px; padding-top: 15px; border-top: 1px solid #e2e8f0; font-size: 11px; color: #94a3b8;">
+           Ceci est un email automatique généré par votre assistant financier personnel.
+        </div>
+      </div>
+    `;
 
-    // 2. Envoi non-bloquant
+    // 2. Envoi
     if (shouldSendMail && parentsEmail) {
         sendGmail(parentsEmail, `Mise à jour Épargne (${new Date().toLocaleDateString()})`, mailBody);
     }
 
-    // 3. Mise à jour de l'état (classique)
+    // 3. Mise à jour de l'état
     setAccounts(prev => {
       const newAccounts = [...prev];
       updates.forEach(upd => {
@@ -216,6 +235,10 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
         if (idx >= 0) {
           const oldAcc = newAccounts[idx];
           const diff = upd.account.ownedAmount - oldAcc.ownedAmount;
+          // Note : on crée un mouvement que si la part "Moi" bouge, 
+          // ou si le total bouge (selon ta logique métier, ici on garde la logique "Moi" pour l'historique perso)
+          // Si tu veux historiser les mouvements parents, il faudrait adapter AccountMovement.
+          // Pour l'instant, on garde la détection sur ownedAmount pour l'historique visuel dans l'app.
           if (Math.abs(diff) > 0.001) {
             const movement: AccountMovement = {
               id: crypto.randomUUID(),
@@ -292,7 +315,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
     navigoRate, setNavigoRate,
     taxRateManual, setTaxRateManual,
     extraMonthlyIncome, setExtraMonthlyIncome,
-    parentsEmail, setParentsEmail, // Export
+    parentsEmail, setParentsEmail,
     lastView, setLastView,
     
     // Status
