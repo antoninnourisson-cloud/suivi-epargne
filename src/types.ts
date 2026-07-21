@@ -50,6 +50,11 @@ export interface PortfolioSnapshot {
   ownedAmount: number;
 }
 
+export interface ExpenseSnapshot {
+  date: string;
+  total: number;
+}
+
 export interface Expense {
   id: string;
   name: string;
@@ -62,6 +67,14 @@ export interface ChatMessage {
   role: 'user' | 'model';
   content: string;
   timestamp: number;
+}
+
+export interface SavingsGoal {
+  id: string;
+  name: string;
+  targetAmount: number;
+  savedAmount: number;
+  deadline?: string; // date ISO optionnelle
 }
 
 export interface TaxBracket {
@@ -110,6 +123,7 @@ export interface GlobalAppData {
   accounts: SavingsAccount[];
   expenses: Expense[];
   history: PortfolioSnapshot[];
+  expensesHistory?: ExpenseSnapshot[];
   fiscalConfig?: FiscalConfig;
   workBenefits?: WorkBenefits; // <--- AJOUT
   config: {
@@ -122,11 +136,7 @@ export interface GlobalAppData {
     extraMonthlyIncome: number;
     parentsEmail?: string; // <--- NOUVEAU CHAMP
   };
-  goalPrompt?: string;
-  financing?: {
-    interestRate: number;
-    insuranceRate: number;
-  };
+  goals?: SavingsGoal[];
   lastView?: string;
   chatHistory?: ChatMessage[];
 }

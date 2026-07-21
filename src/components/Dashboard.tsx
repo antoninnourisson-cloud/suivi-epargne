@@ -3,14 +3,16 @@ import {
   ResponsiveContainer, Tooltip as RechartsTooltip, Legend, 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, AreaChart, Area 
 } from 'recharts';
-import { SavingsAccount, PortfolioSnapshot, AccountType, Expense } from '../types';
-import { Euro, Lock, Wallet, Filter, Unlock, Save } from 'lucide-react';
+import { SavingsAccount, PortfolioSnapshot, AccountType, Expense, FiscalConfig } from '../types';
+import { Euro, Lock, Wallet, Filter, Unlock, Save, AlertTriangle, Trash2, Clock } from 'lucide-react';
 import { Button } from './Button';
 
 interface DashboardProps {
   accounts: SavingsAccount[];
   history: PortfolioSnapshot[];
   expenses: Expense[];
+  fiscalConfig: FiscalConfig;
+  onDeleteAccount?: (account: SavingsAccount) => void;
   config: {
     grossAnnual: number;
     navigoBase: number;
@@ -19,7 +21,7 @@ interface DashboardProps {
   };
 }
 
-export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expenses, config }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expenses, fiscalConfig, onDeleteAccount, config }) => {
   const [dateRange, setDateRange] = useState(() => {
     try {
         const stored = localStorage.getItem('dashboard_date_range');
@@ -37,7 +39,48 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
   }, [dateRange]);
 
   const mySavings = accounts.reduce((acc, curr) => acc + curr.ownedAmount, 0);
-  
+
+  // --- ALERTES PLAFOND (livrets réglementés proches ou au plafond) ---
+  const ceilingAlerts = useMemo(() => {
+    const ceilings: Record<string, number> = {
+      [AccountType.LIVRET_A]: fiscalConfig.ceilings.livretA,
+      [AccountType.LDDS]: fiscalConfig.ceilings.ldds,
+      [AccountType.LEP]: fiscalConfig.ceilings.lep,
+    };
+    return accounts
+      .filter(a => ceilings[a.type] && ceilings[a.type] > 0)
+      .map(a => {
+        const ceiling = ceilings[a.type];
+        const pct = (a.totalAmount / ceiling) * 100;
+        return { id: a.id, name: a.name, type: a.type, pct, remaining: ceiling - a.totalAmount, ceiling };
+      })
+      .filter(x => x.pct >= 90)
+      .sort((a, b) => b.pct - a.pct);
+  }, [accounts, fiscalConfig]);
+
+  // --- COMPTES VIDES INACTIFS (candidats à la suppression) ---
+  const inactiveEmptyAccounts = useMemo(() => {
+    const now = new Date();
+    return accounts.filter(a => {
+      if (a.totalAmount !== 0) return false;
+      const lastMove = (a.movements || []).slice().sort((x, y) => y.date.localeCompare(x.date))[0];
+      const refDate = lastMove ? new Date(lastMove.date) : (a.openingDate ? new Date(a.openingDate) : null);
+      if (!refDate) return true; // aucune date connue, jamais alimenté
+      const days = (now.getTime() - refDate.getTime()) / (1000 * 3600 * 24);
+      return days >= 60;
+    });
+  }, [accounts]);
+
+  // --- RAPPEL D'ACTUALISATION (aucun mouvement récent sur l'ensemble des comptes) ---
+  const daysSinceLastUpdate = useMemo(() => {
+    let latest: string | null = null;
+    accounts.forEach(a => (a.movements || []).forEach(m => {
+      if (!latest || m.date > latest) latest = m.date;
+    }));
+    if (!latest) return null;
+    return Math.floor((Date.now() - new Date(latest).getTime()) / (1000 * 3600 * 24));
+  }, [accounts]);
+
   const getAccountStatus = (account: SavingsAccount): 'AVAILABLE' | 'TAX_LOCKED' | 'HARD_LOCKED' => {
     if (account.type === AccountType.PEE) {
         const now = new Date();
@@ -197,6 +240,40 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
           <input type="date" value={dateRange.end} onChange={(e) => setDateRange((prev: any) => ({ ...prev, end: e.target.value }))} className="bg-slate-50 text-sm border p-2 rounded-lg" />
         </div>
       </div>
+
+      {daysSinceLastUpdate !== null && daysSinceLastUpdate >= 21 && (
+        <div className="flex items-center gap-3 p-3 rounded-xl border bg-slate-50 border-slate-200 text-slate-600 text-sm font-bold">
+          <Clock className="w-4 h-4 flex-shrink-0" />
+          Aucune actualisation de solde depuis {daysSinceLastUpdate} jours — pense à mettre tes comptes à jour.
+        </div>
+      )}
+
+      {inactiveEmptyAccounts.length > 0 && onDeleteAccount && (
+        <div className="space-y-2">
+          {inactiveEmptyAccounts.map(a => (
+            <div key={a.id} className="flex items-center justify-between gap-3 p-3 rounded-xl border bg-slate-50 border-slate-200 text-sm">
+              <span className="text-slate-600 font-bold flex items-center gap-2"><Trash2 className="w-4 h-4 text-slate-400" /> {a.name} est à 0€ et inactif — le supprimer ?</span>
+              <button onClick={() => onDeleteAccount(a)} className="text-xs font-bold text-rose-600 hover:bg-rose-50 px-3 py-1.5 rounded-lg flex-shrink-0">Supprimer</button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {ceilingAlerts.length > 0 && (
+        <div className="space-y-2">
+          {ceilingAlerts.map(a => {
+            const full = a.pct >= 100;
+            return (
+              <div key={a.id} className={`flex items-center gap-3 p-3 rounded-xl border text-sm font-bold ${full ? 'bg-rose-50 border-rose-200 text-rose-700' : 'bg-amber-50 border-amber-200 text-amber-800'}`}>
+                <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                {full
+                  ? <span>{a.name} ({a.type}) est au plafond ({a.ceiling.toLocaleString()} €). Redirige tes prochains versements ailleurs.</span>
+                  : <span>{a.name} ({a.type}) est rempli à {a.pct.toFixed(0)}% — il reste {Math.round(a.remaining).toLocaleString()} € avant le plafond.</span>}
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard title="Mon Épargne Nette" amount={mySavings} icon={Wallet} color="bg-indigo-600" subtext="Capital réel" />

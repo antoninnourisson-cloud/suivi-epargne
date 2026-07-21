@@ -7,6 +7,10 @@ import { VitePWA } from 'vite-plugin-pwa';
 import path from 'path';
 
 export default defineConfig({
+  // Base relative : fonctionne aussi bien sur un user page (username.github.io)
+  // que sur un project page (username.github.io/nom-du-repo/), sans configuration
+  // supplémentaire ni connaissance du nom du repo au moment du build.
+  base: './',
   plugins: [
     react(),
     VitePWA({
@@ -20,8 +24,10 @@ export default defineConfig({
         background_color: '#0f172a',
         display: 'standalone',
         orientation: 'portrait',
-        scope: '/',
-        start_url: '/',
+        // Relatifs pour matcher le `base` ci-dessus, quel que soit le sous-dossier
+        // sur lequel GitHub Pages sert l'app.
+        scope: './',
+        start_url: './',
         icons: [
           {
             src: 'pwa-192x192.png',

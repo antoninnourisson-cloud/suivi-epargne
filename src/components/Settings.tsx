@@ -4,16 +4,27 @@
 import React, { useState } from 'react';
 import { FiscalConfig, TaxBracket, WorkBenefits } from '../types';
 import { Button } from './Button';
-import { Save, AlertTriangle, Settings as SettingsIcon, Plus, Trash2, Mail } from 'lucide-react';
+import { Save, AlertTriangle, Settings as SettingsIcon, Plus, Trash2, Mail, Download, Upload, Database } from 'lucide-react';
 
 interface SettingsProps {
   config: FiscalConfig;
   workBenefits: WorkBenefits;
   parentsEmail: string; // <--- Prop
   onSave: (newConfig: FiscalConfig, newBenefits: WorkBenefits, newEmail: string) => void;
+  onExport: () => void;
+  onImport: (file: File) => Promise<boolean>;
 }
 
-export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parentsEmail, onSave }) => {
+export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parentsEmail, onSave, onExport, onImport }) => {
+  const [importMsg, setImportMsg] = useState<string | null>(null);
+  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const ok = await onImport(file);
+    setImportMsg(ok ? '✅ Données importées (sauvegarde en cours).' : '❌ Fichier invalide.');
+    e.target.value = '';
+  };
+
   const [localFiscal, setLocalFiscal] = useState<FiscalConfig>(config);
   const [localBenefits, setLocalBenefits] = useState<WorkBenefits>(workBenefits);
   const [localEmail, setLocalEmail] = useState<string>(parentsEmail || '');
@@ -53,6 +64,20 @@ export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parent
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* SECTION SAUVEGARDE */}
+        <div className="bg-white p-6 rounded-2xl border border-slate-200 lg:col-span-2">
+          <h3 className="font-bold text-slate-800 mb-4 border-b pb-2 flex items-center gap-2"><Database className="w-4 h-4 text-indigo-600" /> Sauvegarde des données</h3>
+          <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+            <button onClick={onExport} className="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-xl font-bold text-sm"><Download className="w-4 h-4" /> Exporter (JSON)</button>
+            <label className="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-xl font-bold text-sm cursor-pointer">
+              <Upload className="w-4 h-4" /> Importer un fichier
+              <input type="file" accept="application/json" onChange={handleImportFile} className="hidden" />
+            </label>
+            {importMsg && <span className="text-xs font-bold text-slate-500">{importMsg}</span>}
+          </div>
+          <p className="text-[11px] text-slate-400 mt-3">Un export télécharge une copie locale de toutes vos données. L'import remplace les données actuelles puis les resynchronise sur Drive.</p>
+        </div>
+
         {/* SECTION EMAIL */}
         <div className="bg-white p-6 rounded-2xl border border-slate-200 lg:col-span-2">
             <h3 className="font-bold text-slate-800 mb-4 border-b pb-2 flex items-center gap-2"><Mail className="w-4 h-4 text-indigo-600"/> Notification Parents</h3>

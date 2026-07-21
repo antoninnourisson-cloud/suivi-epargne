@@ -1,6 +1,7 @@
 // src/components/AssistantPilot.tsx
 import React, { useState, useMemo } from 'react';
 import { SavingsAccount, Expense, AccountType, FiscalConfig, WorkBenefits } from '../types';
+import { computeIncome } from '../lib/finance';
 import { Calculator, TrendingUp, Target, Lock, Unlock, Info, Plus, Trash2, Hourglass, Coins, BarChart3, X, Check } from 'lucide-react';
 
 interface AssistantPilotProps {
@@ -41,53 +42,18 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
   const [newExpenseName, setNewExpenseName] = useState('');
   const [newExpenseAmount, setNewExpenseAmount] = useState('');
 
-  const autoValues = useMemo(() => {
-    const grossMonth = grossAnnual / 12;
-    const socialCharges = grossMonth * fiscalConfig.salaryChargesRate;
-    const netSalaryOnly = grossMonth - socialCharges;
+  const autoValues = useMemo(
+    () =>
+      computeIncome(
+        { grossAnnual, extraMonthlyIncome, navigoBase, navigoRate, taxRateManual },
+        fiscalConfig,
+        workBenefits
+      ),
+    [grossAnnual, extraMonthlyIncome, fiscalConfig, workBenefits, navigoBase, navigoRate, taxRateManual]
+  );
 
-    let navigoGain = 0;
-    if (workBenefits.navigo.active) {
-        navigoGain = workBenefits.navigo.basePrice * (workBenefits.navigo.refundRate / 100);
-    } else {
-        navigoGain = navigoBase * (navigoRate / 100);
-    }
-
-    let mutuelleCost = 0;
-    if (workBenefits.mutuelle.active) {
-        mutuelleCost = workBenefits.mutuelle.totalCost * (1 - workBenefits.mutuelle.employerRate / 100);
-    }
-
-    let swileCost = 0;
-    if (workBenefits.mealVouchers.active) {
-        swileCost = workBenefits.mealVouchers.faceValue * workBenefits.mealVouchers.daysPerMonth * (1 - workBenefits.mealVouchers.employerRate / 100);
-    }
-
-    const netBeforeTax = netSalaryOnly + navigoGain + extraMonthlyIncome;
-    const netTaxableYear = ((netSalaryOnly + extraMonthlyIncome) * 12) * (1 - fiscalConfig.standardAllowance);
-
-    let taxAmount = 0;
-    let previousLimit = 0;
-    for (const bracket of fiscalConfig.taxBrackets) {
-        const limit = bracket.limit === null || bracket.limit === undefined ? Infinity : bracket.limit;
-        if (netTaxableYear > previousLimit) {
-            const taxable = Math.min(netTaxableYear, limit) - previousLimit;
-            taxAmount += taxable * bracket.rate;
-            previousLimit = limit;
-        }
-    }
-    const monthlyTax = taxAmount / 12;
-    const autoRate = netTaxableYear > 0 ? (taxAmount / netTaxableYear) * 100 : 0;
-
-    return { 
-        grossMonth, socialCharges, netSalaryOnly, netBeforeTax, taxAmount, monthlyTax, autoRate, netTaxableYear,
-        navigoGain, mutuelleCost, swileCost,
-        superNetRaw: netBeforeTax - mutuelleCost - swileCost 
-    };
-  }, [grossAnnual, extraMonthlyIncome, fiscalConfig, workBenefits, navigoBase, navigoRate]);
-
-  const effectiveMonthlyTax = taxRateManual > 0 ? (autoValues.netBeforeTax * (taxRateManual/100)) : autoValues.monthlyTax;
-  const effectiveSuperNet = autoValues.superNetRaw - effectiveMonthlyTax;
+  const effectiveMonthlyTax = autoValues.effectiveMonthlyTax;
+  const effectiveSuperNet = autoValues.superNet;
 
   const updateFromGrossAnnual = (val: number) => setGrossAnnual(val);
   const updateFromGrossMonth = (val: number) => setGrossAnnual(val * 12);

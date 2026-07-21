@@ -3,26 +3,35 @@
 // ================================================
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { 
-  GlobalAppData, SavingsAccount, Expense, PortfolioSnapshot, 
-  ChatMessage, FiscalConfig, WorkBenefits, AccountMovement 
+  GlobalAppData, SavingsAccount, Expense, PortfolioSnapshot, ExpenseSnapshot,
+  ChatMessage, FiscalConfig, WorkBenefits, AccountMovement, SavingsGoal 
 } from '../types';
 import { 
   DEFAULT_FISCAL_CONFIG, DEFAULT_WORK_BENEFITS 
 } from '../constants';
 import { 
-  findConfigFile, createConfigFile, readConfigFile, updateConfigFile, sendGmail 
+  findConfigFile, createConfigFile, readConfigFile, updateConfigFile, sendGmail,
+  getFileVersion, setOnAuthLost, ConflictError 
 } from '../services/googleDriveService';
 
 export const usePortfolioData = (isAuthenticated: boolean) => {
   const [isLoadingData, setIsLoadingData] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [driveFileId, setDriveFileId] = useState<string | null>(null);
+
+  // État de synchronisation exposé à l'UI (bannières).
+  const [syncError, setSyncError] = useState(false);       // échec de sauvegarde
+  const [syncConflict, setSyncConflict] = useState(false); // écriture concurrente (autre appareil)
+  const [sessionExpired, setSessionExpired] = useState(false);
+  const driveVersionRef = useRef<string | null>(null);
   
   // Données
   const [accounts, setAccounts] = useState<SavingsAccount[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [history, setHistory] = useState<PortfolioSnapshot[]>([]);
+  const [expensesHistory, setExpensesHistory] = useState<ExpenseSnapshot[]>([]);
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
+  const [goals, setGoals] = useState<SavingsGoal[]>([]);
   
   // Configs
   const [grossAnnual, setGrossAnnual] = useState<number>(45000);
@@ -36,12 +45,33 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
   const [workBenefits, setWorkBenefits] = useState<WorkBenefits>(DEFAULT_WORK_BENEFITS);
   const [parentsEmail, setParentsEmail] = useState<string>('');
   
-  const [lastView, setLastView] = useState<string>('dashboard');
+  const [lastView, setLastViewState] = useState<string>(
+    () => localStorage.getItem('last_view') || 'dashboard'
+  );
+  // Persiste la vue courante localement (restauration instantanée) SANS déclencher
+  // une réécriture complète du fichier Drive à chaque changement d'onglet.
+  const setLastView = useCallback((v: string) => {
+    localStorage.setItem('last_view', v);
+    setLastViewState(v);
+  }, []);
+
   const saveTimeoutRef = useRef<any>(null);
+  // Garde-fou anti-écrasement : tant qu'un chargement Drive n'a pas réussi,
+  // on n'autorise aucune sauvegarde (évite d'écraser un bon fichier avec un état vide).
+  const hasLoadedRef = useRef(false);
+
+  // La perte de session (401 non récupérable) remonte via ce callback.
+  useEffect(() => {
+    setOnAuthLost(() => setSessionExpired(true));
+    return () => setOnAuthLost(null);
+  }, []);
 
   // --- CHARGEMENT ---
   const loadDriveData = useCallback(async () => {
     setIsLoadingData(true);
+    setSessionExpired(false);
+    setSyncConflict(false);
+    setSyncError(false);
     try {
       let fileId = await findConfigFile();
       if (!fileId) {
@@ -49,6 +79,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
           accounts: [],
           expenses: [],
           history: [],
+          expensesHistory: [],
           chatHistory: [],
           fiscalConfig: DEFAULT_FISCAL_CONFIG,
           workBenefits: DEFAULT_WORK_BENEFITS,
@@ -72,7 +103,9 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
         setAccounts((data.accounts || []).map(acc => ({ ...acc, movements: acc.movements || [] })));
         setExpenses(data.expenses || []);
         setHistory(data.history || []);
+        setExpensesHistory(data.expensesHistory || []);
         setChatHistory(data.chatHistory || []);
+        setGoals(data.goals || []);
         setFiscalConfig(data.fiscalConfig || DEFAULT_FISCAL_CONFIG);
         
         if (data.workBenefits) {
@@ -97,11 +130,12 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
           setParentsEmail(data.config.parentsEmail ?? '');
         }
         if (data.lastView) setLastView(data.lastView);
-        
-        if (data.financing) {
-           localStorage.setItem('financing_interest', data.financing.interestRate.toString());
-           localStorage.setItem('financing_insurance', data.financing.insuranceRate.toString());
-        }
+
+        // Mémorise la version Drive courante (détection de conflit à la sauvegarde).
+        try { driveVersionRef.current = await getFileVersion(fileId); } catch { driveVersionRef.current = null; }
+
+        // Chargement réussi : les sauvegardes automatiques sont désormais autorisées.
+        hasLoadedRef.current = true;
       }
     } catch (error) {
       console.error("Erreur chargement", error);
@@ -110,42 +144,100 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
     }
   }, []);
 
+  // Construit l'objet de données complet à partir de l'état courant.
+  const buildData = useCallback((): GlobalAppData => ({
+    accounts,
+    expenses,
+    history,
+    expensesHistory,
+    chatHistory,
+    fiscalConfig,
+    workBenefits,
+    goals,
+    config: {
+      grossAnnual, leisureBudget, projectSavings, navigoBase, navigoRate,
+      taxRateManual, extraMonthlyIncome, parentsEmail
+    },
+    lastView,
+  }), [accounts, expenses, history, expensesHistory, chatHistory, fiscalConfig, workBenefits, grossAnnual,
+       leisureBudget, projectSavings, navigoBase, navigoRate, taxRateManual,
+       extraMonthlyIncome, parentsEmail, lastView, goals]);
+
+  // Applique un objet de données (import / rechargement) à l'état.
+  const applyData = useCallback((data: GlobalAppData) => {
+    setAccounts((data.accounts || []).map(acc => ({ ...acc, movements: acc.movements || [] })));
+    setExpenses(data.expenses || []);
+    setHistory(data.history || []);
+    setExpensesHistory(data.expensesHistory || []);
+    setChatHistory(data.chatHistory || []);
+    setGoals(data.goals || []);
+    if (data.fiscalConfig) setFiscalConfig(data.fiscalConfig);
+    if (data.workBenefits) setWorkBenefits(data.workBenefits);
+    if (data.config) {
+      setGrossAnnual(data.config.grossAnnual ?? 45000);
+      setLeisureBudget(data.config.leisureBudget ?? 300);
+      setProjectSavings(data.config.projectSavings ?? 200);
+      setNavigoBase(data.config.navigoBase ?? 90.80);
+      setNavigoRate(data.config.navigoRate ?? 67.24);
+      setTaxRateManual(data.config.taxRateManual ?? 0);
+      setExtraMonthlyIncome(data.config.extraMonthlyIncome ?? 0);
+      setParentsEmail(data.config.parentsEmail ?? '');
+    }
+  }, []);
+
+  // Export JSON (téléchargement local de sauvegarde).
+  const exportData = useCallback(() => {
+    const blob = new Blob([JSON.stringify(buildData(), null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `suivi-epargne-${new Date().toISOString().split('T')[0]}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [buildData]);
+
+  // Import JSON depuis un fichier local.
+  const importData = useCallback(async (file: File): Promise<boolean> => {
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text) as GlobalAppData;
+      if (!parsed || !Array.isArray(parsed.accounts)) throw new Error('Format invalide');
+      applyData(parsed);
+      return true;
+    } catch (e) {
+      console.error('Import échoué', e);
+      return false;
+    }
+  }, [applyData]);
+
+  // Recharge depuis Drive (résout un conflit en récupérant la dernière version).
+  const reloadFromDrive = useCallback(() => {
+    setSyncConflict(false);
+    loadDriveData();
+  }, [loadDriveData]);
+
   // --- SAUVEGARDE AUTO ---
   useEffect(() => {
-    if (!isAuthenticated || !driveFileId || isLoadingData) return;
+    if (!isAuthenticated || !driveFileId || isLoadingData || !hasLoadedRef.current) return;
+    if (syncConflict || sessionExpired) return; // on ne réécrit pas tant que non résolu
 
     setIsSaving(true);
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
 
     saveTimeoutRef.current = setTimeout(async () => {
-      const dataToSave: GlobalAppData = {
-        accounts,
-        expenses,
-        history,
-        chatHistory,
-        fiscalConfig,
-        workBenefits,
-        config: {
-          grossAnnual,
-          leisureBudget,
-          projectSavings,
-          navigoBase,
-          navigoRate,
-          taxRateManual,
-          extraMonthlyIncome,
-          parentsEmail
-        },
-        lastView,
-        financing: {
-            interestRate: parseFloat(localStorage.getItem('financing_interest') || '3.5'),
-            insuranceRate: parseFloat(localStorage.getItem('financing_insurance') || '0.3')
-        }
-      };
-
       try {
-        await updateConfigFile(driveFileId, dataToSave);
-      } catch (err) {
-        console.error("Erreur sauvegarde auto", err);
+        const newVersion = await updateConfigFile(driveFileId, buildData(), driveVersionRef.current);
+        driveVersionRef.current = newVersion;
+        setSyncError(false);
+      } catch (err: any) {
+        if (err instanceof ConflictError) {
+          setSyncConflict(true); // un autre appareil a écrit : on n'écrase pas
+        } else if (err?.message === 'SESSION_EXPIRED') {
+          setSessionExpired(true);
+        } else {
+          setSyncError(true);
+          console.error("Erreur sauvegarde auto", err);
+        }
       } finally {
         setIsSaving(false);
       }
@@ -153,10 +245,43 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
 
     return () => clearTimeout(saveTimeoutRef.current);
   }, [
-    accounts, expenses, history, chatHistory, fiscalConfig, workBenefits, 
+    accounts, expenses, history, expensesHistory, chatHistory, fiscalConfig, workBenefits, 
     grossAnnual, leisureBudget, projectSavings, navigoBase, navigoRate, 
-    taxRateManual, extraMonthlyIncome, parentsEmail, lastView, isAuthenticated, driveFileId, isLoadingData
+    taxRateManual, extraMonthlyIncome, parentsEmail, isAuthenticated, driveFileId, isLoadingData,
+    buildData, syncConflict, sessionExpired, goals
   ]);
+
+  // --- SNAPSHOT PATRIMOINE (alimente la courbe d'évolution) ---
+  // Enregistre/actualise un point par mois avec le total et la part personnelle.
+  useEffect(() => {
+    if (!hasLoadedRef.current) return;
+    const total = accounts.reduce((s, a) => s + a.totalAmount, 0);
+    const owned = accounts.reduce((s, a) => s + a.ownedAmount, 0);
+    const month = new Date().toISOString().slice(0, 7); // AAAA-MM
+    const today = new Date().toISOString().split('T')[0];
+    setHistory(prev => {
+      const existing = prev.find(s => s.date.startsWith(month));
+      if (existing && existing.totalAmount === total && existing.ownedAmount === owned) return prev;
+      const others = prev.filter(s => !s.date.startsWith(month));
+      const snapshot: PortfolioSnapshot = { date: existing ? existing.date : today, totalAmount: total, ownedAmount: owned };
+      return [...others, snapshot].sort((a, b) => a.date.localeCompare(b.date));
+    });
+  }, [accounts]);
+
+  // --- SNAPSHOT CHARGES (alimente la répartition dans le temps) ---
+  useEffect(() => {
+    if (!hasLoadedRef.current) return;
+    const total = expenses.reduce((s, e) => s + e.amount, 0);
+    const month = new Date().toISOString().slice(0, 7);
+    const today = new Date().toISOString().split('T')[0];
+    setExpensesHistory(prev => {
+      const existing = prev.find(s => s.date.startsWith(month));
+      if (existing && existing.total === total) return prev;
+      const others = prev.filter(s => !s.date.startsWith(month));
+      const snapshot: ExpenseSnapshot = { date: existing ? existing.date : today, total };
+      return [...others, snapshot].sort((a, b) => a.date.localeCompare(b.date));
+    });
+  }, [expenses]);
 
   // --- LOGIQUE METIER COMPLEXE (Mouvements & Email Détaillé) ---
   const updateAccountsWithMovements = (updates: { account: SavingsAccount, date: string }[]) => {
@@ -222,12 +347,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
 
     // 2. Envoi + Debug
     if (shouldSendMail && parentsEmail) {
-        console.log("🚀 TENTATIVE ENVOI MAIL...");
-        console.log("📧 Destinataire:", parentsEmail);
-        console.log("📝 Contenu HTML:", mailBody);
-        
-        // SUJET MODIFIÉ POUR FORCER LA DIFFÉRENCE VISUELLE
-        sendGmail(parentsEmail, `Mise à jour Épargne [DÉTAILLÉ]`, mailBody);
+        sendGmail(parentsEmail, `Mise à jour Épargne`, mailBody);
     } else if (shouldSendMail && !parentsEmail) {
         console.warn("⚠️ Mouvement détecté mais aucun email parent configuré.");
     }
@@ -294,10 +414,17 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
   };
 
   const resetData = () => {
+      hasLoadedRef.current = false;
+      driveVersionRef.current = null;
+      setSyncError(false);
+      setSyncConflict(false);
+      setSessionExpired(false);
       setAccounts([]);
       setExpenses([]);
       setHistory([]);
+      setExpensesHistory([]);
       setChatHistory([]);
+      setGoals([]);
       setDriveFileId(null);
   };
 
@@ -306,7 +433,9 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
     accounts, setAccounts,
     expenses, setExpenses,
     history, setHistory,
+    expensesHistory, setExpensesHistory,
     chatHistory, setChatHistory,
+    goals, setGoals,
     fiscalConfig, setFiscalConfig,
     workBenefits, setWorkBenefits,
     grossAnnual, setGrossAnnual,
@@ -322,11 +451,17 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
     // Status
     isLoadingData,
     isSaving,
+    syncError,
+    syncConflict,
+    sessionExpired,
     
     // Actions
     loadDriveData,
+    reloadFromDrive,
     updateAccountsWithMovements,
     executeLinkedTransfer,
+    exportData,
+    importData,
     resetData
   };
 };

@@ -10,7 +10,7 @@
 
 **Suivi Épargne** est une Progressive Web App (PWA) conçue pour reprendre le contrôle de vos finances personnelles. Contrairement aux agrégateurs bancaires classiques qui stockent vos données sur leurs serveurs, cette application fonctionne en **architecture "zéro-backend"**.
 
-Vos données financières sont chiffrées et stockées **uniquement sur votre propre Google Drive personnel** dans un fichier JSON sécurisé. Vous seul y avez accès.
+Vos données financières sont stockées **uniquement sur votre propre Google Drive personnel**, dans un fichier JSON auquel vous seul avez accès (portée OAuth `drive.file` : l'app ne voit que le fichier qu'elle a créé). Le contenu n'est pas chiffré côté application ; il repose sur la sécurité de votre compte Google.
 
 L'application est spécifiquement calibrée pour le système français, intégrant le calcul automatique du net après impôt, les plafonds des livrets réglementés (Livret A, LEP, LDDS) et la gestion des avantages salariaux.
 
@@ -33,7 +33,6 @@ L'application est spécifiquement calibrée pour le système français, intégra
 - **Gestionnaire de Virements :** Interface simplifiée pour enregistrer dépôts et virements inter-comptes.
 
 ### 🤖 Assistant & Notifications
-- **Conseiller IA :** Chatbot intégré pour analyser votre situation financière (via Gemini).
 - **Alertes Parents :** Envoi automatique d'un email récapitulatif détaillé (via votre Gmail) à un tiers lors de mouvements sur les comptes réglementés (Livret A, LEP).
 
 ## 🛠️ Architecture Technique
@@ -96,7 +95,25 @@ Bash
 npm run dev
 
 L'application sera accessible sur http://localhost:5173.
-📱 Utilisation sur Mobile (PWA)
+
+## 🌐 Déploiement sur GitHub Pages
+
+Le projet inclut un workflow GitHub Actions (`.github/workflows/deploy.yml`) qui build et déploie automatiquement à chaque push sur `main`.
+
+### 1. Activer GitHub Pages
+Dans les paramètres du repo → **Settings → Pages → Source**, choisissez **GitHub Actions** (pas "Deploy from a branch").
+
+### 2. Autoriser l'origine dans Google Cloud Console (étape obligatoire)
+C'est la seule configuration réellement nécessaire pour que l'authentification fonctionne une fois déployé. Le `CLIENT_ID` présent dans le code est un identifiant public — ce n'est pas un secret et il n'y a rien à cacher — mais Google refuse toute requête OAuth venant d'une origine non déclarée. Sans cette étape, la connexion Google échouera silencieusement sur le site déployé.
+
+Dans Google Cloud Console → **APIs & Services → Credentials** → votre OAuth Client ID → **Authorized JavaScript origins**, ajoutez l'URL de votre déploiement :
+- Repo utilisateur/organisation (`username.github.io`) : `https://username.github.io`
+- Repo de projet (`username.github.io/nom-du-repo`) : `https://username.github.io` (l'origine à autoriser est le domaine seul, sans le sous-chemin)
+
+### 3. Pousser sur `main`
+Le workflow build l'app avec des chemins relatifs (`base: './'` dans `vite.config.ts`), donc elle fonctionne aussi bien à la racine du domaine que dans un sous-dossier, sans configuration supplémentaire à connaître à l'avance.
+
+## 📱 Utilisation sur Mobile (PWA)
 
 L'application est une PWA. Vous pouvez l'ajouter à votre écran d'accueil sur iOS (via Safari > Partager > Sur l'écran d'accueil) ou Android (via Chrome) pour une expérience proche d'une application native.
 
