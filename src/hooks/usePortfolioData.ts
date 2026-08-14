@@ -23,6 +23,9 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
   const [syncError, setSyncError] = useState(false);       // échec de sauvegarde
   const [syncConflict, setSyncConflict] = useState(false); // écriture concurrente (autre appareil)
   const [sessionExpired, setSessionExpired] = useState(false);
+  // Pas de connexion : on gèle simplement les sauvegardes (pas d'erreur affichée),
+  // le filet de sécurité localStorage garde les modifications jusqu'au retour du réseau.
+  const [isOffline, setIsOffline] = useState(!navigator.onLine);
   // Horodatage de la dernière écriture confirmée sur Drive (pas juste un état local) :
   // sert de preuve visible que la sauvegarde cloud a bien réussi, pas seulement l'affichage.
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
@@ -75,6 +78,22 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
   useEffect(() => {
     setOnAuthLost(() => setSessionExpired(true));
     return () => setOnAuthLost(null);
+  }, []);
+
+  // --- DÉTECTION HORS LIGNE ---
+  // navigator.onLine reflète la connectivité réseau du système ; on s'en sert pour geler
+  // les sauvegardes proprement (pas d'erreur affichée) plutôt que de laisser chaque tentative
+  // échouer bruyamment. Le retour en ligne relance automatiquement une sauvegarde (voir
+  // dépendance `isOffline` de l'effet d'auto-save ci-dessous) sans attendre une nouvelle saisie.
+  useEffect(() => {
+    const handleOnline = () => setIsOffline(false);
+    const handleOffline = () => setIsOffline(true);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
   }, []);
 
   // --- CHARGEMENT ---
@@ -256,6 +275,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
       localStorage.removeItem('suivi_epargne_backup');
     } catch (err: any) {
       if (err?.message === 'SESSION_EXPIRED') setSessionExpired(true);
+      else if (err instanceof TypeError) setIsOffline(true);
       else setSyncError(true);
     }
   }, [driveFileId, buildData]);
@@ -287,6 +307,10 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
   useEffect(() => {
     if (!isAuthenticated || !driveFileId || isLoadingData || !hasLoadedRef.current) return;
     if (syncConflict || sessionExpired) return; // on ne réécrit pas tant que non résolu
+    // Hors ligne : on gèle silencieusement (le filet de sécurité local garde déjà tout).
+    // `isOffline` est dans les deps ci-dessous : au retour du réseau, cet effet se
+    // relance de lui-même et retente la sauvegarde sans attendre une nouvelle saisie.
+    if (isOffline) return;
 
     setIsSaving(true);
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
@@ -302,6 +326,11 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
           setSyncConflict(true); // un autre appareil a écrit : on n'écrase pas
         } else if (err?.message === 'SESSION_EXPIRED') {
           setSessionExpired(true);
+        } else if (err instanceof TypeError) {
+          // fetch échoue par TypeError quand la requête ne peut pas partir (réseau coupé,
+          // DNS...) : navigator.onLine n'est pas toujours fiable (ex: portail captif), donc
+          // on traite ce cas comme hors-ligne plutôt que comme une vraie erreur inquiétante.
+          setIsOffline(true);
         } else {
           setSyncError(true);
           console.error("Erreur sauvegarde auto", err);
@@ -316,7 +345,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
     accounts, expenses, history, expensesHistory, chatHistory, fiscalConfig, workBenefits, 
     grossAnnual, leisureBudget, projectSavings, navigoBase, navigoRate, 
     taxRateManual, extraMonthlyIncome, parentsEmail, isAuthenticated, driveFileId, isLoadingData,
-    buildData, syncConflict, sessionExpired, goals
+    buildData, syncConflict, sessionExpired, goals, isOffline
   ]);
 
   // --- SNAPSHOT PATRIMOINE (alimente la courbe d'évolution) ---
@@ -528,6 +557,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
     sessionExpired,
     localBackup,
     lastSavedAt,
+    isOffline,
 
     // Actions
     loadDriveData,

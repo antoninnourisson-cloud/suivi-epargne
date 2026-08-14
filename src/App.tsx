@@ -17,7 +17,7 @@ import {
   LayoutDashboard, Wallet, Trash2, Edit2, ShieldCheck,
   ArrowRightLeft, RefreshCcw, PlusCircle, Cloud, LogOut,
   Loader2, Settings as SettingsIcon, AlertTriangle, RotateCw,
-  Target, Coins, LineChart, Users, Calculator, Sun, Moon, Zap, Tag, Save
+  Target, Coins, LineChart, Users, Calculator, Sun, Moon, Zap, Tag, Save, WifiOff
 } from 'lucide-react';
 
 // Code-splitting : les vues lourdes (recharts, etc.) sont chargées à la demande.
@@ -312,8 +312,8 @@ const App: React.FC = () => {
           <h1 className="text-xl font-bold flex items-center gap-2"><div className="w-8 h-8 bg-indigo-600 rounded flex center justify-center items-center"><RefreshCcw className="w-4 h-4 text-white"/></div> Assistant Épargne</h1>
           <div className="mt-2 text-[10px] uppercase text-slate-400 dark:text-slate-500 font-bold tracking-wider flex items-center justify-between gap-2">
             <div className="flex items-center gap-2" title={data.lastSavedAt ? `Dernière écriture confirmée sur Drive : ${data.lastSavedAt.toLocaleTimeString('fr-FR')}` : undefined}>
-              <div className={`w-2 h-2 rounded-full flex-shrink-0 ${data.isSaving ? 'bg-amber-500 animate-pulse' : data.syncError || data.syncConflict ? 'bg-rose-500' : 'bg-emerald-500'}`}></div>
-              {data.isSaving ? 'Sauvegarde...' : data.syncError ? 'Erreur sync' : data.syncConflict ? 'Conflit' : data.lastSavedAt ? `Sur Drive à ${data.lastSavedAt.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}` : 'Synchronisé'}
+              <div className={`w-2 h-2 rounded-full flex-shrink-0 ${data.isOffline ? 'bg-slate-400' : data.isSaving ? 'bg-amber-500 animate-pulse' : data.syncError || data.syncConflict ? 'bg-rose-500' : 'bg-emerald-500'}`}></div>
+              {data.isOffline ? 'Hors ligne' : data.isSaving ? 'Sauvegarde...' : data.syncError ? 'Erreur sync' : data.syncConflict ? 'Conflit' : data.lastSavedAt ? `Sur Drive à ${data.lastSavedAt.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}` : 'Synchronisé'}
             </div>
             <button onClick={toggleTheme} className="text-slate-400 hover:text-white" title={isDark ? 'Passer en clair' : 'Passer en sombre'}>
               {isDark ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
@@ -349,9 +349,9 @@ const App: React.FC = () => {
         <h1 className="text-base font-bold flex items-center gap-2"><div className="w-6 h-6 bg-indigo-600 rounded flex items-center justify-center"><RefreshCcw className="w-3.5 h-3.5 text-white"/></div> Assistant Épargne</h1>
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1.5" title={data.lastSavedAt ? `Dernière écriture confirmée sur Drive : ${data.lastSavedAt.toLocaleTimeString('fr-FR')}` : undefined}>
-            <div className={`w-2 h-2 rounded-full flex-shrink-0 ${data.isSaving ? 'bg-amber-500 animate-pulse' : data.syncError || data.syncConflict ? 'bg-rose-500' : 'bg-emerald-500'}`}></div>
+            <div className={`w-2 h-2 rounded-full flex-shrink-0 ${data.isOffline ? 'bg-slate-400' : data.isSaving ? 'bg-amber-500 animate-pulse' : data.syncError || data.syncConflict ? 'bg-rose-500' : 'bg-emerald-500'}`}></div>
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">
-              {data.isSaving ? 'Sauvegarde...' : data.syncError ? 'Erreur' : data.syncConflict ? 'Conflit' : data.lastSavedAt ? data.lastSavedAt.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : 'Sync'}
+              {data.isOffline ? 'Hors ligne' : data.isSaving ? 'Sauvegarde...' : data.syncError ? 'Erreur' : data.syncConflict ? 'Conflit' : data.lastSavedAt ? data.lastSavedAt.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : 'Sync'}
             </span>
           </div>
           <button onClick={toggleTheme} className="text-slate-400" title="Thème">{isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}</button>
@@ -366,6 +366,12 @@ const App: React.FC = () => {
 
         <div className="max-w-7xl mx-auto pb-20">
             {/* --- BANNIÈRES DE SYNCHRONISATION --- */}
+            {data.isOffline && (
+              <div className="mb-4 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4 flex items-center gap-3">
+                <WifiOff className="w-5 h-5 flex-shrink-0 text-slate-500 dark:text-slate-400" />
+                <div className="text-slate-600 dark:text-slate-300 text-sm font-bold">Pas de connexion. Vos modifications sont enregistrées sur cet appareil et seront envoyées sur Drive dès le retour du réseau.</div>
+              </div>
+            )}
             {data.sessionExpired && (
               <div className="mb-4 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-xl p-4 flex items-center justify-between gap-4">
                 <div className="flex items-center gap-2 text-amber-800 dark:text-amber-300 text-sm font-bold"><AlertTriangle className="w-5 h-5 flex-shrink-0"/> Votre session Google a expiré. Reconnectez-vous pour continuer à sauvegarder.</div>
@@ -381,7 +387,7 @@ const App: React.FC = () => {
                 </div>
               </div>
             )}
-            {data.syncError && !data.sessionExpired && !data.syncConflict && (
+            {data.syncError && !data.sessionExpired && !data.syncConflict && !data.isOffline && (
               <div className="mb-4 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-xl p-3 text-rose-700 dark:text-rose-300 text-sm font-bold flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4"/> La dernière sauvegarde a échoué. Une nouvelle tentative aura lieu à la prochaine modification.
               </div>
