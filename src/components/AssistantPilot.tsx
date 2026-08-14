@@ -187,8 +187,8 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
               <div className="bg-slate-50 dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-700"><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Brut Annuel</label><input type="number" value={Math.round(grossAnnual)} onChange={e => updateFromGrossAnnual(parseFloat(e.target.value)||0)} className="w-full bg-transparent font-black text-slate-800 dark:text-slate-100 text-lg outline-none" /></div>
               <div className="bg-slate-50 dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-700"><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Brut Mensuel</label><input type="number" value={Math.round(autoValues.grossMonth)} onChange={e => updateFromGrossMonth(parseFloat(e.target.value)||0)} className="w-full bg-transparent font-black text-slate-800 dark:text-slate-100 text-lg outline-none" /></div>
-              <div className="bg-indigo-50 p-3 rounded-xl border border-indigo-100"><label className="text-[10px] font-black text-indigo-400 uppercase">Net Avant Impôt</label><input type="number" value={Math.round(autoValues.netBeforeTax * 100)/100} onChange={e => updateFromNet(parseFloat(e.target.value)||0)} className="w-full bg-transparent font-black text-indigo-700 text-lg outline-none" /></div>
-              <div className="bg-emerald-50 p-3 rounded-xl border border-emerald-100 relative"><label className="text-[10px] font-black text-emerald-600 uppercase flex items-center gap-1">Super Net (Poche) <Info className="w-3 h-3 cursor-pointer" onClick={() => setShowDetails(!showDetails)}/></label><input type="number" value={Math.round(effectiveSuperNet * 100)/100} readOnly className="w-full bg-transparent font-black text-emerald-700 text-2xl outline-none" /></div>
+              <div className="bg-indigo-50 dark:bg-indigo-950/40 p-3 rounded-xl border border-indigo-100 dark:border-indigo-900"><label className="text-[10px] font-black text-indigo-400 dark:text-indigo-400 uppercase">Net Avant Impôt</label><input type="number" value={Math.round(autoValues.netBeforeTax * 100)/100} onChange={e => updateFromNet(parseFloat(e.target.value)||0)} className="w-full bg-transparent font-black text-indigo-700 dark:text-indigo-300 text-lg outline-none" /></div>
+              <div className="bg-emerald-50 dark:bg-emerald-950/40 p-3 rounded-xl border border-emerald-100 dark:border-emerald-900 relative"><label className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase flex items-center gap-1">Super Net (Poche) <Info className="w-3 h-3 cursor-pointer" onClick={() => setShowDetails(!showDetails)}/></label><input type="number" value={Math.round(effectiveSuperNet * 100)/100} readOnly className="w-full bg-transparent font-black text-emerald-700 dark:text-emerald-300 text-2xl outline-none" /></div>
             </div>
 
             {showDetails && (
@@ -286,9 +286,35 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
       )}
 
       {activeTab === 'fiscal' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-           {fiscalClock.map((item: any) => (<div key={item.id} className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm relative overflow-hidden"><div className={`absolute top-0 right-0 p-16 opacity-5 rounded-full -mr-8 -mt-8 ${item.isAvailable ? 'bg-emerald-500' : 'bg-indigo-500'}`}></div><div className="flex justify-between items-start mb-4"><div className={`p-3 rounded-xl ${item.isAvailable ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}>{item.isAvailable ? <Unlock className="w-6 h-6" /> : <Lock className="w-6 h-6" />}</div><span className="text-[10px] font-black uppercase bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded text-slate-500 dark:text-slate-400">{item.type}</span></div><h4 className="font-bold text-slate-800 dark:text-slate-100 text-lg mb-1">{item.name}</h4><div className="border-t border-slate-100 dark:border-slate-800 pt-4 mt-4"><div className="flex justify-between items-end"><div><p className="text-[10px] text-slate-400 dark:text-slate-500 uppercase font-bold">Échéance</p><p className="font-bold text-slate-700 dark:text-slate-200">{item.date}</p></div><div className={`text-right font-black text-xl ${item.isAvailable ? 'text-emerald-500' : 'text-indigo-600'}`}>{item.timeLeft}</div></div></div></div>))}
-        </div>
+        <>
+          {fiscalClock.length > 0 ? (
+            <>
+              <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-wrap items-center gap-x-8 gap-y-2">
+                <div>
+                  <p className="text-[10px] text-slate-400 dark:text-slate-500 uppercase font-bold">Comptes suivis</p>
+                  <p className="font-black text-2xl text-slate-800 dark:text-slate-100">{fiscalClock.length}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-slate-400 dark:text-slate-500 uppercase font-bold">Disponibles</p>
+                  <p className="font-black text-2xl text-emerald-500">{fiscalClock.filter((i: any) => i.isAvailable).length}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-slate-400 dark:text-slate-500 uppercase font-bold">Encore bloqués</p>
+                  <p className="font-black text-2xl text-indigo-600">{fiscalClock.filter((i: any) => !i.isAvailable).length}</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {fiscalClock.map((item: any) => (<div key={item.id} className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm relative overflow-hidden"><div className={`absolute top-0 right-0 p-16 opacity-5 rounded-full -mr-8 -mt-8 ${item.isAvailable ? 'bg-emerald-500' : 'bg-indigo-500'}`}></div><div className="flex justify-between items-start mb-4"><div className={`p-3 rounded-xl ${item.isAvailable ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}>{item.isAvailable ? <Unlock className="w-6 h-6" /> : <Lock className="w-6 h-6" />}</div><span className="text-[10px] font-black uppercase bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded text-slate-500 dark:text-slate-400">{item.type}</span></div><h4 className="font-bold text-slate-800 dark:text-slate-100 text-lg mb-1">{item.name}</h4><div className="border-t border-slate-100 dark:border-slate-800 pt-4 mt-4"><div className="flex justify-between items-end"><div><p className="text-[10px] text-slate-400 dark:text-slate-500 uppercase font-bold">Échéance</p><p className="font-bold text-slate-700 dark:text-slate-200">{item.date}</p></div><div className={`text-right font-black text-xl ${item.isAvailable ? 'text-emerald-500' : 'text-indigo-600'}`}>{item.timeLeft}</div></div></div></div>))}
+              </div>
+            </>
+          ) : (
+            <div className="bg-white dark:bg-slate-800 border border-dashed border-slate-200 dark:border-slate-700 rounded-2xl p-12 flex flex-col items-center justify-center text-center gap-2">
+              <Hourglass className="w-8 h-8 text-slate-300 dark:text-slate-600" />
+              <p className="text-slate-400 dark:text-slate-500 font-bold">Aucun compte fiscal à échéance pour l'instant.</p>
+              <p className="text-slate-400 dark:text-slate-500 text-sm">Les PEA, PEE et assurances-vie avec une date d'ouverture apparaîtront ici.</p>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

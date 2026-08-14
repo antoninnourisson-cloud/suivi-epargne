@@ -1,5 +1,5 @@
 import React from 'react';
-import { LayoutDashboard, RefreshCcw, Wallet, ShieldCheck, MoreHorizontal, X } from 'lucide-react';
+import { LayoutDashboard, ArrowRightLeft, Wallet, ShieldCheck, MoreHorizontal, X } from 'lucide-react';
 
 interface BottomNavProps {
   view: string;
@@ -21,7 +21,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ view, setView, moreOpen, s
     <>
       <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 flex pb-[env(safe-area-inset-bottom)]">
         <TabButton active={view === 'dashboard'} onClick={() => setView('dashboard')} icon={LayoutDashboard} label="Dashboard" />
-        <TabButton active={view === 'update'} onClick={() => setView('update')} icon={RefreshCcw} label="Actualiser" />
+        <TabButton active={view === 'transfers'} onClick={() => setView('transfers')} icon={ArrowRightLeft} label="Virements" />
         <TabButton active={view === 'accounts'} onClick={() => setView('accounts')} icon={Wallet} label="Comptes" />
         <TabButton active={view === 'pilot'} onClick={() => setView('pilot')} icon={ShieldCheck} label="Pilotage" />
         <TabButton active={moreOpen} onClick={() => setMoreOpen(true)} icon={MoreHorizontal} label="Plus" />

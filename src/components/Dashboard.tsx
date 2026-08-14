@@ -264,7 +264,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
           {ceilingAlerts.map(a => {
             const full = a.pct >= 100;
             return (
-              <div key={a.id} className={`flex items-center gap-3 p-3 rounded-xl border text-sm font-bold ${full ? 'bg-rose-50 border-rose-200 text-rose-700' : 'bg-amber-50 border-amber-200 text-amber-800'}`}>
+              <div key={a.id} className={`flex items-center gap-3 p-3 rounded-xl border text-sm font-bold ${full ? 'bg-rose-50 border-rose-200 text-rose-700 dark:bg-rose-950/40 dark:border-rose-800 dark:text-rose-300' : 'bg-amber-50 border-amber-200 text-amber-800 dark:bg-amber-950/40 dark:border-amber-800 dark:text-amber-300'}`}>
                 <AlertTriangle className="w-4 h-4 flex-shrink-0" />
                 {full
                   ? <span>{a.name} ({a.type}) est au plafond ({a.ceiling.toLocaleString()} €). Redirige tes prochains versements ailleurs.</span>

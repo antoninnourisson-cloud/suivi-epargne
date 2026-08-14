@@ -24,6 +24,9 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
   const [syncConflict, setSyncConflict] = useState(false); // écriture concurrente (autre appareil)
   const [sessionExpired, setSessionExpired] = useState(false);
   const driveVersionRef = useRef<string | null>(null);
+  // Sauvegarde locale trouvée au démarrage et différente de ce qui vient d'être chargé
+  // depuis Drive (signe qu'une sync a échoué/été bloquée avant que l'app ne se ferme).
+  const [localBackup, setLocalBackup] = useState<{ savedAt: string; data: GlobalAppData } | null>(null);
   
   // Données
   const [accounts, setAccounts] = useState<SavingsAccount[]>([]);
@@ -48,10 +51,15 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
   const [lastView, setLastViewState] = useState<string>(
     () => localStorage.getItem('last_view') || 'dashboard'
   );
+  // Miroir non-réactif de `lastView` : buildData le lit ici plutôt que via l'état,
+  // pour que la valeur soit incluse dans les sauvegardes Drive réelles sans que
+  // changer d'onglet ne déclenche lui-même un cycle d'auto-sauvegarde.
+  const lastViewRef = useRef(lastView);
   // Persiste la vue courante localement (restauration instantanée) SANS déclencher
   // une réécriture complète du fichier Drive à chaque changement d'onglet.
   const setLastView = useCallback((v: string) => {
     localStorage.setItem('last_view', v);
+    lastViewRef.current = v;
     setLastViewState(v);
   }, []);
 
@@ -134,6 +142,21 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
         // Mémorise la version Drive courante (détection de conflit à la sauvegarde).
         try { driveVersionRef.current = await getFileVersion(fileId); } catch { driveVersionRef.current = null; }
 
+        // Détecte une sauvegarde locale (navigateur) dont le total des comptes diverge de
+        // ce qui vient d'être chargé depuis Drive : signe qu'une sync a été bloquée (conflit,
+        // session expirée...) avant que les modifications locales n'aient pu être écrites.
+        try {
+          const rawBackup = localStorage.getItem('suivi_epargne_backup');
+          if (rawBackup) {
+            const backup = JSON.parse(rawBackup) as { savedAt: string; data: GlobalAppData };
+            const sum = (accs: SavingsAccount[]) => (accs || []).reduce((s, a) => s + (a.totalAmount || 0), 0);
+            const driveSum = sum(data.accounts);
+            const backupSum = sum(backup.data.accounts);
+            if (Math.abs(driveSum - backupSum) > 0.01) setLocalBackup(backup);
+            else localStorage.removeItem('suivi_epargne_backup');
+          }
+        } catch { /* backup illisible : on l'ignore, pas de perte supplémentaire */ }
+
         // Chargement réussi : les sauvegardes automatiques sont désormais autorisées.
         hasLoadedRef.current = true;
       }
@@ -158,10 +181,10 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
       grossAnnual, leisureBudget, projectSavings, navigoBase, navigoRate,
       taxRateManual, extraMonthlyIncome, parentsEmail
     },
-    lastView,
+    lastView: lastViewRef.current,
   }), [accounts, expenses, history, expensesHistory, chatHistory, fiscalConfig, workBenefits, grossAnnual,
        leisureBudget, projectSavings, navigoBase, navigoRate, taxRateManual,
-       extraMonthlyIncome, parentsEmail, lastView, goals]);
+       extraMonthlyIncome, parentsEmail, goals]);
 
   // Applique un objet de données (import / rechargement) à l'état.
   const applyData = useCallback((data: GlobalAppData) => {
@@ -210,11 +233,51 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
     }
   }, [applyData]);
 
-  // Recharge depuis Drive (résout un conflit en récupérant la dernière version).
+  // Recharge depuis Drive (résout un conflit en récupérant la dernière version distante,
+  // AU PRIX de l'abandon des modifications locales non sauvegardées).
   const reloadFromDrive = useCallback(() => {
     setSyncConflict(false);
     loadDriveData();
   }, [loadDriveData]);
+
+  // Résout un conflit en écrasant la version distante avec l'état local courant
+  // (l'utilisateur choisit explicitement de garder ses modifications).
+  const forceSaveToDrive = useCallback(async () => {
+    if (!driveFileId) return;
+    try {
+      const newVersion = await updateConfigFile(driveFileId, buildData()); // sans expectedVersion : pas de contrôle de version
+      driveVersionRef.current = newVersion;
+      setSyncConflict(false);
+      setSyncError(false);
+      localStorage.removeItem('suivi_epargne_backup');
+    } catch (err: any) {
+      if (err?.message === 'SESSION_EXPIRED') setSessionExpired(true);
+      else setSyncError(true);
+    }
+  }, [driveFileId, buildData]);
+
+  // Restaure la sauvegarde locale détectée au démarrage (l'utilisateur choisit de la garder
+  // plutôt que la version Drive). Une sauvegarde normale s'enclenchera ensuite normalement.
+  const restoreLocalBackup = useCallback(() => {
+    if (!localBackup) return;
+    applyData(localBackup.data);
+    setLocalBackup(null);
+  }, [localBackup, applyData]);
+
+  const dismissLocalBackup = useCallback(() => {
+    localStorage.removeItem('suivi_epargne_backup');
+    setLocalBackup(null);
+  }, []);
+
+  // --- FILET DE SÉCURITÉ LOCAL ---
+  // Miroir de l'état courant dans le navigateur : si une sauvegarde Drive reste bloquée
+  // (conflit, session expirée, hors-ligne...), les modifications ne sont jamais perdues
+  // silencieusement — elles restent récupérables via ce backup même après un rechargement.
+  useEffect(() => {
+    if (!hasLoadedRef.current) return;
+    try { localStorage.setItem('suivi_epargne_backup', JSON.stringify({ savedAt: new Date().toISOString(), data: buildData() })); }
+    catch { /* quota localStorage dépassé : tant pis, ce n'est qu'un filet de secours */ }
+  }, [buildData]);
 
   // --- SAUVEGARDE AUTO ---
   useEffect(() => {
@@ -458,10 +521,14 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
     syncError,
     syncConflict,
     sessionExpired,
-    
+    localBackup,
+
     // Actions
     loadDriveData,
     reloadFromDrive,
+    forceSaveToDrive,
+    restoreLocalBackup,
+    dismissLocalBackup,
     updateAccountsWithMovements,
     notifyParentsIfNeeded,
     executeLinkedTransfer,
