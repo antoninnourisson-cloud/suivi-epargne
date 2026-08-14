@@ -74,7 +74,7 @@ export const Goals: React.FC<GoalsProps> = ({ goals, onUpdateGoals, expenses, in
       </div>
 
       {isAdding && (
-        <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-indigo-200 shadow-sm space-y-4">
+        <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-indigo-200 dark:border-indigo-800 shadow-sm space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Nom</label><input autoFocus value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="Ex : Épargne de précaution" className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
             <div><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Montant cible (€)</label><input type="number" value={form.targetAmount} onChange={e => setForm({ ...form, targetAmount: e.target.value })} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
@@ -120,7 +120,7 @@ export const Goals: React.FC<GoalsProps> = ({ goals, onUpdateGoals, expenses, in
                   <h3 className="font-black text-slate-800 dark:text-slate-100 text-lg">{g.name}</h3>
                   <p className="text-xs text-slate-500 dark:text-slate-400">{fmt(g.savedAmount)} / {fmt(g.targetAmount)}</p>
                 </div>
-                <button onClick={() => removeGoal(g.id)} className="p-2 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-lg"><Trash2 className="w-4 h-4" /></button>
+                <button onClick={() => removeGoal(g.id)} className="p-2 text-slate-300 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg"><Trash2 className="w-4 h-4" /></button>
               </div>
 
               <div className="w-full h-3 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden mb-2">
@@ -138,7 +138,7 @@ export const Goals: React.FC<GoalsProps> = ({ goals, onUpdateGoals, expenses, in
                     {capacity > 0 ? `≈ ${Math.ceil(monthsToGoal)} mois au rythme actuel` : 'Capacité d\'épargne insuffisante'}
                   </span>
                   {deadlineInfo && (
-                    <span className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-lg font-bold ${deadlineInfo.ok ? 'text-emerald-700 bg-emerald-50' : 'text-rose-700 bg-rose-50'}`}>
+                    <span className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-lg font-bold ${deadlineInfo.ok ? 'text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40' : 'text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/40'}`}>
                       <Calendar className="w-3.5 h-3.5" /> {deadlineInfo.text}
                     </span>
                   )}

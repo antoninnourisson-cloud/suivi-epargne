@@ -214,7 +214,7 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
             <div className="lg:col-span-1 bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
               <div className="flex justify-between items-center mb-4">
                   <h4 className="font-bold text-slate-700 dark:text-slate-200 flex items-center gap-2"><TrendingUp className="w-4 h-4 text-rose-500"/> Charges Fixes</h4>
-                  <button onClick={() => setIsAddingExpense(true)} className="p-1 bg-slate-100 dark:bg-slate-800 rounded hover:bg-slate-200"><Plus className="w-4 h-4"/></button>
+                  <button onClick={() => setIsAddingExpense(true)} className="p-1 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded hover:bg-slate-200 dark:hover:bg-slate-600"><Plus className="w-4 h-4"/></button>
               </div>
               
               {/* Formulaire Ajout Rapide */}

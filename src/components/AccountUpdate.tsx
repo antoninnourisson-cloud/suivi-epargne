@@ -100,7 +100,7 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
             <div key={account.id} className={`bg-white dark:bg-slate-800 p-6 rounded-2xl border transition-all ${isChanged ? 'border-indigo-400 shadow-lg ring-1 ring-indigo-400/10' : 'border-slate-200 dark:border-slate-700 shadow-sm'}`}>
               <div className="flex justify-between items-start mb-6">
                 <div>
-                  <h4 className="font-black text-slate-900 text-lg leading-tight">{account.name}</h4>
+                  <h4 className="font-black text-slate-900 dark:text-slate-100 text-lg leading-tight">{account.name}</h4>
                   <p className="text-xs text-slate-400 dark:text-slate-500 uppercase font-bold tracking-wider">{account.institution}</p>
                 </div>
                 <div className="text-right">
@@ -111,16 +111,16 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* Part Personnelle */}
-                <div className="bg-indigo-50/50 p-3 rounded-xl border border-indigo-100">
-                  <label className="text-[10px] font-black text-indigo-700 uppercase tracking-widest flex items-center gap-1 mb-2">
+                <div className="bg-indigo-50 dark:bg-indigo-950/40 p-3 rounded-xl border border-indigo-100 dark:border-indigo-900">
+                  <label className="text-[10px] font-black text-indigo-700 dark:text-indigo-300 uppercase tracking-widest flex items-center gap-1 mb-2">
                     <User className="w-3 h-3" /> Ma Part (€)
                   </label>
-                  <input 
+                  <input
                     type="number"
                     step="0.01"
                     value={u.owned}
                     onChange={(e) => handleOwnedChange(account.id, e.target.value)}
-                    className="w-full bg-transparent text-lg font-black text-indigo-900 outline-none"
+                    className="w-full bg-transparent text-lg font-black text-indigo-900 dark:text-indigo-200 outline-none"
                   />
                   {diffOwned !== 0 && (
                     <div className={`text-[10px] mt-1 font-bold ${diffOwned > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
@@ -130,16 +130,16 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
                 </div>
 
                 {/* Part Parents */}
-                <div className="bg-amber-50/50 p-3 rounded-xl border border-amber-100">
-                  <label className="text-[10px] font-black text-amber-700 uppercase tracking-widest flex items-center gap-1 mb-2">
+                <div className="bg-amber-50 dark:bg-amber-950/40 p-3 rounded-xl border border-amber-100 dark:border-amber-900">
+                  <label className="text-[10px] font-black text-amber-700 dark:text-amber-300 uppercase tracking-widest flex items-center gap-1 mb-2">
                     <Users className="w-3 h-3" /> Part Parents (€)
                   </label>
-                  <input 
+                  <input
                     type="number"
                     step="0.01"
                     value={u.parental}
                     onChange={(e) => handleParentalChange(account.id, e.target.value)}
-                    className="w-full bg-transparent text-lg font-black text-amber-900 outline-none"
+                    className="w-full bg-transparent text-lg font-black text-amber-900 dark:text-amber-200 outline-none"
                   />
                   {diffParental !== 0 && (
                     <div className={`text-[10px] mt-1 font-bold ${diffParental > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>

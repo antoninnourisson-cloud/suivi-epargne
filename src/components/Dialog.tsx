@@ -40,7 +40,7 @@ export const Dialog: React.FC<{ state: DialogState; onClose: () => void }> = ({ 
             {state.danger && <AlertTriangle className="w-5 h-5 text-rose-500" />}
             {state.title}
           </h3>
-          <button onClick={onClose} className="p-1 text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:text-slate-200"><X className="w-5 h-5" /></button>
+          <button onClick={onClose} className="p-1 text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-200"><X className="w-5 h-5" /></button>
         </div>
         {state.message && <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">{state.message}</p>}
         {state.kind === 'prompt' && (

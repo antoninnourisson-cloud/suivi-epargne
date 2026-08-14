@@ -112,9 +112,9 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig }) => {
       </div>
 
       {missed.extra > 0.5 && (
-        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 flex items-start gap-3">
+        <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-2xl p-5 flex items-start gap-3">
           <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
-          <div className="text-sm text-amber-800">
+          <div className="text-sm text-amber-800 dark:text-amber-300">
             <p className="font-black mb-1">Manque à gagner détecté</p>
             <p>Tu as <b>{fmt(missed.idleCash)}</b> sur compte courant. En plaçant <b>{fmt(missed.placeable)}</b> sur tes livrets non pleins (jusqu'à {missed.bestRate}%), tu générerais environ <b>{fmt(missed.extra)}/an</b> d'intérêts supplémentaires.</p>
           </div>
@@ -157,7 +157,7 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig }) => {
               <h3 className="font-black text-slate-800 dark:text-slate-100 flex items-center gap-2"><Landmark className="w-5 h-5 text-indigo-600" /> Export fiscal {currentYear}</h3>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Comptes imposables (Assurance Vie, PEA...) — utile pour ta déclaration d'impôts.</p>
             </div>
-            <button onClick={exportFiscalCsv} className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-200 px-4 py-2 rounded-xl font-bold text-sm flex-shrink-0"><FileDown className="w-4 h-4" /> Exporter (CSV)</button>
+            <button onClick={exportFiscalCsv} className="flex items-center gap-2 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 px-4 py-2 rounded-xl font-bold text-sm flex-shrink-0"><FileDown className="w-4 h-4" /> Exporter (CSV)</button>
           </div>
           <table className="w-full text-left text-sm">
             <thead className="bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700">

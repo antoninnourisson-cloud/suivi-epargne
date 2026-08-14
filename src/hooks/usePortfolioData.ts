@@ -23,6 +23,9 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
   const [syncError, setSyncError] = useState(false);       // échec de sauvegarde
   const [syncConflict, setSyncConflict] = useState(false); // écriture concurrente (autre appareil)
   const [sessionExpired, setSessionExpired] = useState(false);
+  // Horodatage de la dernière écriture confirmée sur Drive (pas juste un état local) :
+  // sert de preuve visible que la sauvegarde cloud a bien réussi, pas seulement l'affichage.
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   const driveVersionRef = useRef<string | null>(null);
   // Sauvegarde locale trouvée au démarrage et différente de ce qui vient d'être chargé
   // depuis Drive (signe qu'une sync a échoué/été bloquée avant que l'app ne se ferme).
@@ -249,6 +252,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
       driveVersionRef.current = newVersion;
       setSyncConflict(false);
       setSyncError(false);
+      setLastSavedAt(new Date());
       localStorage.removeItem('suivi_epargne_backup');
     } catch (err: any) {
       if (err?.message === 'SESSION_EXPIRED') setSessionExpired(true);
@@ -292,6 +296,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
         const newVersion = await updateConfigFile(driveFileId, buildData(), driveVersionRef.current);
         driveVersionRef.current = newVersion;
         setSyncError(false);
+        setLastSavedAt(new Date());
       } catch (err: any) {
         if (err instanceof ConflictError) {
           setSyncConflict(true); // un autre appareil a écrit : on n'écrase pas
@@ -522,6 +527,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
     syncConflict,
     sessionExpired,
     localBackup,
+    lastSavedAt,
 
     // Actions
     loadDriveData,

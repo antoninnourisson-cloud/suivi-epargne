@@ -311,9 +311,9 @@ const App: React.FC = () => {
         <div className="p-6 border-b border-slate-800">
           <h1 className="text-xl font-bold flex items-center gap-2"><div className="w-8 h-8 bg-indigo-600 rounded flex center justify-center items-center"><RefreshCcw className="w-4 h-4 text-white"/></div> Assistant Épargne</h1>
           <div className="mt-2 text-[10px] uppercase text-slate-400 dark:text-slate-500 font-bold tracking-wider flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <div className={`w-2 h-2 rounded-full ${data.isSaving ? 'bg-amber-500 animate-pulse' : data.syncError ? 'bg-rose-500' : 'bg-emerald-500'}`}></div>
-              {data.isSaving ? 'Sauvegarde...' : data.syncError ? 'Erreur sync' : 'Synchronisé'}
+            <div className="flex items-center gap-2" title={data.lastSavedAt ? `Dernière écriture confirmée sur Drive : ${data.lastSavedAt.toLocaleTimeString('fr-FR')}` : undefined}>
+              <div className={`w-2 h-2 rounded-full flex-shrink-0 ${data.isSaving ? 'bg-amber-500 animate-pulse' : data.syncError || data.syncConflict ? 'bg-rose-500' : 'bg-emerald-500'}`}></div>
+              {data.isSaving ? 'Sauvegarde...' : data.syncError ? 'Erreur sync' : data.syncConflict ? 'Conflit' : data.lastSavedAt ? `Sur Drive à ${data.lastSavedAt.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}` : 'Synchronisé'}
             </div>
             <button onClick={toggleTheme} className="text-slate-400 hover:text-white" title={isDark ? 'Passer en clair' : 'Passer en sombre'}>
               {isDark ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
@@ -348,7 +348,12 @@ const App: React.FC = () => {
       <header className="md:hidden sticky top-0 z-30 bg-slate-900 text-white px-4 py-3 flex items-center justify-between">
         <h1 className="text-base font-bold flex items-center gap-2"><div className="w-6 h-6 bg-indigo-600 rounded flex items-center justify-center"><RefreshCcw className="w-3.5 h-3.5 text-white"/></div> Assistant Épargne</h1>
         <div className="flex items-center gap-3">
-          <div className={`w-2 h-2 rounded-full ${data.isSaving ? 'bg-amber-500 animate-pulse' : data.syncError ? 'bg-rose-500' : 'bg-emerald-500'}`}></div>
+          <div className="flex items-center gap-1.5" title={data.lastSavedAt ? `Dernière écriture confirmée sur Drive : ${data.lastSavedAt.toLocaleTimeString('fr-FR')}` : undefined}>
+            <div className={`w-2 h-2 rounded-full flex-shrink-0 ${data.isSaving ? 'bg-amber-500 animate-pulse' : data.syncError || data.syncConflict ? 'bg-rose-500' : 'bg-emerald-500'}`}></div>
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">
+              {data.isSaving ? 'Sauvegarde...' : data.syncError ? 'Erreur' : data.syncConflict ? 'Conflit' : data.lastSavedAt ? data.lastSavedAt.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : 'Sync'}
+            </span>
+          </div>
           <button onClick={toggleTheme} className="text-slate-400" title="Thème">{isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}</button>
           <button onClick={handleLogout} className="text-rose-400" title="Déconnexion"><LogOut className="w-4 h-4" /></button>
         </div>
@@ -496,8 +501,8 @@ const App: React.FC = () => {
                               <td className="px-6 py-4 text-right font-black text-indigo-600 text-lg">{acc.ownedAmount.toLocaleString()} €</td>
                               <td className="px-6 py-4 text-right font-bold text-amber-500">{acc.parentalCapital.toLocaleString()} €</td>
                               <td className="px-6 py-4 text-right flex justify-end gap-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
-                                 <button onClick={(e) => { e.stopPropagation(); setEditingAccount(acc); setShowForm(true); }} className="p-2 text-indigo-600 bg-indigo-50 rounded-lg hover:bg-indigo-100"><Edit2 className="w-4 h-4"/></button>
-                                 <button onClick={(e) => { e.stopPropagation(); handleDeleteAccount(acc); }} className="p-2 text-rose-600 bg-rose-50 rounded-lg hover:bg-rose-100"><Trash2 className="w-4 h-4"/></button>
+                                 <button onClick={(e) => { e.stopPropagation(); setEditingAccount(acc); setShowForm(true); }} className="p-2 text-indigo-600 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/40 rounded-lg hover:bg-indigo-100 dark:hover:bg-indigo-900"><Edit2 className="w-4 h-4"/></button>
+                                 <button onClick={(e) => { e.stopPropagation(); handleDeleteAccount(acc); }} className="p-2 text-rose-600 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/40 rounded-lg hover:bg-rose-100 dark:hover:bg-rose-900"><Trash2 className="w-4 h-4"/></button>
                               </td>
                             </tr>
                             {editingAccount?.id === acc.id && !showForm && (
@@ -510,7 +515,7 @@ const App: React.FC = () => {
                                  {buildDisplayMovements(acc.movements).map(m => (
                                    <div key={m.id} className={`flex justify-between items-center p-3 rounded-xl text-xs border shadow-sm ${m.grouped ? 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 italic' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700'}`}>
                                      <div className="flex items-center gap-3">
-                                         <span className="text-slate-400 dark:text-slate-500 font-mono bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded">{m.date}</span>
+                                         <span className="text-slate-400 dark:text-slate-500 font-mono bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded">{m.date}</span>
                                          <span className="font-bold text-slate-700 dark:text-slate-200">{m.label}</span>
                                          {!m.grouped && <button onClick={()=>handleRenameMovement(acc.id, m.id, m.label)} className="opacity-40 hover:opacity-100"><Edit2 className="w-3 h-3 text-slate-500 dark:text-slate-400"/></button>}
                                      </div>
