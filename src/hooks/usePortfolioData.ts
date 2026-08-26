@@ -73,6 +73,20 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
   // Garde-fou anti-écrasement : tant qu'un chargement Drive n'a pas réussi,
   // on n'autorise aucune sauvegarde (évite d'écraser un bon fichier avec un état vide).
   const hasLoadedRef = useRef(false);
+  // Mutex d'écriture : la sauvegarde auto (debounce) et une résolution de conflit manuelle
+  // (forceSaveToDrive) pouvaient partir en parallèle. Chaque appel à updateConfigFile fait
+  // GET-version → PATCH → GET-version en plusieurs allers-retours réseau ; sans sérialisation,
+  // deux appels concurrents s'entrelacent et peuvent soit s'écraser silencieusement l'un
+  // l'autre, soit faire réapparaître un "conflit" juste après qu'il ait été résolu par
+  // l'utilisateur (l'appel encore en vol détecte après coup le changement de version).
+  // On chaîne donc tous les appels sur cette promesse pour n'en avoir jamais qu'un à la fois.
+  const saveMutexRef = useRef<Promise<any>>(Promise.resolve());
+  const runExclusive = useCallback(<T,>(fn: () => Promise<T>): Promise<T> => {
+    const run = () => fn();
+    const next = saveMutexRef.current.then(run, run);
+    saveMutexRef.current = next.catch(() => {});
+    return next;
+  }, []);
 
   // La perte de session (401 non récupérable) remonte via ce callback.
   useEffect(() => {
@@ -267,7 +281,9 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
   const forceSaveToDrive = useCallback(async () => {
     if (!driveFileId) return;
     try {
-      const newVersion = await updateConfigFile(driveFileId, buildData()); // sans expectedVersion : pas de contrôle de version
+      // Sérialisé (voir runExclusive) : attend qu'une sauvegarde auto déjà en vol se termine
+      // avant d'écrire, pour ne jamais courir en parallèle et voir l'une écraser l'autre.
+      const newVersion = await runExclusive(() => updateConfigFile(driveFileId, buildData())); // sans expectedVersion : pas de contrôle de version
       driveVersionRef.current = newVersion;
       setSyncConflict(false);
       setSyncError(false);
@@ -278,7 +294,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
       else if (err instanceof TypeError) setIsOffline(true);
       else setSyncError(true);
     }
-  }, [driveFileId, buildData]);
+  }, [driveFileId, buildData, runExclusive]);
 
   // Restaure la sauvegarde locale détectée au démarrage (l'utilisateur choisit de la garder
   // plutôt que la version Drive). Une sauvegarde normale s'enclenchera ensuite normalement.
@@ -317,7 +333,10 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
 
     saveTimeoutRef.current = setTimeout(async () => {
       try {
-        const newVersion = await updateConfigFile(driveFileId, buildData(), driveVersionRef.current);
+        // Sérialisé via runExclusive : si une résolution de conflit manuelle
+        // (forceSaveToDrive) est en cours, on attend qu'elle se termine avant de lire
+        // driveVersionRef.current, pour ne jamais comparer contre une version obsolète.
+        const newVersion = await runExclusive(() => updateConfigFile(driveFileId, buildData(), driveVersionRef.current));
         driveVersionRef.current = newVersion;
         setSyncError(false);
         setLastSavedAt(new Date());
@@ -345,7 +364,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
     accounts, expenses, history, expensesHistory, chatHistory, fiscalConfig, workBenefits, 
     grossAnnual, leisureBudget, projectSavings, navigoBase, navigoRate, 
     taxRateManual, extraMonthlyIncome, parentsEmail, isAuthenticated, driveFileId, isLoadingData,
-    buildData, syncConflict, sessionExpired, goals, isOffline
+    buildData, syncConflict, sessionExpired, goals, isOffline, runExclusive
   ]);
 
   // --- SNAPSHOT PATRIMOINE (alimente la courbe d'évolution) ---
