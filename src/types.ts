@@ -93,6 +93,10 @@ export interface FiscalConfig {
   salaryChargesRate: number;
   socialChargesCapital: number;
   standardAllowance: number;
+  // Plafond légal de l'abattement forfaitaire. Optionnel : les fichiers de données
+  // enregistrés avant son introduction n'ont pas ce champ, le calcul retombe alors
+  // sur DEFAULT_STANDARD_ALLOWANCE_CAP.
+  standardAllowanceCap?: number;
   ceilings: {
     livretA: number;
     ldds: number;

@@ -3,11 +3,16 @@
 // ================================================
 import { FiscalConfig, WorkBenefits } from './types';
 
+// Plafond légal de l'abattement de 10 % sur les salaires. Exporté à part pour servir de
+// repli aux données utilisateur antérieures à l'ajout du champ (rétrocompatibilité).
+export const DEFAULT_STANDARD_ALLOWANCE_CAP = 14171;
+
 export const DEFAULT_FISCAL_CONFIG: FiscalConfig = {
-  salaryChargesRate: 0.2232, 
+  salaryChargesRate: 0.2232,
   socialChargesCapital: 0.172,
   standardAllowance: 0.10,
-  
+  standardAllowanceCap: DEFAULT_STANDARD_ALLOWANCE_CAP,
+
   ceilings: {
     livretA: 22950,
     ldds: 12000,

@@ -32,7 +32,12 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig }) => {
     [accounts, currentYear]);
 
   const totalAnnual = rows.reduce((s, r) => s + r.annual, 0);
+  // Intérêts produits par ma part propre du capital.
   const totalAnnualOwned = rows.reduce((s, r) => s + r.annualOwned, 0);
+  // Intérêts produits par le capital de mes parents : ils me les offrent en fin
+  // d'année, donc le TOTAL est bien ce qui me revient (je ne touche pas à leur
+  // capital, mais j'encaisse 100 % des intérêts).
+  const totalAnnualParental = Math.max(0, totalAnnual - totalAnnualOwned);
 
   // Manque à gagner : cash dormant sur compte courant vs place possible sur livrets non pleins.
   const missed = useMemo(() => {
@@ -100,14 +105,16 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig }) => {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="bg-slate-900 text-white p-6 rounded-2xl">
-          <p className="text-slate-400 dark:text-slate-500 text-xs font-bold uppercase mb-1 flex items-center gap-2"><TrendingUp className="w-4 h-4" /> Intérêts annuels (total)</p>
+          <p className="text-slate-400 dark:text-slate-500 text-xs font-bold uppercase mb-1 flex items-center gap-2"><TrendingUp className="w-4 h-4" /> Intérêts annuels qui me reviennent</p>
           <p className="text-4xl font-black text-emerald-400">{fmt(totalAnnual)}</p>
-          <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">soit ≈ {fmt(totalAnnual / 12)}/mois</p>
+          <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">soit ≈ {fmt(totalAnnual / 12)}/mois — capital parental inclus</p>
         </div>
         <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-6 rounded-2xl">
-          <p className="text-slate-400 dark:text-slate-500 text-xs font-bold uppercase mb-1 flex items-center gap-2"><PiggyBank className="w-4 h-4" /> Dont ma part</p>
-          <p className="text-4xl font-black text-indigo-600">{fmt(totalAnnualOwned)}</p>
-          <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">hors capital parental</p>
+          <p className="text-slate-400 dark:text-slate-500 text-xs font-bold uppercase mb-1 flex items-center gap-2"><PiggyBank className="w-4 h-4" /> Dont offerts par mes parents</p>
+          <p className="text-4xl font-black text-indigo-600">{fmt(totalAnnualParental)}</p>
+          <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
+            Intérêts générés par leur capital, qu'ils m'offrent en fin d'année. Le reste ({fmt(totalAnnualOwned)}) vient de ma part propre.
+          </p>
         </div>
       </div>
 

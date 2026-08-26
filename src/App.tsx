@@ -185,12 +185,54 @@ const App: React.FC = () => {
   // --- ACTIONS METIER ---
 
   const handleSaveAccount = (acc: SavingsAccount) => {
+    const today = new Date().toISOString().split('T')[0];
+    const existing = data.accounts.find(a => a.id === acc.id);
+
+    // Garde-fou d'invariant : totalAmount DOIT valoir ownedAmount + parentalCapital.
+    // Le formulaire pouvait le rompre (saisir une part personnelle supérieure au total
+    // laissait la part parentale inchangée), et la première opération suivante recalculait
+    // le total depuis l'invariant, faisant bondir le solde d'un coup. On normalise ici
+    // plutôt que de faire confiance à la saisie.
+    const owned = Number.isFinite(acc.ownedAmount) ? acc.ownedAmount : 0;
+    const parental = Number.isFinite(acc.parentalCapital) ? acc.parentalCapital : 0;
+    const normalized: SavingsAccount = {
+      ...acc,
+      ownedAmount: owned,
+      parentalCapital: parental,
+      totalAmount: Math.round((owned + parental) * 100) / 100,
+    };
+
+    // Un changement de solde par le formulaire d'édition doit laisser la même trace qu'une
+    // actualisation ou un ajout rapide : sans ça, l'historique des mouvements ne totalisait
+    // plus le solde, et les parents n'étaient pas prévenus d'un mouvement sur Livret A/LEP
+    // alors qu'ils l'étaient pour la même opération saisie par les deux autres chemins.
+    const ownedDiff = existing ? normalized.ownedAmount - existing.ownedAmount : 0;
+    if (existing && Math.abs(ownedDiff) > 0.001) {
+      data.notifyParentsIfNeeded([{ account: normalized, date: today }]);
+    }
+
     data.setAccounts(prev => {
-      const isNew = !prev.find(a => a.id === acc.id);
-      if (isNew && acc.ownedAmount > 0) {
-        acc.movements = [{ id: crypto.randomUUID(), date: new Date().toISOString().split('T')[0], amount: acc.ownedAmount, label: "Solde initial", type: 'IN' }];
+      const isNew = !prev.find(a => a.id === normalized.id);
+      if (isNew) {
+        const withInitial: SavingsAccount = normalized.ownedAmount > 0
+          ? { ...normalized, movements: [{ id: crypto.randomUUID(), date: today, amount: normalized.ownedAmount, label: "Solde initial", type: 'IN' }] }
+          : normalized;
+        return [...prev, withInitial];
       }
-      return [...prev.filter(a => a.id !== acc.id), acc];
+      // Remplacement en place : l'ancien `filter` puis concat renvoyait le compte édité
+      // en fin de liste, réordonnant l'affichage à chaque modification.
+      return prev.map(a => {
+        if (a.id !== normalized.id) return a;
+        if (Math.abs(ownedDiff) <= 0.001) return { ...normalized, movements: a.movements || [] };
+        const movement: AccountMovement = {
+          id: crypto.randomUUID(),
+          date: today,
+          amount: Math.abs(ownedDiff),
+          label: ownedDiff > 0 ? 'Correction de solde (+)' : 'Correction de solde (-)',
+          type: ownedDiff > 0 ? 'IN' : 'OUT',
+        };
+        return { ...normalized, movements: [...(a.movements || []), movement] };
+      });
     });
     setShowForm(false);
     setEditingAccount(undefined);
@@ -399,6 +441,12 @@ const App: React.FC = () => {
             {data.syncError && !data.sessionExpired && !data.syncConflict && !data.isOffline && (
               <div className="mb-4 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-xl p-3 text-rose-700 dark:text-rose-300 text-sm font-bold flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4"/> La dernière sauvegarde a échoué. Une nouvelle tentative aura lieu à la prochaine modification.
+              </div>
+            )}
+            {data.mailError && (
+              <div className="mb-4 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-2 text-amber-800 dark:text-amber-300 text-sm font-bold"><AlertTriangle className="w-5 h-5 flex-shrink-0"/> L'email d'alerte n'a pas pu être envoyé à {data.mailError}. Le mouvement est bien enregistré, mais vos parents n'ont pas été prévenus.</div>
+                <button onClick={data.dismissMailError} className="bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 px-4 py-2 rounded-lg font-bold text-sm flex-shrink-0">J'ai compris</button>
               </div>
             )}
             {data.localBackup && (

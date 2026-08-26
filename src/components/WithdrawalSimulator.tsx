@@ -1,6 +1,6 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { SavingsAccount, AccountType, Expense, SavingsGoal } from '../types';
-import { Calculator, Hourglass, Target, ArrowRight } from 'lucide-react';
+import { Calculator, Hourglass, Target, ArrowRight, Info } from 'lucide-react';
 
 interface SimulatorProps {
   accounts: SavingsAccount[];
@@ -19,8 +19,29 @@ export const WithdrawalSimulator: React.FC<SimulatorProps> = ({ accounts, expens
   const [amount, setAmount] = useState('');
   const [goalId, setGoalId] = useState(goals[0]?.id || '');
 
+  // Les sélections sont initialisées au montage uniquement : si la liste change en
+  // cours de session (compte supprimé, objectif renommé/retiré), on retombe sur une
+  // valeur valide, sinon le panneau disparaît sans explication.
+  useEffect(() => {
+    if (!eligibleAccounts.some(a => a.id === accountId)) {
+      setAccountId(eligibleAccounts[0]?.id || '');
+    }
+  }, [eligibleAccounts, accountId]);
+
+  useEffect(() => {
+    if (!goals.some(g => g.id === goalId)) {
+      setGoalId(goals[0]?.id || '');
+    }
+  }, [goals, goalId]);
+
   const account = eligibleAccounts.find(a => a.id === accountId);
-  const withdrawAmount = Math.max(0, Math.min(parseFloat(amount) || 0, account?.ownedAmount || 0));
+  const available = account?.ownedAmount || 0;
+  const requestedAmount = parseFloat(amount) || 0;
+  const withdrawAmount = Math.max(0, Math.min(requestedAmount, available));
+  // Le plafonnement au montant possédé était silencieux : on le rend explicite,
+  // car le capital des parents présent sur le compte n'est pas mobilisable.
+  const isCapped = requestedAmount > available;
+  const parentalCapital = account?.parentalCapital || 0;
 
   const totalFixed = useMemo(() => expenses.reduce((s, e) => s + e.amount, 0), [expenses]);
 
@@ -66,6 +87,15 @@ export const WithdrawalSimulator: React.FC<SimulatorProps> = ({ accounts, expens
         <div>
           <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Montant à retirer (€)</label>
           <input type="number" value={amount} onChange={e => setAmount(e.target.value)} placeholder="0" className="w-full p-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold text-slate-800 dark:text-slate-100" />
+          {isCapped && (
+            <p className="mt-2 flex items-start gap-1.5 text-[11px] font-bold text-amber-700 dark:text-amber-300">
+              <Info className="w-3.5 h-3.5 flex-shrink-0 mt-px" />
+              <span>
+                Simulation ramenée à <b>{fmt(available)}</b>, le maximum disponible sur ce compte.
+                {parentalCapital > 0 && <> Les <b>{fmt(parentalCapital)}</b> de capital parental présents dessus ne sont pas mobilisables.</>}
+              </span>
+            </p>
+          )}
         </div>
       </div>
 

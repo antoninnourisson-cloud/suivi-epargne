@@ -14,6 +14,58 @@ import {
   getFileRevision, setOnAuthLost, ConflictError 
 } from '../services/googleDriveService';
 
+// Miroir local de l'état courant : filet anti-crash, réécrit à chaque modification.
+const BACKUP_KEY = 'suivi_epargne_backup';
+// Quarantaine : copie de modifications qui n'ont JAMAIS atteint Drive, détectée au
+// démarrage. Volontairement distincte du miroir ci-dessus, qui est écrasé en continu —
+// sans cette séparation, la première saisie suivant l'ouverture détruisait la trace des
+// modifications non synchronisées, et la bannière de restauration n'était qu'un one-shot
+// non durable (un rechargement après cette saisie les rendait irrécupérables).
+const PENDING_KEY = 'suivi_epargne_pending';
+
+type StoredSnapshot = { savedAt: string; fileId?: string; data: GlobalAppData };
+
+/**
+ * Projette des données sur une forme canonique comparable, en appliquant les mêmes
+ * valeurs par défaut que l'état du hook. Indispensable pour comparer un fichier Drive
+ * (qui peut être ancien, avec des champs absents ou dans un autre ordre) à une
+ * sauvegarde locale sans générer de faux « écarts ».
+ *
+ * `lastView` est exclu : c'est de la préférence d'affichage, pas une donnée financière,
+ * et elle ne doit pas faire croire à des modifications perdues.
+ */
+const canonicalize = (data: GlobalAppData | null | undefined): string => {
+  if (!data) return '';
+  const c = data.config || ({} as GlobalAppData['config']);
+  return JSON.stringify({
+    accounts: (data.accounts || []).map(a => ({ ...a, movements: a.movements || [] })),
+    expenses: data.expenses || [],
+    history: data.history || [],
+    expensesHistory: data.expensesHistory || [],
+    chatHistory: data.chatHistory || [],
+    goals: data.goals || [],
+    fiscalConfig: data.fiscalConfig || null,
+    workBenefits: data.workBenefits || null,
+    config: {
+      grossAnnual: c.grossAnnual ?? null,
+      leisureBudget: c.leisureBudget ?? null,
+      projectSavings: c.projectSavings ?? null,
+      navigoBase: c.navigoBase ?? null,
+      navigoRate: c.navigoRate ?? null,
+      taxRateManual: c.taxRateManual ?? null,
+      extraMonthlyIncome: c.extraMonthlyIncome ?? null,
+      parentsEmail: c.parentsEmail ?? null,
+    },
+  });
+};
+
+// Clé de mois en heure LOCALE. `toISOString().slice(0,7)` raisonne en UTC : le 1er du
+// mois à 00h30 à Paris (UTC+2), l'UTC est encore la veille, donc le snapshot du mois
+// courant écrasait celui du mois précédent.
+const localMonthKey = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+const localDayKey = (d: Date) => `${localMonthKey(d)}-${String(d.getDate()).padStart(2, '0')}`;
+
 export const usePortfolioData = (isAuthenticated: boolean) => {
   const [isLoadingData, setIsLoadingData] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -30,9 +82,15 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
   // sert de preuve visible que la sauvegarde cloud a bien réussi, pas seulement l'affichage.
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   const driveRevisionRef = useRef<string | null>(null);
+  // Miroir non-réactif de driveFileId : sert à étiqueter les sauvegardes locales avec le
+  // fichier (donc le compte Google) auquel elles appartiennent, depuis des effets qui ne
+  // doivent pas se redéclencher quand il change.
+  const driveFileIdRef = useRef<string | null>(null);
   // Sauvegarde locale trouvée au démarrage et différente de ce qui vient d'être chargé
   // depuis Drive (signe qu'une sync a échoué/été bloquée avant que l'app ne se ferme).
-  const [localBackup, setLocalBackup] = useState<{ savedAt: string; data: GlobalAppData } | null>(null);
+  const [localBackup, setLocalBackup] = useState<StoredSnapshot | null>(null);
+  // Destinataire du dernier mail d'alerte parents qui a échoué (null = rien à signaler).
+  const [mailError, setMailError] = useState<string | null>(null);
   
   // Données
   const [accounts, setAccounts] = useState<SavingsAccount[]>([]);
@@ -175,24 +233,40 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
         }
         if (data.lastView) setLastView(data.lastView);
 
-        // Mémorise la version Drive courante (détection de conflit à la sauvegarde).
+        // Mémorise la révision Drive courante (détection de conflit à la sauvegarde).
+        // En cas d'échec on laisse `null` : la sauvegarde auto refusera alors d'écrire
+        // (voir l'effet d'auto-save) plutôt que d'écraser sans contrôle de concurrence.
         try { driveRevisionRef.current = await getFileRevision(fileId); } catch { driveRevisionRef.current = null; }
 
-        // Détecte une sauvegarde locale (navigateur) dont le total des comptes diverge de
-        // ce qui vient d'être chargé depuis Drive : signe qu'une sync a été bloquée (conflit,
-        // session expirée...) avant que les modifications locales n'aient pu être écrites.
+        // Détecte des modifications locales qui n'ont jamais atteint Drive (sync bloquée
+        // par un conflit, une session expirée, une coupure réseau... avant fermeture).
+        //
+        // On compare le CONTENU canonique complet, et non plus une somme de soldes :
+        // cette somme restait identique pour un virement interne, un rééquilibrage
+        // part personnelle / part parentale, ou toute modification de charges, objectifs
+        // et réglages — autant de cas où la sauvegarde locale était donc supprimée
+        // sans alerte, et les modifications perdues silencieusement.
         try {
-          const rawBackup = localStorage.getItem('suivi_epargne_backup');
-          if (rawBackup) {
-            const backup = JSON.parse(rawBackup) as { savedAt: string; data: GlobalAppData };
-            const sum = (accs: SavingsAccount[]) => (accs || []).reduce((s, a) => s + (a.totalAmount || 0), 0);
-            const driveSum = sum(data.accounts);
-            const backupSum = sum(backup.data.accounts);
-            if (Math.abs(driveSum - backupSum) > 0.01) setLocalBackup(backup);
-            else localStorage.removeItem('suivi_epargne_backup');
+          const stored = localStorage.getItem(PENDING_KEY) || localStorage.getItem(BACKUP_KEY);
+          if (stored) {
+            const snap = JSON.parse(stored) as StoredSnapshot;
+            // Une sauvegarde rattachée à un AUTRE fichier Drive appartient à un autre
+            // compte Google : la proposer ici écraserait les données du compte courant.
+            const sameAccount = !snap.fileId || snap.fileId === fileId;
+            const diverges = canonicalize(snap.data) !== canonicalize(data);
+            if (sameAccount && diverges) {
+              // Mise en quarantaine : le miroir courant va être réécrit en continu, la
+              // quarantaine ne bougera plus jusqu'à l'arbitrage de l'utilisateur.
+              localStorage.setItem(PENDING_KEY, JSON.stringify({ ...snap, fileId }));
+              setLocalBackup(snap);
+            } else {
+              localStorage.removeItem(PENDING_KEY);
+              if (!sameAccount) localStorage.removeItem(BACKUP_KEY);
+            }
           }
-        } catch { /* backup illisible : on l'ignore, pas de perte supplémentaire */ }
+        } catch { /* sauvegarde illisible : on l'ignore, pas de perte supplémentaire */ }
 
+        driveFileIdRef.current = fileId;
         // Chargement réussi : les sauvegardes automatiques sont désormais autorisées.
         hasLoadedRef.current = true;
       }
@@ -272,6 +346,12 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
   // Recharge depuis Drive (résout un conflit en récupérant la dernière version distante,
   // AU PRIX de l'abandon des modifications locales non sauvegardées).
   const reloadFromDrive = useCallback(() => {
+    // L'utilisateur abandonne explicitement ses modifications locales : on purge la
+    // quarantaine ET le miroir, sinon le rechargement qui suit les redétecterait comme
+    // divergentes et reproposerait aussitôt de restaurer ce qu'il vient de refuser.
+    localStorage.removeItem(PENDING_KEY);
+    localStorage.removeItem(BACKUP_KEY);
+    setLocalBackup(null);
     setSyncConflict(false);
     loadDriveData();
   }, [loadDriveData]);
@@ -288,7 +368,9 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
       setSyncConflict(false);
       setSyncError(false);
       setLastSavedAt(new Date());
-      localStorage.removeItem('suivi_epargne_backup');
+      // L'état local est désormais sur Drive : plus rien en attente.
+      localStorage.removeItem(PENDING_KEY);
+      setLocalBackup(null);
     } catch (err: any) {
       if (err?.message === 'SESSION_EXPIRED') setSessionExpired(true);
       else if (err instanceof TypeError) setIsOffline(true);
@@ -301,11 +383,14 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
   const restoreLocalBackup = useCallback(() => {
     if (!localBackup) return;
     applyData(localBackup.data);
+    // La quarantaine a rempli son rôle : les données sont revenues dans l'état, que
+    // l'auto-save va pousser sur Drive.
+    localStorage.removeItem(PENDING_KEY);
     setLocalBackup(null);
   }, [localBackup, applyData]);
 
   const dismissLocalBackup = useCallback(() => {
-    localStorage.removeItem('suivi_epargne_backup');
+    localStorage.removeItem(PENDING_KEY);
     setLocalBackup(null);
   }, []);
 
@@ -313,10 +398,19 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
   // Miroir de l'état courant dans le navigateur : si une sauvegarde Drive reste bloquée
   // (conflit, session expirée, hors-ligne...), les modifications ne sont jamais perdues
   // silencieusement — elles restent récupérables via ce backup même après un rechargement.
+  // Étiqueté avec le fichier Drive courant pour ne jamais être réappliqué à un autre
+  // compte Google. Ce miroir est écrasé en continu ; ce qui doit survivre à l'arbitrage
+  // de l'utilisateur vit dans PENDING_KEY (voir loadDriveData).
   useEffect(() => {
     if (!hasLoadedRef.current) return;
-    try { localStorage.setItem('suivi_epargne_backup', JSON.stringify({ savedAt: new Date().toISOString(), data: buildData() })); }
-    catch { /* quota localStorage dépassé : tant pis, ce n'est qu'un filet de secours */ }
+    try {
+      const snapshot: StoredSnapshot = {
+        savedAt: new Date().toISOString(),
+        fileId: driveFileIdRef.current ?? undefined,
+        data: buildData(),
+      };
+      localStorage.setItem(BACKUP_KEY, JSON.stringify(snapshot));
+    } catch { /* quota localStorage dépassé : tant pis, ce n'est qu'un filet de secours */ }
   }, [buildData]);
 
   // --- SAUVEGARDE AUTO ---
@@ -336,7 +430,17 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
         // Sérialisé via runExclusive : si une résolution de conflit manuelle
         // (forceSaveToDrive) est en cours, on attend qu'elle se termine avant de lire
         // driveRevisionRef.current, pour ne jamais comparer contre une révision obsolète.
-        const newRevision = await runExclusive(() => updateConfigFile(driveFileId, buildData(), driveRevisionRef.current));
+        const newRevision = await runExclusive(async () => {
+          // Sans révision de référence, updateConfigFile écrirait SANS contrôle de
+          // concurrence : une seule lecture ratée au chargement (rate-limit Drive) aurait
+          // donc désactivé la détection de conflit pour toute la session, écrasant en
+          // silence les modifications venues d'un autre appareil. On tente de la
+          // récupérer, et on renonce à écrire si c'est impossible.
+          if (!driveRevisionRef.current) {
+            driveRevisionRef.current = await getFileRevision(driveFileId);
+          }
+          return updateConfigFile(driveFileId, buildData(), driveRevisionRef.current);
+        });
         driveRevisionRef.current = newRevision;
         setSyncError(false);
         setLastSavedAt(new Date());
@@ -367,14 +471,28 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
     buildData, syncConflict, sessionExpired, goals, isOffline, runExclusive
   ]);
 
+  // Réveil périodique pour que les snapshots ci-dessous s'ouvrent sur le nouveau mois même
+  // sans aucune saisie (PWA laissée ouverte, ou mois sans opération) : sans ça, ces effets
+  // ne se déclenchant que sur un changement de données, l'historique pouvait sauter un mois.
+  const [monthTick, setMonthTick] = useState(() => localMonthKey(new Date()));
+  useEffect(() => {
+    const sync = () => setMonthTick(localMonthKey(new Date()));
+    const timer = setInterval(sync, 60 * 60 * 1000); // 1 h : largement suffisant
+    document.addEventListener('visibilitychange', sync);
+    return () => { clearInterval(timer); document.removeEventListener('visibilitychange', sync); };
+  }, []);
+
   // --- SNAPSHOT PATRIMOINE (alimente la courbe d'évolution) ---
   // Enregistre/actualise un point par mois avec le total et la part personnelle.
+  // Dates en heure LOCALE (voir localMonthKey) : en UTC, une saisie le 1er du mois à
+  // 00h30 heure de Paris était rattachée au mois précédent et écrasait son point.
   useEffect(() => {
     if (!hasLoadedRef.current) return;
     const total = accounts.reduce((s, a) => s + a.totalAmount, 0);
     const owned = accounts.reduce((s, a) => s + a.ownedAmount, 0);
-    const month = new Date().toISOString().slice(0, 7); // AAAA-MM
-    const today = new Date().toISOString().split('T')[0];
+    const now = new Date();
+    const month = localMonthKey(now); // AAAA-MM
+    const today = localDayKey(now);
     setHistory(prev => {
       const existing = prev.find(s => s.date.startsWith(month));
       if (existing && existing.totalAmount === total && existing.ownedAmount === owned) return prev;
@@ -382,14 +500,15 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
       const snapshot: PortfolioSnapshot = { date: existing ? existing.date : today, totalAmount: total, ownedAmount: owned };
       return [...others, snapshot].sort((a, b) => a.date.localeCompare(b.date));
     });
-  }, [accounts]);
+  }, [accounts, monthTick]);
 
   // --- SNAPSHOT CHARGES (alimente la répartition dans le temps) ---
   useEffect(() => {
     if (!hasLoadedRef.current) return;
     const total = expenses.reduce((s, e) => s + e.amount, 0);
-    const month = new Date().toISOString().slice(0, 7);
-    const today = new Date().toISOString().split('T')[0];
+    const now = new Date();
+    const month = localMonthKey(now);
+    const today = localDayKey(now);
     setExpensesHistory(prev => {
       const existing = prev.find(s => s.date.startsWith(month));
       if (existing && existing.total === total) return prev;
@@ -397,7 +516,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
       const snapshot: ExpenseSnapshot = { date: existing ? existing.date : today, total };
       return [...others, snapshot].sort((a, b) => a.date.localeCompare(b.date));
     });
-  }, [expenses]);
+  }, [expenses, monthTick]);
 
   // Construit et envoie l'email récapitulatif aux parents si un mouvement Livret A/LEP
   // est détecté. Factorisé pour être réutilisable par l'ajout rapide (FAB) et par les
@@ -462,7 +581,15 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
     `;
 
     if (shouldSendMail && parentsEmail) {
-        sendGmail(parentsEmail, `Mise à jour Épargne`, mailBody);
+        // Envoi volontairement non bloquant (la saisie ne doit pas attendre le réseau),
+        // mais l'échec doit être VISIBLE : sinon un quota Gmail atteint ou un scope révoqué
+        // laissait croire que les parents avaient été prévenus alors que rien n'était parti.
+        setMailError(null);
+        sendGmail(parentsEmail, `Mise à jour Épargne`, mailBody)
+          .catch(err => {
+            console.error('Envoi du mail aux parents échoué', err);
+            setMailError(parentsEmail);
+          });
     } else if (shouldSendMail && !parentsEmail) {
         console.warn("⚠️ Mouvement détecté mais aucun email parent configuré.");
     }
@@ -536,6 +663,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
   const resetData = () => {
       hasLoadedRef.current = false;
       driveRevisionRef.current = null;
+      driveFileIdRef.current = null;
       setSyncError(false);
       setSyncConflict(false);
       setSessionExpired(false);
@@ -546,6 +674,13 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
       setChatHistory([]);
       setGoals([]);
       setDriveFileId(null);
+      // Purge des sauvegardes locales à la déconnexion : sans ça, se reconnecter avec un
+      // AUTRE compte Google proposait de restaurer les données du compte précédent, et
+      // accepter écrasait puis synchronisait ces données dans le Drive du nouveau compte.
+      // (Les snapshots sont désormais étiquetés par fileId, ceci est la seconde barrière.)
+      localStorage.removeItem(BACKUP_KEY);
+      localStorage.removeItem(PENDING_KEY);
+      setLocalBackup(null);
   };
 
   return {
@@ -577,6 +712,8 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
     localBackup,
     lastSavedAt,
     isOffline,
+    mailError,
+    dismissMailError: () => setMailError(null),
 
     // Actions
     loadDriveData,

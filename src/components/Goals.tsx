@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Expense, FiscalConfig, WorkBenefits, SavingsGoal } from '../types';
 import { computeIncome, computeSavingsCapacity } from '../lib/finance';
+import { monthsBetween, parseISODate } from '../lib/dates';
 import { Target, Plus, Trash2, Check, X, Calendar, TrendingUp, Flag } from 'lucide-react';
 
 interface IncomeCfg {
@@ -23,8 +24,6 @@ interface GoalsProps {
 }
 
 const fmt = (n: number) => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(n);
-const monthsBetween = (from: Date, to: Date) =>
-  (to.getFullYear() - from.getFullYear()) * 12 + (to.getMonth() - from.getMonth()) + (to.getDate() - from.getDate()) / 30;
 
 export const Goals: React.FC<GoalsProps> = ({ goals, onUpdateGoals, expenses, income, fiscalConfig, workBenefits }) => {
   const [isAdding, setIsAdding] = useState(false);
@@ -97,14 +96,17 @@ export const Goals: React.FC<GoalsProps> = ({ goals, onUpdateGoals, expenses, in
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {goals.map(g => {
-          const pct = g.targetAmount > 0 ? Math.min(100, (g.savedAmount / g.targetAmount) * 100) : 0;
+          // Le pourcentage est borné entre 0 et 100 : un savedAmount négatif (saisie
+          // erronée) produirait sinon une largeur CSS invalide sur la barre de progression.
+          const pct = g.targetAmount > 0 ? Math.min(100, Math.max(0, (g.savedAmount / g.targetAmount) * 100)) : 0;
           const remaining = Math.max(0, g.targetAmount - g.savedAmount);
-          const done = remaining <= 0;
+          // Une cible à 0 € n'est pas un objectif « atteint » : c'est un objectif non renseigné.
+          const done = g.targetAmount > 0 && remaining <= 0;
           const monthsToGoal = capacity > 0 ? remaining / capacity : Infinity;
 
           let deadlineInfo: { text: string; ok: boolean } | null = null;
           if (g.deadline && !done) {
-            const monthsLeft = monthsBetween(new Date(), new Date(g.deadline));
+            const monthsLeft = monthsBetween(new Date(), parseISODate(g.deadline));
             if (monthsLeft <= 0) deadlineInfo = { text: 'Échéance dépassée', ok: false };
             else {
               const requiredMonthly = remaining / monthsLeft;

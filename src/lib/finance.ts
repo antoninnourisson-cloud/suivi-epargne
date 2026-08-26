@@ -4,6 +4,7 @@
 // Fonctions pures, testables, réutilisées par le Pilotage et le Dashboard.
 // ================================================
 import { FiscalConfig, TaxBracket, WorkBenefits, RateChange } from '../types';
+import { DEFAULT_STANDARD_ALLOWANCE_CAP } from '../constants';
 
 export interface IncomeInput {
   grossAnnual: number;
@@ -35,16 +36,31 @@ export interface IncomeBreakdown {
  * `limit` = borne supérieure de la tranche (Infinity ou undefined = dernière tranche).
  */
 export const computeIncomeTax = (taxableAnnual: number, brackets: TaxBracket[]): number => {
+  // Le barème est éditable dans les Paramètres, et « Ajouter tranche » insère {limit:0} en FIN
+  // de liste : on ne peut donc jamais supposer qu'il arrive trié. Sans ce tri, deux tranches
+  // permutées gonflent l'impôt (et une tranche Infinity placée en 1re position taxe tout le
+  // revenu au taux marginal maximum).
+  const sorted = brackets
+    .map(bracket => ({
+      limit:
+        bracket.limit === null || bracket.limit === undefined ? Infinity : bracket.limit,
+      rate: bracket.rate,
+    }))
+    // Comparaison protégée : Infinity - Infinity vaut NaN et casserait le tri.
+    .sort((a, b) => (a.limit === b.limit ? 0 : a.limit - b.limit));
+
+  // Une assiette négative (revenu nul, abattement supérieur au net) ne génère aucun impôt.
+  const taxableTotal = Math.max(0, taxableAnnual);
+
   let taxAmount = 0;
   let previousLimit = 0;
-  for (const bracket of brackets) {
-    const limit =
-      bracket.limit === null || bracket.limit === undefined ? Infinity : bracket.limit;
-    if (taxableAnnual > previousLimit) {
-      const taxable = Math.min(taxableAnnual, limit) - previousLimit;
-      taxAmount += taxable * bracket.rate;
-      previousLimit = limit;
-    }
+  for (const bracket of sorted) {
+    if (taxableTotal <= previousLimit) break;
+    const taxable = Math.max(0, Math.min(taxableTotal, bracket.limit) - previousLimit);
+    taxAmount += taxable * bracket.rate;
+    // previousLimit doit rester monotone : une borne en doublon ou inférieure ne doit pas
+    // faire reculer le curseur, sinon la même part de revenu serait taxée deux fois.
+    previousLimit = Math.max(previousLimit, bracket.limit);
   }
   return taxAmount;
 };
@@ -77,15 +93,32 @@ export const computeIncome = (
     : 0;
 
   const netBeforeTax = netSalaryOnly + navigoGain + input.extraMonthlyIncome;
-  const netTaxableYear =
-    (netSalaryOnly + input.extraMonthlyIncome) * 12 * (1 - fiscalConfig.standardAllowance);
+
+  // Le remboursement transport est exonéré : il est volontairement absent de l'assiette.
+  const netAnnualBeforeAllowance = (netSalaryOnly + input.extraMonthlyIncome) * 12;
+  // L'abattement de 10 % est plafonné par la loi ; sans plafond l'impôt des hauts revenus est
+  // fortement sous-estimé. Le champ étant récent, on retombe sur le plafond par défaut si les
+  // données de l'utilisateur ne le contiennent pas (ou contiennent une valeur inexploitable),
+  // afin de ne jamais propager un NaN dans tout le calcul du reste à vivre.
+  const allowanceCap = Number.isFinite(fiscalConfig.standardAllowanceCap as number)
+    ? (fiscalConfig.standardAllowanceCap as number)
+    : DEFAULT_STANDARD_ALLOWANCE_CAP;
+  const standardAllowanceAmount = Math.min(
+    Math.max(0, netAnnualBeforeAllowance * fiscalConfig.standardAllowance),
+    allowanceCap
+  );
+  const netTaxableYear = Math.max(0, netAnnualBeforeAllowance - standardAllowanceAmount);
 
   const taxAmount = computeIncomeTax(netTaxableYear, fiscalConfig.taxBrackets);
   const monthlyTax = taxAmount / 12;
   const autoRate = netTaxableYear > 0 ? (taxAmount / netTaxableYear) * 100 : 0;
 
+  // Le taux forcé doit porter sur la MÊME assiette imposable que le barème automatique :
+  // l'appliquer à netBeforeTax revenait à imposer le remboursement Navigo, non imposable.
   const effectiveMonthlyTax =
-    input.taxRateManual > 0 ? netBeforeTax * (input.taxRateManual / 100) : monthlyTax;
+    input.taxRateManual > 0
+      ? (netTaxableYear / 12) * (input.taxRateManual / 100)
+      : monthlyTax;
 
   const superNetRaw = netBeforeTax - mutuelleCost - swileCost;
   const superNet = superNetRaw - effectiveMonthlyTax;
@@ -130,28 +163,51 @@ export const computeWeightedAnnualRate = (
 ): number => {
   if (!rateHistory || rateHistory.length === 0) return currentRate;
 
-  const yearStart = new Date(Date.UTC(year, 0, 1));
-  const yearEnd = new Date(Date.UTC(year, 11, 31));
-  const now = new Date();
-  const effectiveEnd = now < yearEnd ? now : yearEnd;
-  if (effectiveEnd < yearStart) return currentRate;
+  const yearStart = Date.UTC(year, 0, 1);
+  // Borne EXCLUSIVE au 1er janvier suivant : avec le 31/12 comme borne, une année pleine ne
+  // pesait que 364 jours et un changement daté du 31/12 avait un poids nul.
+  const yearEnd = Date.UTC(year + 1, 0, 1);
+  const now = Date.now();
+  const effectiveEnd = Math.min(now, yearEnd);
+  // Année encore à venir : rien à pondérer, le taux courant est la seule information.
+  if (effectiveEnd <= yearStart) return currentRate;
 
-  // Segments [ {date de début, taux} ... ] triés chronologiquement, taux courant en dernier.
-  const segments = [...rateHistory].sort((a, b) => a.date.localeCompare(b.date));
-  segments.push({ date: new Date().toISOString().split('T')[0], rate: currentRate });
+  // Deux changements à la même date sont contradictoires. On ne garde que la DERNIÈRE saisie
+  // du tableau, pour que le résultat ne dépende plus de l'ordre d'un tri stable.
+  const lastRateByDate = new Map<string, number>();
+  for (const change of rateHistory) lastRateByDate.set(change.date, change.rate);
+
+  const changes = [...lastRateByDate.entries()]
+    .map(([date, rate]) => ({ date, rate }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  // Un changement daté du jour J marque la FIN de validité du taux historisé (l'app stocke
+  // l'ANCIEN taux le jour où il est remplacé) : le taux historisé i court donc du changement
+  // précédent jusqu'au sien, et le taux COURANT prend le relais depuis le dernier changement
+  // jusqu'à la fin de la période — et non depuis aujourd'hui, ce qui lui donnait quelques
+  // heures de poids sur l'année en cours et zéro jour sur une année passée.
+  const segments = changes.map((change, i) => ({
+    // null = "depuis toujours" : le tout premier taux couvre aussi le début de l'année.
+    start: i === 0 ? null : Date.parse(changes[i - 1].date),
+    end: Date.parse(change.date) as number | null,
+    rate: change.rate,
+  }));
+  segments.push({
+    start: Date.parse(changes[changes.length - 1].date),
+    end: null,
+    rate: currentRate,
+  });
 
   let totalDays = 0;
   let weightedSum = 0;
 
-  for (let i = 0; i < segments.length; i++) {
-    const segStart = new Date(segments[i].date);
-    const segEndRaw = i + 1 < segments.length ? new Date(segments[i + 1].date) : effectiveEnd;
-    const start = segStart > yearStart ? segStart : yearStart;
-    const end = segEndRaw < effectiveEnd ? segEndRaw : effectiveEnd;
-    const days = (end.getTime() - start.getTime()) / (1000 * 3600 * 24);
+  for (const segment of segments) {
+    const start = Math.max(segment.start ?? -Infinity, yearStart);
+    const end = Math.min(segment.end ?? Infinity, effectiveEnd);
+    const days = (end - start) / (1000 * 3600 * 24);
     if (days > 0) {
       totalDays += days;
-      weightedSum += days * segments[i].rate;
+      weightedSum += days * segment.rate;
     }
   }
 
