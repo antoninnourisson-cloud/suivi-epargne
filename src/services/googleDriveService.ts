@@ -156,12 +156,23 @@ export const readConfigFile = async (fileId: string): Promise<any> => {
   return await res.json();
 };
 
-// Numéro de version du fichier Drive : sert à détecter les modifications
-// concurrentes (autre appareil) avant d'écraser.
-export const getFileVersion = async (fileId: string): Promise<string> => {
-  const res = await authedFetch(`https://www.googleapis.com/drive/v3/files/${fileId}?fields=version`);
+/**
+ * Identifiant de la révision courante du contenu : sert à détecter les modifications
+ * concurrentes (autre appareil) avant d'écraser.
+ *
+ * On utilise `headRevisionId` et SURTOUT PAS `version` : le champ `version` de Drive
+ * compte toutes les mutations du fichier, métadonnées incluses, et il continue de
+ * s'incrémenter tout seul quelques secondes APRÈS une écriture (mesuré : un simple
+ * PATCH le fait passer de N à N+1 immédiatement, puis à N+2 ~2 s plus tard, sans
+ * aucune intervention extérieure). Le relire juste après un PATCH donnait donc une
+ * valeur périmée d'avance, et la sauvegarde suivante croyait détecter un autre
+ * appareil → faux conflits à répétition sur un seul et même appareil.
+ * `headRevisionId` ne change, lui, qu'à une vraie écriture de contenu.
+ */
+export const getFileRevision = async (fileId: string): Promise<string> => {
+  const res = await authedFetch(`https://www.googleapis.com/drive/v3/files/${fileId}?fields=headRevisionId`);
   const data = await res.json();
-  return String(data.version ?? '');
+  return String(data.headRevisionId ?? '');
 };
 
 export const createConfigFile = async (data: any): Promise<string> => {
@@ -183,25 +194,31 @@ export class ConflictError extends Error {
 }
 
 /**
- * Sauvegarde le fichier. Si expectedVersion est fourni et que la version Drive
- * a changé entre-temps (écriture depuis un autre appareil), lève ConflictError
- * au lieu d'écraser. Retourne la nouvelle version.
+ * Sauvegarde le fichier. Si expectedRevision est fourni et que la révision Drive a
+ * changé entre-temps (écriture depuis un autre appareil), lève ConflictError au lieu
+ * d'écraser. Retourne la nouvelle révision, lue directement dans la réponse du PATCH
+ * (`fields=headRevisionId`) : c'est la valeur autoritative post-écriture, et ça évite
+ * l'aller-retour supplémentaire que demandait l'ancienne relecture de version.
  */
 export const updateConfigFile = async (
   fileId: string,
   data: any,
-  expectedVersion?: string | null
+  expectedRevision?: string | null
 ): Promise<string> => {
-  if (expectedVersion != null && expectedVersion !== '') {
-    const current = await getFileVersion(fileId);
-    if (current && current !== expectedVersion) throw new ConflictError();
+  if (expectedRevision != null && expectedRevision !== '') {
+    const current = await getFileRevision(fileId);
+    if (current && current !== expectedRevision) throw new ConflictError();
   }
-  await authedFetch(`https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data, null, 2),
-  });
-  return await getFileVersion(fileId);
+  const res = await authedFetch(
+    `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media&fields=headRevisionId`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data, null, 2),
+    }
+  );
+  const result = await res.json();
+  return String(result.headRevisionId ?? '');
 };
 
 // --- GMAIL ---

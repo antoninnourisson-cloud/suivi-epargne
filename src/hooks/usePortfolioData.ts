@@ -11,7 +11,7 @@ import {
 } from '../constants';
 import { 
   findConfigFile, createConfigFile, readConfigFile, updateConfigFile, sendGmail,
-  getFileVersion, setOnAuthLost, ConflictError 
+  getFileRevision, setOnAuthLost, ConflictError 
 } from '../services/googleDriveService';
 
 export const usePortfolioData = (isAuthenticated: boolean) => {
@@ -29,7 +29,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
   // Horodatage de la dernière écriture confirmée sur Drive (pas juste un état local) :
   // sert de preuve visible que la sauvegarde cloud a bien réussi, pas seulement l'affichage.
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
-  const driveVersionRef = useRef<string | null>(null);
+  const driveRevisionRef = useRef<string | null>(null);
   // Sauvegarde locale trouvée au démarrage et différente de ce qui vient d'être chargé
   // depuis Drive (signe qu'une sync a échoué/été bloquée avant que l'app ne se ferme).
   const [localBackup, setLocalBackup] = useState<{ savedAt: string; data: GlobalAppData } | null>(null);
@@ -75,10 +75,10 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
   const hasLoadedRef = useRef(false);
   // Mutex d'écriture : la sauvegarde auto (debounce) et une résolution de conflit manuelle
   // (forceSaveToDrive) pouvaient partir en parallèle. Chaque appel à updateConfigFile fait
-  // GET-version → PATCH → GET-version en plusieurs allers-retours réseau ; sans sérialisation,
-  // deux appels concurrents s'entrelacent et peuvent soit s'écraser silencieusement l'un
-  // l'autre, soit faire réapparaître un "conflit" juste après qu'il ait été résolu par
-  // l'utilisateur (l'appel encore en vol détecte après coup le changement de version).
+  // GET-révision puis PATCH en plusieurs allers-retours réseau ; sans sérialisation, deux
+  // appels concurrents s'entrelacent et peuvent soit s'écraser silencieusement l'un l'autre,
+  // soit faire réapparaître un "conflit" juste après qu'il ait été résolu par l'utilisateur
+  // (l'appel encore en vol détecte après coup le changement de révision).
   // On chaîne donc tous les appels sur cette promesse pour n'en avoir jamais qu'un à la fois.
   const saveMutexRef = useRef<Promise<any>>(Promise.resolve());
   const runExclusive = useCallback(<T,>(fn: () => Promise<T>): Promise<T> => {
@@ -176,7 +176,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
         if (data.lastView) setLastView(data.lastView);
 
         // Mémorise la version Drive courante (détection de conflit à la sauvegarde).
-        try { driveVersionRef.current = await getFileVersion(fileId); } catch { driveVersionRef.current = null; }
+        try { driveRevisionRef.current = await getFileRevision(fileId); } catch { driveRevisionRef.current = null; }
 
         // Détecte une sauvegarde locale (navigateur) dont le total des comptes diverge de
         // ce qui vient d'être chargé depuis Drive : signe qu'une sync a été bloquée (conflit,
@@ -283,8 +283,8 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
     try {
       // Sérialisé (voir runExclusive) : attend qu'une sauvegarde auto déjà en vol se termine
       // avant d'écrire, pour ne jamais courir en parallèle et voir l'une écraser l'autre.
-      const newVersion = await runExclusive(() => updateConfigFile(driveFileId, buildData())); // sans expectedVersion : pas de contrôle de version
-      driveVersionRef.current = newVersion;
+      const newRevision = await runExclusive(() => updateConfigFile(driveFileId, buildData())); // sans expectedRevision : pas de contrôle de concurrence
+      driveRevisionRef.current = newRevision;
       setSyncConflict(false);
       setSyncError(false);
       setLastSavedAt(new Date());
@@ -335,9 +335,9 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
       try {
         // Sérialisé via runExclusive : si une résolution de conflit manuelle
         // (forceSaveToDrive) est en cours, on attend qu'elle se termine avant de lire
-        // driveVersionRef.current, pour ne jamais comparer contre une version obsolète.
-        const newVersion = await runExclusive(() => updateConfigFile(driveFileId, buildData(), driveVersionRef.current));
-        driveVersionRef.current = newVersion;
+        // driveRevisionRef.current, pour ne jamais comparer contre une révision obsolète.
+        const newRevision = await runExclusive(() => updateConfigFile(driveFileId, buildData(), driveRevisionRef.current));
+        driveRevisionRef.current = newRevision;
         setSyncError(false);
         setLastSavedAt(new Date());
       } catch (err: any) {
@@ -535,7 +535,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
 
   const resetData = () => {
       hasLoadedRef.current = false;
-      driveVersionRef.current = null;
+      driveRevisionRef.current = null;
       setSyncError(false);
       setSyncConflict(false);
       setSessionExpired(false);

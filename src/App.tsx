@@ -1,7 +1,7 @@
 // ================================================
 // FILE: src/App.tsx
 // ================================================
-import React, { useState, useEffect, useMemo, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
 import { SavingsAccount, AccountMovement } from './types';
 import { usePortfolioData } from './hooks/usePortfolioData';
 import { useTheme } from './hooks/useTheme';
@@ -114,13 +114,22 @@ const App: React.FC = () => {
   useEffect(() => { data.setLastView(view); }, [view]);
 
   // Toast discret de confirmation quand une sauvegarde vient de réussir.
-  const [wasSaving, setWasSaving] = useState(false);
+  // On se cale sur `lastSavedAt`, qui n'est posé QU'APRÈS une écriture Drive confirmée :
+  // se baser sur la retombée de `isSaving` affichait « Enregistré » même quand la
+  // sauvegarde venait d'échouer (conflit, session expirée, hors-ligne) — c'est-à-dire
+  // exactement dans les cas où l'utilisateur a besoin de savoir que rien n'est parti.
+  const lastToastedSaveRef = useRef<number | null>(null);
   useEffect(() => {
-    if (wasSaving && !data.isSaving && !data.syncError) {
+    if (!data.lastSavedAt) return;
+    const ts = data.lastSavedAt.getTime();
+    if (lastToastedSaveRef.current === ts) return;
+    // Pas de toast pour la toute première valeur observée (montage), seulement sur un vrai
+    // enregistrement survenu pendant la session.
+    if (lastToastedSaveRef.current !== null) {
       addToast({ message: 'Enregistré', kind: 'success', durationMs: 1500 });
     }
-    setWasSaving(data.isSaving);
-  }, [data.isSaving]);
+    lastToastedSaveRef.current = ts;
+  }, [data.lastSavedAt]);
 
   // Init Google API
   useEffect(() => {
