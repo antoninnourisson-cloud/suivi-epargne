@@ -45,6 +45,7 @@ const canonicalize = (data: GlobalAppData | null | undefined): string => {
     chatHistory: data.chatHistory || [],
     goals: data.goals || [],
     payslips: data.payslips || [],
+    activePayslipId: data.activePayslipId ?? null,
     fiscalConfig: data.fiscalConfig || null,
     workBenefits: data.workBenefits || null,
     config: {
@@ -103,6 +104,9 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [goals, setGoals] = useState<SavingsGoal[]>([]);
   const [payslips, setPayslips] = useState<PayslipRecord[]>([]);
+  // Fiche de paie servant de référence exacte au Pilotage Budgétaire (undefined = mode
+  // estimation théorique, comportement historique).
+  const [activePayslipId, setActivePayslipId] = useState<string | undefined>(undefined);
 
   // Configs
   const [grossAnnual, setGrossAnnual] = useState<number>(45000);
@@ -215,6 +219,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
         setChatHistory(data.chatHistory || []);
         setGoals(data.goals || []);
         setPayslips(data.payslips || []);
+        setActivePayslipId(data.activePayslipId || undefined);
         setFiscalConfig(data.fiscalConfig || DEFAULT_FISCAL_CONFIG);
         
         if (data.workBenefits) {
@@ -297,6 +302,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
     workBenefits,
     goals,
     payslips,
+    activePayslipId,
     config: {
       grossAnnual, leisureBudget, projectSavings, navigoBase, navigoRate,
       taxRateManual, extraMonthlyIncome, parentsEmail, geminiApiKey, pickerApiKey
@@ -304,7 +310,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
     lastView: lastViewRef.current,
   }), [accounts, expenses, history, expensesHistory, chatHistory, fiscalConfig, workBenefits, grossAnnual,
        leisureBudget, projectSavings, navigoBase, navigoRate, taxRateManual,
-       extraMonthlyIncome, parentsEmail, goals, payslips, geminiApiKey, pickerApiKey]);
+       extraMonthlyIncome, parentsEmail, goals, payslips, activePayslipId, geminiApiKey, pickerApiKey]);
 
   // Applique un objet de données (import / rechargement) à l'état.
   const applyData = useCallback((data: GlobalAppData) => {
@@ -315,6 +321,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
     setChatHistory(data.chatHistory || []);
     setGoals(data.goals || []);
     setPayslips(data.payslips || []);
+    setActivePayslipId(data.activePayslipId || undefined);
     if (data.fiscalConfig) setFiscalConfig(data.fiscalConfig);
     if (data.workBenefits) setWorkBenefits(data.workBenefits);
     if (data.config) {
@@ -482,7 +489,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
     grossAnnual, leisureBudget, projectSavings, navigoBase, navigoRate, 
     taxRateManual, extraMonthlyIncome, parentsEmail, geminiApiKey, pickerApiKey,
     isAuthenticated, driveFileId, isLoadingData,
-    buildData, syncConflict, sessionExpired, goals, payslips, isOffline, runExclusive
+    buildData, syncConflict, sessionExpired, goals, payslips, activePayslipId, isOffline, runExclusive
   ]);
 
   // Réveil périodique pour que les snapshots ci-dessous s'ouvrent sur le nouveau mois même
@@ -688,6 +695,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
       setChatHistory([]);
       setGoals([]);
       setPayslips([]);
+      setActivePayslipId(undefined);
       setDriveFileId(null);
       // Purge des sauvegardes locales à la déconnexion : sans ça, se reconnecter avec un
       // AUTRE compte Google proposait de restaurer les données du compte précédent, et
@@ -707,6 +715,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
     chatHistory, setChatHistory,
     goals, setGoals,
     payslips, setPayslips,
+    activePayslipId, setActivePayslipId,
     fiscalConfig, setFiscalConfig,
     workBenefits, setWorkBenefits,
     grossAnnual, setGrossAnnual,

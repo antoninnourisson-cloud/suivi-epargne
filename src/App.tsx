@@ -318,21 +318,30 @@ const App: React.FC = () => {
     });
   };
 
-  // Reporte le brut d'une fiche de paie dans le Pilotage Budgétaire, extrapolé sur l'année
-  // (le mois extrait peut être partiel — ex: début de contrat en cours de mois — donc ce
-  // n'est qu'une estimation, jamais appliquée sans confirmation explicite).
+  // Bascule le Pilotage Budgétaire sur les chiffres EXACTS de cette fiche de paie (brut,
+  // charges, navigo, mutuelle, titres resto, impôt réellement prélevé), à la place de la
+  // formule théorique — utile pour un mois réel plutôt que pour simuler un salaire
+  // hypothétique. Le brut annuel affiché est extrapolé (mois × 12, potentiellement partiel
+  // — ex: début de contrat en cours de mois) ; le reste du détail n'est, lui, pas recalculé
+  // du tout : ce sont les vrais montants de la fiche, verbatim.
   const handleApplyPayslipToPilotage = (p: PayslipRecord) => {
     if (p.extracted.grossAmount === undefined) return;
     const estimate = Math.round(p.extracted.grossAmount * 12);
     setDialog({
       open: true, kind: 'confirm', confirmLabel: 'Appliquer',
-      title: 'Mettre à jour le Pilotage Budgétaire',
-      message: `Le brut annuel sera remplacé par ${estimate.toLocaleString('fr-FR')} € (estimation basée sur le brut de ${p.extracted.period || 'cette fiche'} × 12), à la place de ${Math.round(data.grossAnnual).toLocaleString('fr-FR')} € actuellement.`,
+      title: 'Utiliser les chiffres réels de cette fiche',
+      message: `Le Pilotage Budgétaire affichera les montants exacts de la fiche de ${p.extracted.period || 'cette fiche'} (brut, charges, impôt réellement prélevé...) à la place de la formule théorique. Le brut annuel sera aussi mis à jour (${estimate.toLocaleString('fr-FR')} €, extrapolé), à la place de ${Math.round(data.grossAnnual).toLocaleString('fr-FR')} € actuellement.`,
       onConfirm: () => {
         data.setGrossAnnual(estimate);
-        addToast({ message: 'Brut annuel mis à jour dans le Pilotage', kind: 'success' });
+        data.setActivePayslipId(p.id);
+        addToast({ message: 'Pilotage basé sur ta fiche de paie réelle', kind: 'success' });
       },
     });
+  };
+
+  const handleClearActivePayslip = () => {
+    data.setActivePayslipId(undefined);
+    addToast({ message: 'Retour à l\'estimation théorique', kind: 'success' });
   };
 
   const handleQuickAdd = (accountId: string, amount: number, type: 'IN' | 'OUT', label: string, date: string) => {
@@ -501,6 +510,8 @@ const App: React.FC = () => {
                 setExtraMonthlyIncome={data.setExtraMonthlyIncome}
                 fiscalConfig={data.fiscalConfig}
                 workBenefits={data.workBenefits}
+                activePayslip={data.payslips.find(p => p.id === data.activePayslipId)}
+                onClearActivePayslip={handleClearActivePayslip}
             />}
 
             {view === 'transfers' && <TransferManager accounts={data.accounts} onUpdateAccountsComplex={data.updateAccountsWithMovements} onLinkedTransfer={data.executeLinkedTransfer} />}
@@ -518,7 +529,7 @@ const App: React.FC = () => {
             {view === 'history' && <History history={data.history} expensesHistory={data.expensesHistory} />}
             {view === 'parental' && <ParentalShare accounts={data.accounts} />}
             {view === 'simulator' && <WithdrawalSimulator accounts={data.accounts} expenses={data.expenses} goals={data.goals} />}
-            {view === 'payslips' && <Payslips payslips={data.payslips} onUpdatePayslips={data.setPayslips} geminiApiKey={data.geminiApiKey} pickerApiKey={data.pickerApiKey} onApplyToPilotage={handleApplyPayslipToPilotage} />}
+            {view === 'payslips' && <Payslips payslips={data.payslips} onUpdatePayslips={data.setPayslips} geminiApiKey={data.geminiApiKey} pickerApiKey={data.pickerApiKey} onApplyToPilotage={handleApplyPayslipToPilotage} activePayslipId={data.activePayslipId} onClearActivePayslip={handleClearActivePayslip} />}
 
             {view === 'settings' && (
                 <Settings

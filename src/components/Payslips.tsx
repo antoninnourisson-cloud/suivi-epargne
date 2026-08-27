@@ -16,10 +16,15 @@ interface PayslipsProps {
   onUpdatePayslips: (payslips: PayslipRecord[]) => void;
   geminiApiKey: string;
   pickerApiKey: string;
-  // Propose de reporter le brut de cette fiche (extrapolé sur l'année) dans le Pilotage
-  // Budgétaire. L'appelant (App.tsx) est responsable de demander confirmation avant
-  // d'écraser la valeur actuelle — ce composant ne fait que déclencher la demande.
+  // Bascule le Pilotage Budgétaire sur les chiffres exacts de cette fiche (brut, charges,
+  // navigo, mutuelle, titres resto, impôt réellement prélevé) à la place de la formule
+  // théorique. L'appelant (App.tsx) est responsable de demander confirmation avant
+  // d'écraser l'état courant — ce composant ne fait que déclencher la demande.
   onApplyToPilotage: (payslip: PayslipRecord) => void;
+  // Fiche actuellement utilisée comme référence exacte du Pilotage (undefined = mode
+  // estimation), pour la mettre en évidence dans la liste et permettre de désactiver.
+  activePayslipId?: string;
+  onClearActivePayslip: () => void;
 }
 
 const fmt = (n: number | undefined) =>
@@ -46,7 +51,7 @@ const monthLabel = (period: string) => {
   return d.toLocaleDateString('fr-FR', { month: 'short', year: '2-digit' });
 };
 
-export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, geminiApiKey, pickerApiKey, onApplyToPilotage }) => {
+export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, geminiApiKey, pickerApiKey, onApplyToPilotage, activePayslipId, onClearActivePayslip }) => {
   const [draft, setDraft] = useState<DraftPayslip | null>(null);
   const [pickerBusy, setPickerBusy] = useState(false);
 
@@ -56,8 +61,8 @@ export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, 
   // été renseignés (extraction partielle ou saisie manuelle incomplète exclues du tracé).
   const chartData = useMemo(() =>
     payslips
-      .filter(p => p.extracted.period && p.extracted.netAmount !== undefined)
-      .map(p => ({ period: p.extracted.period as string, net: p.extracted.netAmount as number, brut: p.extracted.grossAmount }))
+      .filter(p => p.extracted.period && (p.extracted.netPaid !== undefined || p.extracted.netAmount !== undefined))
+      .map(p => ({ period: p.extracted.period as string, net: (p.extracted.netPaid ?? p.extracted.netAmount) as number, brut: p.extracted.grossAmount }))
       .sort((a, b) => a.period.localeCompare(b.period))
       .map(p => ({ ...p, label: monthLabel(p.period) })),
     [payslips]);
@@ -198,10 +203,14 @@ export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, 
                 <div><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Employeur</label><input value={draft.fields.employer ?? ''} onChange={e => patchDraftField('employer', e.target.value)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
                 <div><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Période (AAAA-MM)</label><input value={draft.fields.period ?? ''} onChange={e => patchDraftField('period', e.target.value)} placeholder="2026-08" className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
                 <div><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Brut (€)</label><input type="number" value={draft.fields.grossAmount ?? ''} onChange={e => patchDraftField('grossAmount', e.target.value)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
-                <div><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Net à payer (€)</label><input type="number" value={draft.fields.netAmount ?? ''} onChange={e => patchDraftField('netAmount', e.target.value)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
+                <div><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Charges salariales (€)</label><input type="number" value={draft.fields.socialCharges ?? ''} onChange={e => patchDraftField('socialCharges', e.target.value)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
+                <div><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Net à payer avant impôt (€)</label><input type="number" value={draft.fields.netAmount ?? ''} onChange={e => patchDraftField('netAmount', e.target.value)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
                 <div><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Net imposable (€)</label><input type="number" value={draft.fields.netTaxable ?? ''} onChange={e => patchDraftField('netTaxable', e.target.value)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
                 <div><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Remb. Navigo (€)</label><input type="number" value={draft.fields.navigoRefund ?? ''} onChange={e => patchDraftField('navigoRefund', e.target.value)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
+                <div><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Mutuelle (part salarié, €)</label><input type="number" value={draft.fields.mutuelleCost ?? ''} onChange={e => patchDraftField('mutuelleCost', e.target.value)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
                 <div><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Tickets restaurant (€)</label><input type="number" value={draft.fields.mealVouchers ?? ''} onChange={e => patchDraftField('mealVouchers', e.target.value)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
+                <div><label className="text-[10px] font-black text-amber-500 uppercase">Impôt prélevé à la source (€)</label><input type="number" value={draft.fields.incomeTaxWithheld ?? ''} onChange={e => patchDraftField('incomeTaxWithheld', e.target.value)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-amber-200 dark:border-amber-800 rounded-lg font-bold" /></div>
+                <div><label className="text-[10px] font-black text-emerald-600 uppercase">Net payé (viré en banque, €)</label><input type="number" value={draft.fields.netPaid ?? ''} onChange={e => patchDraftField('netPaid', e.target.value)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-emerald-200 dark:border-emerald-800 rounded-lg font-bold" /></div>
               </div>
               <div className="flex gap-2 justify-end pt-2">
                 <button onClick={() => setDraft(null)} className="px-4 py-2 rounded-xl font-bold text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-1"><X className="w-4 h-4" /> Annuler</button>
@@ -249,30 +258,38 @@ export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, 
               <tr>
                 <th className="px-6 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Période</th>
                 <th className="px-6 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase text-right">Brut</th>
-                <th className="px-6 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase text-right">Net</th>
+                <th className="px-6 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase text-right">Net payé</th>
                 <th className="px-6 py-3 text-right"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {payslips.map(p => (
-                <tr key={p.id} className="hover:bg-slate-50 dark:hover:bg-slate-800">
+              {payslips.map(p => {
+                const isActive = p.id === activePayslipId;
+                return (
+                <tr key={p.id} className={`hover:bg-slate-50 dark:hover:bg-slate-800 ${isActive ? 'bg-amber-50/60 dark:bg-amber-950/20' : ''}`}>
                   <td className="px-6 py-3">
-                    <div className="font-bold text-slate-800 dark:text-slate-100">{p.extracted.period || '—'}</div>
+                    <div className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                      {p.extracted.period || '—'}
+                      {isActive && <span className="text-[9px] font-black uppercase bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300 px-1.5 py-0.5 rounded">Référence Pilotage</span>}
+                    </div>
                     <div className="text-[10px] uppercase text-slate-400 dark:text-slate-500 font-bold">{p.extracted.employer || p.fileName}</div>
                   </td>
                   <td className="px-6 py-3 text-right font-mono text-slate-600 dark:text-slate-300">{fmt(p.extracted.grossAmount)}</td>
-                  <td className="px-6 py-3 text-right font-black text-emerald-600">{fmt(p.extracted.netAmount)}</td>
+                  <td className="px-6 py-3 text-right font-black text-emerald-600">{fmt(p.extracted.netPaid ?? p.extracted.netAmount)}</td>
                   <td className="px-6 py-3 text-right">
                     <div className="flex justify-end gap-1">
-                      {p.extracted.grossAmount !== undefined && (
-                        <button onClick={() => onApplyToPilotage(p)} className="p-2 text-amber-600 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/40 rounded-lg" title="Utiliser pour mon Pilotage Budgétaire"><Wand2 className="w-4 h-4" /></button>
+                      {isActive ? (
+                        <button onClick={onClearActivePayslip} className="p-2 text-amber-600 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900 rounded-lg" title="Revenir à l'estimation théorique"><Wand2 className="w-4 h-4" /></button>
+                      ) : p.extracted.grossAmount !== undefined && (
+                        <button onClick={() => onApplyToPilotage(p)} className="p-2 text-amber-600 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/40 rounded-lg" title="Utiliser pour mon Pilotage Budgétaire (chiffres exacts)"><Wand2 className="w-4 h-4" /></button>
                       )}
                       <a href={`https://drive.google.com/file/d/${p.fileId}/view`} target="_blank" rel="noopener noreferrer" className="p-2 text-indigo-600 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 rounded-lg" title="Ouvrir sur Drive"><ExternalLink className="w-4 h-4" /></a>
                       <button onClick={() => removePayslip(p.id)} className="p-2 text-slate-300 dark:text-slate-600 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg" title="Retirer de la liste"><Trash2 className="w-4 h-4" /></button>
                     </div>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>

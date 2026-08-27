@@ -91,10 +91,19 @@ export interface PayslipExtractedData {
   employer?: string;
   period?: string;        // "2026-08" par ex.
   grossAmount?: number;
-  netAmount?: number;
-  netTaxable?: number;
+  // Cotisations et contributions salariales totales retenues sur le brut ce mois.
+  socialCharges?: number;
+  netAmount?: number;      // Net à payer AVANT impôt sur le revenu
+  netTaxable?: number;     // Net imposable (assiette, différent du net à payer)
   navigoRefund?: number;
   mealVouchers?: number;
+  // Part salariale de la mutuelle retenue ce mois.
+  mutuelleCost?: number;
+  // Prélèvement à la source réellement appliqué ce mois (pas une estimation de barème).
+  incomeTaxWithheld?: number;
+  // Net réellement viré en banque après impôt — la vérité de terrain à laquelle
+  // comparer le "Super Net" théorique du Pilotage.
+  netPaid?: number;
 }
 
 export interface PayslipRecord {
@@ -182,4 +191,9 @@ export interface GlobalAppData {
   lastView?: string;
   chatHistory?: ChatMessage[];
   payslips?: PayslipRecord[];
+  // Fiche de paie actuellement utilisée comme référence exacte dans le Pilotage Budgétaire
+  // (bascule le détail charges/impôt sur les vrais chiffres au lieu de la formule
+  // théorique). `undefined` = mode estimation (comportement historique, pour simuler des
+  // salaires hypothétiques).
+  activePayslipId?: string;
 }

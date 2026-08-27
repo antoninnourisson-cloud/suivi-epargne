@@ -1,8 +1,8 @@
 // src/components/AssistantPilot.tsx
 import React, { useState, useMemo } from 'react';
-import { SavingsAccount, Expense, AccountType, FiscalConfig, WorkBenefits } from '../types';
+import { SavingsAccount, Expense, AccountType, FiscalConfig, WorkBenefits, PayslipRecord } from '../types';
 import { computeIncome } from '../lib/finance';
-import { Calculator, TrendingUp, Target, Lock, Unlock, Info, Plus, Trash2, Hourglass, Coins, BarChart3, X, Check } from 'lucide-react';
+import { Calculator, TrendingUp, Target, Lock, Unlock, Info, Plus, Trash2, Hourglass, Coins, BarChart3, X, Check, FileCheck2, Wand2 } from 'lucide-react';
 
 interface AssistantPilotProps {
   accounts: SavingsAccount[];
@@ -24,13 +24,18 @@ interface AssistantPilotProps {
   setExtraMonthlyIncome: (val: number) => void;
   fiscalConfig: FiscalConfig;
   workBenefits: WorkBenefits;
+  // Quand définie, le détail budgétaire (brut mensuel, net avant impôt, charges, navigo,
+  // mutuelle, titres resto, impôt, super net) affiche les montants EXACTS de cette fiche
+  // de paie, verbatim, à la place de la formule théorique (computeIncome).
+  activePayslip?: PayslipRecord;
+  onClearActivePayslip: () => void;
 }
 
 export const AssistantPilot: React.FC<AssistantPilotProps> = ({
   accounts, expenses, onUpdateExpenses,
   grossAnnual, setGrossAnnual, leisureBudget, setLeisureBudget, projectSavings, setProjectSavings,
   navigoBase, setNavigoBase, navigoRate, setNavigoRate, taxRateManual, setTaxRateManual,
-  extraMonthlyIncome, setExtraMonthlyIncome, fiscalConfig, workBenefits
+  extraMonthlyIncome, setExtraMonthlyIncome, fiscalConfig, workBenefits, activePayslip, onClearActivePayslip
 }) => {
   const [showDetails, setShowDetails] = useState(false);
   const [externalSavings, setExternalSavings] = useState<number>(0);
@@ -52,8 +57,59 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
     [grossAnnual, extraMonthlyIncome, fiscalConfig, workBenefits, navigoBase, navigoRate, taxRateManual]
   );
 
-  const effectiveMonthlyTax = autoValues.effectiveMonthlyTax;
-  const effectiveSuperNet = autoValues.superNet;
+  // Bascule d'affichage : quand une fiche de paie sert de référence, on montre ses
+  // montants EXACTS, verbatim, plutôt que de les recalculer. Le "Net Avant Impôt"
+  // théorique (formule) devient le "Net à payer avant impôt" réel de la fiche — déjà net
+  // de charges, Navigo et mutuelle sur une vraie fiche, donc directement comparable au
+  // "Net Cash Avant Impôt" de la formule. `autoRate` est reconstruit à partir de l'impôt
+  // et de l'assiette réellement prélevés, pour rester cohérent avec le libellé existant.
+  const display = useMemo(() => {
+    if (activePayslip) {
+      const e = activePayslip.extracted;
+      const effectiveSuperNetReal = e.netPaid ?? (e.netAmount !== undefined && e.incomeTaxWithheld !== undefined
+        ? e.netAmount - e.incomeTaxWithheld
+        : undefined);
+      return {
+        isReal: true,
+        grossMonth: e.grossAmount,
+        socialCharges: e.socialCharges,
+        navigoGain: e.navigoRefund,
+        mutuelleCost: e.mutuelleCost,
+        swileCost: e.mealVouchers,
+        netBeforeTax: e.netAmount,
+        superNetRaw: e.netAmount,
+        effectiveMonthlyTax: e.incomeTaxWithheld,
+        effectiveSuperNet: effectiveSuperNetReal,
+        autoRate: e.netAmount && e.incomeTaxWithheld !== undefined ? (e.incomeTaxWithheld / e.netAmount) * 100 : undefined,
+      };
+    }
+    return {
+      isReal: false,
+      grossMonth: autoValues.grossMonth,
+      socialCharges: autoValues.socialCharges,
+      navigoGain: autoValues.navigoGain,
+      mutuelleCost: autoValues.mutuelleCost,
+      swileCost: autoValues.swileCost,
+      netBeforeTax: autoValues.netBeforeTax,
+      superNetRaw: autoValues.superNetRaw,
+      effectiveMonthlyTax: autoValues.effectiveMonthlyTax,
+      effectiveSuperNet: autoValues.superNet,
+      autoRate: autoValues.autoRate,
+    };
+  }, [activePayslip, autoValues]);
+
+  // Formatage tolérant à l'absence (extraction partielle) : jamais de "0 €" trompeur pour
+  // une donnée que la fiche ne fournissait simplement pas.
+  const showEUR = (v: number | undefined) => v === undefined ? '—' : `${v.toLocaleString('fr-FR', { maximumFractionDigits: 2 })} €`;
+
+  // À AFFICHER : reste honnêtement indéfini ("—") en mode réel si la fiche n'a pas encore
+  // été (ré)extraite avec les champs impôt/net payé — jamais de repli silencieux sur la
+  // formule théorique qui se ferait passer pour un chiffre exact.
+  const effectiveMonthlyTax = display.isReal ? display.effectiveMonthlyTax : autoValues.effectiveMonthlyTax;
+  const effectiveSuperNet = display.isReal ? display.effectiveSuperNet : autoValues.superNet;
+  // À CALCULER (capacité d'épargne, etc.) : a besoin d'un nombre pour continuer à
+  // fonctionner même si la fiche active est incomplète sur ce point précis.
+  const effectiveSuperNetForCalc = effectiveSuperNet ?? autoValues.superNet;
 
   const updateFromGrossAnnual = (val: number) => setGrossAnnual(val);
   const updateFromGrossMonth = (val: number) => setGrossAnnual(val * 12);
@@ -73,11 +129,11 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
 
   const budgetData = useMemo(() => {
     const totalFixed = expenses.reduce((sum, e) => sum + e.amount, 0);
-    const theoreticalCapacity = effectiveSuperNet - totalFixed - leisureBudget - projectSavings;
+    const theoreticalCapacity = effectiveSuperNetForCalc - totalFixed - leisureBudget - projectSavings;
     const finalCapacity = manualSavingsCapacity !== null ? parseFloat(manualSavingsCapacity) : theoreticalCapacity;
     const totalToInvest = Math.max(0, finalCapacity + externalSavings);
     return { totalFixed, theoreticalCapacity, finalCapacity, totalToInvest };
-  }, [effectiveSuperNet, expenses, leisureBudget, projectSavings, manualSavingsCapacity, externalSavings]);
+  }, [effectiveSuperNetForCalc, expenses, leisureBudget, projectSavings, manualSavingsCapacity, externalSavings]);
 
   const strategy = useMemo(() => {
     let remainingMoney = budgetData.totalToInvest;
@@ -184,28 +240,64 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
         <>
           <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
             <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-2"><Calculator className="w-5 h-5 text-indigo-600" /> Revenus & Salaires</h3>
+
+            {activePayslip && (
+              <div className="mb-4 flex items-center justify-between gap-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-xl p-3">
+                <div className="flex items-center gap-2 text-amber-800 dark:text-amber-300 text-xs font-bold">
+                  <FileCheck2 className="w-4 h-4 flex-shrink-0" />
+                  Chiffres exacts de ta fiche de {activePayslip.extracted.period || 'paie'} ({activePayslip.extracted.employer || activePayslip.fileName}) — pas de calcul, valeurs verbatim.
+                </div>
+                <button onClick={onClearActivePayslip} className="flex items-center gap-1 text-xs font-bold text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900 px-3 py-1.5 rounded-lg flex-shrink-0"><Wand2 className="w-3.5 h-3.5" /> Repasser en estimation</button>
+              </div>
+            )}
+
+            {activePayslip && display.effectiveMonthlyTax === undefined && (
+              <div className="mb-4 text-xs text-rose-600 dark:text-rose-400 font-bold flex items-center gap-2">
+                <Info className="w-3.5 h-3.5 flex-shrink-0" />
+                Cette fiche n'a pas encore l'impôt réellement prélevé / le net payé (extraite avant l'ajout de ces champs) : "Net Réel Perçu" affiche "—" plutôt qu'une estimation. Réimporte-la depuis Drive pour compléter.
+              </div>
+            )}
+
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
               <div className="bg-slate-50 dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-700"><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Brut Annuel</label><input type="number" value={Math.round(grossAnnual)} onChange={e => updateFromGrossAnnual(parseFloat(e.target.value)||0)} className="w-full bg-transparent font-black text-slate-800 dark:text-slate-100 text-lg outline-none" /></div>
-              <div className="bg-slate-50 dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-700"><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Brut Mensuel</label><input type="number" value={Math.round(autoValues.grossMonth)} onChange={e => updateFromGrossMonth(parseFloat(e.target.value)||0)} className="w-full bg-transparent font-black text-slate-800 dark:text-slate-100 text-lg outline-none" /></div>
-              <div className="bg-indigo-50 dark:bg-indigo-950/40 p-3 rounded-xl border border-indigo-100 dark:border-indigo-900"><label className="text-[10px] font-black text-indigo-400 dark:text-indigo-400 uppercase">Net Avant Impôt</label><input type="number" value={Math.round(autoValues.netBeforeTax * 100)/100} onChange={e => updateFromNet(parseFloat(e.target.value)||0)} className="w-full bg-transparent font-black text-indigo-700 dark:text-indigo-300 text-lg outline-none" /></div>
-              <div className="bg-emerald-50 dark:bg-emerald-950/40 p-3 rounded-xl border border-emerald-100 dark:border-emerald-900 relative"><label className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase flex items-center gap-1">Super Net (Poche) <Info className="w-3 h-3 cursor-pointer" onClick={() => setShowDetails(!showDetails)}/></label><input type="number" value={Math.round(effectiveSuperNet * 100)/100} readOnly className="w-full bg-transparent font-black text-emerald-700 dark:text-emerald-300 text-2xl outline-none" /></div>
+              <div className="bg-slate-50 dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
+                <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Brut Mensuel</label>
+                {activePayslip
+                  ? <p className="font-black text-slate-800 dark:text-slate-100 text-lg">{showEUR(display.grossMonth)}</p>
+                  : <input type="number" value={Math.round(autoValues.grossMonth)} onChange={e => updateFromGrossMonth(parseFloat(e.target.value)||0)} className="w-full bg-transparent font-black text-slate-800 dark:text-slate-100 text-lg outline-none" />}
+              </div>
+              <div className="bg-indigo-50 dark:bg-indigo-950/40 p-3 rounded-xl border border-indigo-100 dark:border-indigo-900">
+                <label className="text-[10px] font-black text-indigo-400 dark:text-indigo-400 uppercase">Net Avant Impôt</label>
+                {activePayslip
+                  ? <p className="font-black text-indigo-700 dark:text-indigo-300 text-lg">{showEUR(display.netBeforeTax)}</p>
+                  : <input type="number" value={Math.round(autoValues.netBeforeTax * 100)/100} onChange={e => updateFromNet(parseFloat(e.target.value)||0)} className="w-full bg-transparent font-black text-indigo-700 dark:text-indigo-300 text-lg outline-none" />}
+              </div>
+              <div className="bg-emerald-50 dark:bg-emerald-950/40 p-3 rounded-xl border border-emerald-100 dark:border-emerald-900 relative">
+                <label className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase flex items-center gap-1">{activePayslip ? 'Net Réel Perçu' : 'Super Net (Poche)'} <Info className="w-3 h-3 cursor-pointer" onClick={() => setShowDetails(!showDetails)}/></label>
+                <p className="font-black text-emerald-700 dark:text-emerald-300 text-2xl">{showEUR(effectiveSuperNet)}</p>
+              </div>
             </div>
 
             {showDetails && (
               <div className="bg-white dark:bg-slate-800 p-4 rounded-xl text-xs space-y-3 border border-slate-200 dark:border-slate-700 animate-in slide-in-from-top-2 shadow-inner mb-4">
-                 <div className="flex justify-between font-bold border-b pb-1"><span>Salaire Brut Mensuel</span> <span>{Math.round(autoValues.grossMonth).toLocaleString()} €</span></div>
-                 <div className="flex justify-between text-rose-500"><span>Charges Salariales ({(fiscalConfig.salaryChargesRate*100).toFixed(2)}%)</span> <span>- {Math.round(autoValues.socialCharges).toLocaleString()} €</span></div>
-                 <div className="flex justify-between text-emerald-600"><span>Remboursement Navigo</span> <span>+ {autoValues.navigoGain.toFixed(2)} €</span></div>
-                 {workBenefits.mutuelle.active && <div className="flex justify-between text-rose-500"><span>Mutuelle (Part Salarié)</span><span>- {autoValues.mutuelleCost.toFixed(2)} €</span></div>}
-                 {workBenefits.mealVouchers.active && <div className="flex justify-between text-rose-500"><span>Titres Resto (Part Salarié)</span><span>- {autoValues.swileCost.toFixed(2)} €</span></div>}
-                 <div className="flex justify-between font-bold text-indigo-700 pt-1 border-t border-slate-100 dark:border-slate-800"><span>= Net Cash Avant Impôt</span> <span>{(autoValues.superNetRaw).toFixed(2)} €</span></div>
+                 <div className="flex justify-between font-bold border-b pb-1"><span>Salaire Brut Mensuel</span> <span>{showEUR(display.grossMonth)}</span></div>
+                 <div className="flex justify-between text-rose-500"><span>Charges Salariales{!activePayslip && ` (${(fiscalConfig.salaryChargesRate*100).toFixed(2)}%)`}</span> <span>- {showEUR(display.socialCharges)}</span></div>
+                 <div className="flex justify-between text-emerald-600"><span>Remboursement Navigo</span> <span>+ {showEUR(display.navigoGain)}</span></div>
+                 {(activePayslip ? display.mutuelleCost !== undefined : workBenefits.mutuelle.active) && <div className="flex justify-between text-rose-500"><span>Mutuelle (Part Salarié)</span><span>- {showEUR(display.mutuelleCost)}</span></div>}
+                 {(activePayslip ? display.swileCost !== undefined : workBenefits.mealVouchers.active) && <div className="flex justify-between text-rose-500"><span>Titres Resto (Part Salarié)</span><span>- {showEUR(display.swileCost)}</span></div>}
+                 <div className="flex justify-between font-bold text-indigo-700 pt-1 border-t border-slate-100 dark:border-slate-800"><span>= Net Cash Avant Impôt</span> <span>{showEUR(display.superNetRaw)}</span></div>
                  <div className="bg-amber-50 p-2 rounded-lg border border-amber-100">
-                    <div className="flex justify-between items-center mb-2"><span className="text-amber-800 font-bold">Impôt à la source</span><span className="text-amber-600 font-mono font-black">- {effectiveMonthlyTax.toFixed(2)} €</span></div>
+                    <div className="flex justify-between items-center mb-2"><span className="text-amber-800 font-bold">{activePayslip ? 'Impôt réellement prélevé' : 'Impôt à la source'}</span><span className="text-amber-600 font-mono font-black">- {showEUR(display.effectiveMonthlyTax)}</span></div>
+                    {activePayslip ? (
+                      <p className="text-[10px] text-slate-500 dark:text-slate-400">Taux réel constaté : <strong>{display.autoRate !== undefined ? `${display.autoRate.toFixed(1)}%` : '—'}</strong> (montant tel que retenu sur la fiche, pas une estimation)</p>
+                    ) : (
                     <div className="flex items-center justify-between text-[10px] gap-2">
                         <div className="flex flex-col"><span className="text-slate-500 dark:text-slate-400">Taux Barème (Auto) : <strong>{autoValues.autoRate.toFixed(1)}%</strong></span>{taxRateManual > 0 && <span className="text-amber-600">Force à : <strong>{taxRateManual}%</strong></span>}</div>
                         <div className="flex items-center gap-1"><label className="text-slate-400 dark:text-slate-500">Forcer taux :</label><input type="number" step="0.1" value={taxRateManual} onChange={(e) => setTaxRateManual(parseFloat(e.target.value) || 0)} className="w-12 p-1 text-right bg-white dark:bg-slate-800 border border-amber-200 rounded font-bold outline-none" placeholder="Auto"/><span className="text-slate-400 dark:text-slate-500">%</span></div>
                     </div>
+                    )}
                  </div>
+                 {activePayslip && <div className="flex justify-between font-bold text-emerald-700 pt-1 border-t border-slate-100 dark:border-slate-800"><span>= Net Réel Perçu</span> <span>{showEUR(effectiveSuperNet)}</span></div>}
               </div>
             )}
           </div>

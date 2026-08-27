@@ -24,17 +24,25 @@ const RESPONSE_SCHEMA = {
     employer: { type: 'STRING', description: "Nom de l'employeur" },
     period: { type: 'STRING', description: 'Période de paie au format AAAA-MM' },
     grossAmount: { type: 'NUMBER', description: 'Salaire brut du mois, en euros' },
-    netAmount: { type: 'NUMBER', description: 'Net à payer du mois, en euros' },
-    netTaxable: { type: 'NUMBER', description: 'Net imposable du mois, en euros' },
+    socialCharges: { type: 'NUMBER', description: 'Total des cotisations et contributions salariales retenues sur le brut ce mois, en euros' },
+    netAmount: { type: 'NUMBER', description: "Net à payer AVANT impôt sur le revenu, en euros (ligne généralement intitulée « Net à payer avant impôt sur le revenu »)" },
+    netTaxable: { type: 'NUMBER', description: 'Net imposable du mois, en euros (assiette fiscale, différente du net à payer)' },
     navigoRefund: { type: 'NUMBER', description: 'Remboursement transport (Navigo), en euros' },
     mealVouchers: { type: 'NUMBER', description: 'Valeur des tickets restaurant du mois, en euros' },
+    mutuelleCost: { type: 'NUMBER', description: 'Part salariale de la mutuelle retenue ce mois, en euros' },
+    incomeTaxWithheld: { type: 'NUMBER', description: 'Prélèvement à la source (impôt sur le revenu) réellement retenu ce mois, en euros' },
+    netPaid: { type: 'NUMBER', description: 'Net payé / net versé : le montant réellement viré sur le compte bancaire ce mois, APRÈS impôt sur le revenu, en euros' },
   },
 };
 
 const PROMPT = `Tu analyses une fiche de paie française. Extrais uniquement les informations
 demandées par le schéma, en euros (nombres, pas de texte), pour LE MOIS de cette fiche
-précisément (pas de cumul annuel). Si une information n'est pas présente ou illisible,
-omets ce champ plutôt que de deviner une valeur.`;
+précisément (pas de cumul annuel). Distingue bien "Net à payer avant impôt" (netAmount),
+"Net imposable" (netTaxable, l'assiette fiscale) et "Net payé"/"Net versé" (netPaid, le
+montant réellement viré en banque après impôt sur le revenu) — ce sont trois lignes
+différentes sur une fiche de paie française, ne confonds pas l'une avec l'autre. Si une
+information n'est pas présente ou illisible, omets ce champ plutôt que de deviner une
+valeur.`;
 
 export class GeminiError extends Error {
   constructor(message: string) { super(message); this.name = 'GeminiError'; }
@@ -97,10 +105,14 @@ export const extractPayslipData = async (
     employer: str(parsed.employer),
     period: str(parsed.period),
     grossAmount: num(parsed.grossAmount),
+    socialCharges: num(parsed.socialCharges),
     netAmount: num(parsed.netAmount),
     netTaxable: num(parsed.netTaxable),
     navigoRefund: num(parsed.navigoRefund),
     mealVouchers: num(parsed.mealVouchers),
+    mutuelleCost: num(parsed.mutuelleCost),
+    incomeTaxWithheld: num(parsed.incomeTaxWithheld),
+    netPaid: num(parsed.netPaid),
   };
   return result;
 };
