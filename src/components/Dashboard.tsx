@@ -4,7 +4,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, AreaChart, Area 
 } from 'recharts';
 import { SavingsAccount, PortfolioSnapshot, AccountType, Expense, FiscalConfig } from '../types';
-import { Euro, Lock, Wallet, Filter, Unlock, Save, AlertTriangle, Trash2, Clock } from 'lucide-react';
+import { Euro, Lock, Wallet, Filter, Unlock, Save, AlertTriangle, Trash2, Clock, TrendingUp } from 'lucide-react';
 import { Button } from './Button';
 
 interface DashboardProps {
@@ -174,6 +174,41 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
     return data;
   }, [accounts, dateRange]);
 
+  // --- PROJECTION DE TRAJECTOIRE ---
+  // Extrapole le rythme d'épargne RÉEL observé sur les 90 derniers jours (indépendant du
+  // filtre de dates du graphique ci-dessus, pour rester stable même si l'utilisateur
+  // change la période affichée). Reconstruction par soustraction des mouvements postérieurs
+  // à une date donnée — même méthode que `stackedData`, donc mêmes limites assumées
+  // (suppose que les mouvements enregistrés reflètent bien tout le flux depuis l'ouverture).
+  const balanceAtDate = (dateStr: string): number =>
+    accounts.reduce((total, acc) => {
+      let balance = acc.ownedAmount;
+      (acc.movements || []).filter(m => m.date > dateStr).forEach(m => {
+        balance += m.type === 'IN' ? -m.amount : m.amount;
+      });
+      return total + balance;
+    }, 0);
+
+  const projection = useMemo(() => {
+    const now = new Date();
+    const past = new Date(now);
+    past.setDate(past.getDate() - 90);
+    const nowStr = now.toISOString().split('T')[0];
+    const pastStr = past.toISOString().split('T')[0];
+
+    const hasRecentMovements = accounts.some(a => (a.movements || []).some(m => m.date > pastStr && m.date <= nowStr));
+    if (!hasRecentMovements) return null; // pas assez d'historique récent pour extrapoler quoi que ce soit
+
+    const totalNow = balanceAtDate(nowStr);
+    const totalPast = balanceAtDate(pastStr);
+    const monthlyRate = (totalNow - totalPast) / 3; // 90 jours ≈ 3 mois
+    if (Math.abs(monthlyRate) < 1) return null; // rythme quasi nul, rien d'exploitable à projeter
+
+    return { monthlyRate, totalNow, in6: totalNow + monthlyRate * 6, in12: totalNow + monthlyRate * 12 };
+  }, [accounts]);
+
+  const fmtEUR = (v: number) => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v);
+
   const dataByInstitution = Object.values(accounts.reduce((acc, curr) => {
     const key = curr.institution;
     if (!acc[key]) acc[key] = { name: key, value: 0 };
@@ -281,6 +316,30 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
         <StatCard title="Contrainte Fiscale" amount={availabilityStats.taxLocked} icon={Euro} color="bg-amber-500" subtext="AV/PEA récents" />
         <StatCard title="Bloqué" amount={availabilityStats.hardLocked} icon={Lock} color="bg-slate-800" subtext="Retraite/PEE" />
       </div>
+
+      {projection && (
+        <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="p-2 rounded-lg bg-indigo-600"><TrendingUp className="w-4 h-4 text-white" /></div>
+            <div>
+              <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100">Projection de trajectoire</h3>
+              <p className="text-[11px] text-slate-400 dark:text-slate-500">
+                Extrapolation du rythme réel des 90 derniers jours ({projection.monthlyRate >= 0 ? '+' : ''}{fmtEUR(projection.monthlyRate)}/mois) — une estimation, pas une garantie.
+              </p>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="p-4 rounded-lg bg-slate-50 dark:bg-slate-900">
+              <p className="text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500 tracking-wide">Dans 6 mois</p>
+              <p className="text-xl font-black text-slate-800 dark:text-slate-100 mt-1">{fmtEUR(projection.in6)}</p>
+            </div>
+            <div className="p-4 rounded-lg bg-slate-50 dark:bg-slate-900">
+              <p className="text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500 tracking-wide">Dans 12 mois</p>
+              <p className="text-xl font-black text-slate-800 dark:text-slate-100 mt-1">{fmtEUR(projection.in12)}</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 h-96">
         <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100 mb-4">Évolution de mon Épargne Nette (Empilé)</h3>

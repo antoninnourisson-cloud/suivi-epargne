@@ -28,6 +28,18 @@ export default defineConfig({
         // sur lequel GitHub Pages sert l'app.
         scope: './',
         start_url: './',
+        // Appui long sur l'icône de l'app -> action directe, sans repasser par la nav.
+        // `url` relative au `scope` ci-dessus (donc au sous-dossier GitHub Pages, quel
+        // qu'il soit) : App.tsx lit `?action=quickadd` au montage pour ouvrir la modale.
+        shortcuts: [
+          {
+            name: 'Ajouter un mouvement',
+            short_name: 'Ajouter',
+            description: 'Enregistrer rapidement un dépôt ou un retrait',
+            url: './?action=quickadd',
+            icons: [{ src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png' }]
+          }
+        ],
         icons: [
           {
             src: 'pwa-192x192.png',

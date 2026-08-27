@@ -132,6 +132,20 @@ export const disablePin = (): void => {
   localStorage.removeItem(PIN_SALT_KEY);
 };
 
+/**
+ * Désactive TOUTES les méthodes de verrouillage sur cet appareil (biométrie + PIN).
+ * Utilisé par l'écran de verrouillage lui-même en cas de code oublié / biométrie
+ * indisponible : puisque ce verrou n'est qu'un frein de confort local (voir l'en-tête de
+ * ce fichier) et non une protection cryptographique des données (qui restent sur Drive,
+ * inaccessibles sans le vrai compte Google), il n'y a pas de risque de sécurité à l'ouvrir
+ * après confirmation explicite de l'utilisateur — l'alternative serait un verrouillage
+ * définitif de l'app sur cet appareil, bien pire.
+ */
+export const resetAllLocks = (): void => {
+  disableBiometric();
+  disablePin();
+};
+
 export const verifyPin = async (pin: string): Promise<boolean> => {
   const storedHash = localStorage.getItem(PIN_HASH_KEY);
   const salt = localStorage.getItem(PIN_SALT_KEY);

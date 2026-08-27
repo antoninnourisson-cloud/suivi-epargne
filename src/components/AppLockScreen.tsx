@@ -6,7 +6,7 @@
 // ================================================
 import React, { useEffect, useState } from 'react';
 import { Fingerprint, Loader2, AlertTriangle, Delete } from 'lucide-react';
-import { isBiometricEnabled, isPinEnabled, verifyBiometric, verifyPin } from '../services/appLockService';
+import { isBiometricEnabled, isPinEnabled, verifyBiometric, verifyPin, resetAllLocks } from '../services/appLockService';
 
 interface AppLockScreenProps {
   onUnlock: () => void;
@@ -22,6 +22,7 @@ export const AppLockScreen: React.FC<AppLockScreenProps> = ({ onUnlock }) => {
   const [pin, setPin] = useState('');
   const [pinError, setPinError] = useState(false);
   const [checkingPin, setCheckingPin] = useState(false);
+  const [confirmingReset, setConfirmingReset] = useState(false);
 
   const attemptBiometric = async () => {
     setCheckingBiometric(true);
@@ -55,6 +56,16 @@ export const AppLockScreen: React.FC<AppLockScreenProps> = ({ onUnlock }) => {
   };
   const pressBackspace = () => setPin(p => p.slice(0, -1));
   const pressValidate = () => { if (pin.length >= 4) submitPin(pin); };
+
+  // Filet de sécurité : sans ceci, oublier son code (ou perdre l'accès à la biométrie —
+  // changement de capteur, navigateur réinstallé...) bloquerait définitivement l'app sur
+  // cet appareil. Le verrou n'étant qu'un frein de confort local (les données restent sur
+  // Drive, protégées par le vrai compte Google), le désactiver après confirmation
+  // explicite ne compromet rien — voir appLockService.ts.
+  const handleForgot = () => {
+    resetAllLocks();
+    onUnlock();
+  };
 
   return (
     <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-4">
@@ -110,6 +121,26 @@ export const AppLockScreen: React.FC<AppLockScreenProps> = ({ onUnlock }) => {
             </div>
           </div>
         )}
+
+        <div className="mt-6">
+          {confirmingReset ? (
+            <div className="text-left bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 rounded-xl p-4">
+              <p className="text-xs font-bold text-amber-800 dark:text-amber-300 mb-3">
+                Ceci désactive le verrou (biométrie + PIN) sur cet appareil. Tes données restent
+                intactes et protégées sur ton Drive — tu pourras réactiver un verrou à tout moment
+                depuis Paramètres.
+              </p>
+              <div className="flex gap-2">
+                <button onClick={handleForgot} className="flex-1 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-black">Désactiver le verrou</button>
+                <button onClick={() => setConfirmingReset(false)} className="flex-1 py-2 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-black">Annuler</button>
+              </div>
+            </div>
+          ) : (
+            <button onClick={() => setConfirmingReset(true)} className="text-xs font-bold text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 underline">
+              Code oublié / biométrie indisponible ?
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );

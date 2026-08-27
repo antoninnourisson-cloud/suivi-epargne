@@ -90,6 +90,21 @@ const App: React.FC = () => {
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [activeTagFilter, setActiveTagFilter] = useState<string | null>(null);
 
+  // Raccourci PWA "Ajouter un mouvement" (appui long sur l'icône, voir vite.config.ts) :
+  // ouvre directement la modale au lieu d'atterrir sur le Dashboard nu. On attend
+  // authentification + déverrouillage pour ne pas exposer la modale par-dessus l'écran de
+  // login/verrou, et on nettoie l'URL ensuite pour qu'un simple reload ne la rouvre pas.
+  useEffect(() => {
+    if (!isAuthenticated || locked) return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('action') === 'quickadd') {
+      setQuickAddOpen(true);
+      params.delete('action');
+      const rest = params.toString();
+      window.history.replaceState({}, '', window.location.pathname + (rest ? `?${rest}` : ''));
+    }
+  }, [isAuthenticated, locked]);
+
   // Regroupe les mouvements < 1€ (bruit typique des PEE) en une ligne synthétique.
   type DisplayMovement = AccountMovement & { grouped?: boolean };
   const buildDisplayMovements = (movements: AccountMovement[] | undefined): DisplayMovement[] => {
