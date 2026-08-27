@@ -10,9 +10,11 @@ import { Dialog, DialogState, emptyDialog } from './components/Dialog';
 import { useToasts, ToastContainer } from './components/Toast';
 import { QuickAddModal } from './components/QuickAddModal';
 import { BottomNav } from './components/BottomNav';
+import { AppLockScreen } from './components/AppLockScreen';
 import {
   initGoogleApi, handleAuthClick, handleSignOut, isTokenValid
 } from './services/googleDriveService';
+import { isLockEnabled } from './services/appLockService';
 import {
   LayoutDashboard, Wallet, Trash2, Edit2, ShieldCheck,
   ArrowRightLeft, RefreshCcw, PlusCircle, Cloud, LogOut,
@@ -55,6 +57,10 @@ type View = 'dashboard' | 'accounts' | 'transfers' | 'pilot' | 'update' | 'setti
 const App: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isApiLoaded, setIsApiLoaded] = useState(false);
+  // Verrou biométrique local (propre à cet appareil, jamais synchronisé) : verrouillé par
+  // défaut si un credential a été enregistré sur CE navigateur, débloqué après succès de
+  // la vérification WebAuthn (voir AppLockScreen / appLockService).
+  const [locked, setLocked] = useState<boolean>(() => isLockEnabled());
 
   const data = usePortfolioData(isAuthenticated);
   const { isDark, toggleTheme } = useTheme();
@@ -363,6 +369,13 @@ const App: React.FC = () => {
   };
 
   // --- RENDU ---
+
+  // Verrou biométrique en tout premier : avant même de décider s'il faut afficher l'écran
+  // de connexion ou les données, pour ne jamais laisser filtrer d'information (y compris
+  // le simple fait qu'une session Google est déjà active) tant que ce n'est pas déverrouillé.
+  if (locked) {
+    return <AppLockScreen onUnlock={() => setLocked(false)} />;
+  }
 
   if (!isAuthenticated) {
     return (

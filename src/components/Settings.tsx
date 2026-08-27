@@ -1,10 +1,11 @@
 // ================================================
 // FILE: src/components/Settings.tsx
 // ================================================
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { FiscalConfig, TaxBracket, WorkBenefits } from '../types';
 import { Button } from './Button';
-import { Save, AlertTriangle, Settings as SettingsIcon, Plus, Trash2, Mail, Download, Upload, Database, KeyRound, FileText } from 'lucide-react';
+import { Save, AlertTriangle, Settings as SettingsIcon, Plus, Trash2, Mail, Download, Upload, Database, KeyRound, FileText, Fingerprint, Hash } from 'lucide-react';
+import { isLockAvailable, isBiometricEnabled, isPinEnabled, enableLock, disableBiometric, enablePin, disablePin } from '../services/appLockService';
 
 interface SettingsProps {
   config: FiscalConfig;
@@ -32,6 +33,55 @@ export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parent
   const [localEmail, setLocalEmail] = useState<string>(parentsEmail || '');
   const [localGeminiKey, setLocalGeminiKey] = useState<string>(geminiApiKey || '');
   const [localPickerKey, setLocalPickerKey] = useState<string>(pickerApiKey || '');
+
+  // Verrou (biométrie et/ou PIN) : réglage 100% local à cet appareil (localStorage), donc
+  // en dehors du circuit onSave/Drive utilisé par le reste de cet écran — une empreinte ou
+  // un code enregistrés sur ce téléphone n'ont aucun sens synchronisés sur un autre appareil.
+  const [lockAvailable, setLockAvailable] = useState(false);
+  const [biometricOn, setBiometricOn] = useState(isBiometricEnabled());
+  const [lockError, setLockError] = useState<string | null>(null);
+  useEffect(() => { isLockAvailable().then(setLockAvailable); }, []);
+
+  const toggleBiometric = async () => {
+    setLockError(null);
+    if (biometricOn) {
+      disableBiometric();
+      setBiometricOn(false);
+      return;
+    }
+    try {
+      await enableLock();
+      setBiometricOn(true);
+    } catch {
+      setLockError("Activation annulée ou échouée. Réessaie, ou vérifie que Face ID / l'empreinte est configuré sur cet appareil.");
+    }
+  };
+
+  const [pinOn, setPinOn] = useState(isPinEnabled());
+  const [pinDraft, setPinDraft] = useState('');
+  const [pinError, setPinError] = useState<string | null>(null);
+  const [settingPin, setSettingPin] = useState(false);
+
+  const submitPinSetup = async () => {
+    setPinError(null);
+    if (!/^\d{4,8}$/.test(pinDraft)) {
+      setPinError('Le code doit faire entre 4 et 8 chiffres.');
+      return;
+    }
+    await enablePin(pinDraft);
+    setPinOn(true);
+    setSettingPin(false);
+    setPinDraft('');
+  };
+
+  const togglePin = () => {
+    if (pinOn) {
+      disablePin();
+      setPinOn(false);
+      return;
+    }
+    setSettingPin(true);
+  };
 
   const handleFiscalChange = (field: keyof FiscalConfig, value: any) => {
     setLocalFiscal(prev => ({ ...prev, [field]: value }));
@@ -133,6 +183,63 @@ export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parent
             <div className="mt-4 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-lg p-3 flex gap-2 items-start">
                 <AlertTriangle className="w-4 h-4 text-amber-500 mt-0.5 flex-shrink-0"/>
                 <p className="text-xs text-amber-700 dark:text-amber-300 leading-relaxed">Ces clés sont stockées en clair dans votre fichier sur Drive (comme le reste de vos réglages) — jamais envoyées ailleurs qu'à Google. Chaque extraction utilise votre propre quota Gemini.</p>
+            </div>
+        </div>
+
+        {/* SECTION SÉCURITÉ (réglages locaux à cet appareil, non synchronisés) */}
+        <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 lg:col-span-2 space-y-4">
+            <h3 className="font-bold text-slate-800 dark:text-slate-100 mb-2 border-b border-slate-200 dark:border-slate-700 pb-2 flex items-center gap-2"><Fingerprint className="w-4 h-4 text-indigo-600"/> Sécurité</h3>
+            <p className="text-[11px] text-slate-400 dark:text-slate-500 -mt-2">Verrouille l'accès à cet appareil (réglage propre à ce navigateur, jamais synchronisé sur Drive). Les deux méthodes peuvent être actives en même temps. Protège contre un accès occasionnel — pas une garantie cryptographique absolue sur un site sans serveur.</p>
+
+            {!lockAvailable ? (
+                <p className="text-sm text-slate-500 dark:text-slate-400">Face ID / empreinte / Windows Hello non disponible sur cet appareil ou ce navigateur — seul le code PIN est proposé.</p>
+            ) : (
+                <div className="flex items-center justify-between gap-4 bg-slate-50 dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-700">
+                    <div>
+                        <p className="font-bold text-slate-800 dark:text-slate-100 text-sm">Verrou biométrique</p>
+                        <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1 max-w-md">Face ID / empreinte / Windows Hello à chaque ouverture de l'app.</p>
+                        {lockError && <p className="text-[11px] text-rose-600 dark:text-rose-400 mt-2 font-bold">{lockError}</p>}
+                    </div>
+                    <button
+                        onClick={toggleBiometric}
+                        className={`flex-shrink-0 px-4 py-2 rounded-xl font-bold text-sm ${biometricOn ? 'bg-emerald-600 hover:bg-emerald-700 text-white' : 'bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200'}`}
+                    >
+                        {biometricOn ? 'Activé' : 'Désactivé'}
+                    </button>
+                </div>
+            )}
+
+            <div className="bg-slate-50 dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-700">
+                <div className="flex items-center justify-between gap-4">
+                    <div>
+                        <p className="font-bold text-slate-800 dark:text-slate-100 text-sm flex items-center gap-1.5"><Hash className="w-3.5 h-3.5"/> Code PIN</p>
+                        <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1 max-w-md">4 à 8 chiffres, en repli si la biométrie n'est pas disponible ou par préférence.</p>
+                    </div>
+                    <button
+                        onClick={togglePin}
+                        className={`flex-shrink-0 px-4 py-2 rounded-xl font-bold text-sm ${pinOn ? 'bg-emerald-600 hover:bg-emerald-700 text-white' : 'bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200'}`}
+                    >
+                        {pinOn ? 'Activé' : 'Désactivé'}
+                    </button>
+                </div>
+                {settingPin && (
+                    <div className="mt-3 flex items-center gap-2">
+                        <input
+                            type="password"
+                            inputMode="numeric"
+                            pattern="[0-9]*"
+                            maxLength={8}
+                            value={pinDraft}
+                            onChange={e => setPinDraft(e.target.value.replace(/\D/g, ''))}
+                            placeholder="Nouveau code (4-8 chiffres)"
+                            className="flex-1 p-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg font-bold text-slate-800 dark:text-slate-100"
+                            autoFocus
+                        />
+                        <button onClick={submitPinSetup} className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold text-sm">Définir</button>
+                        <button onClick={() => { setSettingPin(false); setPinDraft(''); setPinError(null); }} className="px-3 py-2 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 rounded-lg font-bold text-sm">Annuler</button>
+                    </div>
+                )}
+                {pinError && <p className="text-[11px] text-rose-600 dark:text-rose-400 mt-2 font-bold">{pinError}</p>}
             </div>
         </div>
 
