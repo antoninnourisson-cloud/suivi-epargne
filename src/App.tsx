@@ -62,6 +62,21 @@ const App: React.FC = () => {
   // la vérification WebAuthn (voir AppLockScreen / appLockService).
   const [locked, setLocked] = useState<boolean>(() => isLockEnabled());
 
+  // Ré-active le verrou dès que l'app repasse au premier plan après avoir été masquée
+  // (bouton Home, changement d'appli, écran éteint...). Sur mobile, quitter l'app ne
+  // recharge pas la page — le process JS reste vivant en mémoire tant que l'OS ne le tue
+  // pas — donc sans ceci, un simple aller-retour laisserait l'app déverrouillée
+  // indéfiniment, ce qui viderait le verrou de son intérêt.
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden' && isLockEnabled()) {
+        setLocked(true);
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, []);
+
   const data = usePortfolioData(isAuthenticated);
   const { isDark, toggleTheme } = useTheme();
   const { toasts, addToast, dismiss } = useToasts();
