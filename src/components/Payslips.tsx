@@ -4,17 +4,22 @@
 // original n'est jamais copié, on ne stocke que sa référence) et extraction des montants
 // via l'API Gemini, à la demande explicite (chaque clic consomme le quota de l'utilisateur).
 // ================================================
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
+import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend } from 'recharts';
 import { PayslipRecord, PayslipExtractedData } from '../types';
 import { openDrivePicker, downloadFileAsBase64 } from '../services/googleDriveService';
 import { extractPayslipData, GeminiError } from '../services/geminiService';
-import { FileText, Upload, Sparkles, Trash2, ExternalLink, AlertTriangle, Check, X, Loader2, KeyRound } from 'lucide-react';
+import { FileText, Upload, Sparkles, Trash2, ExternalLink, AlertTriangle, Check, X, Loader2, KeyRound, TrendingUp, Wand2 } from 'lucide-react';
 
 interface PayslipsProps {
   payslips: PayslipRecord[];
   onUpdatePayslips: (payslips: PayslipRecord[]) => void;
   geminiApiKey: string;
   pickerApiKey: string;
+  // Propose de reporter le brut de cette fiche (extrapolé sur l'année) dans le Pilotage
+  // Budgétaire. L'appelant (App.tsx) est responsable de demander confirmation avant
+  // d'écraser la valeur actuelle — ce composant ne fait que déclencher la demande.
+  onApplyToPilotage: (payslip: PayslipRecord) => void;
 }
 
 const fmt = (n: number | undefined) =>
@@ -32,11 +37,30 @@ interface DraftPayslip {
 
 const emptyFields: PayslipExtractedData = {};
 
-export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, geminiApiKey, pickerApiKey }) => {
+const monthLabel = (period: string) => {
+  // period attendu au format "AAAA-MM" ; si l'IA a renvoyé autre chose, on l'affiche tel quel
+  // plutôt que planter sur un Date invalide.
+  const match = /^(\d{4})-(\d{2})$/.exec(period);
+  if (!match) return period;
+  const d = new Date(Number(match[1]), Number(match[2]) - 1, 1);
+  return d.toLocaleDateString('fr-FR', { month: 'short', year: '2-digit' });
+};
+
+export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, geminiApiKey, pickerApiKey, onApplyToPilotage }) => {
   const [draft, setDraft] = useState<DraftPayslip | null>(null);
   const [pickerBusy, setPickerBusy] = useState(false);
 
   const keysMissing = !geminiApiKey || !pickerApiKey;
+
+  // Courbe d'évolution du net : uniquement les fiches dont la période et le net ont bien
+  // été renseignés (extraction partielle ou saisie manuelle incomplète exclues du tracé).
+  const chartData = useMemo(() =>
+    payslips
+      .filter(p => p.extracted.period && p.extracted.netAmount !== undefined)
+      .map(p => ({ period: p.extracted.period as string, net: p.extracted.netAmount as number, brut: p.extracted.grossAmount }))
+      .sort((a, b) => a.period.localeCompare(b.period))
+      .map(p => ({ ...p, label: monthLabel(p.period) })),
+    [payslips]);
 
   const handlePick = async () => {
     if (!pickerApiKey) return;
@@ -188,6 +212,28 @@ export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, 
         </div>
       )}
 
+      {/* --- ÉVOLUTION DU NET --- */}
+      {chartData.length >= 2 && !draft && (
+        <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
+          <h3 className="font-black text-slate-800 dark:text-slate-100 flex items-center gap-2 mb-4"><TrendingUp className="w-5 h-5 text-indigo-600" /> Évolution du net</h3>
+          <div className="h-72">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="gNet" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#10b981" stopOpacity={0.6} /><stop offset="95%" stopColor="#10b981" stopOpacity={0.05} /></linearGradient>
+                </defs>
+                <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+                <YAxis tickFormatter={(v) => `${v}€`} tick={{ fontSize: 11 }} />
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                <RechartsTooltip formatter={(v: number, name: string) => [fmt(v), name === 'net' ? 'Net' : 'Brut']} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                <Legend formatter={(v) => (v === 'net' ? 'Net' : 'Brut')} wrapperStyle={{ fontSize: 12 }} />
+                <Area type="monotone" dataKey="net" stroke="#10b981" fill="url(#gNet)" strokeWidth={2} />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
+
       {/* --- HISTORIQUE --- */}
       {payslips.length === 0 && !draft && (
         <div className="text-center py-16 text-slate-400 dark:text-slate-500 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700">
@@ -218,6 +264,9 @@ export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, 
                   <td className="px-6 py-3 text-right font-black text-emerald-600">{fmt(p.extracted.netAmount)}</td>
                   <td className="px-6 py-3 text-right">
                     <div className="flex justify-end gap-1">
+                      {p.extracted.grossAmount !== undefined && (
+                        <button onClick={() => onApplyToPilotage(p)} className="p-2 text-amber-600 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/40 rounded-lg" title="Utiliser pour mon Pilotage Budgétaire"><Wand2 className="w-4 h-4" /></button>
+                      )}
                       <a href={`https://drive.google.com/file/d/${p.fileId}/view`} target="_blank" rel="noopener noreferrer" className="p-2 text-indigo-600 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 rounded-lg" title="Ouvrir sur Drive"><ExternalLink className="w-4 h-4" /></a>
                       <button onClick={() => removePayslip(p.id)} className="p-2 text-slate-300 dark:text-slate-600 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg" title="Retirer de la liste"><Trash2 className="w-4 h-4" /></button>
                     </div>

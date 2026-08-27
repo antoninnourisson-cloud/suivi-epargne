@@ -2,7 +2,7 @@
 // FILE: src/App.tsx
 // ================================================
 import React, { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
-import { SavingsAccount, AccountMovement } from './types';
+import { SavingsAccount, AccountMovement, PayslipRecord } from './types';
 import { usePortfolioData } from './hooks/usePortfolioData';
 import { useTheme } from './hooks/useTheme';
 import { AccountForm } from './components/AccountForm';
@@ -318,6 +318,23 @@ const App: React.FC = () => {
     });
   };
 
+  // Reporte le brut d'une fiche de paie dans le Pilotage Budgétaire, extrapolé sur l'année
+  // (le mois extrait peut être partiel — ex: début de contrat en cours de mois — donc ce
+  // n'est qu'une estimation, jamais appliquée sans confirmation explicite).
+  const handleApplyPayslipToPilotage = (p: PayslipRecord) => {
+    if (p.extracted.grossAmount === undefined) return;
+    const estimate = Math.round(p.extracted.grossAmount * 12);
+    setDialog({
+      open: true, kind: 'confirm', confirmLabel: 'Appliquer',
+      title: 'Mettre à jour le Pilotage Budgétaire',
+      message: `Le brut annuel sera remplacé par ${estimate.toLocaleString('fr-FR')} € (estimation basée sur le brut de ${p.extracted.period || 'cette fiche'} × 12), à la place de ${Math.round(data.grossAnnual).toLocaleString('fr-FR')} € actuellement.`,
+      onConfirm: () => {
+        data.setGrossAnnual(estimate);
+        addToast({ message: 'Brut annuel mis à jour dans le Pilotage', kind: 'success' });
+      },
+    });
+  };
+
   const handleQuickAdd = (accountId: string, amount: number, type: 'IN' | 'OUT', label: string, date: string) => {
     const account = data.accounts.find(a => a.id === accountId);
     if (!account) return;
@@ -501,7 +518,7 @@ const App: React.FC = () => {
             {view === 'history' && <History history={data.history} expensesHistory={data.expensesHistory} />}
             {view === 'parental' && <ParentalShare accounts={data.accounts} />}
             {view === 'simulator' && <WithdrawalSimulator accounts={data.accounts} expenses={data.expenses} goals={data.goals} />}
-            {view === 'payslips' && <Payslips payslips={data.payslips} onUpdatePayslips={data.setPayslips} geminiApiKey={data.geminiApiKey} pickerApiKey={data.pickerApiKey} />}
+            {view === 'payslips' && <Payslips payslips={data.payslips} onUpdatePayslips={data.setPayslips} geminiApiKey={data.geminiApiKey} pickerApiKey={data.pickerApiKey} onApplyToPilotage={handleApplyPayslipToPilotage} />}
 
             {view === 'settings' && (
                 <Settings
