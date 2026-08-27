@@ -2,9 +2,9 @@
 // FILE: src/hooks/usePortfolioData.ts
 // ================================================
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { 
+import {
   GlobalAppData, SavingsAccount, Expense, PortfolioSnapshot, ExpenseSnapshot,
-  ChatMessage, FiscalConfig, WorkBenefits, AccountMovement, SavingsGoal 
+  ChatMessage, FiscalConfig, WorkBenefits, AccountMovement, SavingsGoal, PayslipRecord
 } from '../types';
 import { 
   DEFAULT_FISCAL_CONFIG, DEFAULT_WORK_BENEFITS 
@@ -44,6 +44,7 @@ const canonicalize = (data: GlobalAppData | null | undefined): string => {
     expensesHistory: data.expensesHistory || [],
     chatHistory: data.chatHistory || [],
     goals: data.goals || [],
+    payslips: data.payslips || [],
     fiscalConfig: data.fiscalConfig || null,
     workBenefits: data.workBenefits || null,
     config: {
@@ -55,6 +56,8 @@ const canonicalize = (data: GlobalAppData | null | undefined): string => {
       taxRateManual: c.taxRateManual ?? null,
       extraMonthlyIncome: c.extraMonthlyIncome ?? null,
       parentsEmail: c.parentsEmail ?? null,
+      geminiApiKey: c.geminiApiKey ?? null,
+      pickerApiKey: c.pickerApiKey ?? null,
     },
   });
 };
@@ -99,7 +102,8 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
   const [expensesHistory, setExpensesHistory] = useState<ExpenseSnapshot[]>([]);
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [goals, setGoals] = useState<SavingsGoal[]>([]);
-  
+  const [payslips, setPayslips] = useState<PayslipRecord[]>([]);
+
   // Configs
   const [grossAnnual, setGrossAnnual] = useState<number>(45000);
   const [leisureBudget, setLeisureBudget] = useState<number>(300);
@@ -111,7 +115,9 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
   const [fiscalConfig, setFiscalConfig] = useState<FiscalConfig>(DEFAULT_FISCAL_CONFIG);
   const [workBenefits, setWorkBenefits] = useState<WorkBenefits>(DEFAULT_WORK_BENEFITS);
   const [parentsEmail, setParentsEmail] = useState<string>('');
-  
+  const [geminiApiKey, setGeminiApiKey] = useState<string>('');
+  const [pickerApiKey, setPickerApiKey] = useState<string>('');
+
   const [lastView, setLastViewState] = useState<string>(
     () => localStorage.getItem('last_view') || 'dashboard'
   );
@@ -208,6 +214,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
         setExpensesHistory(data.expensesHistory || []);
         setChatHistory(data.chatHistory || []);
         setGoals(data.goals || []);
+        setPayslips(data.payslips || []);
         setFiscalConfig(data.fiscalConfig || DEFAULT_FISCAL_CONFIG);
         
         if (data.workBenefits) {
@@ -230,6 +237,8 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
           setTaxRateManual(data.config.taxRateManual ?? 0);
           setExtraMonthlyIncome(data.config.extraMonthlyIncome ?? 0);
           setParentsEmail(data.config.parentsEmail ?? '');
+          setGeminiApiKey(data.config.geminiApiKey ?? '');
+          setPickerApiKey(data.config.pickerApiKey ?? '');
         }
         if (data.lastView) setLastView(data.lastView);
 
@@ -287,14 +296,15 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
     fiscalConfig,
     workBenefits,
     goals,
+    payslips,
     config: {
       grossAnnual, leisureBudget, projectSavings, navigoBase, navigoRate,
-      taxRateManual, extraMonthlyIncome, parentsEmail
+      taxRateManual, extraMonthlyIncome, parentsEmail, geminiApiKey, pickerApiKey
     },
     lastView: lastViewRef.current,
   }), [accounts, expenses, history, expensesHistory, chatHistory, fiscalConfig, workBenefits, grossAnnual,
        leisureBudget, projectSavings, navigoBase, navigoRate, taxRateManual,
-       extraMonthlyIncome, parentsEmail, goals]);
+       extraMonthlyIncome, parentsEmail, goals, payslips, geminiApiKey, pickerApiKey]);
 
   // Applique un objet de données (import / rechargement) à l'état.
   const applyData = useCallback((data: GlobalAppData) => {
@@ -304,6 +314,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
     setExpensesHistory(data.expensesHistory || []);
     setChatHistory(data.chatHistory || []);
     setGoals(data.goals || []);
+    setPayslips(data.payslips || []);
     if (data.fiscalConfig) setFiscalConfig(data.fiscalConfig);
     if (data.workBenefits) setWorkBenefits(data.workBenefits);
     if (data.config) {
@@ -315,6 +326,8 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
       setTaxRateManual(data.config.taxRateManual ?? 0);
       setExtraMonthlyIncome(data.config.extraMonthlyIncome ?? 0);
       setParentsEmail(data.config.parentsEmail ?? '');
+      setGeminiApiKey(data.config.geminiApiKey ?? '');
+      setPickerApiKey(data.config.pickerApiKey ?? '');
     }
   }, []);
 
@@ -467,8 +480,9 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
   }, [
     accounts, expenses, history, expensesHistory, chatHistory, fiscalConfig, workBenefits, 
     grossAnnual, leisureBudget, projectSavings, navigoBase, navigoRate, 
-    taxRateManual, extraMonthlyIncome, parentsEmail, isAuthenticated, driveFileId, isLoadingData,
-    buildData, syncConflict, sessionExpired, goals, isOffline, runExclusive
+    taxRateManual, extraMonthlyIncome, parentsEmail, geminiApiKey, pickerApiKey,
+    isAuthenticated, driveFileId, isLoadingData,
+    buildData, syncConflict, sessionExpired, goals, payslips, isOffline, runExclusive
   ]);
 
   // Réveil périodique pour que les snapshots ci-dessous s'ouvrent sur le nouveau mois même
@@ -673,6 +687,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
       setExpensesHistory([]);
       setChatHistory([]);
       setGoals([]);
+      setPayslips([]);
       setDriveFileId(null);
       // Purge des sauvegardes locales à la déconnexion : sans ça, se reconnecter avec un
       // AUTRE compte Google proposait de restaurer les données du compte précédent, et
@@ -691,6 +706,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
     expensesHistory, setExpensesHistory,
     chatHistory, setChatHistory,
     goals, setGoals,
+    payslips, setPayslips,
     fiscalConfig, setFiscalConfig,
     workBenefits, setWorkBenefits,
     grossAnnual, setGrossAnnual,
@@ -701,6 +717,8 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
     taxRateManual, setTaxRateManual,
     extraMonthlyIncome, setExtraMonthlyIncome,
     parentsEmail, setParentsEmail,
+    geminiApiKey, setGeminiApiKey,
+    pickerApiKey, setPickerApiKey,
     lastView, setLastView,
     
     // Status

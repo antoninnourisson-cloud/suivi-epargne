@@ -17,7 +17,7 @@ import {
   LayoutDashboard, Wallet, Trash2, Edit2, ShieldCheck,
   ArrowRightLeft, RefreshCcw, PlusCircle, Cloud, LogOut,
   Loader2, Settings as SettingsIcon, AlertTriangle, RotateCw,
-  Target, Coins, LineChart, Users, Calculator, Sun, Moon, Zap, Tag, Save, WifiOff
+  Target, Coins, LineChart, Users, Calculator, Sun, Moon, Zap, Tag, Save, WifiOff, FileText
 } from 'lucide-react';
 
 // Code-splitting : les vues lourdes (recharts, etc.) sont chargées à la demande.
@@ -31,6 +31,7 @@ const Yield = lazy(() => import('./components/Yield').then(m => ({ default: m.Yi
 const History = lazy(() => import('./components/History').then(m => ({ default: m.History })));
 const ParentalShare = lazy(() => import('./components/ParentalShare').then(m => ({ default: m.ParentalShare })));
 const WithdrawalSimulator = lazy(() => import('./components/WithdrawalSimulator').then(m => ({ default: m.WithdrawalSimulator })));
+const Payslips = lazy(() => import('./components/Payslips').then(m => ({ default: m.Payslips })));
 
 const ViewLoader = () => (
   <div className="flex justify-center items-center py-20"><Loader2 className="animate-spin w-8 h-8 text-indigo-600" /></div>
@@ -49,7 +50,7 @@ const NavButton = ({ active, onClick, icon: Icon, label, highlight }: any) => (
     </button>
 );
 
-type View = 'dashboard' | 'accounts' | 'transfers' | 'pilot' | 'update' | 'settings' | 'goals' | 'yield' | 'history' | 'parental' | 'simulator';
+type View = 'dashboard' | 'accounts' | 'transfers' | 'pilot' | 'update' | 'settings' | 'goals' | 'yield' | 'history' | 'parental' | 'simulator' | 'payslips';
 
 const App: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -104,7 +105,7 @@ const App: React.FC = () => {
   // Sync view from data (au premier chargement)
   useEffect(() => {
       if (data.lastView && view === 'dashboard') {
-          const validViews: View[] = ['dashboard', 'accounts', 'transfers', 'pilot', 'update', 'settings', 'goals', 'yield', 'history', 'parental', 'simulator'];
+          const validViews: View[] = ['dashboard', 'accounts', 'transfers', 'pilot', 'update', 'settings', 'goals', 'yield', 'history', 'parental', 'simulator', 'payslips'];
           if (validViews.includes(data.lastView as View)) {
               setView(data.lastView as View);
           }
@@ -386,6 +387,7 @@ const App: React.FC = () => {
           <div className="pt-6 pb-2 text-[10px] font-black text-slate-600 dark:text-slate-300 uppercase px-4 tracking-widest">Gestion</div>
           <NavButton active={view === 'accounts'} onClick={() => setView('accounts')} icon={Wallet} label="Mes Comptes" />
           <NavButton active={view === 'transfers'} onClick={() => setView('transfers')} icon={ArrowRightLeft} label="Virements" />
+          <NavButton active={view === 'payslips'} onClick={() => setView('payslips')} icon={FileText} label="Fiches de paie" />
 
           <div className="my-4 border-t border-slate-800 mx-4"></div>
           <NavButton active={view === 'settings'} onClick={() => setView('settings')} icon={SettingsIcon} label="Paramètres" />
@@ -499,18 +501,23 @@ const App: React.FC = () => {
             {view === 'history' && <History history={data.history} expensesHistory={data.expensesHistory} />}
             {view === 'parental' && <ParentalShare accounts={data.accounts} />}
             {view === 'simulator' && <WithdrawalSimulator accounts={data.accounts} expenses={data.expenses} goals={data.goals} />}
+            {view === 'payslips' && <Payslips payslips={data.payslips} onUpdatePayslips={data.setPayslips} geminiApiKey={data.geminiApiKey} pickerApiKey={data.pickerApiKey} />}
 
             {view === 'settings' && (
                 <Settings
                     config={data.fiscalConfig}
                     workBenefits={data.workBenefits}
                     parentsEmail={data.parentsEmail}
+                    geminiApiKey={data.geminiApiKey}
+                    pickerApiKey={data.pickerApiKey}
                     onExport={data.exportData}
                     onImport={data.importData}
-                    onSave={(newFiscal, newBenefits, newEmail) => {
+                    onSave={(newFiscal, newBenefits, newEmail, newGeminiKey, newPickerKey) => {
                        data.setFiscalConfig(newFiscal);
                        data.setWorkBenefits(newBenefits);
                        data.setParentsEmail(newEmail);
+                       data.setGeminiApiKey(newGeminiKey);
+                       data.setPickerApiKey(newPickerKey);
                        if (newBenefits.navigo.active) {
                            data.setNavigoBase(newBenefits.navigo.basePrice);
                            data.setNavigoRate(newBenefits.navigo.refundRate);
@@ -635,6 +642,7 @@ const App: React.FC = () => {
           { key: 'history', label: 'Historique', icon: LineChart },
           { key: 'parental', label: 'Part Parentale', icon: Users },
           { key: 'simulator', label: 'Simulateur', icon: Calculator },
+          { key: 'payslips', label: 'Fiches de paie', icon: FileText },
           { key: 'settings', label: 'Paramètres', icon: SettingsIcon },
         ]}
       />

@@ -4,18 +4,20 @@
 import React, { useState } from 'react';
 import { FiscalConfig, TaxBracket, WorkBenefits } from '../types';
 import { Button } from './Button';
-import { Save, AlertTriangle, Settings as SettingsIcon, Plus, Trash2, Mail, Download, Upload, Database } from 'lucide-react';
+import { Save, AlertTriangle, Settings as SettingsIcon, Plus, Trash2, Mail, Download, Upload, Database, KeyRound, FileText } from 'lucide-react';
 
 interface SettingsProps {
   config: FiscalConfig;
   workBenefits: WorkBenefits;
   parentsEmail: string; // <--- Prop
-  onSave: (newConfig: FiscalConfig, newBenefits: WorkBenefits, newEmail: string) => void;
+  geminiApiKey: string;
+  pickerApiKey: string;
+  onSave: (newConfig: FiscalConfig, newBenefits: WorkBenefits, newEmail: string, newGeminiKey: string, newPickerKey: string) => void;
   onExport: () => void;
   onImport: (file: File) => Promise<boolean>;
 }
 
-export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parentsEmail, onSave, onExport, onImport }) => {
+export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parentsEmail, geminiApiKey, pickerApiKey, onSave, onExport, onImport }) => {
   const [importMsg, setImportMsg] = useState<string | null>(null);
   const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -28,6 +30,8 @@ export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parent
   const [localFiscal, setLocalFiscal] = useState<FiscalConfig>(config);
   const [localBenefits, setLocalBenefits] = useState<WorkBenefits>(workBenefits);
   const [localEmail, setLocalEmail] = useState<string>(parentsEmail || '');
+  const [localGeminiKey, setLocalGeminiKey] = useState<string>(geminiApiKey || '');
+  const [localPickerKey, setLocalPickerKey] = useState<string>(pickerApiKey || '');
 
   const handleFiscalChange = (field: keyof FiscalConfig, value: any) => {
     setLocalFiscal(prev => ({ ...prev, [field]: value }));
@@ -60,7 +64,7 @@ export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parent
           <h2 className="text-xl font-black text-slate-800 dark:text-slate-100 flex items-center gap-2"><SettingsIcon className="w-6 h-6 text-indigo-600" /> Paramètres Globaux</h2>
           <p className="text-sm text-slate-500 dark:text-slate-400">Ajustez la fiscalité et vos avantages salariaux.</p>
         </div>
-        <Button onClick={() => onSave(localFiscal, localBenefits, localEmail)} className="gap-2"><Save className="w-4 h-4" /> Enregistrer Tout</Button>
+        <Button onClick={() => onSave(localFiscal, localBenefits, localEmail, localGeminiKey, localPickerKey)} className="gap-2"><Save className="w-4 h-4" /> Enregistrer Tout</Button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -91,9 +95,44 @@ export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parent
                     className="w-full p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl font-bold text-slate-800 dark:text-slate-100"
                 />
                 <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-2 flex items-start gap-1">
-                    <span className="text-indigo-600 font-bold">Note :</span> 
+                    <span className="text-indigo-600 font-bold">Note :</span>
                     Un email récapitulatif sera envoyé automatiquement depuis VOTRE compte Gmail à cette adresse uniquement lorsqu'un mouvement est détecté sur un Livret A ou un LEP.
                 </p>
+            </div>
+        </div>
+
+        {/* SECTION FICHES DE PAIE (IA) */}
+        <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 lg:col-span-2">
+            <h3 className="font-bold text-slate-800 dark:text-slate-100 mb-4 border-b border-slate-200 dark:border-slate-700 pb-2 flex items-center gap-2"><FileText className="w-4 h-4 text-indigo-600"/> Fiches de paie (analyse IA)</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="bg-slate-50 dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-700">
+                    <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase block mb-2 flex items-center gap-1"><KeyRound className="w-3 h-3"/> Clé API Gemini</label>
+                    <input
+                        type="password"
+                        autoComplete="off"
+                        value={localGeminiKey}
+                        onChange={e => setLocalGeminiKey(e.target.value)}
+                        placeholder="AIza..."
+                        className="w-full p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-bold text-slate-800 dark:text-slate-100"
+                    />
+                    <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-2">Sert à extraire automatiquement les montants d'une fiche de paie importée. Créée sur <span className="font-bold">Google AI Studio</span>.</p>
+                </div>
+                <div className="bg-slate-50 dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-700">
+                    <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase block mb-2 flex items-center gap-1"><KeyRound className="w-3 h-3"/> Clé API Google Picker</label>
+                    <input
+                        type="password"
+                        autoComplete="off"
+                        value={localPickerKey}
+                        onChange={e => setLocalPickerKey(e.target.value)}
+                        placeholder="AIza..."
+                        className="w-full p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-bold text-slate-800 dark:text-slate-100"
+                    />
+                    <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-2">Permet de choisir une fiche déjà présente sur votre Drive. Créée dans <span className="font-bold">Google Cloud Console</span>, restreinte à l'API Picker.</p>
+                </div>
+            </div>
+            <div className="mt-4 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-lg p-3 flex gap-2 items-start">
+                <AlertTriangle className="w-4 h-4 text-amber-500 mt-0.5 flex-shrink-0"/>
+                <p className="text-xs text-amber-700 dark:text-amber-300 leading-relaxed">Ces clés sont stockées en clair dans votre fichier sur Drive (comme le reste de vos réglages) — jamais envoyées ailleurs qu'à Google. Chaque extraction utilise votre propre quota Gemini.</p>
             </div>
         </div>
 

@@ -84,6 +84,32 @@ export interface SavingsGoal {
   deadline?: string; // date ISO optionnelle
 }
 
+// Champs extraits d'une fiche de paie par l'IA. Tous optionnels : une extraction
+// partielle (fiche illisible, champ absent) ne doit jamais bloquer l'enregistrement,
+// l'utilisateur complète/corrige à la main avant de valider.
+export interface PayslipExtractedData {
+  employer?: string;
+  period?: string;        // "2026-08" par ex.
+  grossAmount?: number;
+  netAmount?: number;
+  netTaxable?: number;
+  navigoRefund?: number;
+  mealVouchers?: number;
+}
+
+export interface PayslipRecord {
+  id: string;
+  // Fichier resté à sa place sur le Drive de l'utilisateur (sélectionné via Google
+  // Picker) : jamais de copie, juste la référence pour le rouvrir depuis Drive.
+  fileId: string;
+  fileName: string;
+  addedAt: string; // date ISO d'import dans l'app
+  extracted: PayslipExtractedData;
+  // L'utilisateur a relu/corrigé l'extraction avant de l'enregistrer : sert à distinguer
+  // une extraction encore brute d'une donnée validée, avant tout usage (ex: pré-remplissage).
+  reviewed: boolean;
+}
+
 export interface TaxBracket {
   limit: number;
   rate: number;
@@ -146,8 +172,14 @@ export interface GlobalAppData {
     taxRateManual: number;
     extraMonthlyIncome: number;
     parentsEmail?: string; // <--- NOUVEAU CHAMP
+    // Clés API saisies par l'utilisateur, stockées en clair dans son propre fichier Drive
+    // (même logique de confiance que le CLIENT_ID applicatif) : jamais transmises ailleurs
+    // qu'à l'API du fournisseur concerné (Google Picker / Gemini) depuis le navigateur.
+    geminiApiKey?: string;
+    pickerApiKey?: string;
   };
   goals?: SavingsGoal[];
   lastView?: string;
   chatHistory?: ChatMessage[];
+  payslips?: PayslipRecord[];
 }
