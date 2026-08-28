@@ -22,12 +22,9 @@ export const AccountForm: React.FC<AccountFormProps> = ({ onSave, initialData, o
   const [parentalCapital, setParentalCapital] = useState<number>(initialData?.parentalCapital || 0);
   const [ownedAmount, setOwnedAmount] = useState<number>(initialData?.ownedAmount || 0);
   const [interestRate, setInterestRate] = useState<string>(initialData?.interestRate?.toString() || '');
-  const [highRate, setHighRate] = useState<string>(initialData?.recentHighRate?.toString() || '');
-  const [lowRate, setLowRate] = useState<string>(initialData?.recentLowRate?.toString() || '');
   const [openingDate, setOpeningDate] = useState(initialData?.openingDate || '');
   const [contractEndDate, setContractEndDate] = useState(initialData?.contractEndDate || '');
   const [ceiling, setCeiling] = useState<number>(initialData?.ceiling || 0);
-  const [isRevolut, setIsRevolut] = useState(initialData?.isRevolut || false);
   const [tags, setTags] = useState<string[]>(initialData?.tags || []);
   const [tagInput, setTagInput] = useState('');
 
@@ -61,7 +58,6 @@ export const AccountForm: React.FC<AccountFormProps> = ({ onSave, initialData, o
     setInstitution('Revolut');
     setName('Poche Loisirs/Projets');
     setType(AccountType.COMPTE_COURANT);
-    setIsRevolut(true);
   };
 
   const addTag = () => {
@@ -91,12 +87,9 @@ export const AccountForm: React.FC<AccountFormProps> = ({ onSave, initialData, o
       ownedAmount,
       parentalCapital,
       interestRate: newRate,
-      recentHighRate: parseFloat(highRate) || undefined,
-      recentLowRate: parseFloat(lowRate) || undefined,
       openingDate,
       contractEndDate: type === AccountType.PEE ? contractEndDate : undefined,
       ceiling: ceiling || undefined,
-      isRevolut,
       isTaxable: isTaxableType,
       rateHistory: rateHistory.length > 0 ? rateHistory : undefined,
       tags: tags.length > 0 ? tags : undefined,
@@ -126,9 +119,9 @@ export const AccountForm: React.FC<AccountFormProps> = ({ onSave, initialData, o
           <div className="md:col-span-2 bg-indigo-50 dark:bg-indigo-950/40 p-5 rounded-2xl border border-indigo-100 dark:border-indigo-900">
             <label className="flex items-center gap-2 text-[10px] font-black text-indigo-700 dark:text-indigo-300 uppercase mb-4"><Calculator className="w-4 h-4" /> Répartition du Capital</label>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-indigo-100 dark:border-indigo-900"><label className="text-[10px] font-black text-indigo-700 dark:text-indigo-300 block mb-1">Solde Total (€)</label><NumberInput value={totalAmount} onChange={handleTotalChange} className={moneyInputClass} /></div>
-              <div className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-amber-100 dark:border-amber-900"><label className="text-[10px] font-black text-amber-700 dark:text-amber-300 block mb-1"><Users className="w-3 h-3" /> Part Parents (€)</label><NumberInput value={parentalCapital} onChange={handleParentalChange} className={`${moneyInputClass} text-amber-700 dark:text-amber-300`} /></div>
-              <div className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-emerald-100 dark:border-emerald-900"><label className="text-[10px] font-black text-emerald-700 dark:text-emerald-300 block mb-1">Ma Part Nette (€)</label><NumberInput value={ownedAmount} onChange={handleOwnedChange} className={`${moneyInputClass} text-emerald-800 dark:text-emerald-300`} /></div>
+              <div className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-indigo-100 dark:border-indigo-900"><label className="text-[10px] font-black text-indigo-700 dark:text-indigo-300 block mb-1">Solde Total (€)</label><NumberInput value={totalAmount} onChange={handleTotalChange} className={moneyInputClass} min={0} /></div>
+              <div className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-amber-100 dark:border-amber-900"><label className="text-[10px] font-black text-amber-700 dark:text-amber-300 block mb-1"><Users className="w-3 h-3" /> Part Parents (€)</label><NumberInput value={parentalCapital} onChange={handleParentalChange} className={`${moneyInputClass} text-amber-700 dark:text-amber-300`} min={0} /></div>
+              <div className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-emerald-100 dark:border-emerald-900"><label className="text-[10px] font-black text-emerald-700 dark:text-emerald-300 block mb-1">Ma Part Nette (€)</label><NumberInput value={ownedAmount} onChange={handleOwnedChange} className={`${moneyInputClass} text-emerald-800 dark:text-emerald-300`} min={0} /></div>
             </div>
           </div>
 
@@ -140,13 +133,7 @@ export const AccountForm: React.FC<AccountFormProps> = ({ onSave, initialData, o
                 <p className="text-[9px] text-slate-400 dark:text-slate-500 mt-1 flex items-center gap-1"><History className="w-3 h-3" /> {initialData.rateHistory.length} changement(s) historisé(s)</p>
               )}
             </div>
-            {isTaxableType && (
-              <>
-                <div><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase mb-1 flex items-center gap-1"><TrendingUp className="w-3 h-3 text-emerald-500" /> Taux Haut Net</label><input type="number" step="0.01" value={highRate} onChange={e => setHighRate(e.target.value)} className="w-full p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-bold text-emerald-600" /></div>
-                <div><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase mb-1 flex items-center gap-1"><TrendingDown className="w-3 h-3 text-rose-500" /> Taux Bas Net</label><input type="number" step="0.01" value={lowRate} onChange={e => setLowRate(e.target.value)} className="w-full p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-bold text-rose-600" /></div>
-              </>
-            )}
-            {!isTaxableType && <div><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase mb-1">Plafond (€)</label><NumberInput value={ceiling} onChange={setCeiling} className="w-full p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-bold" /></div>}
+            {!isTaxableType && <div><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase mb-1">Plafond (€)</label><NumberInput value={ceiling} onChange={setCeiling} className="w-full p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-bold" min={0} /></div>}
           </div>
 
           <div><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase mb-1">Date d'ouverture</label><input type="date" value={openingDate} onChange={e => setOpeningDate(e.target.value)} className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl font-bold" /></div>
@@ -158,7 +145,7 @@ export const AccountForm: React.FC<AccountFormProps> = ({ onSave, initialData, o
               {tags.map(t => (
                 <span key={t} className="inline-flex items-center gap-1 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 text-xs font-bold px-2.5 py-1 rounded-full">
                   {t}
-                  <button type="button" onClick={() => removeTag(t)}><X className="w-3 h-3" /></button>
+                  <button type="button" onClick={() => removeTag(t)} aria-label={`Retirer l'étiquette ${t}`} className="p-2 -m-1.5 hover:text-indigo-900 dark:hover:text-indigo-100"><X className="w-3.5 h-3.5" /></button>
                 </span>
               ))}
             </div>
@@ -176,7 +163,6 @@ export const AccountForm: React.FC<AccountFormProps> = ({ onSave, initialData, o
           </div>
         </div>
         <div className="mt-8 flex justify-between items-center gap-4">
-          <div className="flex items-center gap-2"><input type="checkbox" checked={isRevolut} onChange={e => setIsRevolut(e.target.checked)} className="w-4 h-4" /><label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">Compte Revolut (3916)</label></div>
           <div className="flex gap-3">{onCancel && <Button type="button" variant="ghost" onClick={onCancel}>Annuler</Button>}<Button type="submit" className="px-10 py-4">Enregistrer</Button></div>
         </div>
       </form>

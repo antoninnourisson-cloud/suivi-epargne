@@ -39,13 +39,10 @@ export interface SavingsAccount {
   ownedAmount: number;
   parentalCapital: number;
   interestRate?: number;
-  recentHighRate?: number;
-  recentLowRate?: number;
   openingDate?: string;
   contractEndDate?: string;
   ceiling?: number;
   movements?: AccountMovement[];
-  isRevolut?: boolean;
   isTaxable?: boolean;
   rateHistory?: RateChange[];
   tags?: string[];
@@ -67,13 +64,6 @@ export interface Expense {
   name: string;
   amount: number;
   paymentMethod?: string;
-}
-
-export interface ChatMessage {
-  id: string;
-  role: 'user' | 'model';
-  content: string;
-  timestamp: number;
 }
 
 export interface SavingsGoal {
@@ -189,7 +179,6 @@ export interface GlobalAppData {
   };
   goals?: SavingsGoal[];
   lastView?: string;
-  chatHistory?: ChatMessage[];
   payslips?: PayslipRecord[];
   // Fiche de paie actuellement utilisée comme référence exacte dans le Pilotage Budgétaire
   // (bascule le détail charges/impôt sur les vrais chiffres au lieu de la formule

@@ -295,16 +295,39 @@ const App: React.FC = () => {
     }));
   };
 
-  const undoDeleteMovement = (accountId: string, movement: AccountMovement) => {
+  // Recense TOUTES les lignes que la suppression va réellement retirer. Un virement interne
+  // en compte deux (le OUT côté source et le IN côté destination, appariés par `linkId`) et
+  // `doDeleteMovement` les supprime ensemble : les recenser avant permet de tout restaurer
+  // d'un bloc. Sans ça, l'undo était purement et simplement désactivé pour les virements,
+  // faisant de l'opération la plus destructrice de l'app la seule sans filet.
+  type MovementLeg = { accountId: string; movement: AccountMovement };
+  const collectMovementLegs = (accountId: string, movementId: string): MovementLeg[] => {
+    const account = data.accounts.find(a => a.id === accountId);
+    const movement = account?.movements?.find(m => m.id === movementId);
+    if (!movement) return [];
+    if (!movement.linkId) return [{ accountId, movement }];
+    const legs: MovementLeg[] = [];
+    data.accounts.forEach(acc => {
+      (acc.movements || []).forEach(m => {
+        if (m.linkId === movement.linkId) legs.push({ accountId: acc.id, movement: m });
+      });
+    });
+    return legs;
+  };
+
+  const restoreMovementLegs = (legs: MovementLeg[]) => {
     data.setAccounts(prev => prev.map(acc => {
-      if (acc.id !== accountId) return acc;
+      const toRestore = legs.filter(l => l.accountId === acc.id);
+      if (toRestore.length === 0) return acc;
       let newOwned = acc.ownedAmount;
-      if (movement.type === 'IN') newOwned += movement.amount; else newOwned -= movement.amount;
+      toRestore.forEach(({ movement }) => {
+        if (movement.type === 'IN') newOwned += movement.amount; else newOwned -= movement.amount;
+      });
       return {
         ...acc,
         ownedAmount: newOwned,
         totalAmount: newOwned + acc.parentalCapital,
-        movements: [...(acc.movements || []), movement],
+        movements: [...(acc.movements || []), ...toRestore.map(l => l.movement)],
       };
     }));
   };
@@ -312,16 +335,22 @@ const App: React.FC = () => {
   const handleDeleteMovement = (accountId: string, movementId: string) => {
     const account = data.accounts.find(a => a.id === accountId);
     const movement = account?.movements?.find(m => m.id === movementId);
+    const legs = collectMovementLegs(accountId, movementId);
+    const isTransfer = legs.length > 1;
     setDialog({
       open: true, kind: 'confirm', danger: true, confirmLabel: 'Supprimer',
-      title: 'Supprimer le mouvement',
-      message: movement ? `« ${movement.label} » sera supprimé.` : undefined,
+      title: isTransfer ? 'Supprimer le virement' : 'Supprimer le mouvement',
+      message: movement
+        ? (isTransfer
+            ? `« ${movement.label} » est un virement interne : les ${legs.length} lignes liées seront supprimées ensemble.`
+            : `« ${movement.label} » sera supprimé.`)
+        : undefined,
       onConfirm: () => {
         doDeleteMovement(accountId, movementId);
-        if (movement && !movement.linkId) {
+        if (legs.length > 0) {
           addToast({
-            message: 'Mouvement supprimé',
-            action: { label: 'Annuler', onClick: () => undoDeleteMovement(accountId, movement) },
+            message: isTransfer ? `Virement supprimé (${legs.length} lignes)` : 'Mouvement supprimé',
+            action: { label: 'Annuler', onClick: () => restoreMovementLegs(legs) },
           });
         }
       },
@@ -340,6 +369,9 @@ const App: React.FC = () => {
 
   const handleDeleteAccount = (acc: SavingsAccount) => {
     const isEmpty = acc.totalAmount === 0;
+    // Position d'origine mémorisée pour que l'annulation remette le compte à sa place au
+    // lieu de le renvoyer en fin de liste (même exigence que pour l'édition, cf. plus haut).
+    const originalIndex = data.accounts.findIndex(a => a.id === acc.id);
     setDialog({
       open: true, kind: 'confirm', danger: true, confirmLabel: 'Supprimer',
       title: `Supprimer « ${acc.name} »`,
@@ -348,7 +380,14 @@ const App: React.FC = () => {
         data.setAccounts(prev => prev.filter(a => a.id !== acc.id));
         addToast({
           message: `« ${acc.name} » supprimé`,
-          action: { label: 'Annuler', onClick: () => data.setAccounts(prev => [...prev, acc]) },
+          action: {
+            label: 'Annuler',
+            onClick: () => data.setAccounts(prev => {
+              const next = [...prev];
+              next.splice(originalIndex < 0 ? next.length : originalIndex, 0, acc);
+              return next;
+            }),
+          },
         });
       },
     });
@@ -476,8 +515,8 @@ const App: React.FC = () => {
               {data.isOffline ? 'Hors ligne' : data.isSaving ? 'Sauvegarde...' : data.syncError ? 'Erreur' : data.syncConflict ? 'Conflit' : data.lastSavedAt ? data.lastSavedAt.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : 'Sync'}
             </span>
           </div>
-          <button onClick={toggleTheme} className="text-slate-400" title="Thème">{isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}</button>
-          <button onClick={handleLogout} className="text-rose-400" title="Déconnexion"><LogOut className="w-4 h-4" /></button>
+          <button onClick={toggleTheme} className="p-2.5 -m-1 text-slate-400" title="Thème" aria-label="Changer de thème">{isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}</button>
+          <button onClick={handleLogout} className="p-2.5 -m-1 text-rose-400" title="Déconnexion" aria-label="Se déconnecter"><LogOut className="w-4 h-4" /></button>
         </div>
       </header>
 
@@ -557,8 +596,8 @@ const App: React.FC = () => {
                 onClearActivePayslip={handleClearActivePayslip}
             />}
 
-            {view === 'transfers' && <TransferManager accounts={data.accounts} onUpdateAccountsComplex={data.updateAccountsWithMovements} onLinkedTransfer={data.executeLinkedTransfer} />}
-            {view === 'update' && <AccountUpdate accounts={data.accounts} onUpdateAccountsComplex={data.updateAccountsWithMovements} />}
+            {view === 'transfers' && <TransferManager accounts={data.accounts} onUpdateAccountsComplex={data.updateAccountsWithMovements} onLinkedTransfer={data.executeLinkedTransfer} lastSavedAt={data.lastSavedAt} />}
+            {view === 'update' && <AccountUpdate accounts={data.accounts} onUpdateAccountsComplex={data.updateAccountsWithMovements} lastSavedAt={data.lastSavedAt} />}
 
             {view === 'goals' && <Goals
                 goals={data.goals}
@@ -622,58 +661,60 @@ const App: React.FC = () => {
                     </div>
                   )}
                   <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
-                    <table className="w-full text-left">
-                      <thead className="bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700">
-                        <tr><th className="px-6 py-4 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider">Compte</th><th className="px-6 py-4 text-[10px] text-right text-slate-400 dark:text-slate-500 uppercase tracking-wider">Mien</th><th className="px-6 py-4 text-[10px] text-right text-slate-400 dark:text-slate-500 uppercase tracking-wider">Parents</th><th className="px-6 py-4 text-right"></th></tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                        {filteredAccounts.map(acc => (
-                          <React.Fragment key={acc.id}>
-                            <tr onClick={() => setEditingAccount(editingAccount?.id === acc.id ? undefined : acc)} className="hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer group transition-colors">
-                              <td className="px-6 py-4">
-                                <div className="font-bold text-slate-800 dark:text-slate-100">{acc.name}</div>
-                                <div className="text-[10px] uppercase text-slate-400 dark:text-slate-500 font-bold">{acc.institution}</div>
-                                {acc.tags && acc.tags.length > 0 && (
-                                  <div className="flex flex-wrap gap-1 mt-1">
-                                    {acc.tags.map(t => <span key={t} className="text-[9px] bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-300 px-1.5 py-0.5 rounded-full font-bold normal-case">{t}</span>)}
-                                  </div>
-                                )}
-                              </td>
-                              <td className="px-6 py-4 text-right font-black text-indigo-600 text-lg">{acc.ownedAmount.toLocaleString()} €</td>
-                              <td className="px-6 py-4 text-right font-bold text-amber-500">{acc.parentalCapital.toLocaleString()} €</td>
-                              <td className="px-6 py-4 text-right flex justify-end gap-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
-                                 <button onClick={(e) => { e.stopPropagation(); setEditingAccount(acc); setShowForm(true); }} className="p-2 text-indigo-600 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/40 rounded-lg hover:bg-indigo-100 dark:hover:bg-indigo-900"><Edit2 className="w-4 h-4"/></button>
-                                 <button onClick={(e) => { e.stopPropagation(); handleDeleteAccount(acc); }} className="p-2 text-rose-600 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/40 rounded-lg hover:bg-rose-100 dark:hover:bg-rose-900"><Trash2 className="w-4 h-4"/></button>
-                              </td>
-                            </tr>
-                            {editingAccount?.id === acc.id && !showForm && (
-                               <tr className="bg-slate-50 dark:bg-slate-900 animate-in slide-in-from-top-2"><td colSpan={4} className="p-4"><div className="space-y-2 p-2">
-                                 <label className="flex items-center gap-2 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase mb-1 cursor-pointer">
-                                   <input type="checkbox" checked={groupSmallMovements} onChange={e => setGroupSmallMovements(e.target.checked)} className="accent-indigo-600" />
-                                   Regrouper les mouvements &lt; 1€
-                                 </label>
-                                 <div className="max-h-60 overflow-y-auto space-y-2">
-                                 {buildDisplayMovements(acc.movements).map(m => (
-                                   <div key={m.id} className={`flex justify-between items-center p-3 rounded-xl text-xs border shadow-sm ${m.grouped ? 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 italic' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700'}`}>
-                                     <div className="flex items-center gap-3">
-                                         <span className="text-slate-400 dark:text-slate-500 font-mono bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded">{m.date}</span>
-                                         <span className="font-bold text-slate-700 dark:text-slate-200">{m.label}</span>
-                                         {!m.grouped && <button onClick={()=>handleRenameMovement(acc.id, m.id, m.label)} className="opacity-40 hover:opacity-100"><Edit2 className="w-3 h-3 text-slate-500 dark:text-slate-400"/></button>}
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left min-w-[34rem]">
+                        <thead className="bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700">
+                          <tr><th className="px-6 py-4 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider">Compte</th><th className="px-6 py-4 text-[10px] text-right text-slate-400 dark:text-slate-500 uppercase tracking-wider">Mien</th><th className="px-6 py-4 text-[10px] text-right text-slate-400 dark:text-slate-500 uppercase tracking-wider">Parents</th><th className="px-6 py-4 text-right"></th></tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                          {filteredAccounts.map(acc => (
+                            <React.Fragment key={acc.id}>
+                              <tr onClick={() => setEditingAccount(editingAccount?.id === acc.id ? undefined : acc)} className="hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer group transition-colors">
+                                <td className="px-6 py-4">
+                                  <div className="font-bold text-slate-800 dark:text-slate-100">{acc.name}</div>
+                                  <div className="text-[10px] uppercase text-slate-400 dark:text-slate-500 font-bold">{acc.institution}</div>
+                                  {acc.tags && acc.tags.length > 0 && (
+                                    <div className="flex flex-wrap gap-1 mt-1">
+                                      {acc.tags.map(t => <span key={t} className="text-[9px] bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-300 px-1.5 py-0.5 rounded-full font-bold normal-case">{t}</span>)}
+                                    </div>
+                                  )}
+                                </td>
+                                <td className="px-6 py-4 text-right font-black text-indigo-600 text-lg">{acc.ownedAmount.toLocaleString()} €</td>
+                                <td className="px-6 py-4 text-right font-bold text-amber-500">{acc.parentalCapital.toLocaleString()} €</td>
+                                <td className="px-6 py-4 text-right flex justify-end gap-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+                                   <button onClick={(e) => { e.stopPropagation(); setEditingAccount(acc); setShowForm(true); }} className="p-2 text-indigo-600 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/40 rounded-lg hover:bg-indigo-100 dark:hover:bg-indigo-900"><Edit2 className="w-4 h-4"/></button>
+                                   <button onClick={(e) => { e.stopPropagation(); handleDeleteAccount(acc); }} className="p-2 text-rose-600 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/40 rounded-lg hover:bg-rose-100 dark:hover:bg-rose-900"><Trash2 className="w-4 h-4"/></button>
+                                </td>
+                              </tr>
+                              {editingAccount?.id === acc.id && !showForm && (
+                                 <tr className="bg-slate-50 dark:bg-slate-900 animate-in slide-in-from-top-2"><td colSpan={4} className="p-4"><div className="space-y-2 p-2">
+                                   <label className="flex items-center gap-2 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase mb-1 cursor-pointer">
+                                     <input type="checkbox" checked={groupSmallMovements} onChange={e => setGroupSmallMovements(e.target.checked)} className="accent-indigo-600" />
+                                     Regrouper les mouvements &lt; 1€
+                                   </label>
+                                   <div className="max-h-60 overflow-y-auto space-y-2">
+                                   {buildDisplayMovements(acc.movements).map(m => (
+                                     <div key={m.id} className={`flex justify-between items-center p-3 rounded-xl text-xs border shadow-sm ${m.grouped ? 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 italic' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700'}`}>
+                                       <div className="flex items-center gap-3">
+                                           <span className="text-slate-400 dark:text-slate-500 font-mono bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded">{m.date}</span>
+                                           <span className="font-bold text-slate-700 dark:text-slate-200">{m.label}</span>
+                                           {!m.grouped && <button onClick={()=>handleRenameMovement(acc.id, m.id, m.label)} aria-label={`Renommer « ${m.label} »`} className="p-2 -m-1 opacity-60 hover:opacity-100"><Edit2 className="w-4 h-4 text-slate-500 dark:text-slate-400"/></button>}
+                                       </div>
+                                       <div className="flex items-center gap-3">
+                                           <span className={`font-mono text-sm ${m.type==='IN'?'text-emerald-600 font-bold':'text-rose-600 font-bold'}`}>{m.type==='IN'?'+':'-'}{m.amount.toLocaleString()}€</span>
+                                           {!m.grouped && <button onClick={()=>handleDeleteMovement(acc.id, m.id)} aria-label={`Supprimer « ${m.label} »`} className="p-2.5 -m-1 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded text-slate-400 dark:text-slate-500 hover:text-rose-500"><Trash2 className="w-4 h-4"/></button>}
+                                       </div>
                                      </div>
-                                     <div className="flex items-center gap-3">
-                                         <span className={`font-mono text-sm ${m.type==='IN'?'text-emerald-600 font-bold':'text-rose-600 font-bold'}`}>{m.type==='IN'?'+':'-'}{m.amount.toLocaleString()}€</span>
-                                         {!m.grouped && <button onClick={()=>handleDeleteMovement(acc.id, m.id)} className="p-1 hover:bg-rose-50 rounded text-slate-400 dark:text-slate-500 hover:text-rose-500"><Trash2 className="w-4 h-4"/></button>}
-                                     </div>
+                                   ))}
+                                   {(!acc.movements || acc.movements.length===0) && <div className="text-center text-slate-400 dark:text-slate-500 italic py-4">Aucun mouvement historique.</div>}
                                    </div>
-                                 ))}
-                                 {(!acc.movements || acc.movements.length===0) && <div className="text-center text-slate-400 dark:text-slate-500 italic py-4">Aucun mouvement historique.</div>}
-                                 </div>
-                               </div></td></tr>
-                             )}
-                          </React.Fragment>
-                        ))}
-                      </tbody>
-                    </table>
+                                 </div></td></tr>
+                               )}
+                            </React.Fragment>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                   </>
                 )}

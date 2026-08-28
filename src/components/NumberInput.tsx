@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { parseFrenchNumber } from '../lib/numbers';
 
 interface NumberInputProps {
   value: number;
@@ -6,6 +7,7 @@ interface NumberInputProps {
   className?: string;
   placeholder?: string;
   suffix?: string; // ex: '€'
+  min?: number;    // borne basse appliquée à la validation (ex: 0 pour un montant)
 }
 
 const fmt = (n: number) => (isNaN(n) ? '' : n.toLocaleString('fr-FR', { maximumFractionDigits: 2 }));
@@ -13,8 +15,12 @@ const fmt = (n: number) => (isNaN(n) ? '' : n.toLocaleString('fr-FR', { maximumF
 /**
  * Input numérique affichant les montants avec séparateurs de milliers (espace, format FR)
  * en dehors du focus, et la valeur brute éditable pendant la saisie.
+ *
+ * Reste en `type="text"` en permanence : c'est `parseFrenchNumber` qui interprète la saisie,
+ * pas le navigateur. Voir le commentaire de cette fonction pour le bug de perte de données
+ * que ça corrige (la virgule décimale enregistrait 0).
  */
-export const NumberInput: React.FC<NumberInputProps> = ({ value, onChange, className, placeholder, suffix }) => {
+export const NumberInput: React.FC<NumberInputProps> = ({ value, onChange, className, placeholder, suffix, min }) => {
   const [focused, setFocused] = useState(false);
   const [raw, setRaw] = useState(String(value ?? ''));
 
@@ -25,7 +31,7 @@ export const NumberInput: React.FC<NumberInputProps> = ({ value, onChange, class
   return (
     <div className="relative">
       <input
-        type={focused ? 'number' : 'text'}
+        type="text"
         inputMode="decimal"
         value={focused ? raw : (value || value === 0 ? fmt(value) : '')}
         placeholder={placeholder}
@@ -33,8 +39,15 @@ export const NumberInput: React.FC<NumberInputProps> = ({ value, onChange, class
         onChange={e => setRaw(e.target.value)}
         onBlur={() => {
           setFocused(false);
-          const parsed = parseFloat(raw.replace(',', '.'));
-          onChange(isNaN(parsed) ? 0 : parsed);
+          const parsed = parseFrenchNumber(raw);
+          if (parsed === null) {
+            // Champ explicitement vidé => 0 (intention claire). Saisie non interprétable
+            // => on RESTAURE la valeur précédente : écraser un solde réel par 0 à cause
+            // d'une faute de frappe est la pire issue possible ici.
+            onChange(raw.trim() === '' ? 0 : value);
+            return;
+          }
+          onChange(min !== undefined && parsed < min ? min : parsed);
         }}
         className={className}
       />

@@ -2,19 +2,24 @@
 import React, { useState } from 'react';
 import { SavingsAccount } from '../types';
 import { Button } from './Button';
-import { ArrowRightLeft, Download, Calendar, ArrowDown, CheckCircle } from 'lucide-react';
+import { ArrowRightLeft, Download, Calendar, ArrowDown, CheckCircle, AlertCircle, Wallet } from 'lucide-react';
+import { useSaveFeedback } from '../hooks/useSaveFeedback';
+import { safeNumber } from '../lib/numbers';
 
 interface TransferManagerProps {
   accounts: SavingsAccount[];
   onUpdateAccountsComplex: (updates: { account: SavingsAccount, date: string }[]) => void;
   onLinkedTransfer: (sourceId: string, destId: string, amount: number, date: string) => void;
+  // Horodatage de la dernière écriture Drive CONFIRMÉE (voir useSaveFeedback).
+  lastSavedAt?: Date | null;
 }
 
-export const TransferManager: React.FC<TransferManagerProps> = ({ accounts, onUpdateAccountsComplex, onLinkedTransfer }) => {
+export const TransferManager: React.FC<TransferManagerProps> = ({ accounts, onUpdateAccountsComplex, onLinkedTransfer, lastSavedAt }) => {
   const today = new Date().toISOString().split('T')[0];
   const [activeTab, setActiveTab] = useState<'deposit' | 'transfer'>('deposit');
   const [opDate, setOpDate] = useState<string>(today);
-  const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const { status: saveStatus, markPending } = useSaveFeedback(lastSavedAt);
+  const [formError, setFormError] = useState<string | null>(null);
 
   // Deposit State
   const [depositAccountId, setDepositAccountId] = useState<string>('');
@@ -25,20 +30,19 @@ export const TransferManager: React.FC<TransferManagerProps> = ({ accounts, onUp
   const [destAccountId, setDestAccountId] = useState<string>('');
   const [transferAmount, setTransferAmount] = useState<string>('');
 
-  const showSuccess = (msg: string) => {
-      setSuccessMsg(msg);
-      setTimeout(() => setSuccessMsg(null), 3000);
-  };
-
+  // Les échecs de validation étaient de simples `return` silencieux (ou une `alert()`
+  // native) : l'utilisateur cliquait et rien ne se passait, sans explication. On remonte
+  // désormais la raison dans le formulaire lui-même.
   const handleDeposit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!depositAccountId || !depositAmount) return;
+    setFormError(null);
 
-    const amount = parseFloat(depositAmount);
-    if (isNaN(amount) || amount <= 0) return;
+    if (!depositAccountId) { setFormError('Choisis un compte de destination.'); return; }
+    const amount = safeNumber(depositAmount, 0);
+    if (amount <= 0) { setFormError('Saisis un montant supérieur à 0.'); return; }
 
     const targetAcc = accounts.find(a => a.id === depositAccountId);
-    if (!targetAcc) return;
+    if (!targetAcc) { setFormError('Ce compte est introuvable.'); return; }
 
     const updatedAcc: SavingsAccount = {
       ...targetAcc,
@@ -46,32 +50,47 @@ export const TransferManager: React.FC<TransferManagerProps> = ({ accounts, onUp
       ownedAmount: targetAcc.ownedAmount + amount
     };
 
+    markPending();
     onUpdateAccountsComplex([{ account: updatedAcc, date: opDate }]);
     setDepositAmount('');
-    showSuccess("Dépôt enregistré avec succès !");
   };
 
   const handleTransfer = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!sourceAccountId || !destAccountId || !transferAmount) return;
-    if (sourceAccountId === destAccountId) return;
+    setFormError(null);
 
-    const amount = parseFloat(transferAmount);
+    if (!sourceAccountId || !destAccountId) { setFormError('Choisis les comptes source et destination.'); return; }
+    if (sourceAccountId === destAccountId) { setFormError('Source et destination doivent être différentes.'); return; }
+
+    const amount = safeNumber(transferAmount, 0);
+    if (amount <= 0) { setFormError('Saisis un montant supérieur à 0.'); return; }
+
     const sourceAcc = accounts.find(a => a.id === sourceAccountId);
-
-    if (isNaN(amount) || amount <= 0 || !sourceAcc) return;
+    if (!sourceAcc) { setFormError('Le compte source est introuvable.'); return; }
 
     if (sourceAcc.totalAmount < amount) {
-        alert("Fonds insuffisants."); // Exception: ici alert ok car erreur blocante
-        return;
+      setFormError(`Fonds insuffisants : ${sourceAcc.name} ne contient que ${sourceAcc.totalAmount.toLocaleString('fr-FR', { maximumFractionDigits: 2 })} €.`);
+      return;
     }
 
+    markPending();
     onLinkedTransfer(sourceAccountId, destAccountId, amount, opDate);
     setTransferAmount('');
-    showSuccess("Virement exécuté avec succès !");
   };
 
-  if (accounts.length === 0) return null;
+  // Auparavant `return null` : l'onglet Virements de la barre du bas s'ouvrait sur une zone
+  // entièrement vide, sans explication ni porte de sortie.
+  if (accounts.length === 0) {
+    return (
+      <div className="text-center py-20 bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
+        <Wallet className="w-12 h-12 text-slate-300 dark:text-slate-600 mx-auto mb-3" />
+        <h2 className="text-xl font-bold text-slate-600 dark:text-slate-300">Aucun compte pour l'instant</h2>
+        <p className="text-sm text-slate-400 dark:text-slate-500 mt-2 max-w-xs mx-auto">
+          Ajoute au moins un compte depuis l'écran « Mes Comptes » pour pouvoir enregistrer des dépôts et des virements.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
@@ -93,9 +112,15 @@ export const TransferManager: React.FC<TransferManagerProps> = ({ accounts, onUp
           </div>
         </div>
 
-        {successMsg && (
-            <div className="bg-emerald-100 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300 p-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2 animate-pulse">
-                <CheckCircle className="w-4 h-4"/> {successMsg}
+        {saveStatus === 'saved' && (
+            <div className="bg-emerald-100 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300 p-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2">
+                <CheckCircle className="w-4 h-4"/> Enregistré sur Drive
+            </div>
+        )}
+
+        {formError && (
+            <div className="bg-rose-100 dark:bg-rose-950/50 text-rose-800 dark:text-rose-300 p-3 rounded-xl text-sm font-bold flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 flex-shrink-0"/> {formError}
             </div>
         )}
 
@@ -105,8 +130,8 @@ export const TransferManager: React.FC<TransferManagerProps> = ({ accounts, onUp
               <option value="">Compte de destination</option>
               {accounts.map(acc => <option key={acc.id} value={acc.id}>{acc.name} ({acc.institution})</option>)}
             </select>
-            <input type="number" step="0.01" value={depositAmount} onChange={e => setDepositAmount(e.target.value)} className="w-full p-4 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 border border-slate-300 dark:border-slate-700 rounded-lg text-2xl font-black" placeholder="0.00 €" required />
-            <Button type="submit" className="w-full bg-emerald-600 py-4">Valider le dépôt</Button>
+            <input type="text" value={depositAmount} onChange={e => setDepositAmount(e.target.value)} className="w-full p-4 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 border border-slate-300 dark:border-slate-700 rounded-lg text-2xl font-black" placeholder="0,00 €" inputMode="decimal" />
+            <Button type="submit" isLoading={saveStatus === 'pending'} className="w-full bg-emerald-600 py-4">Valider le dépôt</Button>
           </form>
         ) : (
           <form onSubmit={handleTransfer} className="space-y-4">
@@ -119,8 +144,8 @@ export const TransferManager: React.FC<TransferManagerProps> = ({ accounts, onUp
               <option value="">Vers</option>
               {accounts.map(acc => <option key={acc.id} value={acc.id} disabled={acc.id === sourceAccountId}>{acc.name}</option>)}
             </select>
-            <input type="number" step="0.01" value={transferAmount} onChange={e => setTransferAmount(e.target.value)} className="w-full p-4 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 border border-slate-300 dark:border-slate-700 rounded-lg text-2xl font-black" placeholder="0.00 €" required />
-            <Button type="submit" className="w-full py-4">Exécuter le virement</Button>
+            <input type="text" value={transferAmount} onChange={e => setTransferAmount(e.target.value)} className="w-full p-4 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 border border-slate-300 dark:border-slate-700 rounded-lg text-2xl font-black" placeholder="0,00 €" inputMode="decimal" />
+            <Button type="submit" isLoading={saveStatus === 'pending'} className="w-full py-4">Exécuter le virement</Button>
           </form>
         )}
       </div>

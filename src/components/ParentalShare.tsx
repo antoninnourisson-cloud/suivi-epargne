@@ -55,35 +55,37 @@ export const ParentalShare: React.FC<ParentalShareProps> = ({ accounts }) => {
       </div>
 
       <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
-        <table className="w-full text-left text-sm">
-          <thead className="bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700">
-            <tr>
-              <th className="px-6 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Compte</th>
-              <th className="px-6 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase text-right">Moi</th>
-              <th className="px-6 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase text-right">Parents</th>
-              <th className="px-6 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase w-1/3">Répartition</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-            {rows.map(r => {
-              const pct = r.total > 0 ? (r.owned / r.total) * 100 : 0;
-              return (
-                <tr key={r.id} className="hover:bg-slate-50 dark:hover:bg-slate-800">
-                  <td className="px-6 py-3"><div className="font-bold text-slate-800 dark:text-slate-100">{r.name}</div><div className="text-[10px] uppercase text-slate-400 dark:text-slate-500 font-bold">{r.type}</div></td>
-                  <td className="px-6 py-3 text-right font-mono text-indigo-600">{fmt(r.owned)}</td>
-                  <td className="px-6 py-3 text-right font-mono text-amber-500">{fmt(r.parental)}</td>
-                  <td className="px-6 py-3">
-                    <div className="w-full h-2.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden flex">
-                      <div className="h-full bg-indigo-600" style={{ width: `${pct}%` }} />
-                      <div className="h-full bg-amber-400" style={{ width: `${100 - pct}%` }} />
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-            {rows.length === 0 && <tr><td colSpan={4} className="px-6 py-8 text-center text-slate-400 dark:text-slate-500 italic">Aucun compte à afficher.</td></tr>}
-          </tbody>
-        </table>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm min-w-[34rem]">
+            <thead className="bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700">
+              <tr>
+                <th className="px-6 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Compte</th>
+                <th className="px-6 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase text-right">Moi</th>
+                <th className="px-6 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase text-right">Parents</th>
+                <th className="px-6 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase w-1/3">Répartition</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+              {rows.map(r => {
+                const pct = r.total > 0 ? (r.owned / r.total) * 100 : 0;
+                return (
+                  <tr key={r.id} className="hover:bg-slate-50 dark:hover:bg-slate-800">
+                    <td className="px-6 py-3"><div className="font-bold text-slate-800 dark:text-slate-100">{r.name}</div><div className="text-[10px] uppercase text-slate-400 dark:text-slate-500 font-bold">{r.type}</div></td>
+                    <td className="px-6 py-3 text-right font-mono text-indigo-600">{fmt(r.owned)}</td>
+                    <td className="px-6 py-3 text-right font-mono text-amber-500">{fmt(r.parental)}</td>
+                    <td className="px-6 py-3">
+                      <div className="w-full h-2.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden flex">
+                        <div className="h-full bg-indigo-600" style={{ width: `${pct}%` }} />
+                        <div className="h-full bg-amber-400" style={{ width: `${100 - pct}%` }} />
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+              {rows.length === 0 && <tr><td colSpan={4} className="px-6 py-8 text-center text-slate-400 dark:text-slate-500 italic">Aucun compte à afficher.</td></tr>}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );

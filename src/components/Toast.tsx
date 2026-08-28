@@ -53,7 +53,7 @@ export const ToastContainer: React.FC<{ toasts: ToastItem[]; onDismiss: (id: str
               {t.action.label}
             </button>
           )}
-          <button onClick={() => onDismiss(t.id)} className="opacity-50 hover:opacity-100 flex-shrink-0"><X className="w-3.5 h-3.5" /></button>
+          <button onClick={() => onDismiss(t.id)} aria-label="Fermer la notification" className="p-2 -m-1 opacity-60 hover:opacity-100 flex-shrink-0"><X className="w-4 h-4" /></button>
         </div>
       ))}
     </div>

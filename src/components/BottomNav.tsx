@@ -32,7 +32,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ view, setView, moreOpen, s
           <div className="bg-white dark:bg-slate-900 rounded-t-3xl w-full p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] max-h-[70vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4 px-2">
               <h3 className="font-black text-slate-800 dark:text-slate-100">Plus d'options</h3>
-              <button onClick={() => setMoreOpen(false)} className="p-1 text-slate-400 dark:text-slate-500"><X className="w-5 h-5" /></button>
+              <button onClick={() => setMoreOpen(false)} aria-label="Fermer le menu" className="p-2.5 -m-1.5 text-slate-400 dark:text-slate-500"><X className="w-5 h-5" /></button>
             </div>
             <div className="grid grid-cols-3 gap-2">
               {moreItems.map(item => (

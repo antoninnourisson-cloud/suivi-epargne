@@ -3,16 +3,21 @@ import React, { useState } from 'react';
 import { SavingsAccount } from '../types';
 import { Button } from './Button';
 import { Save, AlertCircle, RefreshCw, Calendar, User, Users, CheckCircle } from 'lucide-react';
+import { useSaveFeedback } from '../hooks/useSaveFeedback';
+import { safeNumber } from '../lib/numbers';
 
 interface AccountUpdateProps {
   accounts: SavingsAccount[];
   onUpdateAccountsComplex: (updates: { account: SavingsAccount, date: string }[]) => void;
   onCancel?: () => void; // Ajout prop optionnelle pour cohérence
+  // Horodatage de la dernière écriture Drive CONFIRMÉE : sert à n'annoncer le succès que
+  // lorsqu'il est réel (voir useSaveFeedback).
+  lastSavedAt?: Date | null;
 }
 
-export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdateAccountsComplex }) => {
+export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdateAccountsComplex, lastSavedAt }) => {
   const today = new Date().toISOString().split('T')[0];
-  const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const { status: saveStatus, markPending } = useSaveFeedback(lastSavedAt);
 
   const [updates, setUpdates] = useState<Record<string, { owned: string, parental: string, date: string }>>(
     accounts.reduce((acc, account) => ({ 
@@ -27,12 +32,10 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
 
   const handleOwnedChange = (id: string, val: string) => {
     setUpdates(prev => ({ ...prev, [id]: { ...prev[id], owned: val } }));
-    setSuccessMsg(null);
   };
 
   const handleParentalChange = (id: string, val: string) => {
     setUpdates(prev => ({ ...prev, [id]: { ...prev[id], parental: val } }));
-    setSuccessMsg(null);
   };
 
   const handleDateChange = (id: string, val: string) => {
@@ -42,8 +45,8 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
   const handleSaveAll = () => {
     const payloads = accounts.map(account => {
       const u = updates[account.id];
-      const newOwned = parseFloat(u.owned) || 0;
-      const newParental = parseFloat(u.parental) || 0;
+      const newOwned = safeNumber(u.owned, 0);
+      const newParental = safeNumber(u.parental, 0);
       const updatedAccount: SavingsAccount = {
         ...account,
         ownedAmount: newOwned,
@@ -52,10 +55,9 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
       };
       return { account: updatedAccount, date: u.date };
     });
-    
+
+    markPending();
     onUpdateAccountsComplex(payloads);
-    setSuccessMsg("Comptes actualisés avec succès !");
-    setTimeout(() => setSuccessMsg(null), 3000);
   };
 
   if (accounts.length === 0) {
@@ -80,10 +82,10 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
           </p>
         </div>
         <div className="flex flex-col items-end gap-2">
-             <Button onClick={handleSaveAll} className="bg-white dark:bg-slate-800 text-indigo-600 hover:bg-indigo-50 border-none font-black px-8 py-3 shadow-xl">
+             <Button onClick={handleSaveAll} isLoading={saveStatus === 'pending'} className="bg-white dark:bg-slate-800 text-indigo-600 hover:bg-indigo-50 border-none font-black px-8 py-3 shadow-xl">
                 <Save className="w-5 h-5 mr-2" /> Tout Enregistrer
             </Button>
-            {successMsg && <span className="text-emerald-300 font-bold text-sm flex items-center gap-1"><CheckCircle className="w-4 h-4"/> {successMsg}</span>}
+            {saveStatus === 'saved' && <span className="text-emerald-300 font-bold text-sm flex items-center gap-1"><CheckCircle className="w-4 h-4"/> Enregistré sur Drive</span>}
         </div>
        
       </div>

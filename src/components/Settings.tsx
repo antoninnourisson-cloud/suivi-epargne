@@ -6,6 +6,7 @@ import { FiscalConfig, TaxBracket, WorkBenefits } from '../types';
 import { Button } from './Button';
 import { Save, AlertTriangle, Settings as SettingsIcon, Plus, Trash2, Mail, Download, Upload, Database, KeyRound, FileText, Fingerprint, Hash } from 'lucide-react';
 import { isLockAvailable, isBiometricEnabled, isPinEnabled, enableLock, disableBiometric, enablePin, disablePin } from '../services/appLockService';
+import { safeNumber } from '../lib/numbers';
 
 interface SettingsProps {
   config: FiscalConfig;
@@ -20,12 +21,25 @@ interface SettingsProps {
 
 export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parentsEmail, geminiApiKey, pickerApiKey, onSave, onExport, onImport }) => {
   const [importMsg, setImportMsg] = useState<string | null>(null);
-  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  // L'import écrase TOUT (comptes, mouvements, objectifs, fiches de paie, réglages) puis
+  // resynchronise sur Drive : il faut une confirmation explicite, la boîte de sélection de
+  // fichier de l'OS n'en est pas une. On garde le fichier en attente le temps de l'accord.
+  const [pendingImport, setPendingImport] = useState<File | null>(null);
+
+  const handleImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    e.target.value = ''; // permet de resélectionner le même fichier après une annulation
     if (!file) return;
+    setImportMsg(null);
+    setPendingImport(file);
+  };
+
+  const confirmImport = async () => {
+    if (!pendingImport) return;
+    const file = pendingImport;
+    setPendingImport(null);
     const ok = await onImport(file);
-    setImportMsg(ok ? '✅ Données importées (sauvegarde en cours).' : '❌ Fichier invalide.');
-    e.target.value = '';
+    setImportMsg(ok ? '✅ Données importées (sauvegarde en cours).' : '❌ Fichier invalide : aucune donnée n\'a été remplacée.');
   };
 
   const [localFiscal, setLocalFiscal] = useState<FiscalConfig>(config);
@@ -129,6 +143,24 @@ export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parent
             </label>
             {importMsg && <span className="text-xs font-bold text-slate-500 dark:text-slate-400">{importMsg}</span>}
           </div>
+
+          {pendingImport && (
+            <div className="mt-4 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-xl p-4">
+              <p className="text-xs font-black text-rose-800 dark:text-rose-300 flex items-center gap-2 mb-2">
+                <AlertTriangle className="w-4 h-4 flex-shrink-0" /> Remplacer toutes tes données ?
+              </p>
+              <p className="text-[11px] text-rose-700 dark:text-rose-300 mb-3 leading-relaxed">
+                « {pendingImport.name} » va écraser <strong>l'intégralité</strong> de tes comptes, mouvements,
+                objectifs, fiches de paie et réglages actuels, puis être synchronisé sur Drive. Cette action
+                est irréversible — pense à faire un export avant si tu as un doute.
+              </p>
+              <div className="flex gap-2">
+                <button onClick={confirmImport} className="flex-1 py-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-black">Remplacer mes données</button>
+                <button onClick={() => setPendingImport(null)} className="flex-1 py-2 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-black">Annuler</button>
+              </div>
+            </div>
+          )}
+
           <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-3">Un export télécharge une copie locale de toutes vos données. L'import remplace les données actuelles puis les resynchronise sur Drive.</p>
         </div>
 
@@ -255,8 +287,8 @@ export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parent
                    </label>
                    {localBenefits.navigo.active && (
                        <div className="space-y-2">
-                           <div><label className="text-[9px] font-bold text-slate-400 dark:text-slate-500">Prix Base Mensuel (€)</label><input type="number" value={localBenefits.navigo.basePrice} onChange={e => updateBenefit('navigo', 'basePrice', parseFloat(e.target.value))} className="w-full p-2 rounded border border-indigo-200 dark:border-indigo-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100"/></div>
-                           <div><label className="text-[9px] font-bold text-slate-400 dark:text-slate-500">Remboursement (%)</label><input type="number" value={localBenefits.navigo.refundRate} onChange={e => updateBenefit('navigo', 'refundRate', parseFloat(e.target.value))} className="w-full p-2 rounded border border-indigo-200 dark:border-indigo-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100"/></div>
+                           <div><label className="text-[9px] font-bold text-slate-400 dark:text-slate-500">Prix Base Mensuel (€)</label><input type="number" value={localBenefits.navigo.basePrice} onChange={e => updateBenefit('navigo', 'basePrice', safeNumber(e.target.value, 0))} className="w-full p-2 rounded border border-indigo-200 dark:border-indigo-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100"/></div>
+                           <div><label className="text-[9px] font-bold text-slate-400 dark:text-slate-500">Remboursement (%)</label><input type="number" value={localBenefits.navigo.refundRate} onChange={e => updateBenefit('navigo', 'refundRate', safeNumber(e.target.value, 0))} className="w-full p-2 rounded border border-indigo-200 dark:border-indigo-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100"/></div>
                            <p className="text-[9px] text-emerald-600 dark:text-emerald-400 text-right mt-1">+{(localBenefits.navigo.basePrice * localBenefits.navigo.refundRate / 100).toFixed(2)}€/mois (Gain)</p>
                        </div>
                    )}
@@ -270,8 +302,8 @@ export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parent
                    </label>
                    {localBenefits.mutuelle.active && (
                        <div className="space-y-2">
-                           <div><label className="text-[9px] font-bold text-slate-400 dark:text-slate-500">Coût Contrat Total (€)</label><input type="number" value={localBenefits.mutuelle.totalCost} onChange={e => updateBenefit('mutuelle', 'totalCost', parseFloat(e.target.value))} className="w-full p-2 rounded border border-rose-200 dark:border-rose-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100"/></div>
-                           <div><label className="text-[9px] font-bold text-slate-400 dark:text-slate-500">Prise en charge Boite (%)</label><input type="number" value={localBenefits.mutuelle.employerRate} onChange={e => updateBenefit('mutuelle', 'employerRate', parseFloat(e.target.value))} className="w-full p-2 rounded border border-rose-200 dark:border-rose-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100"/></div>
+                           <div><label className="text-[9px] font-bold text-slate-400 dark:text-slate-500">Coût Contrat Total (€)</label><input type="number" value={localBenefits.mutuelle.totalCost} onChange={e => updateBenefit('mutuelle', 'totalCost', safeNumber(e.target.value, 0))} className="w-full p-2 rounded border border-rose-200 dark:border-rose-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100"/></div>
+                           <div><label className="text-[9px] font-bold text-slate-400 dark:text-slate-500">Prise en charge Boite (%)</label><input type="number" value={localBenefits.mutuelle.employerRate} onChange={e => updateBenefit('mutuelle', 'employerRate', safeNumber(e.target.value, 0))} className="w-full p-2 rounded border border-rose-200 dark:border-rose-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100"/></div>
                            <p className="text-[9px] text-rose-600 dark:text-rose-400 text-right mt-1">-{(localBenefits.mutuelle.totalCost * (1 - localBenefits.mutuelle.employerRate/100)).toFixed(2)}€/mois (Coût)</p>
                        </div>
                    )}
@@ -286,10 +318,10 @@ export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parent
                    {localBenefits.mealVouchers.active && (
                        <div className="space-y-2">
                            <div className="grid grid-cols-2 gap-2">
-                               <div><label className="text-[9px] font-bold text-slate-400 dark:text-slate-500">Valeur (€)</label><input type="number" value={localBenefits.mealVouchers.faceValue} onChange={e => updateBenefit('mealVouchers', 'faceValue', parseFloat(e.target.value))} className="w-full p-2 rounded border border-emerald-200 dark:border-emerald-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100"/></div>
-                               <div><label className="text-[9px] font-bold text-slate-400 dark:text-slate-500">Jours/Mois</label><input type="number" value={localBenefits.mealVouchers.daysPerMonth} onChange={e => updateBenefit('mealVouchers', 'daysPerMonth', parseFloat(e.target.value))} className="w-full p-2 rounded border border-emerald-200 dark:border-emerald-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100"/></div>
+                               <div><label className="text-[9px] font-bold text-slate-400 dark:text-slate-500">Valeur (€)</label><input type="number" value={localBenefits.mealVouchers.faceValue} onChange={e => updateBenefit('mealVouchers', 'faceValue', safeNumber(e.target.value, 0))} className="w-full p-2 rounded border border-emerald-200 dark:border-emerald-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100"/></div>
+                               <div><label className="text-[9px] font-bold text-slate-400 dark:text-slate-500">Jours/Mois</label><input type="number" value={localBenefits.mealVouchers.daysPerMonth} onChange={e => updateBenefit('mealVouchers', 'daysPerMonth', safeNumber(e.target.value, 0))} className="w-full p-2 rounded border border-emerald-200 dark:border-emerald-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100"/></div>
                            </div>
-                           <div><label className="text-[9px] font-bold text-slate-400 dark:text-slate-500">Prise en charge Boite (%)</label><input type="number" value={localBenefits.mealVouchers.employerRate} onChange={e => updateBenefit('mealVouchers', 'employerRate', parseFloat(e.target.value))} className="w-full p-2 rounded border border-emerald-200 dark:border-emerald-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100"/></div>
+                           <div><label className="text-[9px] font-bold text-slate-400 dark:text-slate-500">Prise en charge Boite (%)</label><input type="number" value={localBenefits.mealVouchers.employerRate} onChange={e => updateBenefit('mealVouchers', 'employerRate', safeNumber(e.target.value, 0))} className="w-full p-2 rounded border border-emerald-200 dark:border-emerald-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100"/></div>
                            <p className="text-[9px] text-emerald-600 dark:text-emerald-400 text-right mt-1">-{(localBenefits.mealVouchers.faceValue * localBenefits.mealVouchers.daysPerMonth * (1 - localBenefits.mealVouchers.employerRate/100)).toFixed(2)}€/mois (Coût)</p>
                        </div>
                    )}
@@ -303,11 +335,11 @@ export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parent
           <div className="space-y-4">
             <div>
               <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Charges Salariales (Ex: 0.2232)</label>
-              <input type="number" step="0.0001" value={localFiscal.salaryChargesRate} onChange={e => handleFiscalChange('salaryChargesRate', parseFloat(e.target.value))} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded font-bold" />
+              <input type="number" step="0.0001" value={localFiscal.salaryChargesRate} onChange={e => handleFiscalChange('salaryChargesRate', safeNumber(e.target.value, 0))} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded font-bold" />
             </div>
             <div>
               <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Abattement Forfaitaire Impôt (Ex: 0.10)</label>
-              <input type="number" step="0.01" value={localFiscal.standardAllowance} onChange={e => handleFiscalChange('standardAllowance', parseFloat(e.target.value))} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded font-bold" />
+              <input type="number" step="0.01" value={localFiscal.standardAllowance} onChange={e => handleFiscalChange('standardAllowance', safeNumber(e.target.value, 0))} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded font-bold" />
             </div>
           </div>
         </div>
@@ -315,8 +347,8 @@ export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parent
         <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700">
           <h3 className="font-bold text-slate-800 dark:text-slate-100 mb-4 border-b border-slate-200 dark:border-slate-700 pb-2">📈 Plafonds Livrets (€)</h3>
           <div className="grid grid-cols-2 gap-4">
-              <div><label className="text-[10px] text-indigo-600 dark:text-indigo-300 font-black uppercase">Livret A</label><input type="number" value={localFiscal.ceilings.livretA} onChange={e => handleCeilingChange('livretA', parseFloat(e.target.value))} className="w-full p-2 bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900 rounded font-bold text-slate-800 dark:text-slate-100" /></div>
-              <div><label className="text-[10px] text-rose-600 dark:text-rose-300 font-black uppercase">LEP</label><input type="number" value={localFiscal.ceilings.lep} onChange={e => handleCeilingChange('lep', parseFloat(e.target.value))} className="w-full p-2 bg-rose-50 dark:bg-rose-950/40 border border-rose-100 dark:border-rose-900 rounded font-bold text-slate-800 dark:text-slate-100" /></div>
+              <div><label className="text-[10px] text-indigo-600 dark:text-indigo-300 font-black uppercase">Livret A</label><input type="number" value={localFiscal.ceilings.livretA} onChange={e => handleCeilingChange('livretA', safeNumber(e.target.value, 0))} className="w-full p-2 bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900 rounded font-bold text-slate-800 dark:text-slate-100" /></div>
+              <div><label className="text-[10px] text-rose-600 dark:text-rose-300 font-black uppercase">LEP</label><input type="number" value={localFiscal.ceilings.lep} onChange={e => handleCeilingChange('lep', safeNumber(e.target.value, 0))} className="w-full p-2 bg-rose-50 dark:bg-rose-950/40 border border-rose-100 dark:border-rose-900 rounded font-bold text-slate-800 dark:text-slate-100" /></div>
           </div>
         </div>
 
@@ -331,11 +363,11 @@ export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parent
                 <div key={index} className="flex items-center gap-4">
                     <div className="flex-1">
                         <label className="text-[8px] uppercase font-bold text-slate-400 dark:text-slate-500">Limite Sup (€)</label>
-                        <input type="number" value={bracket.limit === Infinity ? 999999999 : bracket.limit} onChange={e => updateBracket(index, 'limit', parseFloat(e.target.value))} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded text-sm text-slate-800 dark:text-slate-100" />
+                        <input type="number" value={bracket.limit === Infinity ? 999999999 : bracket.limit} onChange={e => updateBracket(index, 'limit', safeNumber(e.target.value, 0))} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded text-sm text-slate-800 dark:text-slate-100" />
                     </div>
                     <div className="w-32">
                         <label className="text-[8px] uppercase font-bold text-slate-400 dark:text-slate-500">Taux (0.11)</label>
-                        <input type="number" step="0.01" value={bracket.rate} onChange={e => updateBracket(index, 'rate', parseFloat(e.target.value))} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded text-sm font-bold text-indigo-600 dark:text-indigo-300" />
+                        <input type="number" step="0.01" value={bracket.rate} onChange={e => updateBracket(index, 'rate', safeNumber(e.target.value, 0))} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded text-sm font-bold text-indigo-600 dark:text-indigo-300" />
                     </div>
                     <button onClick={() => removeBracket(index)} className="mt-4 p-2 text-slate-300 hover:text-rose-500"><Trash2 className="w-4 h-4" /></button>
                 </div>

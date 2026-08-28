@@ -32,7 +32,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ open, accounts, on
       <div className="bg-white dark:bg-slate-800 rounded-t-3xl sm:rounded-3xl shadow-2xl max-w-sm w-full p-6" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 flex items-center gap-2"><Zap className="w-5 h-5 text-indigo-600" /> Ajout rapide</h3>
-          <button onClick={onClose} className="p-1 text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-200"><X className="w-5 h-5" /></button>
+          <button onClick={onClose} aria-label="Fermer" className="p-2.5 -m-1.5 text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-200"><X className="w-5 h-5" /></button>
         </div>
 
         <div className="space-y-4">
@@ -54,7 +54,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ open, accounts, on
 
           <div>
             <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Montant (€)</label>
-            <NumberInput value={amount} onChange={setAmount} className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl font-black text-2xl text-slate-800 dark:text-slate-100" />
+            <NumberInput value={amount} onChange={setAmount} className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl font-black text-2xl text-slate-800 dark:text-slate-100" min={0} />
           </div>
 
           <div className="grid grid-cols-2 gap-3">

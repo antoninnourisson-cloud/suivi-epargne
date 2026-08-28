@@ -4,7 +4,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import {
   GlobalAppData, SavingsAccount, Expense, PortfolioSnapshot, ExpenseSnapshot,
-  ChatMessage, FiscalConfig, WorkBenefits, AccountMovement, SavingsGoal, PayslipRecord
+  FiscalConfig, WorkBenefits, AccountMovement, SavingsGoal, PayslipRecord
 } from '../types';
 import { 
   DEFAULT_FISCAL_CONFIG, DEFAULT_WORK_BENEFITS 
@@ -42,7 +42,6 @@ const canonicalize = (data: GlobalAppData | null | undefined): string => {
     expenses: data.expenses || [],
     history: data.history || [],
     expensesHistory: data.expensesHistory || [],
-    chatHistory: data.chatHistory || [],
     goals: data.goals || [],
     payslips: data.payslips || [],
     activePayslipId: data.activePayslipId ?? null,
@@ -101,7 +100,6 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [history, setHistory] = useState<PortfolioSnapshot[]>([]);
   const [expensesHistory, setExpensesHistory] = useState<ExpenseSnapshot[]>([]);
-  const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [goals, setGoals] = useState<SavingsGoal[]>([]);
   const [payslips, setPayslips] = useState<PayslipRecord[]>([]);
   // Fiche de paie servant de référence exacte au Pilotage Budgétaire (undefined = mode
@@ -192,7 +190,6 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
           expenses: [],
           history: [],
           expensesHistory: [],
-          chatHistory: [],
           fiscalConfig: DEFAULT_FISCAL_CONFIG,
           workBenefits: DEFAULT_WORK_BENEFITS,
           config: {
@@ -216,7 +213,6 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
         setExpenses(data.expenses || []);
         setHistory(data.history || []);
         setExpensesHistory(data.expensesHistory || []);
-        setChatHistory(data.chatHistory || []);
         setGoals(data.goals || []);
         setPayslips(data.payslips || []);
         setActivePayslipId(data.activePayslipId || undefined);
@@ -297,7 +293,6 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
     expenses,
     history,
     expensesHistory,
-    chatHistory,
     fiscalConfig,
     workBenefits,
     goals,
@@ -308,7 +303,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
       taxRateManual, extraMonthlyIncome, parentsEmail, geminiApiKey, pickerApiKey
     },
     lastView: lastViewRef.current,
-  }), [accounts, expenses, history, expensesHistory, chatHistory, fiscalConfig, workBenefits, grossAnnual,
+  }), [accounts, expenses, history, expensesHistory, fiscalConfig, workBenefits, grossAnnual,
        leisureBudget, projectSavings, navigoBase, navigoRate, taxRateManual,
        extraMonthlyIncome, parentsEmail, goals, payslips, activePayslipId, geminiApiKey, pickerApiKey]);
 
@@ -318,7 +313,6 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
     setExpenses(data.expenses || []);
     setHistory(data.history || []);
     setExpensesHistory(data.expensesHistory || []);
-    setChatHistory(data.chatHistory || []);
     setGoals(data.goals || []);
     setPayslips(data.payslips || []);
     setActivePayslipId(data.activePayslipId || undefined);
@@ -485,7 +479,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
 
     return () => clearTimeout(saveTimeoutRef.current);
   }, [
-    accounts, expenses, history, expensesHistory, chatHistory, fiscalConfig, workBenefits, 
+    accounts, expenses, history, expensesHistory, fiscalConfig, workBenefits, 
     grossAnnual, leisureBudget, projectSavings, navigoBase, navigoRate, 
     taxRateManual, extraMonthlyIncome, parentsEmail, geminiApiKey, pickerApiKey,
     isAuthenticated, driveFileId, isLoadingData,
@@ -692,7 +686,6 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
       setExpenses([]);
       setHistory([]);
       setExpensesHistory([]);
-      setChatHistory([]);
       setGoals([]);
       setPayslips([]);
       setActivePayslipId(undefined);
@@ -712,7 +705,6 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
     expenses, setExpenses,
     history, setHistory,
     expensesHistory, setExpensesHistory,
-    chatHistory, setChatHistory,
     goals, setGoals,
     payslips, setPayslips,
     activePayslipId, setActivePayslipId,

@@ -52,9 +52,3 @@ export const DEFAULT_WORK_BENEFITS: WorkBenefits = {
     daysPerMonth: 20
   }
 };
-
-export const DEFAULT_RATES = {
-  LIVRET_A: 3.0,
-  LEP: 4.0,
-  FONDS_EURO: 2.5
-};

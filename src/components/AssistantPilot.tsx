@@ -306,7 +306,7 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
             <div className="lg:col-span-1 bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
               <div className="flex justify-between items-center mb-4">
                   <h4 className="font-bold text-slate-700 dark:text-slate-200 flex items-center gap-2"><TrendingUp className="w-4 h-4 text-rose-500"/> Charges Fixes</h4>
-                  <button onClick={() => setIsAddingExpense(true)} className="p-1 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded hover:bg-slate-200 dark:hover:bg-slate-600"><Plus className="w-4 h-4"/></button>
+                  <button onClick={() => setIsAddingExpense(true)} aria-label="Ajouter une charge fixe" className="p-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded hover:bg-slate-200 dark:hover:bg-slate-600"><Plus className="w-4 h-4"/></button>
               </div>
               
               {/* Formulaire Ajout Rapide */}
@@ -323,11 +323,23 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
 
               <div className="space-y-2 max-h-60 overflow-y-auto pr-2">
                   {expenses.map(e => (
-                      <div key={e.id} className="flex justify-between text-sm p-2 bg-slate-50 dark:bg-slate-900 rounded group">
-                          <span>{e.name}</span>
-                          <div className="flex gap-2">
+                      <div key={e.id} className="flex justify-between items-center text-sm p-2 bg-slate-50 dark:bg-slate-900 rounded group gap-2">
+                          <span className="min-w-0 truncate">
+                            {e.name}
+                            {e.paymentMethod && <span className="ml-2 text-[10px] font-bold uppercase text-slate-400 dark:text-slate-500">{e.paymentMethod}</span>}
+                          </span>
+                          <div className="flex items-center gap-1 flex-shrink-0">
                               <span className="font-mono font-bold">{e.amount}€</span>
-                              <Trash2 className="w-4 h-4 text-slate-300 hover:text-rose-500 cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => onUpdateExpenses(expenses.filter(x => x.id !== e.id))} />
+                              {/* Visible en permanence sur tactile (pas de hover sur mobile : sans le
+                                  préfixe `md:`, l'icône restait invisible et la dépense indélétable). */}
+                              <button
+                                type="button"
+                                aria-label={`Supprimer la charge ${e.name}`}
+                                onClick={() => onUpdateExpenses(expenses.filter(x => x.id !== e.id))}
+                                className="p-2 -m-1 text-slate-400 hover:text-rose-500 opacity-100 md:opacity-0 md:group-hover:opacity-100 focus:opacity-100 transition-opacity"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
                           </div>
                       </div>
                   ))}
