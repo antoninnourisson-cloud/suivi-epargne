@@ -6,6 +6,9 @@ import {
   computeWeightedAnnualRate,
   computeCapitalGainsTax,
   computeParentalInterest,
+  computeMaturityCountdown,
+  computeAccountBalanceAtDate,
+  computeRecentSavingsRate,
 } from './finance';
 import { DEFAULT_FISCAL_CONFIG, DEFAULT_WORK_BENEFITS } from '../constants';
 import { FiscalConfig, TaxBracket, WorkBenefits, AccountType } from '../types';
@@ -436,5 +439,112 @@ describe('computeParentalInterest', () => {
       2025
     );
     expect(r.totalAnnualParental).toBe(0);
+  });
+});
+
+describe('computeMaturityCountdown', () => {
+  const fiscal = DEFAULT_FISCAL_CONFIG; // legalMaturity: {pea:5, assuranceVie:8, pee:5}
+  const NOW = new Date('2026-01-01T00:00:00Z');
+
+  it('annonce le passage en régime favorable pour un PEA pas encore mature', () => {
+    // Ouvert le 01/01/2022 : 4 ans révolus au 01/01/2026, maturité à 5 ans -> ~1 an restant.
+    const r = computeMaturityCountdown({ type: AccountType.PEA, openingDate: '2022-01-01', interestRate: 5, totalAmount: 1000 }, fiscal, NOW);
+    expect(r).not.toBeNull();
+    expect(r!.regimeBefore).toBe('PFU');
+    expect(r!.regimeAfter).toBe('EXONERE_IR');
+    expect(r!.monthsRemaining).toBeGreaterThan(10);
+    expect(r!.monthsRemaining).toBeLessThan(14);
+    // Économie = 12,8% (part IR du PFU) sur les intérêts annuels actuels (1000*5%=50).
+    expect(r!.annualTaxSaving).toBeCloseTo(50 * 0.128, 5);
+  });
+
+  it('renvoie null pour un compte déjà mature', () => {
+    const r = computeMaturityCountdown({ type: AccountType.PEA, openingDate: '2015-01-01', interestRate: 5, totalAmount: 1000 }, fiscal, NOW);
+    expect(r).toBeNull();
+  });
+
+  it("renvoie null sans date d'ouverture connue", () => {
+    const r = computeMaturityCountdown({ type: AccountType.PEA, openingDate: undefined, interestRate: 5, totalAmount: 1000 }, fiscal, NOW);
+    expect(r).toBeNull();
+  });
+
+  it("renvoie null pour un type de compte sans notion de maturité (Livret A, Crypto, Immobilier)", () => {
+    expect(computeMaturityCountdown({ type: AccountType.LIVRET_A, openingDate: '2024-01-01', totalAmount: 1000 }, fiscal, NOW)).toBeNull();
+    expect(computeMaturityCountdown({ type: AccountType.CRYPTO, openingDate: '2024-01-01', totalAmount: 1000 }, fiscal, NOW)).toBeNull();
+    expect(computeMaturityCountdown({ type: AccountType.IMMOBILIER, openingDate: '2024-01-01', totalAmount: 1000 }, fiscal, NOW)).toBeNull();
+  });
+
+  it('calcule le passage au taux réduit pour une Assurance Vie pas encore mature', () => {
+    // Ouverte le 01/01/2019 : 7 ans révolus au 01/01/2026, maturité à 8 ans.
+    const r = computeMaturityCountdown({ type: AccountType.ASSURANCE_VIE, openingDate: '2019-01-01', interestRate: 3, totalAmount: 10000 }, fiscal, NOW);
+    expect(r).not.toBeNull();
+    expect(r!.regimeBefore).toBe('PFU');
+    expect(r!.regimeAfter).toBe('AV_REDUIT');
+    // Économie = (12,8% - 7,5%) sur les intérêts annuels actuels (10000*3%=300).
+    expect(r!.annualTaxSaving).toBeCloseTo(300 * (0.128 - 0.075), 5);
+  });
+
+  it("renvoie quand même le compte à rebours sans intérêt connu, avec une économie nulle", () => {
+    const r = computeMaturityCountdown({ type: AccountType.PEA, openingDate: '2022-01-01', totalAmount: 1000 }, fiscal, NOW);
+    expect(r).not.toBeNull();
+    expect(r!.annualTaxSaving).toBe(0);
+  });
+});
+
+describe('computeAccountBalanceAtDate', () => {
+  it('retire les mouvements postérieurs à la date pour reconstruire le solde passé', () => {
+    const accounts = [{
+      ownedAmount: 1000,
+      movements: [
+        { id: '1', date: '2026-01-10', amount: 200, label: 'x', type: 'IN' as const },
+        { id: '2', date: '2026-01-20', amount: 50, label: 'x', type: 'OUT' as const },
+      ],
+    }];
+    // Avant le 10/01 : on retire le dépôt de 200 ET on annule le retrait de 50 (on l'ajoute).
+    expect(computeAccountBalanceAtDate(accounts, '2026-01-05')).toBe(1000 - 200 + 50);
+    // Entre les deux mouvements : seul le retrait du 20/01 est encore "futur".
+    expect(computeAccountBalanceAtDate(accounts, '2026-01-15')).toBe(1000 + 50);
+    // Après les deux : solde actuel intact.
+    expect(computeAccountBalanceAtDate(accounts, '2026-01-25')).toBe(1000);
+  });
+
+  it('cumule plusieurs comptes', () => {
+    const accounts = [{ ownedAmount: 500, movements: [] }, { ownedAmount: 300, movements: [] }];
+    expect(computeAccountBalanceAtDate(accounts, '2026-01-01')).toBe(800);
+  });
+});
+
+describe('computeRecentSavingsRate', () => {
+  it('renvoie null sans mouvement dans la fenêtre observée', () => {
+    const accounts = [{ ownedAmount: 1000, movements: [] }];
+    expect(computeRecentSavingsRate(accounts, 90, new Date('2026-01-01'))).toBeNull();
+  });
+
+  it('calcule le rythme mensuel sur la fenêtre glissante (90 jours = 3 mois)', () => {
+    const now = new Date('2026-01-01T00:00:00');
+    const accounts = [{
+      ownedAmount: 1600,
+      movements: [
+        { id: '1', date: '2025-11-01', amount: 200, label: 'x', type: 'IN' as const },
+        { id: '2', date: '2025-12-01', amount: 200, label: 'x', type: 'IN' as const },
+        { id: '3', date: '2025-12-15', amount: 200, label: 'x', type: 'IN' as const },
+      ],
+    }];
+    // Les 3 dépôts (600 au total) sont dans la fenêtre des 90 jours -> 600/3 = 200/mois.
+    expect(computeRecentSavingsRate(accounts, 90, now)).toBeCloseTo(200, 5);
+  });
+
+  it("permet de calculer le rythme d'une fenêtre PASSÉE en décalant asOfDate (utilisé pour la dérive)", () => {
+    const accounts = [{
+      ownedAmount: 1000,
+      movements: [
+        { id: '1', date: '2025-08-01', amount: 90, label: 'x', type: 'IN' as const },
+      ],
+    }];
+    // Fenêtre se terminant le 01/09/2025 (donc [03/06 -> 01/09] environ) contient le dépôt.
+    const rate = computeRecentSavingsRate(accounts, 90, new Date('2025-09-01T00:00:00'));
+    expect(rate).toBeCloseTo(30, 5); // 90 / 3 mois
+    // Fenêtre se terminant aujourd'hui (bien après) ne contient plus ce dépôt isolé.
+    expect(computeRecentSavingsRate(accounts, 90, new Date('2026-06-01'))).toBeNull();
   });
 });

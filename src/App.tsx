@@ -15,11 +15,12 @@ import {
   initGoogleApi, handleAuthClick, handleSignOut, isTokenValid
 } from './services/googleDriveService';
 import { isLockEnabled } from './services/appLockService';
+import { computeMaturityCountdown } from './lib/finance';
 import {
   LayoutDashboard, Wallet, Trash2, Edit2, ShieldCheck,
   ArrowRightLeft, RefreshCcw, PlusCircle, Cloud, LogOut,
   Loader2, Settings as SettingsIcon, AlertTriangle, RotateCw,
-  Target, Coins, LineChart, Users, Calculator, Sun, Moon, Zap, Tag, Save, WifiOff, FileText
+  Target, Coins, LineChart, Users, Calculator, Sun, Moon, Zap, Tag, Save, WifiOff, FileText, Clock
 } from 'lucide-react';
 
 // Code-splitting : les vues lourdes (recharts, etc.) sont chargées à la demande.
@@ -606,6 +607,7 @@ const App: React.FC = () => {
                 income={{ grossAnnual: data.grossAnnual, extraMonthlyIncome: data.extraMonthlyIncome, navigoBase: data.navigoBase, navigoRate: data.navigoRate, taxRateManual: data.taxRateManual, leisureBudget: data.leisureBudget, projectSavings: data.projectSavings }}
                 fiscalConfig={data.fiscalConfig}
                 workBenefits={data.workBenefits}
+                accounts={data.accounts}
             />}
             {view === 'yield' && <Yield accounts={data.accounts} fiscalConfig={data.fiscalConfig} />}
             {view === 'history' && <History history={data.history} expensesHistory={data.expensesHistory} />}
@@ -678,6 +680,21 @@ const App: React.FC = () => {
                                       {acc.tags.map(t => <span key={t} className="text-[9px] bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-300 px-1.5 py-0.5 rounded-full font-bold normal-case">{t}</span>)}
                                     </div>
                                   )}
+                                  {(() => {
+                                    // Compte à rebours de maturité fiscale (PEA/AV/PEE) : réutilise
+                                    // exactement le calcul de fiscalité du capital de Rendement, pour
+                                    // ne jamais annoncer un régime différent d'un écran à l'autre.
+                                    const maturity = computeMaturityCountdown(acc, data.fiscalConfig);
+                                    if (!maturity) return null;
+                                    const label = maturity.regimeAfter === 'EXONERE_IR' ? "exonération d'IR" : 'taux réduit (7,5%)';
+                                    return (
+                                      <div className="mt-1 text-[10px] font-bold text-indigo-500 dark:text-indigo-400 flex items-center gap-1">
+                                        <Clock className="w-3 h-3 flex-shrink-0" />
+                                        Passe en {label} dans {maturity.monthsRemaining} mois
+                                        {maturity.annualTaxSaving > 1 && ` (≈ +${Math.round(maturity.annualTaxSaving)} €/an)`}
+                                      </div>
+                                    );
+                                  })()}
                                 </td>
                                 <td className="px-6 py-4 text-right font-black text-indigo-600 text-lg">{acc.ownedAmount.toLocaleString()} €</td>
                                 <td className="px-6 py-4 text-right font-bold text-amber-500">{acc.parentalCapital.toLocaleString()} €</td>

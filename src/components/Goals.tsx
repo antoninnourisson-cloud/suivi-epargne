@@ -1,8 +1,8 @@
 import React, { useMemo, useState } from 'react';
-import { Expense, FiscalConfig, WorkBenefits, SavingsGoal } from '../types';
-import { computeIncome, computeSavingsCapacity } from '../lib/finance';
+import { Expense, FiscalConfig, WorkBenefits, SavingsGoal, SavingsAccount } from '../types';
+import { computeIncome, computeSavingsCapacity, computeRecentSavingsRate } from '../lib/finance';
 import { monthsBetween, parseISODate } from '../lib/dates';
-import { Target, Plus, Trash2, Check, X, Calendar, TrendingUp, Flag } from 'lucide-react';
+import { Target, Plus, Trash2, Check, X, Calendar, TrendingUp, TrendingDown, Flag } from 'lucide-react';
 
 interface IncomeCfg {
   grossAnnual: number;
@@ -21,11 +21,14 @@ interface GoalsProps {
   income: IncomeCfg;
   fiscalConfig: FiscalConfig;
   workBenefits: WorkBenefits;
+  // Comptes réels, uniquement pour comparer la capacité THÉORIQUE ci-dessous (formule du
+  // Pilotage) au rythme d'épargne RÉEL récemment observé — voir `realMonthlyRate`.
+  accounts: SavingsAccount[];
 }
 
 const fmt = (n: number) => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(n);
 
-export const Goals: React.FC<GoalsProps> = ({ goals, onUpdateGoals, expenses, income, fiscalConfig, workBenefits }) => {
+export const Goals: React.FC<GoalsProps> = ({ goals, onUpdateGoals, expenses, income, fiscalConfig, workBenefits, accounts }) => {
   const [isAdding, setIsAdding] = useState(false);
   const [form, setForm] = useState({ name: '', targetAmount: '', savedAmount: '', deadline: '' });
 
@@ -38,6 +41,12 @@ export const Goals: React.FC<GoalsProps> = ({ goals, onUpdateGoals, expenses, in
     const totalFixed = expenses.reduce((s, e) => s + e.amount, 0);
     return computeSavingsCapacity(breakdown.superNet, totalFixed, income.leisureBudget, income.projectSavings);
   }, [income, expenses, fiscalConfig, workBenefits]);
+
+  // Rythme RÉEL des 90 derniers jours (même calcul que la projection du Dashboard, voir
+  // computeRecentSavingsRate) — pour confronter la théorie du Pilotage (formule, budgets
+  // saisis) à ce qui se passe vraiment sur les comptes. `null` si pas assez d'historique
+  // récent : on ne montre alors que l'estimation théorique, comme avant.
+  const realMonthlyRate = useMemo(() => computeRecentSavingsRate(accounts, 90), [accounts]);
 
   const resetForm = () => { setForm({ name: '', targetAmount: '', savedAmount: '', deadline: '' }); setIsAdding(false); };
 
@@ -104,6 +113,23 @@ export const Goals: React.FC<GoalsProps> = ({ goals, onUpdateGoals, expenses, in
           const done = g.targetAmount > 0 && remaining <= 0;
           const monthsToGoal = capacity > 0 ? remaining / capacity : Infinity;
 
+          // Confronte l'estimation THÉORIQUE ci-dessus (formule du Pilotage) au rythme
+          // RÉEL observé sur les comptes. N'affiche l'écart que s'il change vraiment la
+          // donne (>=25%, ou rythme réel nul/négatif alors que la théorie est positive,
+          // ou théorie jugée "insuffisante" alors que le réel avance quand même) — sinon
+          // ça ajoute du bruit pour une différence qui ne changerait rien à la décision.
+          const realMonthsToGoal = realMonthlyRate !== null && realMonthlyRate > 0 ? remaining / realMonthlyRate : null;
+          let realRateNote: { text: string; worse: boolean } | null = null;
+          if (!done && realMonthlyRate !== null) {
+            if (realMonthlyRate <= 0) {
+              realRateNote = { text: "au rythme réel récent, tu n'avances pas vers cet objectif", worse: true };
+            } else if (monthsToGoal === Infinity) {
+              realRateNote = { text: `mais ≈ ${Math.ceil(realMonthsToGoal!)} mois au rythme réel récent`, worse: false };
+            } else if (Math.abs(realMonthsToGoal! - monthsToGoal) / monthsToGoal >= 0.25) {
+              realRateNote = { text: `≈ ${Math.ceil(realMonthsToGoal!)} mois au rythme réel récent`, worse: realMonthsToGoal! > monthsToGoal };
+            }
+          }
+
           let deadlineInfo: { text: string; ok: boolean } | null = null;
           if (g.deadline && !done) {
             const monthsLeft = monthsBetween(new Date(), parseISODate(g.deadline));
@@ -137,8 +163,14 @@ export const Goals: React.FC<GoalsProps> = ({ goals, onUpdateGoals, expenses, in
                 <div className="flex flex-wrap gap-3 text-xs">
                   <span className="inline-flex items-center gap-1 text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-900 px-3 py-1.5 rounded-lg font-bold">
                     <TrendingUp className="w-3.5 h-3.5 text-indigo-500" />
-                    {capacity > 0 ? `≈ ${Math.ceil(monthsToGoal)} mois au rythme actuel` : 'Capacité d\'épargne insuffisante'}
+                    {capacity > 0 ? `≈ ${Math.ceil(monthsToGoal)} mois au rythme théorique (Pilotage)` : 'Capacité d\'épargne insuffisante'}
                   </span>
+                  {realRateNote && (
+                    <span className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-lg font-bold ${realRateNote.worse ? 'text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40' : 'text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40'}`}>
+                      {realRateNote.worse ? <TrendingDown className="w-3.5 h-3.5" /> : <TrendingUp className="w-3.5 h-3.5" />}
+                      {realRateNote.text}
+                    </span>
+                  )}
                   {deadlineInfo && (
                     <span className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-lg font-bold ${deadlineInfo.ok ? 'text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40' : 'text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/40'}`}>
                       <Calendar className="w-3.5 h-3.5" /> {deadlineInfo.text}

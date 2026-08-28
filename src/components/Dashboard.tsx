@@ -5,7 +5,7 @@ import {
 } from 'recharts';
 import { SavingsAccount, PortfolioSnapshot, AccountType, Expense, FiscalConfig } from '../types';
 import { Euro, Lock, Wallet, Filter, Unlock, Save, AlertTriangle, Trash2, Clock, TrendingUp, TrendingDown, PiggyBank } from 'lucide-react';
-import { computeParentalInterest } from '../lib/finance';
+import { computeParentalInterest, computeRecentSavingsRate, computeAccountBalanceAtDate } from '../lib/finance';
 import { Button } from './Button';
 
 interface DashboardProps {
@@ -177,52 +177,29 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
 
   // --- PROJECTION DE TRAJECTOIRE ---
   // Extrapole le rythme d'épargne RÉEL observé sur les 90 derniers jours (indépendant du
-  // filtre de dates du graphique ci-dessus, pour rester stable même si l'utilisateur
-  // change la période affichée). Reconstruction par soustraction des mouvements postérieurs
-  // à une date donnée — même méthode que `stackedData`, donc mêmes limites assumées
-  // (suppose que les mouvements enregistrés reflètent bien tout le flux depuis l'ouverture).
-  const balanceAtDate = (dateStr: string): number =>
-    accounts.reduce((total, acc) => {
-      let balance = acc.ownedAmount;
-      (acc.movements || []).filter(m => m.date > dateStr).forEach(m => {
-        balance += m.type === 'IN' ? -m.amount : m.amount;
-      });
-      return total + balance;
-    }, 0);
-
+  // filtre de dates du graphique ci-dessus, pour rester stable même si l'utilisateur change
+  // la période affichée). `computeRecentSavingsRate`/`computeAccountBalanceAtDate` sont
+  // partagées avec Objectifs, pour que les deux écrans ne puissent jamais raconter deux
+  // rythmes différents.
   const projection = useMemo(() => {
     const now = new Date();
-    const past90 = new Date(now);
-    past90.setDate(past90.getDate() - 90);
-    const past180 = new Date(now);
-    past180.setDate(past180.getDate() - 180);
-    const nowStr = now.toISOString().split('T')[0];
-    const past90Str = past90.toISOString().split('T')[0];
-    const past180Str = past180.toISOString().split('T')[0];
+    const monthlyRate = computeRecentSavingsRate(accounts, 90, now);
+    if (monthlyRate === null || Math.abs(monthlyRate) < 1) return null; // pas assez d'historique, ou rythme quasi nul
 
-    const hasRecentMovements = accounts.some(a => (a.movements || []).some(m => m.date > past90Str && m.date <= nowStr));
-    if (!hasRecentMovements) return null; // pas assez d'historique récent pour extrapoler quoi que ce soit
-
-    const totalNow = balanceAtDate(nowStr);
-    const totalPast90 = balanceAtDate(past90Str);
-    const monthlyRate = (totalNow - totalPast90) / 3; // 90 jours ≈ 3 mois
-    if (Math.abs(monthlyRate) < 1) return null; // rythme quasi nul, rien d'exploitable à projeter
+    const totalNow = computeAccountBalanceAtDate(accounts, now.toISOString().split('T')[0]);
 
     // --- DÉRIVE DE RYTHME : comparaison au trimestre précédent (jours -180 à -90) ---
-    // Réutilise la même reconstruction, décalée d'un trimestre, pour détecter un
-    // ralentissement (ou une accélération) sans rien collecter de nouveau. Comparaison
-    // ignorée si le trimestre précédent est lui-même peu documenté ou quasi nul : sinon un
-    // rythme précédent proche de 0 ferait passer n'importe quelle variation pour un séisme.
-    const hasOlderMovements = accounts.some(a => (a.movements || []).some(m => m.date > past180Str && m.date <= past90Str));
+    // Même fonction, `asOfDate` décalé d'un trimestre, pour détecter un ralentissement (ou
+    // une accélération) sans rien collecter de nouveau. `null` ou rythme précédent proche de
+    // 0 => comparaison ignorée : sinon un rythme précédent quasi nul ferait passer n'importe
+    // quelle variation pour un séisme.
+    const past90 = new Date(now.getTime() - 90 * 24 * 3600 * 1000);
+    const previousMonthlyRate = computeRecentSavingsRate(accounts, 90, past90);
     let drift: { previousMonthlyRate: number; changeRatio: number } | null = null;
-    if (hasOlderMovements) {
-      const totalPast180 = balanceAtDate(past180Str);
-      const previousMonthlyRate = (totalPast90 - totalPast180) / 3;
-      if (Math.abs(previousMonthlyRate) >= 20) {
-        const changeRatio = (monthlyRate - previousMonthlyRate) / Math.abs(previousMonthlyRate);
-        // Écart de moins de 25% : variation normale d'un trimestre à l'autre, pas une dérive.
-        if (Math.abs(changeRatio) >= 0.25) drift = { previousMonthlyRate, changeRatio };
-      }
+    if (previousMonthlyRate !== null && Math.abs(previousMonthlyRate) >= 20) {
+      const changeRatio = (monthlyRate - previousMonthlyRate) / Math.abs(previousMonthlyRate);
+      // Écart de moins de 25% : variation normale d'un trimestre à l'autre, pas une dérive.
+      if (Math.abs(changeRatio) >= 0.25) drift = { previousMonthlyRate, changeRatio };
     }
 
     return { monthlyRate, totalNow, in6: totalNow + monthlyRate * 6, in12: totalNow + monthlyRate * 12, drift };
