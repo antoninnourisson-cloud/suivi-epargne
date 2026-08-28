@@ -4,9 +4,11 @@ import {
   computeIncome,
   computeSavingsCapacity,
   computeWeightedAnnualRate,
+  computeCapitalGainsTax,
+  computeParentalInterest,
 } from './finance';
 import { DEFAULT_FISCAL_CONFIG, DEFAULT_WORK_BENEFITS } from '../constants';
-import { FiscalConfig, TaxBracket, WorkBenefits } from '../types';
+import { FiscalConfig, TaxBracket, WorkBenefits, AccountType } from '../types';
 
 const NO_BENEFITS: WorkBenefits = {
   navigo: { active: false, basePrice: 0, refundRate: 0 },
@@ -322,5 +324,117 @@ describe('computeWeightedAnnualRate', () => {
 
   it('retourne le taux courant pour une année future', () => {
     expect(computeWeightedAnnualRate(5, [{ date: '2020-01-01', rate: 1 }], 2030)).toBe(5);
+  });
+});
+
+describe('computeCapitalGainsTax (PFU / prélèvements sociaux)', () => {
+  const fiscal = DEFAULT_FISCAL_CONFIG; // socialChargesCapital: 0.172, legalMaturity: {pea:5, assuranceVie:8, pee:5}
+  const NOW = new Date('2026-01-01T00:00:00Z');
+
+  it("n'applique rien à un gain nul ou négatif", () => {
+    const r = computeCapitalGainsTax({ type: AccountType.PEA, openingDate: '2020-01-01' }, 0, fiscal, NOW);
+    expect(r).toEqual({ grossInterest: 0, socialCharges: 0, incomeTax: 0, netInterest: 0, regime: 'PFU' });
+  });
+
+  it('applique le PFU à 30% (12,8% IR + 17,2% social) sur un PEA récent', () => {
+    const r = computeCapitalGainsTax({ type: AccountType.PEA, openingDate: '2024-01-01' }, 1000, fiscal, NOW);
+    expect(r.socialCharges).toBeCloseTo(172, 5);
+    expect(r.incomeTax).toBeCloseTo(128, 5);
+    expect(r.netInterest).toBeCloseTo(700, 5);
+    expect(r.regime).toBe('PFU');
+  });
+
+  it('exonère un PEA de plus de 5 ans d\'IR, mais garde les 17,2% sociaux', () => {
+    const r = computeCapitalGainsTax({ type: AccountType.PEA, openingDate: '2015-01-01' }, 1000, fiscal, NOW);
+    expect(r.incomeTax).toBe(0);
+    expect(r.socialCharges).toBeCloseTo(172, 5);
+    expect(r.netInterest).toBeCloseTo(828, 5);
+    expect(r.regime).toBe('EXONERE_IR');
+  });
+
+  it('exonère un PEE de plus de 5 ans d\'IR, comme un PEA', () => {
+    const r = computeCapitalGainsTax({ type: AccountType.PEE, openingDate: '2015-01-01' }, 1000, fiscal, NOW);
+    expect(r.incomeTax).toBe(0);
+    expect(r.regime).toBe('EXONERE_IR');
+  });
+
+  it('applique le taux réduit 7,5% + 17,2% social sur une Assurance Vie de plus de 8 ans', () => {
+    const r = computeCapitalGainsTax({ type: AccountType.ASSURANCE_VIE, openingDate: '2015-01-01' }, 1000, fiscal, NOW);
+    expect(r.incomeTax).toBeCloseTo(75, 5);
+    expect(r.socialCharges).toBeCloseTo(172, 5);
+    expect(r.netInterest).toBeCloseTo(753, 5);
+    expect(r.regime).toBe('AV_REDUIT');
+  });
+
+  it('applique le PFU complet sur une Assurance Vie de moins de 8 ans', () => {
+    const r = computeCapitalGainsTax({ type: AccountType.ASSURANCE_VIE, openingDate: '2024-01-01' }, 1000, fiscal, NOW);
+    expect(r.incomeTax).toBeCloseTo(128, 5);
+    expect(r.regime).toBe('PFU');
+  });
+
+  it('applique le PFU flat sur le crypto quelle que soit la durée de détention', () => {
+    const recent = computeCapitalGainsTax({ type: AccountType.CRYPTO, openingDate: '2025-12-01' }, 1000, fiscal, NOW);
+    const old = computeCapitalGainsTax({ type: AccountType.CRYPTO, openingDate: '2010-01-01' }, 1000, fiscal, NOW);
+    expect(recent.incomeTax).toBeCloseTo(128, 5);
+    expect(old.incomeTax).toBeCloseTo(128, 5); // pas d'exonération par ancienneté pour le crypto
+    expect(recent.regime).toBe('PFU');
+  });
+
+  it("ne modélise pas l'immobilier ou le PER (régimes trop spécifiques)", () => {
+    const immo = computeCapitalGainsTax({ type: AccountType.IMMOBILIER, openingDate: '2010-01-01' }, 1000, fiscal, NOW);
+    const per = computeCapitalGainsTax({ type: AccountType.PER, openingDate: '2010-01-01' }, 1000, fiscal, NOW);
+    expect(immo).toEqual({ grossInterest: 1000, socialCharges: 0, incomeTax: 0, netInterest: 1000, regime: 'NON_MODELISE' });
+    expect(per.regime).toBe('NON_MODELISE');
+  });
+
+  it("suppose le cas défavorable (compte récent) quand la date d'ouverture est inconnue", () => {
+    const r = computeCapitalGainsTax({ type: AccountType.PEA, openingDate: undefined }, 1000, fiscal, NOW);
+    expect(r.regime).toBe('PFU'); // jamais d'exonération non prouvée
+  });
+});
+
+describe('computeParentalInterest', () => {
+  it('répartit les intérêts entre part propre et part parentale au prorata du capital', () => {
+    const r = computeParentalInterest(
+      [{ interestRate: 4, totalAmount: 1000, ownedAmount: 600 }],
+      2025
+    );
+    expect(r.totalAnnual).toBeCloseTo(40, 5);
+    expect(r.totalAnnualOwned).toBeCloseTo(24, 5);
+    expect(r.totalAnnualParental).toBeCloseTo(16, 5);
+  });
+
+  it('ignore les comptes sans taux ou à solde nul', () => {
+    const r = computeParentalInterest(
+      [
+        { interestRate: 0, totalAmount: 1000, ownedAmount: 1000 },
+        { interestRate: 3, totalAmount: 0, ownedAmount: 0 },
+      ],
+      2025
+    );
+    expect(r).toEqual({ totalAnnual: 0, totalAnnualOwned: 0, totalAnnualParental: 0 });
+  });
+
+  it('cumule plusieurs comptes', () => {
+    const r = computeParentalInterest(
+      [
+        { interestRate: 4, totalAmount: 1000, ownedAmount: 1000 }, // 100% à moi
+        { interestRate: 2, totalAmount: 2000, ownedAmount: 0 },    // 100% aux parents
+      ],
+      2025
+    );
+    expect(r.totalAnnual).toBeCloseTo(80, 5);
+    expect(r.totalAnnualOwned).toBeCloseTo(40, 5);
+    expect(r.totalAnnualParental).toBeCloseTo(40, 5);
+  });
+
+  it('ne renvoie jamais une part parentale négative', () => {
+    // Garde-fou : ownedAmount ne devrait jamais dépasser totalAmount, mais si une
+    // incohérence de données passait au travers, le résultat reste borné à 0.
+    const r = computeParentalInterest(
+      [{ interestRate: 4, totalAmount: 1000, ownedAmount: 1500 }],
+      2025
+    );
+    expect(r.totalAnnualParental).toBe(0);
   });
 });

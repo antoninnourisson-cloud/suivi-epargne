@@ -1,7 +1,14 @@
 import React, { useMemo } from 'react';
 import { SavingsAccount, AccountType, FiscalConfig } from '../types';
-import { computeWeightedAnnualRate } from '../lib/finance';
-import { Coins, TrendingUp, AlertCircle, PiggyBank, FileDown, Landmark } from 'lucide-react';
+import { computeWeightedAnnualRate, computeCapitalGainsTax, computeParentalInterest, CapitalTaxRegime } from '../lib/finance';
+import { Coins, TrendingUp, AlertCircle, PiggyBank, FileDown, Landmark, Info } from 'lucide-react';
+
+const REGIME_LABEL: Record<CapitalTaxRegime, string> = {
+  PFU: 'PFU 30%',
+  EXONERE_IR: 'Exonéré IR',
+  AV_REDUIT: 'IR réduit 7,5%',
+  NON_MODELISE: 'Non calculé',
+};
 
 interface YieldProps {
   accounts: SavingsAccount[];
@@ -31,13 +38,15 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig }) => {
       .sort((x, y) => y.annual - x.annual),
     [accounts, currentYear]);
 
-  const totalAnnual = rows.reduce((s, r) => s + r.annual, 0);
-  // Intérêts produits par ma part propre du capital.
-  const totalAnnualOwned = rows.reduce((s, r) => s + r.annualOwned, 0);
-  // Intérêts produits par le capital de mes parents : ils me les offrent en fin
-  // d'année, donc le TOTAL est bien ce qui me revient (je ne touche pas à leur
-  // capital, mais j'encaisse 100 % des intérêts).
-  const totalAnnualParental = Math.max(0, totalAnnual - totalAnnualOwned);
+  // Totaux via computeParentalInterest (partagé avec le rappel de fin d'année du Dashboard)
+  // plutôt que recalculés ici : les deux écrans ne doivent jamais pouvoir diverger.
+  // Intérêts produits par le capital de mes parents : ils me les offrent en fin d'année,
+  // donc le TOTAL est bien ce qui me revient (je ne touche pas à leur capital, mais
+  // j'encaisse 100 % des intérêts).
+  const { totalAnnual, totalAnnualOwned, totalAnnualParental } = useMemo(
+    () => computeParentalInterest(accounts, currentYear),
+    [accounts, currentYear]
+  );
 
   // Manque à gagner : cash dormant sur compte courant vs place possible sur livrets non pleins.
   const missed = useMemo(() => {
@@ -71,21 +80,33 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig }) => {
   }, [accounts, fiscalConfig]);
 
   // --- EXPORT FISCAL (comptes imposables, pour la déclaration d'impôts) ---
+  // Le net après prélèvements est une SIMPLIFICATION (voir les commentaires de
+  // computeCapitalGainsTax) — utile pour se projeter, pas pour remplir une déclaration.
   const taxableRows = useMemo(() =>
     accounts
       .filter(a => a.isTaxable)
-      .map(a => ({
-        id: a.id, name: a.name, type: a.type, institution: a.institution,
-        base: a.totalAmount, rate: a.interestRate || 0,
-        estimatedAnnualInterest: a.totalAmount * ((a.interestRate || 0) / 100),
-        openingDate: a.openingDate || '',
-      })),
-    [accounts]);
+      .map(a => {
+        const base = a.totalAmount;
+        const rate = a.interestRate || 0;
+        const estimatedAnnualInterest = base * (rate / 100);
+        const tax = computeCapitalGainsTax(a, estimatedAnnualInterest, fiscalConfig);
+        return {
+          id: a.id, name: a.name, type: a.type, institution: a.institution,
+          base, rate, estimatedAnnualInterest,
+          openingDate: a.openingDate || '',
+          tax,
+        };
+      }),
+    [accounts, fiscalConfig]);
+
+  const totalGrossTaxable = taxableRows.reduce((s, r) => s + r.estimatedAnnualInterest, 0);
+  const totalNetTaxable = taxableRows.reduce((s, r) => s + (r.tax.regime === 'NON_MODELISE' ? r.estimatedAnnualInterest : r.tax.netInterest), 0);
+  const hasUnmodeled = taxableRows.some(r => r.tax.regime === 'NON_MODELISE');
 
   const exportFiscalCsv = () => {
-    let csv = 'Compte,Type,Établissement,Solde,Taux (%),Intérêts estimés (an),Date ouverture\n';
+    let csv = 'Compte,Type,Établissement,Solde,Taux (%),Intérêts bruts estimés (an),Prélèvements sociaux,Impôt sur le revenu,Net estimé,Régime,Date ouverture\n';
     taxableRows.forEach(r => {
-      csv += `"${r.name}","${r.type}","${r.institution}",${r.base},${r.rate},${r.estimatedAnnualInterest.toFixed(2)},${r.openingDate}\n`;
+      csv += `"${r.name}","${r.type}","${r.institution}",${r.base},${r.rate},${r.estimatedAnnualInterest.toFixed(2)},${r.tax.socialCharges.toFixed(2)},${r.tax.incomeTax.toFixed(2)},${r.tax.netInterest.toFixed(2)},${REGIME_LABEL[r.tax.regime]},${r.openingDate}\n`;
     });
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -168,13 +189,31 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig }) => {
             </div>
             <button onClick={exportFiscalCsv} className="flex items-center gap-2 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 px-4 py-2 rounded-xl font-bold text-sm flex-shrink-0"><FileDown className="w-4 h-4" /> Exporter (CSV)</button>
           </div>
+
+          <div className="px-6 pt-4 flex flex-wrap gap-4">
+            <div>
+              <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Brut estimé {currentYear}</p>
+              <p className="text-lg font-black text-slate-500 dark:text-slate-400 line-through decoration-slate-300 dark:decoration-slate-600">{fmt(totalGrossTaxable)}</p>
+            </div>
+            <div>
+              <p className="text-[10px] font-black text-emerald-600 uppercase">Net après prélèvements</p>
+              <p className="text-lg font-black text-emerald-600">{fmt(totalNetTaxable)}</p>
+            </div>
+          </div>
+          <p className="px-6 pb-2 pt-1 text-[10px] text-slate-400 dark:text-slate-500 flex items-start gap-1">
+            <Info className="w-3 h-3 flex-shrink-0 mt-0.5" />
+            Estimation simplifiée (PFU 30% ou régime réduit selon l'ancienneté du compte) — pas une simulation fiscale complète.
+            {hasUnmodeled && ' Certains comptes (Immobilier, PER...) ont un régime trop spécifique pour être calculé ici : leur brut est repris tel quel.'}
+          </p>
+
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm min-w-[34rem]">
               <thead className="bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700">
                 <tr>
                   <th className="px-6 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Compte</th>
                   <th className="px-6 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase text-right">Solde</th>
-                  <th className="px-6 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase text-right">Intérêts estimés {currentYear}</th>
+                  <th className="px-6 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase text-right">Brut estimé {currentYear}</th>
+                  <th className="px-6 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase text-right">Net estimé</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -182,7 +221,11 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig }) => {
                   <tr key={r.id} className="hover:bg-slate-50 dark:hover:bg-slate-800">
                     <td className="px-6 py-3"><div className="font-bold text-slate-800 dark:text-slate-100">{r.name}</div><div className="text-[10px] uppercase text-slate-400 dark:text-slate-500 font-bold">{r.institution} · {r.type}</div></td>
                     <td className="px-6 py-3 text-right font-mono text-slate-600 dark:text-slate-300">{fmt(r.base)}</td>
-                    <td className="px-6 py-3 text-right font-black text-amber-600">{fmt(r.estimatedAnnualInterest)}</td>
+                    <td className="px-6 py-3 text-right font-mono text-slate-500 dark:text-slate-400">{fmt(r.estimatedAnnualInterest)}</td>
+                    <td className="px-6 py-3 text-right">
+                      <div className="font-black text-emerald-600">{r.tax.regime === 'NON_MODELISE' ? '—' : fmt(r.tax.netInterest)}</div>
+                      <div className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase">{REGIME_LABEL[r.tax.regime]}</div>
+                    </td>
                   </tr>
                 ))}
               </tbody>

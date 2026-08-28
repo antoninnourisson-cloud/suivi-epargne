@@ -4,7 +4,8 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, AreaChart, Area 
 } from 'recharts';
 import { SavingsAccount, PortfolioSnapshot, AccountType, Expense, FiscalConfig } from '../types';
-import { Euro, Lock, Wallet, Filter, Unlock, Save, AlertTriangle, Trash2, Clock, TrendingUp } from 'lucide-react';
+import { Euro, Lock, Wallet, Filter, Unlock, Save, AlertTriangle, Trash2, Clock, TrendingUp, TrendingDown, PiggyBank } from 'lucide-react';
+import { computeParentalInterest } from '../lib/finance';
 import { Button } from './Button';
 
 interface DashboardProps {
@@ -191,23 +192,55 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
 
   const projection = useMemo(() => {
     const now = new Date();
-    const past = new Date(now);
-    past.setDate(past.getDate() - 90);
+    const past90 = new Date(now);
+    past90.setDate(past90.getDate() - 90);
+    const past180 = new Date(now);
+    past180.setDate(past180.getDate() - 180);
     const nowStr = now.toISOString().split('T')[0];
-    const pastStr = past.toISOString().split('T')[0];
+    const past90Str = past90.toISOString().split('T')[0];
+    const past180Str = past180.toISOString().split('T')[0];
 
-    const hasRecentMovements = accounts.some(a => (a.movements || []).some(m => m.date > pastStr && m.date <= nowStr));
+    const hasRecentMovements = accounts.some(a => (a.movements || []).some(m => m.date > past90Str && m.date <= nowStr));
     if (!hasRecentMovements) return null; // pas assez d'historique récent pour extrapoler quoi que ce soit
 
     const totalNow = balanceAtDate(nowStr);
-    const totalPast = balanceAtDate(pastStr);
-    const monthlyRate = (totalNow - totalPast) / 3; // 90 jours ≈ 3 mois
+    const totalPast90 = balanceAtDate(past90Str);
+    const monthlyRate = (totalNow - totalPast90) / 3; // 90 jours ≈ 3 mois
     if (Math.abs(monthlyRate) < 1) return null; // rythme quasi nul, rien d'exploitable à projeter
 
-    return { monthlyRate, totalNow, in6: totalNow + monthlyRate * 6, in12: totalNow + monthlyRate * 12 };
+    // --- DÉRIVE DE RYTHME : comparaison au trimestre précédent (jours -180 à -90) ---
+    // Réutilise la même reconstruction, décalée d'un trimestre, pour détecter un
+    // ralentissement (ou une accélération) sans rien collecter de nouveau. Comparaison
+    // ignorée si le trimestre précédent est lui-même peu documenté ou quasi nul : sinon un
+    // rythme précédent proche de 0 ferait passer n'importe quelle variation pour un séisme.
+    const hasOlderMovements = accounts.some(a => (a.movements || []).some(m => m.date > past180Str && m.date <= past90Str));
+    let drift: { previousMonthlyRate: number; changeRatio: number } | null = null;
+    if (hasOlderMovements) {
+      const totalPast180 = balanceAtDate(past180Str);
+      const previousMonthlyRate = (totalPast90 - totalPast180) / 3;
+      if (Math.abs(previousMonthlyRate) >= 20) {
+        const changeRatio = (monthlyRate - previousMonthlyRate) / Math.abs(previousMonthlyRate);
+        // Écart de moins de 25% : variation normale d'un trimestre à l'autre, pas une dérive.
+        if (Math.abs(changeRatio) >= 0.25) drift = { previousMonthlyRate, changeRatio };
+      }
+    }
+
+    return { monthlyRate, totalNow, in6: totalNow + monthlyRate * 6, in12: totalNow + monthlyRate * 12, drift };
   }, [accounts]);
 
   const fmtEUR = (v: number) => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v);
+
+  // --- RAPPEL DE FIN D'ANNÉE : INTÉRÊTS PARENTAUX ---
+  // Le capital que les parents ont placé sur ces comptes reste intouchable, mais ses
+  // intérêts sont offerts en fin d'année (accord familial, pas une règle fiscale) — même
+  // calcul que Rendement (`computeParentalInterest`), affiché ici en rappel ponctuel plutôt
+  // que d'obliger à aller consulter cet onglet spécifiquement en décembre.
+  const parentalYearEndReminder = useMemo(() => {
+    const now = new Date();
+    if (now.getMonth() !== 11) return null; // uniquement en décembre
+    const { totalAnnualParental } = computeParentalInterest(accounts, now.getFullYear());
+    return totalAnnualParental > 1 ? totalAnnualParental : null;
+  }, [accounts]);
 
   const dataByInstitution = Object.values(accounts.reduce((acc, curr) => {
     const key = curr.institution;
@@ -283,6 +316,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
         </div>
       )}
 
+      {parentalYearEndReminder !== null && (
+        <div className="flex items-center gap-3 p-3 rounded-xl border bg-indigo-50 dark:bg-indigo-950/40 border-indigo-200 dark:border-indigo-900 text-indigo-800 dark:text-indigo-300 text-sm font-bold">
+          <PiggyBank className="w-4 h-4 flex-shrink-0" />
+          Rappel de fin d'année : les intérêts générés cette année par la part de tes parents représentent environ {fmtEUR(parentalYearEndReminder)} — normalement à toi d'après votre accord (le capital, lui, reste intouchable).
+        </div>
+      )}
+
       {inactiveEmptyAccounts.length > 0 && onDeleteAccount && (
         <div className="space-y-2">
           {inactiveEmptyAccounts.map(a => (
@@ -338,6 +378,18 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
               <p className="text-xl font-black text-slate-800 dark:text-slate-100 mt-1">{fmtEUR(projection.in12)}</p>
             </div>
           </div>
+
+          {projection.drift && (
+            <div className={`mt-4 flex items-start gap-2 p-3 rounded-lg text-xs font-bold ${projection.drift.changeRatio < 0 ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300' : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300'}`}>
+              {projection.drift.changeRatio < 0
+                ? <TrendingDown className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                : <TrendingUp className="w-4 h-4 flex-shrink-0 mt-0.5" />}
+              <span>
+                Ton rythme d'épargne a {projection.drift.changeRatio < 0 ? 'ralenti' : 'accéléré'} de {Math.abs(Math.round(projection.drift.changeRatio * 100))}%
+                par rapport au trimestre précédent ({fmtEUR(projection.drift.previousMonthlyRate)}/mois → {fmtEUR(projection.monthlyRate)}/mois).
+              </span>
+            </div>
+          )}
         </div>
       )}
 

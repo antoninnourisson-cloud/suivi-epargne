@@ -3,7 +3,7 @@
 // Logique fiscale centralisée (calcul du "super net", impôt par tranches).
 // Fonctions pures, testables, réutilisées par le Pilotage et le Dashboard.
 // ================================================
-import { FiscalConfig, TaxBracket, WorkBenefits, RateChange } from '../types';
+import { FiscalConfig, TaxBracket, WorkBenefits, RateChange, AccountType } from '../types';
 import { DEFAULT_STANDARD_ALLOWANCE_CAP } from '../constants';
 
 export interface IncomeInput {
@@ -151,6 +151,86 @@ export const computeSavingsCapacity = (
   projectSavings: number
 ): number => superNet - totalFixedExpenses - leisureBudget - projectSavings;
 
+// --- FISCALITÉ DU CAPITAL (PFU / prélèvements sociaux) ---
+// `socialChargesCapital` (17,2 %) existait dans FiscalConfig depuis le début mais n'était
+// utilisé par aucun calcul : l'export fiscal de Rendement listait des intérêts BRUTS. Ce qui
+// suit modélise le régime le plus courant par type de compte — volontairement simplifié, pas
+// une simulation fiscale complète (voir les limites documentées sur chaque cas).
+const PFU_INCOME_TAX_RATE = 0.128; // part "impôt" du Prélèvement Forfaitaire Unique à 30 % (12,8 % IR + 17,2 % social)
+// Taux réduit d'IR sur les gains d'Assurance Vie après 8 ans (art. 125-0 A du CGI), HORS
+// abattement annuel de 4 600 €/9 200 € : celui-ci porte sur l'ensemble des contrats d'une
+// personne (pas par compte) et dépend de versements antérieurs au 27/09/2017 — non modélisable
+// ici sans ces informations. Le net réel après 8 ans est donc, dans la pratique, souvent
+// LÉGÈREMENT MEILLEUR que ce que ce calcul affiche pour de petits montants de gains annuels.
+const AV_REDUCED_INCOME_TAX_RATE = 0.075;
+
+export type CapitalTaxRegime = 'PFU' | 'EXONERE_IR' | 'AV_REDUIT' | 'NON_MODELISE';
+
+export interface CapitalTaxBreakdown {
+  grossInterest: number;
+  socialCharges: number;
+  incomeTax: number;
+  netInterest: number;
+  regime: CapitalTaxRegime;
+}
+
+/**
+ * Répartit des intérêts/gains bruts entre prélèvements sociaux, impôt sur le revenu et net
+ * réel, selon le type de compte et son ancienneté par rapport aux seuils légaux configurés.
+ *
+ * `asOfDate` est injectable pour les tests (sinon non-déterministe).
+ */
+export const computeCapitalGainsTax = (
+  account: { type: AccountType; openingDate?: string },
+  grossInterest: number,
+  fiscalConfig: FiscalConfig,
+  asOfDate: Date = new Date()
+): CapitalTaxBreakdown => {
+  if (grossInterest <= 0) {
+    return { grossInterest, socialCharges: 0, incomeTax: 0, netInterest: grossInterest, regime: 'PFU' };
+  }
+
+  // Date d'ouverture inconnue => on ne peut pas prouver l'ancienneté requise pour une
+  // exonération : on suppose le cas le moins favorable (compte récent) plutôt que d'afficher
+  // un net optimiste et faux.
+  const ageYears = account.openingDate
+    ? (asOfDate.getTime() - new Date(account.openingDate).getTime()) / (1000 * 3600 * 24 * 365.25)
+    : 0;
+
+  const socialCharges = grossInterest * fiscalConfig.socialChargesCapital;
+
+  const withMaturity = (maturityYears: number, reducedRate: number, regimeIfMature: CapitalTaxRegime): CapitalTaxBreakdown => {
+    const mature = ageYears >= maturityYears;
+    const incomeTax = grossInterest * (mature ? reducedRate : PFU_INCOME_TAX_RATE);
+    return {
+      grossInterest, socialCharges, incomeTax,
+      netInterest: grossInterest - socialCharges - incomeTax,
+      regime: mature ? regimeIfMature : 'PFU',
+    };
+  };
+
+  switch (account.type) {
+    // Passé le seuil légal, les gains PEA/PEE sont exonérés d'IR (mais pas des 17,2 % sociaux,
+    // dus dans tous les cas sur du capital).
+    case AccountType.PEA:
+      return withMaturity(fiscalConfig.legalMaturity.pea, 0, 'EXONERE_IR');
+    case AccountType.PEE:
+      return withMaturity(fiscalConfig.legalMaturity.pee, 0, 'EXONERE_IR');
+    case AccountType.ASSURANCE_VIE:
+      return withMaturity(fiscalConfig.legalMaturity.assuranceVie, AV_REDUCED_INCOME_TAX_RATE, 'AV_REDUIT');
+    // Crypto : flat tax 30 % quelle que soit la durée de détention, pas de notion de maturité.
+    case AccountType.CRYPTO: {
+      const incomeTax = grossInterest * PFU_INCOME_TAX_RATE;
+      return { grossInterest, socialCharges, incomeTax, netInterest: grossInterest - socialCharges - incomeTax, regime: 'PFU' };
+    }
+    default:
+      // Immobilier (paliers d'abattement par durée de détention, distinction résidence
+      // principale...), PER (fiscalité dépend du mode de sortie et de la déductibilité à
+      // l'entrée) : régimes trop spécifiques pour un calcul fiable ici plutôt qu'un faux net.
+      return { grossInterest, socialCharges: 0, incomeTax: 0, netInterest: grossInterest, regime: 'NON_MODELISE' };
+  }
+};
+
 /**
  * Taux moyen pondéré par le temps sur l'année civile donnée, à partir de l'historique
  * des changements de taux. Si aucun historique n'est renseigné, retourne simplement
@@ -212,4 +292,32 @@ export const computeWeightedAnnualRate = (
   }
 
   return totalDays > 0 ? weightedSum / totalDays : currentRate;
+};
+
+export interface ParentalInterestBreakdown {
+  totalAnnual: number;
+  totalAnnualOwned: number;
+  // Intérêts produits par le capital des parents : ils reviennent à l'utilisateur en fin
+  // d'année (le capital, lui, reste intouchable) — voir Yield.tsx pour le raisonnement complet.
+  totalAnnualParental: number;
+}
+
+/**
+ * Centralise le calcul "intérêts annuels, dont part parentale" déjà utilisé par Rendement,
+ * pour que le rappel de fin d'année (Dashboard) ne puisse pas en dériver avec une formule
+ * légèrement différente.
+ */
+export const computeParentalInterest = (
+  accounts: { interestRate?: number; rateHistory?: RateChange[]; totalAmount: number; ownedAmount: number }[],
+  year: number
+): ParentalInterestBreakdown => {
+  let totalAnnual = 0;
+  let totalAnnualOwned = 0;
+  accounts.forEach(a => {
+    if (!((a.interestRate || 0) > 0) || a.totalAmount <= 0) return;
+    const weightedRate = computeWeightedAnnualRate(a.interestRate || 0, a.rateHistory, year);
+    totalAnnual += a.totalAmount * (weightedRate / 100);
+    totalAnnualOwned += a.ownedAmount * (weightedRate / 100);
+  });
+  return { totalAnnual, totalAnnualOwned, totalAnnualParental: Math.max(0, totalAnnual - totalAnnualOwned) };
 };
