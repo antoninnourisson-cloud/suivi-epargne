@@ -1,7 +1,10 @@
 // src/components/AssistantPilot.tsx
 import React, { useState, useMemo } from 'react';
 import { SavingsAccount, Expense, AccountType, FiscalConfig, WorkBenefits, PayslipRecord } from '../types';
-import { computeIncome } from '../lib/finance';
+import { computeIncome, computeMaturityCountdown } from '../lib/finance';
+import { parseISODate } from '../lib/dates';
+import { parseFrenchNumber, safeNumber } from '../lib/numbers';
+import { NumberInput } from './NumberInput';
 import { Calculator, TrendingUp, Target, Lock, Unlock, Info, Plus, Trash2, Hourglass, Coins, BarChart3, X, Check, FileCheck2, Wand2 } from 'lucide-react';
 
 interface AssistantPilotProps {
@@ -80,7 +83,13 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
         superNetRaw: e.netAmount,
         effectiveMonthlyTax: e.incomeTaxWithheld,
         effectiveSuperNet: effectiveSuperNetReal,
-        autoRate: e.netAmount && e.incomeTaxWithheld !== undefined ? (e.incomeTaxWithheld / e.netAmount) * 100 : undefined,
+        // Assiette : le NET IMPOSABLE quand la fiche le fournit (c'est le dénominateur du
+        // barème, donc comparable au "Taux Barème" théorique) — l'ancien calcul divisait
+        // par le net à payer, ce qui décalait le taux affiché de plusieurs points au
+        // simple basculement fiche/formule.
+        autoRate: e.incomeTaxWithheld !== undefined && (e.netTaxable || e.netAmount)
+          ? (e.incomeTaxWithheld / (e.netTaxable || e.netAmount)!) * 100
+          : undefined,
       };
     }
     return {
@@ -114,13 +123,17 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
   const updateFromGrossAnnual = (val: number) => setGrossAnnual(val);
   const updateFromGrossMonth = (val: number) => setGrossAnnual(val * 12);
   const updateFromNet = (val: number) => {
-    const targetGrossMonth = (val - autoValues.navigoGain - extraMonthlyIncome) / (1 - fiscalConfig.salaryChargesRate);
+    // Un taux de charges >= 100 % (saisie erronée dans les Paramètres) donnerait une
+    // division par zéro → grossAnnual = Infinity persisté sur Drive. On ignore la saisie.
+    const denominator = 1 - fiscalConfig.salaryChargesRate;
+    if (denominator <= 0) return;
+    const targetGrossMonth = (val - autoValues.navigoGain - extraMonthlyIncome) / denominator;
     setGrossAnnual(targetGrossMonth * 12);
   };
 
   const handleAddExpense = () => {
       if(newExpenseName && newExpenseAmount) {
-          onUpdateExpenses([...expenses, {id: crypto.randomUUID(), name: newExpenseName, amount: parseFloat(newExpenseAmount)}]);
+          onUpdateExpenses([...expenses, {id: crypto.randomUUID(), name: newExpenseName, amount: safeNumber(newExpenseAmount, 0)}]);
           setNewExpenseName('');
           setNewExpenseAmount('');
           setIsAddingExpense(false);
@@ -130,7 +143,11 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
   const budgetData = useMemo(() => {
     const totalFixed = expenses.reduce((sum, e) => sum + e.amount, 0);
     const theoreticalCapacity = effectiveSuperNetForCalc - totalFixed - leisureBudget - projectSavings;
-    const finalCapacity = manualSavingsCapacity !== null ? parseFloat(manualSavingsCapacity) : theoreticalCapacity;
+    // parseFrenchNumber et non parseFloat : vider le champ (ou taper "-" seul) donnait
+    // NaN → "Placement (NaN €)" et un plan de placement qui disparaissait sans message.
+    // Saisie non interprétable = retour au calcul automatique.
+    const manualParsed = manualSavingsCapacity !== null ? parseFrenchNumber(manualSavingsCapacity) : null;
+    const finalCapacity = manualParsed ?? theoreticalCapacity;
     const totalToInvest = Math.max(0, finalCapacity + externalSavings);
     return { totalFixed, theoreticalCapacity, finalCapacity, totalToInvest };
   }, [effectiveSuperNetForCalc, expenses, leisureBudget, projectSavings, manualSavingsCapacity, externalSavings]);
@@ -155,11 +172,15 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
 
     userLiquidAccounts.forEach(acc => {
       if (remainingMoney <= 0) return;
-      let ceiling = acc.ceiling || 0;
-      if (acc.type === AccountType.LEP) ceiling = fiscalConfig.ceilings.lep;
-      if (acc.type === AccountType.LIVRET_A) ceiling = fiscalConfig.ceilings.livretA;
-      if (acc.type === AccountType.LDDS) ceiling = fiscalConfig.ceilings.ldds;
-      
+      // Plafond du compte s'il est renseigné, sinon celui de la config (même règle que
+      // bookletStats et les alertes du Dashboard).
+      const defaults: Partial<Record<AccountType, number>> = {
+        [AccountType.LEP]: fiscalConfig.ceilings.lep,
+        [AccountType.LIVRET_A]: fiscalConfig.ceilings.livretA,
+        [AccountType.LDDS]: fiscalConfig.ceilings.ldds,
+      };
+      const ceiling = (acc.ceiling && acc.ceiling > 0) ? acc.ceiling : (defaults[acc.type] || 0);
+
       const availableSpace = Math.max(0, ceiling - acc.totalAmount);
       if (availableSpace > 0) {
         const amountAllocated = Math.min(remainingMoney, availableSpace);
@@ -179,53 +200,86 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
   }, [budgetData.totalToInvest, accounts, fiscalConfig]);
 
   const bookletStats = useMemo(() => {
-    return [AccountType.LEP, AccountType.LIVRET_A, AccountType.LDDS].map(type => {
-      const acc = accounts.find(a => a.type === type);
-      if (!acc) return null;
-      let ceiling = acc.ceiling;
-      if (type === AccountType.LEP) ceiling = fiscalConfig.ceilings.lep;
-      if (type === AccountType.LIVRET_A) ceiling = fiscalConfig.ceilings.livretA;
-      if (type === AccountType.LDDS) ceiling = fiscalConfig.ceilings.ldds;
-      if (!ceiling) ceiling = 10000; 
-      
-      const parentPct = (acc.parentalCapital / ceiling) * 100;
-      const ownedPct = (acc.ownedAmount / ceiling) * 100;
-      return { name: acc.name, type, ceiling, parentAmount: acc.parentalCapital, ownedAmount: acc.ownedAmount, parentPct, ownedPct, totalPct: parentPct + ownedPct, remainingSpace: ceiling - acc.totalAmount };
-    }).filter(x => x !== null);
+    const defaults: Partial<Record<AccountType, number>> = {
+      [AccountType.LEP]: fiscalConfig.ceilings.lep,
+      [AccountType.LIVRET_A]: fiscalConfig.ceilings.livretA,
+      [AccountType.LDDS]: fiscalConfig.ceilings.ldds,
+    };
+    // TOUS les comptes de chaque type réglementé, pas seulement le premier trouvé : un
+    // second Livret A était invisible ici et exclu de l'espace restant. Le plafond saisi
+    // sur le compte prime sur la config globale (il était stocké mais jamais lu).
+    return [AccountType.LEP, AccountType.LIVRET_A, AccountType.LDDS].flatMap(type =>
+      accounts.filter(a => a.type === type).map(acc => {
+        const ceiling = (acc.ceiling && acc.ceiling > 0) ? acc.ceiling : (defaults[type] || 10000);
+        const parentPct = Math.min(100, (acc.parentalCapital / ceiling) * 100);
+        const ownedPct = Math.min(100 - parentPct, (acc.ownedAmount / ceiling) * 100);
+        return {
+          id: acc.id, name: acc.name, type, ceiling,
+          parentAmount: acc.parentalCapital, ownedAmount: acc.ownedAmount,
+          parentPct, ownedPct, totalPct: parentPct + ownedPct,
+          remainingSpace: Math.max(0, ceiling - acc.totalAmount),
+        };
+      })
+    );
   }, [accounts, fiscalConfig]);
 
   const survival = useMemo(() => {
     const liquidMoney = accounts.filter(a => !a.contractEndDate && ![AccountType.IMMOBILIER, AccountType.PER, AccountType.PEE].includes(a.type)).reduce((sum, a) => sum + a.ownedAmount, 0);
-    const monthlyBurn = budgetData.totalFixed; 
-    
-    if (monthlyBurn === 0) return { label: "Infini", color: "text-slate-500 dark:text-slate-400", bg: "bg-slate-50 dark:bg-slate-900", border: "border-slate-200 dark:border-slate-700" };
-    
+    const monthlyBurn = budgetData.totalFixed;
+
+    // Le retour anticipé "Infini" doit porter TOUS les champs lus par le JSX : l'ancienne
+    // version omettait years/months/days/monthlyBurn et l'écran affichait littéralement
+    // "m j" et "Avec € de charges fixes".
+    if (monthlyBurn === 0) {
+      return {
+        infinite: true, years: 0, months: 0, days: 0, monthlyBurn: 0, totalMonths: Infinity,
+        color: "text-slate-500 dark:text-slate-400", bg: "bg-slate-50 dark:bg-slate-900", border: "border-slate-200 dark:border-slate-700",
+      };
+    }
+
     const totalMonths = liquidMoney / monthlyBurn;
     const years = Math.floor(totalMonths / 12);
     const months = Math.floor(totalMonths % 12);
     const days = Math.floor((totalMonths * 30) % 30);
-    
+
     let color = 'text-emerald-600'; let border = 'border-emerald-200'; let bg = 'bg-emerald-50';
     if (totalMonths < 3) { color = 'text-rose-600'; border = 'border-rose-200'; bg = 'bg-rose-50'; }
     else if (totalMonths < 6) { color = 'text-orange-600'; border = 'border-orange-200'; bg = 'bg-orange-50'; }
-    
-    return { years, months, days, color, border, bg, monthlyBurn, totalMonths };
+
+    return { infinite: false, years, months, days, color, border, bg, monthlyBurn, totalMonths };
   }, [accounts, budgetData.totalFixed]);
 
   const fiscalClock = useMemo(() => {
     return accounts.filter(a => [AccountType.PEE, AccountType.PEA, AccountType.ASSURANCE_VIE].includes(a.type)).map(acc => {
-        let endDate: Date | null = null;
-        if (acc.type === AccountType.PEE && acc.contractEndDate) endDate = new Date(acc.contractEndDate);
-        else if (acc.openingDate) {
-          const duration = acc.type === AccountType.PEA ? fiscalConfig.legalMaturity.pea : fiscalConfig.legalMaturity.assuranceVie;
-          endDate = new Date(acc.openingDate); endDate.setFullYear(endDate.getFullYear() + duration);
+        // Cas particulier : un PEE avec date de fin de contrat explicite prime sur le
+        // calcul d'ancienneté.
+        if (acc.type === AccountType.PEE && acc.contractEndDate) {
+          const endDate = parseISODate(acc.contractEndDate);
+          const diffTime = endDate.getTime() - Date.now();
+          const isAvailable = diffTime <= 0;
+          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+          const years = Math.floor(diffDays / 365); const months = Math.floor((diffDays % 365) / 30);
+          return { id: acc.id, name: acc.name, type: acc.type, date: endDate.toLocaleDateString('fr-FR'), timeLeft: isAvailable ? "Disponible" : `${years > 0 ? years + 'a ' : ''}${months}m`, isAvailable };
         }
-        if (!endDate) return null;
-        
-        const now = new Date(); const diffTime = endDate.getTime() - now.getTime(); const isAvailable = diffTime <= 0;
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-        const years = Math.floor(diffDays / 365); const months = Math.floor((diffDays % 365) / 30);
-        return { id: acc.id, name: acc.name, type: acc.type, date: endDate.toLocaleDateString(), timeLeft: isAvailable ? "Disponible" : `${years>0?years+'a ':''}${months}m`, isAvailable };
+        // Sinon : MÊME calcul que le badge de "Mes Comptes" (computeMaturityCountdown),
+        // qui applique la bonne maturité par type — l'ancien code donnait au PEE la
+        // maturité de l'Assurance Vie (8 ans au lieu de legalMaturity.pee), et ses
+        // conventions d'arrondi divergeaient du badge d'un mois.
+        if (!acc.openingDate) return null;
+        const countdown = computeMaturityCountdown(acc, fiscalConfig);
+        if (!countdown) {
+          // computeMaturityCountdown renvoie null pour "déjà mature" : ici c'est une info
+          // à afficher, pas à masquer.
+          return { id: acc.id, name: acc.name, type: acc.type, date: '', timeLeft: 'Disponible', isAvailable: true };
+        }
+        const years = Math.floor(countdown.monthsRemaining / 12);
+        const months = countdown.monthsRemaining % 12;
+        return {
+          id: acc.id, name: acc.name, type: acc.type,
+          date: parseISODate(countdown.maturityDate).toLocaleDateString('fr-FR'),
+          timeLeft: `${years > 0 ? years + 'a ' : ''}${months}m`,
+          isAvailable: false,
+        };
     }).filter(item => item !== null);
   }, [accounts, fiscalConfig]);
 
@@ -259,18 +313,18 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
             )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-              <div className="bg-slate-50 dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-700"><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Brut Annuel</label><input type="number" value={Math.round(grossAnnual)} onChange={e => updateFromGrossAnnual(parseFloat(e.target.value)||0)} className="w-full bg-transparent font-black text-slate-800 dark:text-slate-100 text-lg outline-none" /></div>
+              <div className="bg-slate-50 dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-700"><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Brut Annuel</label><NumberInput value={Math.round(grossAnnual)} onChange={updateFromGrossAnnual} min={0} className="w-full bg-transparent font-black text-slate-800 dark:text-slate-100 text-lg outline-none" /></div>
               <div className="bg-slate-50 dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
                 <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Brut Mensuel</label>
                 {activePayslip
                   ? <p className="font-black text-slate-800 dark:text-slate-100 text-lg">{showEUR(display.grossMonth)}</p>
-                  : <input type="number" value={Math.round(autoValues.grossMonth)} onChange={e => updateFromGrossMonth(parseFloat(e.target.value)||0)} className="w-full bg-transparent font-black text-slate-800 dark:text-slate-100 text-lg outline-none" />}
+                  : <NumberInput value={Math.round(autoValues.grossMonth)} onChange={updateFromGrossMonth} min={0} className="w-full bg-transparent font-black text-slate-800 dark:text-slate-100 text-lg outline-none" />}
               </div>
               <div className="bg-indigo-50 dark:bg-indigo-950/40 p-3 rounded-xl border border-indigo-100 dark:border-indigo-900">
                 <label className="text-[10px] font-black text-indigo-400 dark:text-indigo-400 uppercase">Net Avant Impôt</label>
                 {activePayslip
                   ? <p className="font-black text-indigo-700 dark:text-indigo-300 text-lg">{showEUR(display.netBeforeTax)}</p>
-                  : <input type="number" value={Math.round(autoValues.netBeforeTax * 100)/100} onChange={e => updateFromNet(parseFloat(e.target.value)||0)} className="w-full bg-transparent font-black text-indigo-700 dark:text-indigo-300 text-lg outline-none" />}
+                  : <NumberInput value={Math.round(autoValues.netBeforeTax * 100)/100} onChange={updateFromNet} min={0} className="w-full bg-transparent font-black text-indigo-700 dark:text-indigo-300 text-lg outline-none" />}
               </div>
               <div className="bg-emerald-50 dark:bg-emerald-950/40 p-3 rounded-xl border border-emerald-100 dark:border-emerald-900 relative">
                 <label className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase flex items-center gap-1">{activePayslip ? 'Net Réel Perçu' : 'Super Net (Poche)'} <Info className="w-3 h-3 cursor-pointer" onClick={() => setShowDetails(!showDetails)}/></label>
@@ -293,7 +347,7 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
                     ) : (
                     <div className="flex items-center justify-between text-[10px] gap-2">
                         <div className="flex flex-col"><span className="text-slate-500 dark:text-slate-400">Taux Barème (Auto) : <strong>{autoValues.autoRate.toFixed(1)}%</strong></span>{taxRateManual > 0 && <span className="text-amber-600">Force à : <strong>{taxRateManual}%</strong></span>}</div>
-                        <div className="flex items-center gap-1"><label className="text-slate-400 dark:text-slate-500">Forcer taux :</label><input type="number" step="0.1" value={taxRateManual} onChange={(e) => setTaxRateManual(parseFloat(e.target.value) || 0)} className="w-12 p-1 text-right bg-white dark:bg-slate-800 border border-amber-200 rounded font-bold outline-none" placeholder="Auto"/><span className="text-slate-400 dark:text-slate-500">%</span></div>
+                        <div className="flex items-center gap-1"><label className="text-slate-400 dark:text-slate-500">Forcer taux :</label><NumberInput value={taxRateManual} onChange={setTaxRateManual} min={0} className="w-12 p-1 text-right bg-white dark:bg-slate-800 border border-amber-200 rounded font-bold outline-none" placeholder="Auto"/><span className="text-slate-400 dark:text-slate-500">%</span></div>
                     </div>
                     )}
                  </div>
@@ -314,7 +368,7 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
                   <div className="bg-indigo-50 p-2 rounded-lg mb-2 flex flex-col gap-2">
                       <input type="text" placeholder="Nom..." className="p-1 rounded text-xs border border-indigo-100" value={newExpenseName} onChange={e => setNewExpenseName(e.target.value)} autoFocus />
                       <div className="flex gap-1">
-                          <input type="number" placeholder="€..." className="p-1 rounded text-xs border border-indigo-100 w-20" value={newExpenseAmount} onChange={e => setNewExpenseAmount(e.target.value)} />
+                          <input type="text" inputMode="decimal" placeholder="€..." className="p-1 rounded text-xs border border-indigo-100 w-20" value={newExpenseAmount} onChange={e => setNewExpenseAmount(e.target.value)} />
                           <button onClick={handleAddExpense} className="flex-1 bg-indigo-600 text-white rounded flex items-center justify-center"><Check className="w-3 h-3"/></button>
                           <button onClick={() => setIsAddingExpense(false)} className="bg-slate-300 text-white rounded p-1"><X className="w-3 h-3"/></button>
                       </div>
@@ -344,26 +398,26 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
                       </div>
                   ))}
               </div>
-              <div className="mt-4 pt-4 border-t flex justify-between font-black text-rose-600"><span>TOTAL CHARGES</span><span>{Math.round(budgetData.totalFixed)} €</span></div>
+              <div className="mt-4 pt-4 border-t flex justify-between font-black text-rose-600"><span>TOTAL CHARGES</span><span>{Math.round(budgetData.totalFixed).toLocaleString('fr-FR')} €</span></div>
             </div>
 
             <div className="lg:col-span-2 space-y-6">
               <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm grid grid-cols-2 gap-4">
-                  <div><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Argent Plaisir</label><input type="number" value={leisureBudget} onChange={e => setLeisureBudget(parseFloat(e.target.value)||0)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
-                  <div><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Épargne Projets</label><input type="number" value={projectSavings} onChange={e => setProjectSavings(parseFloat(e.target.value)||0)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
+                  <div><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Argent Plaisir</label><NumberInput value={leisureBudget} onChange={setLeisureBudget} min={0} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
+                  <div><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Épargne Projets</label><NumberInput value={projectSavings} onChange={setProjectSavings} min={0} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
               </div>
 
               <div className="bg-slate-900 p-6 rounded-2xl shadow-lg text-white grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
                   <div>
                       <p className="text-slate-400 dark:text-slate-500 text-xs font-bold uppercase mb-2">Capacité d'Épargne Réelle</p>
                       <div className="flex items-baseline gap-2">
-                          <input type="number" value={manualSavingsCapacity !== null ? manualSavingsCapacity : Math.round(budgetData.theoreticalCapacity)} onChange={(e) => setManualSavingsCapacity(e.target.value)} className="bg-transparent text-5xl font-black text-emerald-400 w-40 outline-none border-b border-slate-700 focus:border-emerald-400" />
+                          <input type="text" inputMode="decimal" value={manualSavingsCapacity !== null ? manualSavingsCapacity : String(Math.round(budgetData.theoreticalCapacity))} onChange={(e) => setManualSavingsCapacity(e.target.value)} className="bg-transparent text-5xl font-black text-emerald-400 w-40 outline-none border-b border-slate-700 focus:border-emerald-400" />
                           <span className="text-xl">€</span>
                       </div>
                   </div>
                   <div className="bg-slate-800 p-4 rounded-xl border border-slate-700">
                       <label className="text-[10px] font-black text-indigo-300 uppercase flex items-center gap-2"><Coins className="w-3 h-3"/> Ajout Somme Externe</label>
-                      <input type="number" value={externalSavings} onChange={e => setExternalSavings(parseFloat(e.target.value)||0)} className="w-full bg-slate-900 border border-slate-600 rounded-lg p-2 mt-2 text-white font-bold focus:ring-2 focus:ring-indigo-500 outline-none" />
+                      <NumberInput value={externalSavings} onChange={setExternalSavings} className="w-full bg-slate-900 border border-slate-600 rounded-lg p-2 mt-2 text-white font-bold focus:ring-2 focus:ring-indigo-500 outline-none" />
                   </div>
               </div>
             </div>
@@ -371,20 +425,20 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
-               <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-2"><Target className="w-5 h-5 text-indigo-600" /> Placement ({Math.round(budgetData.totalToInvest)} €)</h3>
-               <div className="space-y-3">{strategy.length > 0 ? strategy.map((step, idx) => (<div key={idx} className="flex items-center justify-between p-4 rounded-xl border-l-4 bg-indigo-50 border-indigo-600"><div className="flex items-center gap-4"><div className="w-6 h-6 rounded-full flex center items-center justify-center bg-indigo-600 text-white font-bold text-xs">{idx + 1}</div><div><p className="font-bold text-slate-800 dark:text-slate-100">{step.accountName}</p><p className="text-xs text-slate-500 dark:text-slate-400">{step.type} • Taux {step.rate}%</p></div></div><p className="text-xl font-black text-indigo-600">+ {Math.round(step.fillAmount)} €</p></div>)) : <p className="text-sm text-slate-400 dark:text-slate-500 italic">Rien à placer.</p>}</div>
+               <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-2"><Target className="w-5 h-5 text-indigo-600" /> Placement ({Math.round(budgetData.totalToInvest).toLocaleString('fr-FR')} €)</h3>
+               <div className="space-y-3">{strategy.length > 0 ? strategy.map((step, idx) => (<div key={step.accountName + idx} className="flex items-center justify-between p-4 rounded-xl border-l-4 bg-indigo-50 border-indigo-600"><div className="flex items-center gap-4"><div className="w-6 h-6 rounded-full flex center items-center justify-center bg-indigo-600 text-white font-bold text-xs">{idx + 1}</div><div><p className="font-bold text-slate-800 dark:text-slate-100">{step.accountName}</p><p className="text-xs text-slate-500 dark:text-slate-400">{step.type} • Taux {step.rate}%</p></div></div><p className="text-xl font-black text-indigo-600">+ {Math.round(step.fillAmount).toLocaleString('fr-FR')} €</p></div>)) : <p className="text-sm text-slate-400 dark:text-slate-500 italic">Rien à placer.</p>}</div>
             </div>
 
             <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-6">
                <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-2 flex items-center gap-2"><BarChart3 className="w-5 h-5 text-indigo-600" /> Remplissage Livrets</h3>
-               {bookletStats.map((b, i) => (<div key={i} className="space-y-2"><div className="flex justify-between text-sm font-bold text-slate-700 dark:text-slate-200"><span>{b?.name}</span><span>{Math.round(b?.totalPct || 0)}%</span></div><div className="w-full h-3 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden flex"><div className="h-full bg-amber-400" style={{ width: `${b?.parentPct}%` }} title={`Parents: ${b?.parentAmount}€`}></div><div className="h-full bg-indigo-600" style={{ width: `${b?.ownedPct}%` }} title={`Moi: ${b?.ownedAmount}€`}></div></div><div className="flex justify-between text-[10px] text-slate-400 dark:text-slate-500 font-bold"><span className="text-amber-500">Parents {b?.parentAmount}€</span><span className="text-indigo-600">Moi {b?.ownedAmount}€</span><span>Max {b?.ceiling}€</span></div></div>))}
+               {bookletStats.map(b => (<div key={b.id} className="space-y-2"><div className="flex justify-between text-sm font-bold text-slate-700 dark:text-slate-200"><span>{b?.name}</span><span>{Math.round(b?.totalPct || 0)}%</span></div><div className="w-full h-3 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden flex"><div className="h-full bg-amber-400" style={{ width: `${b?.parentPct}%` }} title={`Parents: ${b?.parentAmount}€`}></div><div className="h-full bg-indigo-600" style={{ width: `${b?.ownedPct}%` }} title={`Moi: ${b?.ownedAmount}€`}></div></div><div className="flex justify-between text-[10px] text-slate-400 dark:text-slate-500 font-bold"><span className="text-amber-500">Parents {b?.parentAmount}€</span><span className="text-indigo-600">Moi {b?.ownedAmount}€</span><span>Max {b?.ceiling}€</span></div></div>))}
             </div>
           </div>
 
           <div className={`p-8 rounded-3xl border-2 shadow-sm text-center transition-colors ${survival.bg} ${survival.border}`}>
             <h3 className="text-sm font-black uppercase tracking-widest opacity-60 mb-4 flex justify-center items-center gap-2"><Hourglass className="w-4 h-4" /> Durée de Survie</h3>
-            <div className={`text-6xl font-black ${survival.color} mb-2`}>{survival.years > 0 && <span>{survival.years}a </span>}{survival.months}m {survival.days}j</div>
-            <p className={`font-bold ${survival.color} opacity-80`}>Avec {survival.monthlyBurn}€ de charges fixes / mois</p>
+            <div className={`text-6xl font-black ${survival.color} mb-2`}>{survival.infinite ? '∞' : <>{survival.years > 0 && <span>{survival.years}a </span>}{survival.months}m {survival.days}j</>}</div>
+            <p className={`font-bold ${survival.color} opacity-80`}>{survival.infinite ? 'Aucune charge fixe renseignée' : `Avec ${survival.monthlyBurn.toLocaleString('fr-FR')} € de charges fixes / mois`}</p>
           </div>
         </>
       )}

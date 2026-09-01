@@ -5,6 +5,7 @@ import { Button } from './Button';
 import { Save, AlertCircle, RefreshCw, Calendar, User, Users, CheckCircle } from 'lucide-react';
 import { useSaveFeedback } from '../hooks/useSaveFeedback';
 import { safeNumber } from '../lib/numbers';
+import { localTodayISO } from '../lib/dates';
 
 interface AccountUpdateProps {
   accounts: SavingsAccount[];
@@ -16,7 +17,7 @@ interface AccountUpdateProps {
 }
 
 export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdateAccountsComplex, lastSavedAt }) => {
-  const today = new Date().toISOString().split('T')[0];
+  const today = localTodayISO();
   const { status: saveStatus, markPending } = useSaveFeedback(lastSavedAt);
 
   const [updates, setUpdates] = useState<Record<string, { owned: string, parental: string, date: string }>>(
@@ -118,8 +119,8 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
                     <User className="w-3 h-3" /> Ma Part (€)
                   </label>
                   <input
-                    type="number"
-                    step="0.01"
+                    type="text"
+                    inputMode="decimal"
                     value={u.owned}
                     onChange={(e) => handleOwnedChange(account.id, e.target.value)}
                     className="w-full bg-transparent text-lg font-black text-indigo-900 dark:text-indigo-200 outline-none"
@@ -137,8 +138,8 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
                     <Users className="w-3 h-3" /> Part Parents (€)
                   </label>
                   <input
-                    type="number"
-                    step="0.01"
+                    type="text"
+                    inputMode="decimal"
                     value={u.parental}
                     onChange={(e) => handleParentalChange(account.id, e.target.value)}
                     className="w-full bg-transparent text-lg font-black text-amber-900 dark:text-amber-200 outline-none"

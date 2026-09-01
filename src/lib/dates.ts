@@ -29,6 +29,21 @@ export const parseISODate = (iso: string): Date => {
 export const startOfDay = (d: Date): Date => new Date(d.getFullYear(), d.getMonth(), d.getDate());
 
 /**
+ * Formate une date en 'YYYY-MM-DD' LOCAL.
+ * POURQUOI : `toISOString().split('T')[0]` renvoie le jour UTC — entre minuit et ~2h du
+ * matin à Paris, c'est LA VEILLE. Un ajout rapide saisi à 00h30 était daté d'hier, un
+ * changement de taux historisé le mauvais jour, etc. Toute production de clé de jour
+ * destinée aux données doit passer par ici.
+ */
+export const formatISODay = (d: Date): string => {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+};
+
+/** Le 'YYYY-MM-DD' d'aujourd'hui, en heure LOCALE (voir formatISODay). */
+export const localTodayISO = (): string => formatISODay(new Date());
+
+/**
  * Écart en jours calendaires entiers entre deux dates (négatif si `to` est passé).
  * L'arrondi absorbe les décalages d'une heure introduits par les changements
  * d'heure (été/hiver) entre les deux minuits locaux.

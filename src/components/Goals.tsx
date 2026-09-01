@@ -1,7 +1,9 @@
 import React, { useMemo, useState } from 'react';
 import { Expense, FiscalConfig, WorkBenefits, SavingsGoal, SavingsAccount } from '../types';
-import { computeIncome, computeSavingsCapacity, computeRecentSavingsRate } from '../lib/finance';
+import { computeIncome, computeSavingsCapacity, computeRecentSavingsRate, computeEffectiveSuperNet } from '../lib/finance';
 import { monthsBetween, parseISODate } from '../lib/dates';
+import { safeNumber } from '../lib/numbers';
+import { PayslipRecord } from '../types';
 import { Target, Plus, Trash2, Check, X, Calendar, TrendingUp, TrendingDown, Flag } from 'lucide-react';
 
 interface IncomeCfg {
@@ -24,11 +26,14 @@ interface GoalsProps {
   // Comptes réels, uniquement pour comparer la capacité THÉORIQUE ci-dessous (formule du
   // Pilotage) au rythme d'épargne RÉEL récemment observé — voir `realMonthlyRate`.
   accounts: SavingsAccount[];
+  // Fiche de paie de référence du Pilotage : quand elle est active, la capacité doit se
+  // baser sur le même net réel que lui, pas sur la formule théorique.
+  activePayslip?: PayslipRecord;
 }
 
 const fmt = (n: number) => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(n);
 
-export const Goals: React.FC<GoalsProps> = ({ goals, onUpdateGoals, expenses, income, fiscalConfig, workBenefits, accounts }) => {
+export const Goals: React.FC<GoalsProps> = ({ goals, onUpdateGoals, expenses, income, fiscalConfig, workBenefits, accounts, activePayslip }) => {
   const [isAdding, setIsAdding] = useState(false);
   const [form, setForm] = useState({ name: '', targetAmount: '', savedAmount: '', deadline: '' });
 
@@ -38,9 +43,11 @@ export const Goals: React.FC<GoalsProps> = ({ goals, onUpdateGoals, expenses, in
       fiscalConfig,
       workBenefits
     );
+    // Même règle que le Pilotage : le net réel de la fiche de référence prime sur la formule.
+    const superNet = computeEffectiveSuperNet(breakdown.superNet, activePayslip);
     const totalFixed = expenses.reduce((s, e) => s + e.amount, 0);
-    return computeSavingsCapacity(breakdown.superNet, totalFixed, income.leisureBudget, income.projectSavings);
-  }, [income, expenses, fiscalConfig, workBenefits]);
+    return computeSavingsCapacity(superNet, totalFixed, income.leisureBudget, income.projectSavings);
+  }, [income, expenses, fiscalConfig, workBenefits, activePayslip]);
 
   // Rythme RÉEL des 90 derniers jours (même calcul que la projection du Dashboard, voir
   // computeRecentSavingsRate) — pour confronter la théorie du Pilotage (formule, budgets
@@ -55,8 +62,8 @@ export const Goals: React.FC<GoalsProps> = ({ goals, onUpdateGoals, expenses, in
     const g: SavingsGoal = {
       id: crypto.randomUUID(),
       name: form.name,
-      targetAmount: parseFloat(form.targetAmount) || 0,
-      savedAmount: parseFloat(form.savedAmount) || 0,
+      targetAmount: safeNumber(form.targetAmount, 0),
+      savedAmount: safeNumber(form.savedAmount, 0),
       deadline: form.deadline || undefined,
     };
     onUpdateGoals([...goals, g]);
@@ -85,8 +92,8 @@ export const Goals: React.FC<GoalsProps> = ({ goals, onUpdateGoals, expenses, in
         <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-indigo-200 dark:border-indigo-800 shadow-sm space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Nom</label><input autoFocus value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="Ex : Épargne de précaution" className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
-            <div><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Montant cible (€)</label><input type="number" value={form.targetAmount} onChange={e => setForm({ ...form, targetAmount: e.target.value })} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
-            <div><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Déjà épargné (€)</label><input type="number" value={form.savedAmount} onChange={e => setForm({ ...form, savedAmount: e.target.value })} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
+            <div><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Montant cible (€)</label><input type="text" inputMode="decimal" value={form.targetAmount} onChange={e => setForm({ ...form, targetAmount: e.target.value })} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
+            <div><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Déjà épargné (€)</label><input type="text" inputMode="decimal" value={form.savedAmount} onChange={e => setForm({ ...form, savedAmount: e.target.value })} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
             <div><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Échéance (optionnel)</label><input type="date" value={form.deadline} onChange={e => setForm({ ...form, deadline: e.target.value })} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
           </div>
           <div className="flex gap-2 justify-end">
@@ -134,7 +141,11 @@ export const Goals: React.FC<GoalsProps> = ({ goals, onUpdateGoals, expenses, in
           if (g.deadline && !done) {
             const monthsLeft = monthsBetween(new Date(), parseISODate(g.deadline));
             if (monthsLeft <= 0) deadlineInfo = { text: 'Échéance dépassée', ok: false };
-            else {
+            else if (monthsLeft < 1) {
+              // Échéance à quelques jours : "nécessite X/mois" extrapolé sur une fraction
+              // de mois donnait des montants absurdes (91 200 €/mois pour 3 000 € à J-1).
+              deadlineInfo = { text: `Échéance sous un mois — reste ${fmt(remaining)} à trouver`, ok: capacity >= remaining };
+            } else {
               const requiredMonthly = remaining / monthsLeft;
               const ok = capacity >= requiredMonthly;
               deadlineInfo = { text: `Nécessite ${fmt(requiredMonthly)}/mois (dispo : ${fmt(capacity)})`, ok };
@@ -182,9 +193,11 @@ export const Goals: React.FC<GoalsProps> = ({ goals, onUpdateGoals, expenses, in
               <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center gap-2">
                 <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Mettre à jour l'épargne</label>
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="decimal"
+                  key={`${g.id}-${g.savedAmount}`}
                   defaultValue={g.savedAmount}
-                  onBlur={e => patchGoal(g.id, { savedAmount: parseFloat(e.target.value) || 0 })}
+                  onBlur={e => patchGoal(g.id, { savedAmount: safeNumber(e.target.value, g.savedAmount) })}
                   className="w-28 p-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold text-sm"
                 />
                 <span className="text-slate-400 dark:text-slate-500 text-sm">€</span>

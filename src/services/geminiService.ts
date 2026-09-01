@@ -60,12 +60,22 @@ export const extractPayslipData = async (
 ): Promise<PayslipExtractedData> => {
   if (!apiKey) throw new GeminiError('GEMINI_API_KEY_MISSING');
 
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+  // Timeout : sans lui, une requête qui pend laissait l'écran "Analyse en cours..." et le
+  // bouton morts jusqu'au rechargement de la page.
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 90_000);
+
+  let res: Response;
+  try {
+    res = await fetch(
+      // Clé dans l'en-tête, pas dans l'URL : une query string atterrit dans les logs
+      // réseau, l'historique devtools et tout intermédiaire qui capture les URLs.
+      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+        signal: controller.signal,
+        body: JSON.stringify({
         contents: [{
           parts: [
             { text: PROMPT },
@@ -77,8 +87,14 @@ export const extractPayslipData = async (
           responseSchema: RESPONSE_SCHEMA,
         },
       }),
-    }
-  );
+      }
+    );
+  } catch (e: any) {
+    if (e?.name === 'AbortError') throw new GeminiError('DÉLAI_DÉPASSÉ — l\'analyse a pris trop de temps, réessaie.');
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
 
   if (!res.ok) {
     const body = await res.text().catch(() => '');

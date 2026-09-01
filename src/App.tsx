@@ -16,6 +16,7 @@ import {
 } from './services/googleDriveService';
 import { isLockEnabled } from './services/appLockService';
 import { computeMaturityCountdown } from './lib/finance';
+import { localTodayISO } from './lib/dates';
 import {
   LayoutDashboard, Wallet, Trash2, Edit2, ShieldCheck,
   ArrowRightLeft, RefreshCcw, PlusCircle, Cloud, LogOut,
@@ -58,6 +59,7 @@ type View = 'dashboard' | 'accounts' | 'transfers' | 'pilot' | 'update' | 'setti
 const App: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isApiLoaded, setIsApiLoaded] = useState(false);
+  const [apiError, setApiError] = useState(false);
   // Verrou biométrique local (propre à cet appareil, jamais synchronisé) : verrouillé par
   // défaut si un credential a été enregistré sur CE navigateur, débloqué après succès de
   // la vérification WebAuthn (voir AppLockScreen / appLockService).
@@ -139,6 +141,19 @@ const App: React.FC = () => {
     return data.accounts.filter(a => (a.tags || []).includes(activeTagFilter));
   }, [data.accounts, activeTagFilter]);
 
+  // Objet stable : un littéral inline dans le JSX est une nouvelle identité à chaque rendu
+  // d'App, ce qui invalidait systématiquement le useMemo de capacité dans Goals.
+  const incomeCfg = useMemo(() => ({
+    grossAnnual: data.grossAnnual, extraMonthlyIncome: data.extraMonthlyIncome,
+    navigoBase: data.navigoBase, navigoRate: data.navigoRate, taxRateManual: data.taxRateManual,
+    leisureBudget: data.leisureBudget, projectSavings: data.projectSavings,
+  }), [data.grossAnnual, data.extraMonthlyIncome, data.navigoBase, data.navigoRate, data.taxRateManual, data.leisureBudget, data.projectSavings]);
+
+  const activePayslipRecord = useMemo(
+    () => data.payslips.find(p => p.id === data.activePayslipId),
+    [data.payslips, data.activePayslipId]
+  );
+
   // Sync view from data (au premier chargement)
   useEffect(() => {
       if (data.lastView && view === 'dashboard') {
@@ -192,7 +207,13 @@ const App: React.FC = () => {
            }
         }
       })
-      .catch(err => console.error("Erreur init Google API", err));
+      .catch(err => {
+        // Le timeout d'attente des SDK Google existe précisément pour que l'UI puisse
+        // afficher un vrai message (voir googleDriveService) — il n'était branché sur
+        // rien : l'app restait sur "Chargement API..." pour toujours.
+        console.error("Erreur init Google API", err);
+        setApiError(true);
+      });
   }, []);
 
   const handleLogin = async () => {
@@ -201,7 +222,7 @@ const App: React.FC = () => {
       setIsAuthenticated(true);
       data.loadDriveData();
     } catch (error) {
-      alert("Échec de la connexion à Google Drive.");
+      addToast({ message: 'Échec de la connexion à Google Drive.', kind: 'error' });
     }
   };
 
@@ -210,7 +231,7 @@ const App: React.FC = () => {
       await handleAuthClick(false);
       data.reloadFromDrive();
     } catch (e) {
-      alert("Reconnexion échouée.");
+      addToast({ message: 'Reconnexion échouée.', kind: 'error' });
     }
   };
 
@@ -223,7 +244,7 @@ const App: React.FC = () => {
   // --- ACTIONS METIER ---
 
   const handleSaveAccount = (acc: SavingsAccount) => {
-    const today = new Date().toISOString().split('T')[0];
+    const today = localTodayISO();
     const existing = data.accounts.find(a => a.id === acc.id);
 
     // Garde-fou d'invariant : totalAmount DOIT valoir ownedAmount + parentalCapital.
@@ -276,6 +297,11 @@ const App: React.FC = () => {
     setEditingAccount(undefined);
   };
 
+  // Arrondi systématique à 2 décimales sur toute recomposition owned/total : les ajouts
+  // successifs en flottant dérivaient (0.1+0.2...), et un compte "vidé" n'était plus
+  // reconnu comme vide (totalAmount !== 0 à cause d'un résidu de 1e-13).
+  const round2 = (n: number) => Math.round(n * 100) / 100;
+
   const doDeleteMovement = (accountId: string, movementId: string) => {
     const account = data.accounts.find(a => a.id === accountId);
     if (!account) return;
@@ -283,15 +309,22 @@ const App: React.FC = () => {
     if (!movement) return;
     const linkId = movement.linkId;
     data.setAccounts(prev => prev.map(acc => {
-      const movToDelete = acc.movements?.find(m => m.id === movementId || (linkId && m.linkId === linkId));
-      if (!movToDelete) return acc;
+      // TOUTES les jambes présentes sur ce compte, pas seulement la première : si deux
+      // jambes d'un même linkId vivaient sur le même compte, on n'en supprimait qu'une
+      // alors que l'undo (collectMovementLegs) restaurait les deux — doublon garanti.
+      const toDelete = (acc.movements || []).filter(m => m.id === movementId || (linkId && m.linkId === linkId));
+      if (toDelete.length === 0) return acc;
       let newOwned = acc.ownedAmount;
-      if (movToDelete.type === 'IN') newOwned -= movToDelete.amount; else newOwned += movToDelete.amount;
+      toDelete.forEach(m => {
+        if (m.type === 'IN') newOwned -= m.amount; else newOwned += m.amount;
+      });
+      newOwned = round2(newOwned);
+      const deletedIds = new Set(toDelete.map(m => m.id));
       return {
           ...acc,
           ownedAmount: newOwned,
-          totalAmount: newOwned + acc.parentalCapital,
-          movements: acc.movements?.filter(m => m.id !== movToDelete.id) || []
+          totalAmount: round2(newOwned + acc.parentalCapital),
+          movements: acc.movements?.filter(m => !deletedIds.has(m.id)) || []
       };
     }));
   };
@@ -324,10 +357,11 @@ const App: React.FC = () => {
       toRestore.forEach(({ movement }) => {
         if (movement.type === 'IN') newOwned += movement.amount; else newOwned -= movement.amount;
       });
+      newOwned = round2(newOwned);
       return {
         ...acc,
         ownedAmount: newOwned,
-        totalAmount: newOwned + acc.parentalCapital,
+        totalAmount: round2(newOwned + acc.parentalCapital),
         movements: [...(acc.movements || []), ...toRestore.map(l => l.movement)],
       };
     }));
@@ -424,8 +458,8 @@ const App: React.FC = () => {
     const account = data.accounts.find(a => a.id === accountId);
     if (!account) return;
     const delta = type === 'IN' ? amount : -amount;
-    const newOwned = account.ownedAmount + delta;
-    const newTotal = newOwned + account.parentalCapital;
+    const newOwned = round2(account.ownedAmount + delta);
+    const newTotal = round2(newOwned + account.parentalCapital);
     const movement: AccountMovement = { id: crypto.randomUUID(), date, amount, label, type };
 
     // Notifie les parents AVANT la mise à jour d'état (le hook compare à l'état courant).
@@ -456,7 +490,13 @@ const App: React.FC = () => {
           </div>
           <h1 className="text-2xl font-black text-slate-900 mb-2">Suivi Épargne</h1>
           <p className="text-slate-500 dark:text-slate-400 mb-8">Vos données sont stockées en sécurité sur votre Google Drive personnel.</p>
-          {!isApiLoaded ? <div className="flex justify-center gap-2 text-indigo-600 font-bold"><Loader2 className="animate-spin"/> Chargement API...</div> :
+          {apiError ? (
+            <div className="text-left bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-xl p-4">
+              <p className="text-sm font-black text-rose-700 dark:text-rose-300 mb-2 flex items-center gap-2"><AlertTriangle className="w-4 h-4" /> Impossible de charger les services Google</p>
+              <p className="text-xs text-rose-600 dark:text-rose-400 mb-3">Vérifie ta connexion (ou un bloqueur de scripts) puis réessaie.</p>
+              <button onClick={() => window.location.reload()} className="w-full py-2.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-sm font-black">Recharger l'application</button>
+            </div>
+          ) : !isApiLoaded ? <div className="flex justify-center gap-2 text-indigo-600 font-bold"><Loader2 className="animate-spin"/> Chargement API...</div> :
             <button onClick={handleLogin} className="w-full flex justify-center gap-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 py-4 rounded-xl font-bold hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 transition-colors">Continuer avec Google</button>
           }
         </div>
@@ -593,7 +633,7 @@ const App: React.FC = () => {
                 setExtraMonthlyIncome={data.setExtraMonthlyIncome}
                 fiscalConfig={data.fiscalConfig}
                 workBenefits={data.workBenefits}
-                activePayslip={data.payslips.find(p => p.id === data.activePayslipId)}
+                activePayslip={activePayslipRecord}
                 onClearActivePayslip={handleClearActivePayslip}
             />}
 
@@ -604,10 +644,11 @@ const App: React.FC = () => {
                 goals={data.goals}
                 onUpdateGoals={data.setGoals}
                 expenses={data.expenses}
-                income={{ grossAnnual: data.grossAnnual, extraMonthlyIncome: data.extraMonthlyIncome, navigoBase: data.navigoBase, navigoRate: data.navigoRate, taxRateManual: data.taxRateManual, leisureBudget: data.leisureBudget, projectSavings: data.projectSavings }}
+                income={incomeCfg}
                 fiscalConfig={data.fiscalConfig}
                 workBenefits={data.workBenefits}
                 accounts={data.accounts}
+                activePayslip={activePayslipRecord}
             />}
             {view === 'yield' && <Yield accounts={data.accounts} fiscalConfig={data.fiscalConfig} />}
             {view === 'history' && <History history={data.history} expensesHistory={data.expensesHistory} />}

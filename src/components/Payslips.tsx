@@ -9,6 +9,7 @@ import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tool
 import { PayslipRecord, PayslipExtractedData } from '../types';
 import { openDrivePicker, downloadFileAsBase64 } from '../services/googleDriveService';
 import { extractPayslipData, GeminiError } from '../services/geminiService';
+import { parseFrenchNumber } from '../lib/numbers';
 import { FileText, Upload, Sparkles, Trash2, ExternalLink, AlertTriangle, Check, X, Loader2, KeyRound, TrendingUp, Wand2 } from 'lucide-react';
 
 interface PayslipsProps {
@@ -102,11 +103,19 @@ export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, 
   const patchDraftField = (field: keyof PayslipExtractedData, value: string) => {
     if (!draft) return;
     const isNumeric = field !== 'employer' && field !== 'period';
+    // parseFrenchNumber : parseFloat stockait NaN dans le record (propagé jusqu'à
+    // "NaN €" dans le Pilotage) et perdait les virgules décimales.
+    const parsed = isNumeric ? (value === '' ? undefined : parseFrenchNumber(value) ?? undefined) : value;
     setDraft({
       ...draft,
-      fields: { ...draft.fields, [field]: isNumeric ? (value === '' ? undefined : parseFloat(value)) : value },
+      fields: { ...draft.fields, [field]: parsed },
     });
   };
+
+  // Doublon de période : deux fiches du même mois mettent deux points sur le même X du
+  // graphique et rendent ambigu "Utiliser pour le Pilotage". On prévient, sans bloquer
+  // (cas légitimes possibles : fiche rectificative, double contrat).
+  const duplicatePeriod = draft?.fields.period && payslips.some(p => p.extracted.period === draft.fields.period);
 
   const saveDraft = () => {
     if (!draft) return;
@@ -199,23 +208,32 @@ export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, 
                 </p>
               )}
               <p className="text-[11px] text-slate-400 dark:text-slate-500 -mt-1">Vérifie et corrige les valeurs avant d'enregistrer — l'extraction automatique peut se tromper.</p>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* key={status} : les champs numériques sont non contrôlés (defaultValue, parsés au
+                  blur pour accepter la virgule française) — le remontage à l'arrivée des données
+                  extraites recharge leurs valeurs initiales. */}
+              <div key={draft.status} className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Employeur</label><input value={draft.fields.employer ?? ''} onChange={e => patchDraftField('employer', e.target.value)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
                 <div><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Période (AAAA-MM)</label><input value={draft.fields.period ?? ''} onChange={e => patchDraftField('period', e.target.value)} placeholder="2026-08" className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
-                <div><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Brut (€)</label><input type="number" value={draft.fields.grossAmount ?? ''} onChange={e => patchDraftField('grossAmount', e.target.value)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
-                <div><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Charges salariales (€)</label><input type="number" value={draft.fields.socialCharges ?? ''} onChange={e => patchDraftField('socialCharges', e.target.value)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
-                <div><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Net à payer avant impôt (€)</label><input type="number" value={draft.fields.netAmount ?? ''} onChange={e => patchDraftField('netAmount', e.target.value)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
-                <div><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Net imposable (€)</label><input type="number" value={draft.fields.netTaxable ?? ''} onChange={e => patchDraftField('netTaxable', e.target.value)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
-                <div><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Remb. Navigo (€)</label><input type="number" value={draft.fields.navigoRefund ?? ''} onChange={e => patchDraftField('navigoRefund', e.target.value)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
-                <div><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Mutuelle (part salarié, €)</label><input type="number" value={draft.fields.mutuelleCost ?? ''} onChange={e => patchDraftField('mutuelleCost', e.target.value)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
-                <div><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Tickets restaurant (€)</label><input type="number" value={draft.fields.mealVouchers ?? ''} onChange={e => patchDraftField('mealVouchers', e.target.value)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
-                <div><label className="text-[10px] font-black text-amber-500 uppercase">Impôt prélevé à la source (€)</label><input type="number" value={draft.fields.incomeTaxWithheld ?? ''} onChange={e => patchDraftField('incomeTaxWithheld', e.target.value)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-amber-200 dark:border-amber-800 rounded-lg font-bold" /></div>
-                <div><label className="text-[10px] font-black text-emerald-600 uppercase">Net payé (viré en banque, €)</label><input type="number" value={draft.fields.netPaid ?? ''} onChange={e => patchDraftField('netPaid', e.target.value)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-emerald-200 dark:border-emerald-800 rounded-lg font-bold" /></div>
+                <div><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Brut (€)</label><input type="text" inputMode="decimal" defaultValue={draft.fields.grossAmount ?? ''} onBlur={e => patchDraftField('grossAmount', e.target.value)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
+                <div><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Charges salariales (€)</label><input type="text" inputMode="decimal" defaultValue={draft.fields.socialCharges ?? ''} onBlur={e => patchDraftField('socialCharges', e.target.value)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
+                <div><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Net à payer avant impôt (€)</label><input type="text" inputMode="decimal" defaultValue={draft.fields.netAmount ?? ''} onBlur={e => patchDraftField('netAmount', e.target.value)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
+                <div><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Net imposable (€)</label><input type="text" inputMode="decimal" defaultValue={draft.fields.netTaxable ?? ''} onBlur={e => patchDraftField('netTaxable', e.target.value)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
+                <div><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Remb. Navigo (€)</label><input type="text" inputMode="decimal" defaultValue={draft.fields.navigoRefund ?? ''} onBlur={e => patchDraftField('navigoRefund', e.target.value)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
+                <div><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Mutuelle (part salarié, €)</label><input type="text" inputMode="decimal" defaultValue={draft.fields.mutuelleCost ?? ''} onBlur={e => patchDraftField('mutuelleCost', e.target.value)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
+                <div><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Tickets restaurant (€)</label><input type="text" inputMode="decimal" defaultValue={draft.fields.mealVouchers ?? ''} onBlur={e => patchDraftField('mealVouchers', e.target.value)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
+                <div><label className="text-[10px] font-black text-amber-500 uppercase">Impôt prélevé à la source (€)</label><input type="text" inputMode="decimal" defaultValue={draft.fields.incomeTaxWithheld ?? ''} onBlur={e => patchDraftField('incomeTaxWithheld', e.target.value)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-amber-200 dark:border-amber-800 rounded-lg font-bold" /></div>
+                <div><label className="text-[10px] font-black text-emerald-600 uppercase">Net payé (viré en banque, €)</label><input type="text" inputMode="decimal" defaultValue={draft.fields.netPaid ?? ''} onBlur={e => patchDraftField('netPaid', e.target.value)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-emerald-200 dark:border-emerald-800 rounded-lg font-bold" /></div>
               </div>
               <div className="flex gap-2 justify-end pt-2">
                 <button onClick={() => setDraft(null)} className="px-4 py-2 rounded-xl font-bold text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-1"><X className="w-4 h-4" /> Annuler</button>
                 <button onClick={saveDraft} className="px-4 py-2 rounded-xl font-bold text-sm bg-indigo-600 text-white hover:bg-indigo-700 flex items-center gap-1"><Check className="w-4 h-4" /> Enregistrer</button>
               </div>
+              {duplicatePeriod && (
+                <p className="mt-2 flex items-start justify-end gap-1.5 text-[11px] font-bold text-amber-700 dark:text-amber-300">
+                  <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-px" />
+                  Une fiche existe déjà pour la période {draft?.fields.period} : les deux apparaîtront sur le graphique.
+                </p>
+              )}
             </>
           )}
         </div>

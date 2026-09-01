@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { SavingsAccount, AccountType, Expense, SavingsGoal } from '../types';
 import { Calculator, Hourglass, Target, ArrowRight, Info } from 'lucide-react';
+import { safeNumber } from '../lib/numbers';
 
 interface SimulatorProps {
   accounts: SavingsAccount[];
@@ -36,8 +37,12 @@ export const WithdrawalSimulator: React.FC<SimulatorProps> = ({ accounts, expens
 
   const account = eligibleAccounts.find(a => a.id === accountId);
   const available = account?.ownedAmount || 0;
-  const requestedAmount = parseFloat(amount) || 0;
+  const requestedAmount = safeNumber(amount, 0);
   const withdrawAmount = Math.max(0, Math.min(requestedAmount, available));
+  // Un retrait depuis un compte NON liquide (PEE, PER, Immobilier, contrat bloqué) ne
+  // touche pas le pot liquide : l'ancien calcul le soustrayait quand même, produisant des
+  // durées de survie négatives ("-2a -3m") pour de l'argent qui n'y était pas.
+  const sourceIsLiquid = account ? isLiquid(account) : false;
   // Le plafonnement au montant possédé était silencieux : on le rend explicite,
   // car le capital des parents présent sur le compte n'est pas mobilisable.
   const isCapped = requestedAmount > available;
@@ -47,26 +52,28 @@ export const WithdrawalSimulator: React.FC<SimulatorProps> = ({ accounts, expens
 
   const survival = useMemo(() => {
     const before = accounts.filter(isLiquid).reduce((s, a) => s + a.ownedAmount, 0);
-    const after = before - withdrawAmount;
+    const after = Math.max(0, before - (sourceIsLiquid ? withdrawAmount : 0));
     const monthsBefore = totalFixed > 0 ? before / totalFixed : Infinity;
     const monthsAfter = totalFixed > 0 ? after / totalFixed : Infinity;
     return { before, after, monthsBefore, monthsAfter };
-  }, [accounts, totalFixed, withdrawAmount]);
+  }, [accounts, totalFixed, withdrawAmount, sourceIsLiquid]);
 
   const goal = goals.find(g => g.id === goalId);
   const goalImpact = useMemo(() => {
     if (!goal) return null;
     const before = goal.savedAmount;
     const after = Math.max(0, goal.savedAmount - withdrawAmount);
-    const pctBefore = goal.targetAmount > 0 ? (before / goal.targetAmount) * 100 : 0;
-    const pctAfter = goal.targetAmount > 0 ? (after / goal.targetAmount) * 100 : 0;
+    // Borné à 100 comme sur l'écran Objectifs, pour ne pas afficher 140% ici et 100% là-bas.
+    const pctBefore = goal.targetAmount > 0 ? Math.min(100, (before / goal.targetAmount) * 100) : 0;
+    const pctAfter = goal.targetAmount > 0 ? Math.min(100, (after / goal.targetAmount) * 100) : 0;
     return { before, after, pctBefore, pctAfter };
   }, [goal, withdrawAmount]);
 
   const fmtMonths = (m: number) => {
     if (!isFinite(m)) return 'Infini';
-    const years = Math.floor(m / 12);
-    const months = Math.floor(m % 12);
+    const clamped = Math.max(0, m); // jamais de "-2a -3m"
+    const years = Math.floor(clamped / 12);
+    const months = Math.floor(clamped % 12);
     return `${years > 0 ? years + 'a ' : ''}${months}m`;
   };
 
@@ -86,7 +93,7 @@ export const WithdrawalSimulator: React.FC<SimulatorProps> = ({ accounts, expens
         </div>
         <div>
           <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Montant à retirer (€)</label>
-          <input type="number" value={amount} onChange={e => setAmount(e.target.value)} placeholder="0" className="w-full p-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold text-slate-800 dark:text-slate-100" />
+          <input type="text" inputMode="decimal" value={amount} onChange={e => setAmount(e.target.value)} placeholder="0" className="w-full p-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold text-slate-800 dark:text-slate-100" />
           {isCapped && (
             <p className="mt-2 flex items-start gap-1.5 text-[11px] font-bold text-amber-700 dark:text-amber-300">
               <Info className="w-3.5 h-3.5 flex-shrink-0 mt-px" />
@@ -103,6 +110,12 @@ export const WithdrawalSimulator: React.FC<SimulatorProps> = ({ accounts, expens
         <>
           <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
             <h3 className="font-black text-slate-800 dark:text-slate-100 mb-4 flex items-center gap-2"><Hourglass className="w-5 h-5 text-indigo-600" /> Impact sur ta durée de survie</h3>
+            {!sourceIsLiquid && (
+              <p className="mb-4 flex items-start gap-1.5 text-[11px] font-bold text-slate-500 dark:text-slate-400">
+                <Info className="w-3.5 h-3.5 flex-shrink-0 mt-px" />
+                Ce compte ne fait pas partie de ton épargne liquide : le retirer ne change pas ta durée de survie (qui ne compte que le liquide).
+              </p>
+            )}
             <div className="flex items-center gap-4 flex-wrap">
               <div className="text-center">
                 <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase mb-1">Avant</p>

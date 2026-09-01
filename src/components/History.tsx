@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend } from 'recharts';
 import { PortfolioSnapshot, ExpenseSnapshot } from '../types';
+import { parseISODate } from '../lib/dates';
 import { LineChart as LineChartIcon, ArrowUpRight, ArrowDownRight, Minus, Wallet, Receipt } from 'lucide-react';
 
 interface HistoryProps {
@@ -10,23 +11,28 @@ interface HistoryProps {
 
 const fmt = (n: number) => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(n);
 const monthLabel = (iso: string) => {
-  const d = new Date(iso);
+  const d = parseISODate(iso); // parse LOCAL : new Date('YYYY-MM-DD') est minuit UTC et decale le mois affiche
   return d.toLocaleDateString('fr-FR', { month: 'short', year: '2-digit' });
 };
 
 export const History: React.FC<HistoryProps> = ({ history, expensesHistory }) => {
   const [tab, setTab] = useState<'patrimoine' | 'charges'>('patrimoine');
   const sorted = useMemo(() => [...history].sort((a, b) => a.date.localeCompare(b.date)), [history]);
-  const chartData = sorted.map(s => ({ ...s, label: monthLabel(s.date) }));
+  const chartData = useMemo(() => sorted.map(s => ({ ...s, label: monthLabel(s.date) })), [sorted]);
 
   const expensesSorted = useMemo(() => [...expensesHistory].sort((a, b) => a.date.localeCompare(b.date)), [expensesHistory]);
-  const expensesChartData = expensesSorted.map(s => ({ ...s, label: monthLabel(s.date) }));
+  const expensesChartData = useMemo(() => expensesSorted.map(s => ({ ...s, label: monthLabel(s.date) })), [expensesSorted]);
 
   const deltas = useMemo(() => {
-    const rows: { date: string; total: number; owned: number; deltaTotal: number | null }[] = [];
+    const rows: { date: string; total: number; owned: number; deltaTotal: number | null; monthsGap: number }[] = [];
     sorted.forEach((s, i) => {
       const prev = i > 0 ? sorted[i - 1] : null;
-      rows.push({ date: s.date, total: s.totalAmount, owned: s.ownedAmount, deltaTotal: prev ? s.totalAmount - prev.totalAmount : null });
+      // Écart réel en mois avec le point précédent : un trou dans la série (app non
+      // ouverte pendant un trimestre) était présenté comme la variation d'UN mois.
+      const monthsGap = prev
+        ? Math.max(1, Math.round((parseISODate(s.date).getTime() - parseISODate(prev.date).getTime()) / (1000 * 3600 * 24 * 30.4375)))
+        : 1;
+      rows.push({ date: s.date, total: s.totalAmount, owned: s.ownedAmount, deltaTotal: prev ? s.totalAmount - prev.totalAmount : null, monthsGap });
     });
     return rows.reverse();
   }, [sorted]);
@@ -49,17 +55,22 @@ export const History: React.FC<HistoryProps> = ({ history, expensesHistory }) =>
 
       {tab === 'patrimoine' && (
       <>
+      {/* Un seul point : les cartes de synthèse sont déjà pertinentes — les masquer avec
+          tout le reste cachait "Total actuel"/"Ma part" parfaitement définis. Seuls la
+          courbe et le tableau exigent >= 2 points. */}
+      {sorted.length >= 1 && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700"><p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Total actuel</p><p className="text-2xl font-black text-slate-800 dark:text-slate-100">{fmt(latest.totalAmount)}</p></div>
+            <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700"><p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Ma part actuelle</p><p className="text-2xl font-black text-indigo-600">{fmt(latest.ownedAmount)}</p></div>
+            <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700"><p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Évolution depuis {monthLabel(first.date)}</p><p className={`text-2xl font-black ${totalGrowth >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>{totalGrowth >= 0 ? '+' : ''}{fmt(totalGrowth)}</p></div>
+          </div>
+      )}
       {sorted.length < 2 ? (
         <div className="text-center py-16 text-slate-400 dark:text-slate-500 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700">
           L'historique se construit au fil des mois. Reviens après quelques actualisations pour voir la courbe évoluer.
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700"><p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Total actuel</p><p className="text-2xl font-black text-slate-800 dark:text-slate-100">{fmt(latest.totalAmount)}</p></div>
-            <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700"><p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Ma part actuelle</p><p className="text-2xl font-black text-indigo-600">{fmt(latest.ownedAmount)}</p></div>
-            <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700"><p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Évolution depuis {monthLabel(first.date)}</p><p className={`text-2xl font-black ${totalGrowth >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>{totalGrowth >= 0 ? '+' : ''}{fmt(totalGrowth)}</p></div>
-          </div>
 
           <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm h-96">
             <ResponsiveContainer width="100%" height="100%">
@@ -101,6 +112,9 @@ export const History: React.FC<HistoryProps> = ({ history, expensesHistory }) =>
                           r.deltaTotal > 0 ? <span className="text-emerald-600 inline-flex items-center gap-1 justify-end"><ArrowUpRight className="w-3.5 h-3.5" />{fmt(r.deltaTotal)}</span> :
                           r.deltaTotal < 0 ? <span className="text-rose-600 inline-flex items-center gap-1 justify-end"><ArrowDownRight className="w-3.5 h-3.5" />{fmt(r.deltaTotal)}</span> :
                           <span className="text-slate-400 dark:text-slate-500 inline-flex items-center gap-1 justify-end"><Minus className="w-3.5 h-3.5" />0</span>}
+                        {r.deltaTotal !== null && r.monthsGap > 1 && (
+                          <span className="block text-[10px] font-bold text-slate-400 dark:text-slate-500 normal-case">sur {r.monthsGap} mois</span>
+                        )}
                       </td>
                     </tr>
                   ))}

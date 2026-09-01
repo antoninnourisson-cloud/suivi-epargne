@@ -100,7 +100,10 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig }) => {
     [accounts, fiscalConfig]);
 
   const totalGrossTaxable = taxableRows.reduce((s, r) => s + r.estimatedAnnualInterest, 0);
-  const totalNetTaxable = taxableRows.reduce((s, r) => s + (r.tax.regime === 'NON_MODELISE' ? r.estimatedAnnualInterest : r.tax.netInterest), 0);
+  // Total net = somme des seules lignes réellement calculées : additionner le BRUT des
+  // comptes "Non calculé" (dont la cellule affiche "—") rendait le total invérifiable
+  // depuis le tableau.
+  const totalNetTaxable = taxableRows.reduce((s, r) => s + (r.tax.regime === 'NON_MODELISE' ? 0 : r.tax.netInterest), 0);
   const hasUnmodeled = taxableRows.some(r => r.tax.regime === 'NON_MODELISE');
 
   const exportFiscalCsv = () => {
@@ -203,7 +206,7 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig }) => {
           <p className="px-6 pb-2 pt-1 text-[10px] text-slate-400 dark:text-slate-500 flex items-start gap-1">
             <Info className="w-3 h-3 flex-shrink-0 mt-0.5" />
             Estimation simplifiée (PFU 30% ou régime réduit selon l'ancienneté du compte) — pas une simulation fiscale complète.
-            {hasUnmodeled && ' Certains comptes (Immobilier, PER...) ont un régime trop spécifique pour être calculé ici : leur brut est repris tel quel.'}
+            {hasUnmodeled && ' Certains comptes (Immobilier, PER...) ont un régime trop spécifique pour être calculé ici : ils sont exclus du total net.'}
           </p>
 
           <div className="overflow-x-auto">

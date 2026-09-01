@@ -6,7 +6,7 @@
 // ================================================
 import React, { useEffect, useState } from 'react';
 import { Fingerprint, Loader2, AlertTriangle, Delete } from 'lucide-react';
-import { isBiometricEnabled, isPinEnabled, verifyBiometric, verifyPin, resetAllLocks } from '../services/appLockService';
+import { isBiometricEnabled, isPinEnabled, verifyBiometric, verifyPin, resetAllLocks, getPinCooldownSeconds } from '../services/appLockService';
 
 interface AppLockScreenProps {
   onUnlock: () => void;
@@ -38,6 +38,8 @@ export const AppLockScreen: React.FC<AppLockScreenProps> = ({ onUnlock }) => {
   // reste disponible en repli si elle échoue ou est annulée.
   useEffect(() => { if (biometricOn) attemptBiometric(); }, []);
 
+  const [cooldown, setCooldown] = useState(0);
+
   const submitPin = async (value: string) => {
     setCheckingPin(true);
     setPinError(false);
@@ -45,8 +47,16 @@ export const AppLockScreen: React.FC<AppLockScreenProps> = ({ onUnlock }) => {
     setCheckingPin(false);
     if (ok) { onUnlock(); return; }
     setPinError(true);
+    setCooldown(getPinCooldownSeconds());
     setPin('');
   };
+
+  // Décompte visible du délai anti-bruteforce (voir appLockService.getPinCooldownSeconds).
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const timer = setInterval(() => setCooldown(getPinCooldownSeconds()), 1000);
+    return () => clearInterval(timer);
+  }, [cooldown]);
 
   const pressDigit = (d: string) => {
     if (checkingPin || pin.length >= PIN_MAX_LENGTH) return;
@@ -109,7 +119,9 @@ export const AppLockScreen: React.FC<AppLockScreenProps> = ({ onUnlock }) => {
               ))}
             </div>
             {pinError && (
-              <p className="mb-3 text-xs font-bold text-rose-600 dark:text-rose-400">Code incorrect.</p>
+              <p className="mb-3 text-xs font-bold text-rose-600 dark:text-rose-400">
+                {cooldown > 0 ? `Code incorrect. Réessaie dans ${cooldown} s.` : 'Code incorrect.'}
+              </p>
             )}
             <div className="grid grid-cols-3 gap-2 max-w-[220px] mx-auto">
               {['1','2','3','4','5','6','7','8','9'].map(d => (

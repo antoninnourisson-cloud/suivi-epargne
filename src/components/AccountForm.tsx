@@ -5,6 +5,7 @@ import React, { useState, useEffect } from 'react';
 import { AccountType, SavingsAccount, FiscalConfig } from '../types';
 import { Button } from './Button';
 import { NumberInput } from './NumberInput';
+import { localTodayISO } from '../lib/dates';
 import { PlusCircle, Save, Users, Calculator, ShieldCheck, TrendingUp, TrendingDown, Tag, X, History } from 'lucide-react';
 
 interface AccountFormProps {
@@ -51,7 +52,16 @@ export const AccountForm: React.FC<AccountFormProps> = ({ onSave, initialData, o
 
   const handleOwnedChange = (owned: number) => {
     setOwnedAmount(owned);
-    if (totalAmount >= owned) setParentalCapital(Math.round((totalAmount - owned) * 100) / 100);
+    const rest = Math.round((totalAmount - owned) * 100) / 100;
+    if (rest >= 0) {
+      setParentalCapital(rest);
+    } else {
+      // Ma part saisie dépasse le total : plutôt que de laisser le formulaire afficher des
+      // nombres incohérents (silencieusement renormalisés à la sauvegarde, en GONFLANT le
+      // total), on maintient l'invariant total = ma part + parents immédiatement.
+      setParentalCapital(0);
+      setTotalAmount(owned);
+    }
   };
 
   const setRevolutMode = () => {
@@ -74,7 +84,7 @@ export const AccountForm: React.FC<AccountFormProps> = ({ onSave, initialData, o
     // Historise l'ancien taux s'il a changé, pour affiner le calcul de rendement dans le temps.
     let rateHistory = initialData?.rateHistory || [];
     if (initialData && initialData.interestRate !== undefined && initialData.interestRate !== newRate) {
-      const today = new Date().toISOString().split('T')[0];
+      const today = localTodayISO();
       rateHistory = [...rateHistory, { date: today, rate: initialData.interestRate }];
     }
 

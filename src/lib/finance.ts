@@ -5,7 +5,7 @@
 // ================================================
 import { FiscalConfig, TaxBracket, WorkBenefits, RateChange, AccountType, AccountMovement } from '../types';
 import { DEFAULT_STANDARD_ALLOWANCE_CAP } from '../constants';
-import { MS_PER_DAY } from './dates';
+import { MS_PER_DAY, formatISODay } from './dates';
 
 export interface IncomeInput {
   grossAnnual: number;
@@ -364,6 +364,24 @@ export const computeWeightedAnnualRate = (
   return totalDays > 0 ? weightedSum / totalDays : currentRate;
 };
 
+/**
+ * "Super net" effectif pour les CALCULS (capacité d'épargne...) : le net réel de la fiche
+ * de paie de référence quand il est disponible, sinon le net théorique de la formule.
+ * Extrait du Pilotage pour que l'écran Objectifs applique EXACTEMENT la même règle — il
+ * ignorait la fiche active et affichait une capacité différente pour le même mois.
+ */
+export const computeEffectiveSuperNet = (
+  theoreticalSuperNet: number,
+  activePayslip?: { extracted: { netPaid?: number; netAmount?: number; incomeTaxWithheld?: number } }
+): number => {
+  if (!activePayslip) return theoreticalSuperNet;
+  const e = activePayslip.extracted;
+  const real = e.netPaid ?? (e.netAmount !== undefined && e.incomeTaxWithheld !== undefined
+    ? e.netAmount - e.incomeTaxWithheld
+    : undefined);
+  return real ?? theoreticalSuperNet;
+};
+
 export interface ParentalInterestBreakdown {
   totalAnnual: number;
   totalAnnualOwned: number;
@@ -434,8 +452,10 @@ export const computeRecentSavingsRate = (
   asOfDate: Date = new Date()
 ): number | null => {
   const past = new Date(asOfDate.getTime() - windowDays * MS_PER_DAY);
-  const nowStr = asOfDate.toISOString().split('T')[0];
-  const pastStr = past.toISOString().split('T')[0];
+  // Cles de jour en heure LOCALE : les mouvements sont dates en local, une cle UTC
+  // decalait la fenetre d'un jour entre minuit et ~2h du matin a Paris.
+  const nowStr = formatISODay(asOfDate);
+  const pastStr = formatISODay(past);
 
   const hasMovementsInWindow = accounts.some(a => (a.movements || []).some(m => m.date > pastStr && m.date <= nowStr));
   if (!hasMovementsInWindow) return null;

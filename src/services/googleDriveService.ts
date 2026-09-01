@@ -113,7 +113,16 @@ const requestToken = (prompt: '' | 'none' | 'consent'): Promise<void> =>
       settled = true;
       clearTimeout(timer);
       if (resp.error) { reject(resp); return; }
-      storeToken(resp);
+      // storeToken fait des localStorage.setItem qui PEUVENT jeter (mode privé Safari,
+      // quota plein, stockage désactivé). `settled` étant déjà true et le timer annulé,
+      // une exception qui s'échapperait ici laisserait la promesse pendante à jamais —
+      // login gelé et tous les appels Drive suivants bloqués derrière refreshInFlight.
+      try {
+        storeToken(resp);
+      } catch {
+        reject(new Error('TOKEN_STORAGE_FAILED'));
+        return;
+      }
       resolve();
     };
     tokenClient.requestAccessToken({ prompt });
@@ -145,7 +154,13 @@ export const getAccessToken = async (): Promise<string> => {
     // Tente un refresh silencieux avant d'échouer.
     await refreshTokenSilently();
   }
-  return JSON.parse(localStorage.getItem('google_token') as string).access_token;
+  // Relecture APRÈS l'await : si handleAuthLost/handleSignOut a purgé le token dans
+  // l'intervalle, JSON.parse(null) jetait un TypeError — que le chemin de sauvegarde
+  // classait à tort comme "hors ligne" (il réserve TypeError aux échecs réseau de fetch),
+  // gelant l'autosave sans aucune bannière. On lève une erreur explicitement typée.
+  const fresh = localStorage.getItem('google_token');
+  if (!fresh) throw new Error('SESSION_EXPIRED');
+  return JSON.parse(fresh).access_token;
 };
 
 const handleAuthLost = () => {
@@ -155,10 +170,35 @@ const handleAuthLost = () => {
   if (onAuthLost) onAuthLost();
 };
 
+// Erreur d'API portant le statut HTTP : permet aux appelants de réagir différemment à un
+// 404 (fichier supprimé côté Drive → re-résolution) qu'à un 500 (bannière d'erreur).
+export class ApiError extends Error {
+  status: number;
+  constructor(message: string, status: number) { super(message); this.name = 'ApiError'; this.status = status; }
+}
+
 const ensureOk = async (res: Response): Promise<Response> => {
   if (res.ok) return res;
   const body = await res.text().catch(() => '');
-  throw new Error(`Google API ${res.status} ${res.statusText} — ${body.slice(0, 300)}`);
+  throw new ApiError(`Google API ${res.status} ${res.statusText} — ${body.slice(0, 300)}`, res.status);
+};
+
+// Toute requête a un délai maximal : sans lui, un fetch qui pend (portail captif, TLS
+// bloqué) laissait le mutex de sauvegarde occupé POUR TOUJOURS — plus aucune écriture
+// Drive ne partait, isSaving restait allumé, zéro message. AbortError est converti en
+// TypeError pour rejoindre le chemin "problème réseau" existant des appelants.
+const FETCH_TIMEOUT_MS = 30_000;
+const fetchWithTimeout = async (url: string, options: RequestInit = {}): Promise<Response> => {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } catch (e: any) {
+    if (e?.name === 'AbortError') throw new TypeError('NETWORK_TIMEOUT');
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
 };
 
 // Fetch authentifié : injecte le token, retente une fois après refresh sur 401,
@@ -166,7 +206,7 @@ const ensureOk = async (res: Response): Promise<Response> => {
 const authedFetch = async (url: string, options: RequestInit = {}): Promise<Response> => {
   const build = async () => {
     const token = await getAccessToken();
-    return fetch(url, { ...options, headers: { ...(options.headers || {}), Authorization: `Bearer ${token}` } });
+    return fetchWithTimeout(url, { ...options, headers: { ...(options.headers || {}), Authorization: `Bearer ${token}` } });
   };
   let res = await build();
   if (res.status === 401) {
@@ -299,7 +339,11 @@ export const updateConfigFile = async (
     }
   );
   const result = await res.json();
-  return String(result.headRevisionId ?? '');
+  if (result.headRevisionId) return String(result.headRevisionId);
+  // Réponse sans headRevisionId (rare mais observé possible) : on relit la révision plutôt
+  // que de retourner '' — la chaîne vide est le sentinelle "écriture sans contrôle" et la
+  // laisser se propager dans driveRevisionRef désactiverait la détection de conflit.
+  return getFileRevision(fileId);
 };
 
 // --- GMAIL ---
@@ -309,10 +353,30 @@ export const updateConfigFile = async (
  * succès — personne, ni l'utilisateur ni les parents, ne pouvait savoir qu'aucune
  * notification n'était partie. C'est à l'appelant de décider comment le signaler.
  */
+// Base64 UTF-8 via TextEncoder (l'idiome unescape/encodeURIComponent est déprécié).
+const utf8ToBase64 = (s: string): string => {
+  const bytes = new TextEncoder().encode(s);
+  let binary = '';
+  const CHUNK = 0x8000;
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+  }
+  return btoa(binary);
+};
+
 export const sendGmail = async (to: string, subject: string, body: string): Promise<void> => {
-  const utf8Subject = `=?utf-8?B?${btoa(unescape(encodeURIComponent(subject)))}?=`;
-  const message = [`To: ${to}`, 'Content-Type: text/html; charset=utf-8', 'MIME-Version: 1.0', `Subject: ${utf8Subject}`, '', body].join('\n');
-  const raw = btoa(unescape(encodeURIComponent(message))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  // Le destinataire est du texte libre venant des Paramètres (et du JSON importable) : il
+  // est concaténé dans les EN-TÊTES du message. Sans validation, un CR/LF glissé dedans
+  // injecte des en-têtes arbitraires (Bcc:, From:...) dans chaque mail d'alerte.
+  const cleanTo = to.trim();
+  if (/[\r\n]/.test(cleanTo) || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanTo)) {
+    throw new Error('INVALID_RECIPIENT');
+  }
+  const utf8Subject = `=?utf-8?B?${utf8ToBase64(subject.replace(/[\r\n]/g, ' '))}?=`;
+  // \r\n : séparateur d'en-têtes exigé par la RFC 5322 (\n seul est toléré par Gmail mais
+  // non conforme).
+  const message = [`To: ${cleanTo}`, 'Content-Type: text/html; charset=utf-8', 'MIME-Version: 1.0', `Subject: ${utf8Subject}`, '', body].join('\r\n');
+  const raw = utf8ToBase64(message).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
   await authedFetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -379,6 +443,10 @@ export const openDrivePicker = async (pickerApiKey: string): Promise<PickedDrive
           resolve(doc ? { id: doc.id, name: doc.name, mimeType: doc.mimeType } : null);
         } else if (data.action === picker.Action.CANCEL) {
           resolve(null);
+        } else if (data.action === 'error') {
+          // Sans cette branche, une erreur interne du Picker laissait la promesse pendante
+          // à jamais — bouton "Importer" mort jusqu'au rechargement de la page.
+          reject(new Error('PICKER_ERROR'));
         }
       })
       .build();

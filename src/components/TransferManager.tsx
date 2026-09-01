@@ -5,6 +5,7 @@ import { Button } from './Button';
 import { ArrowRightLeft, Download, Calendar, ArrowDown, CheckCircle, AlertCircle, Wallet } from 'lucide-react';
 import { useSaveFeedback } from '../hooks/useSaveFeedback';
 import { safeNumber } from '../lib/numbers';
+import { localTodayISO } from '../lib/dates';
 
 interface TransferManagerProps {
   accounts: SavingsAccount[];
@@ -15,7 +16,7 @@ interface TransferManagerProps {
 }
 
 export const TransferManager: React.FC<TransferManagerProps> = ({ accounts, onUpdateAccountsComplex, onLinkedTransfer, lastSavedAt }) => {
-  const today = new Date().toISOString().split('T')[0];
+  const today = localTodayISO();
   const [activeTab, setActiveTab] = useState<'deposit' | 'transfer'>('deposit');
   const [opDate, setOpDate] = useState<string>(today);
   const { status: saveStatus, markPending } = useSaveFeedback(lastSavedAt);

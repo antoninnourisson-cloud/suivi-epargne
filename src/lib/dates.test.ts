@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { monthsBetween, daysBetween, parseISODate, AVG_DAYS_PER_MONTH } from './dates';
+import { monthsBetween, daysBetween, parseISODate, AVG_DAYS_PER_MONTH, formatISODay } from './dates';
 
 describe('parseISODate', () => {
   it("parse 'YYYY-MM-DD' en date locale à minuit (pas de décalage de fuseau)", () => {
@@ -60,5 +60,19 @@ describe('monthsBetween', () => {
     const m = monthsBetween(parseISODate('2026-09-01'), parseISODate('2026-08-01'));
     expect(m).toBeLessThan(0);
     expect(m).toBeCloseTo(-31 / AVG_DAYS_PER_MONTH, 6);
+  });
+});
+
+describe('formatISODay', () => {
+  it('formate en jour LOCAL, pas UTC', () => {
+    // 00h30 heure locale : toISOString() aurait donne LA VEILLE dans un fuseau positif.
+    const d = new Date(2026, 7, 31, 0, 30);
+    expect(formatISODay(d)).toBe('2026-08-31');
+  });
+  it('zero-pad mois et jour', () => {
+    expect(formatISODay(new Date(2026, 0, 5))).toBe('2026-01-05');
+  });
+  it('est l inverse de parseISODate', () => {
+    expect(formatISODay(parseISODate('2025-10-26'))).toBe('2025-10-26');
   });
 });

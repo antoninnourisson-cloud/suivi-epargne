@@ -16,7 +16,13 @@ import './index.css';
 // avant que la moindre sauvegarde avec un schéma obsolète ne puisse partir. Le filet de
 // sécurité local (quarantaine) protège déjà toute modification non enregistrée à ce moment.
 if ('serviceWorker' in navigator) {
+  // À la TOUTE PREMIÈRE visite, le service worker s'installe et prend le contrôle
+  // (clientsClaim) : ça déclenche aussi `controllerchange`, mais il n'y a aucun code
+  // obsolète à purger — recharger serait gratuit et visuellement brutal. On ne recharge
+  // que si un contrôleur existait déjà (vraie mise à jour d'un onglet ouvert).
+  let hadController = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadController) { hadController = true; return; }
     window.location.reload();
   });
 }

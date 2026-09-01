@@ -108,28 +108,66 @@ export const verifyBiometric = async (): Promise<boolean> => {
 };
 
 // --- PIN (repli si la biométrie n'est pas disponible, ou par préférence) ---
-// Seul un hash salé (SHA-256, Web Crypto native) est stocké — jamais le PIN en clair.
-// Sur un site sans backend, un attaquant capable d'exécuter du JS sur la page pourrait de
-// toute façon contourner cette vérification (même limite que la biométrie ci-dessus) ;
-// le hash évite au moins qu'une simple lecture du localStorage révèle le PIN directement.
-const hashPin = async (pin: string, saltB64: string): Promise<string> => {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(saltB64 + ':' + pin);
-  const digest = await crypto.subtle.digest('SHA-256', data);
+// Seul un hash salé est stocké — jamais le PIN en clair. Dérivation PBKDF2 (SHA-256,
+// 310 000 itérations, reco OWASP) et non un simple SHA-256 : un PIN de 4-8 chiffres ne
+// couvre que ~10⁴ à 10⁸ candidats, un hash "une passe" se casse donc instantanément
+// hors-ligne depuis le localStorage. PBKDF2 rend l'énumération coûteuse ; verifyPin
+// ajoute en plus un délai croissant après échecs. Rappel des limites (voir l'en-tête du
+// fichier) : quelqu'un qui exécute du JS sur la page contourne le verrou de toute façon —
+// ceci protège le CODE lui-même (souvent réutilisé ailleurs par son propriétaire : carte
+// bleue, téléphone...), pas seulement l'accès à l'app.
+const PIN_ITERATIONS = 310_000;
+// Hashs d'avant cette migration (SHA-256 une passe, sans compteur d'itérations stocké) :
+// encore vérifiables, puis migrés vers PBKDF2 au premier déverrouillage réussi.
+const PIN_ITERATIONS_KEY = 'app_lock_pin_iterations';
+const PIN_FAILS_KEY = 'app_lock_pin_fails';
+
+const legacyHashPin = async (pin: string, saltB64: string): Promise<string> => {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(saltB64 + ':' + pin));
   return bufferToBase64(digest);
+};
+
+const pbkdf2Pin = async (pin: string, saltB64: string, iterations: number): Promise<string> => {
+  const keyMaterial = await crypto.subtle.importKey('raw', new TextEncoder().encode(pin), 'PBKDF2', false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits(
+    { name: 'PBKDF2', hash: 'SHA-256', salt: new Uint8Array(base64ToBuffer(saltB64)), iterations },
+    keyMaterial,
+    256
+  );
+  return bufferToBase64(bits);
 };
 
 export const enablePin = async (pin: string): Promise<void> => {
   if (!/^\d{4,8}$/.test(pin)) throw new Error('PIN_INVALID_FORMAT');
   const salt = bufferToBase64(crypto.getRandomValues(new Uint8Array(16)).buffer);
-  const hash = await hashPin(pin, salt);
+  const hash = await pbkdf2Pin(pin, salt, PIN_ITERATIONS);
   localStorage.setItem(PIN_SALT_KEY, salt);
   localStorage.setItem(PIN_HASH_KEY, hash);
+  localStorage.setItem(PIN_ITERATIONS_KEY, String(PIN_ITERATIONS));
+  localStorage.removeItem(PIN_FAILS_KEY);
 };
 
 export const disablePin = (): void => {
   localStorage.removeItem(PIN_HASH_KEY);
   localStorage.removeItem(PIN_SALT_KEY);
+  localStorage.removeItem(PIN_ITERATIONS_KEY);
+  localStorage.removeItem(PIN_FAILS_KEY);
+};
+
+/**
+ * Secondes à attendre avant le prochain essai (0 = essai autorisé). Backoff après échecs
+ * consécutifs : 2^(n-3) s à partir du 4e, plafonné à 60 s — freine l'énumération manuelle
+ * sans jamais verrouiller définitivement (le lien "Code oublié" reste la vraie sortie).
+ */
+export const getPinCooldownSeconds = (): number => {
+  try {
+    const raw = localStorage.getItem(PIN_FAILS_KEY);
+    if (!raw) return 0;
+    const { count, at } = JSON.parse(raw);
+    if (!count || count < 4) return 0;
+    const waitMs = Math.min(60_000, 2 ** (count - 3) * 1000);
+    return Math.max(0, Math.ceil((at + waitMs - Date.now()) / 1000));
+  } catch { return 0; }
 };
 
 /**
@@ -150,6 +188,23 @@ export const verifyPin = async (pin: string): Promise<boolean> => {
   const storedHash = localStorage.getItem(PIN_HASH_KEY);
   const salt = localStorage.getItem(PIN_SALT_KEY);
   if (!storedHash || !salt) return false;
-  const candidateHash = await hashPin(pin, salt);
-  return candidateHash === storedHash;
+  if (getPinCooldownSeconds() > 0) return false;
+
+  const storedIterations = parseInt(localStorage.getItem(PIN_ITERATIONS_KEY) || '0', 10);
+  const candidate = storedIterations > 0
+    ? await pbkdf2Pin(pin, salt, storedIterations)
+    : await legacyHashPin(pin, salt); // format d'avant la migration PBKDF2
+
+  const ok = candidate === storedHash;
+  if (ok) {
+    localStorage.removeItem(PIN_FAILS_KEY);
+    // Migration transparente de l'ancien format au premier déverrouillage réussi.
+    if (storedIterations === 0) await enablePin(pin).catch(() => { /* le legacy reste valide */ });
+  } else {
+    try {
+      const prev = JSON.parse(localStorage.getItem(PIN_FAILS_KEY) || '{"count":0}');
+      localStorage.setItem(PIN_FAILS_KEY, JSON.stringify({ count: (prev.count || 0) + 1, at: Date.now() }));
+    } catch { /* stockage plein : le backoff ne fonctionne juste pas */ }
+  }
+  return ok;
 };

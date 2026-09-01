@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { SavingsAccount } from '../types';
 import { X, Zap, ArrowUpCircle, ArrowDownCircle } from 'lucide-react';
 import { NumberInput } from './NumberInput';
+import { localTodayISO } from '../lib/dates';
 
 interface QuickAddModalProps {
   open: boolean;
@@ -15,7 +16,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ open, accounts, on
   const [amount, setAmount] = useState(0);
   const [type, setType] = useState<'IN' | 'OUT'>('IN');
   const [label, setLabel] = useState('');
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [date, setDate] = useState(localTodayISO());
 
   if (!open) return null;
 

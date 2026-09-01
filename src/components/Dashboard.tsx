@@ -6,6 +6,7 @@ import {
 import { SavingsAccount, PortfolioSnapshot, AccountType, Expense, FiscalConfig } from '../types';
 import { Euro, Lock, Wallet, Filter, Unlock, Save, AlertTriangle, Trash2, Clock, TrendingUp, TrendingDown, PiggyBank } from 'lucide-react';
 import { computeParentalInterest, computeRecentSavingsRate, computeAccountBalanceAtDate } from '../lib/finance';
+import { parseISODate, formatISODay, daysBetween, localTodayISO } from '../lib/dates';
 import { Button } from './Button';
 
 interface DashboardProps {
@@ -29,29 +30,47 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
         if (stored) return JSON.parse(stored);
     } catch (e) {}
     
-    return {
-        start: new Date(new Date().setMonth(new Date().getMonth() - 6)).toISOString().split('T')[0],
-        end: new Date().toISOString().split('T')[0]
-    };
+    // `setMonth(-6)` sur un 31 du mois débordait (31 février → 3 mars) ; on borne le jour
+    // au dernier jour du mois cible. Et tout en heure LOCALE, pas UTC.
+    const now = new Date();
+    const lastDayOfTargetMonth = new Date(now.getFullYear(), now.getMonth() - 5, 0).getDate();
+    const start = new Date(now.getFullYear(), now.getMonth() - 6, Math.min(now.getDate(), lastDayOfTargetMonth));
+    return { start: formatISODay(start), end: localTodayISO() };
   });
 
   useEffect(() => {
     localStorage.setItem('dashboard_date_range', JSON.stringify(dateRange));
   }, [dateRange]);
 
-  const mySavings = accounts.reduce((acc, curr) => acc + curr.ownedAmount, 0);
+  // Part possédée À CE JOUR : les mouvements datés dans le futur sont neutralisés, comme
+  // le fait déjà le graphique — sinon la carte "Mon Épargne Nette" et le dernier point de
+  // la courbe divergeaient dès qu'un mouvement futur existait.
+  const ownedToday = (acc: SavingsAccount): number => {
+    const today = localTodayISO();
+    let balance = acc.ownedAmount;
+    (acc.movements || []).forEach(m => {
+      if (m.date > today) balance -= m.type === 'IN' ? m.amount : -m.amount;
+    });
+    return balance;
+  };
+  const mySavings = accounts.reduce((acc, curr) => acc + ownedToday(curr), 0);
 
   // --- ALERTES PLAFOND (livrets réglementés proches ou au plafond) ---
   const ceilingAlerts = useMemo(() => {
-    const ceilings: Record<string, number> = {
+    const defaults: Record<string, number> = {
       [AccountType.LIVRET_A]: fiscalConfig.ceilings.livretA,
       [AccountType.LDDS]: fiscalConfig.ceilings.ldds,
       [AccountType.LEP]: fiscalConfig.ceilings.lep,
     };
     return accounts
-      .filter(a => ceilings[a.type] && ceilings[a.type] > 0)
       .map(a => {
-        const ceiling = ceilings[a.type];
+        // Le plafond saisi sur le compte (AccountForm) prime : il était stocké mais
+        // ignoré par tous les consommateurs, qui n'utilisaient que la config globale.
+        const ceiling = (a.ceiling && a.ceiling > 0) ? a.ceiling : (defaults[a.type] || 0);
+        return { a, ceiling };
+      })
+      .filter(({ ceiling }) => ceiling > 0)
+      .map(({ a, ceiling }) => {
         const pct = (a.totalAmount / ceiling) * 100;
         return { id: a.id, name: a.name, type: a.type, pct, remaining: ceiling - a.totalAmount, ceiling };
       })
@@ -65,7 +84,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
     return accounts.filter(a => {
       if (a.totalAmount !== 0) return false;
       const lastMove = (a.movements || []).slice().sort((x, y) => y.date.localeCompare(x.date))[0];
-      const refDate = lastMove ? new Date(lastMove.date) : (a.openingDate ? new Date(a.openingDate) : null);
+      const refDate = lastMove ? parseISODate(lastMove.date) : (a.openingDate ? parseISODate(a.openingDate) : null);
       if (!refDate) return true; // aucune date connue, jamais alimenté
       const days = (now.getTime() - refDate.getTime()) / (1000 * 3600 * 24);
       return days >= 60;
@@ -74,32 +93,39 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
 
   // --- RAPPEL D'ACTUALISATION (aucun mouvement récent sur l'ensemble des comptes) ---
   const daysSinceLastUpdate = useMemo(() => {
+    // Les mouvements datés dans le futur sont ignorés : un seul suffisait à rendre le
+    // compteur négatif et à désactiver le rappel pour toujours.
+    const today = localTodayISO();
     let latest: string | null = null;
     accounts.forEach(a => (a.movements || []).forEach(m => {
-      if (!latest || m.date > latest) latest = m.date;
+      if (m.date <= today && (!latest || m.date > latest)) latest = m.date;
     }));
     if (!latest) return null;
-    return Math.floor((Date.now() - new Date(latest).getTime()) / (1000 * 3600 * 24));
+    return Math.floor((Date.now() - parseISODate(latest).getTime()) / (1000 * 3600 * 24));
   }, [accounts]);
 
+  // Les seuils de maturité viennent de fiscalConfig.legalMaturity (comme lib/finance.ts et
+  // l'Horloge Fiscale) : ils étaient codés en dur ici (5/8), seul écran incapable de suivre
+  // la config — trois réponses différentes possibles pour le même compte.
   const getAccountStatus = (account: SavingsAccount): 'AVAILABLE' | 'TAX_LOCKED' | 'HARD_LOCKED' => {
+    const { pea, assuranceVie, pee } = fiscalConfig.legalMaturity;
     if (account.type === AccountType.PEE) {
         const now = new Date();
-        if (account.contractEndDate && new Date(account.contractEndDate) <= now) return 'AVAILABLE';
+        if (account.contractEndDate && parseISODate(account.contractEndDate) <= now) return 'AVAILABLE';
         if (account.openingDate) {
-            const openDate = new Date(account.openingDate);
+            const openDate = parseISODate(account.openingDate);
             const ageInYears = (now.getTime() - openDate.getTime()) / (1000 * 3600 * 24 * 365.25);
-            return ageInYears >= 5 ? 'AVAILABLE' : 'HARD_LOCKED';
+            return ageInYears >= pee ? 'AVAILABLE' : 'HARD_LOCKED';
         }
         return 'HARD_LOCKED';
     }
     if ([AccountType.IMMOBILIER, AccountType.PER, AccountType.AUTRE].includes(account.type)) return 'HARD_LOCKED';
     if (!account.openingDate) return 'AVAILABLE';
-    const openDate = new Date(account.openingDate);
+    const openDate = parseISODate(account.openingDate);
     const now = new Date();
     const ageInYears = (now.getTime() - openDate.getTime()) / (1000 * 3600 * 24 * 365.25);
-    if (account.type === AccountType.PEA) return ageInYears < 5 ? 'TAX_LOCKED' : 'AVAILABLE';
-    if (account.type === AccountType.ASSURANCE_VIE) return ageInYears < 8 ? 'TAX_LOCKED' : 'AVAILABLE';
+    if (account.type === AccountType.PEA) return ageInYears < pea ? 'TAX_LOCKED' : 'AVAILABLE';
+    if (account.type === AccountType.ASSURANCE_VIE) return ageInYears < assuranceVie ? 'TAX_LOCKED' : 'AVAILABLE';
     return 'AVAILABLE';
   };
 
@@ -107,12 +133,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
     let available = 0; let taxLocked = 0; let hardLocked = 0;
     accounts.forEach(acc => {
       const status = getAccountStatus(acc);
-      if (status === 'AVAILABLE') available += acc.ownedAmount;
-      else if (status === 'TAX_LOCKED') taxLocked += acc.ownedAmount;
-      else hardLocked += acc.ownedAmount;
+      const owned = ownedToday(acc); // même convention "à ce jour" que la carte du total
+      if (status === 'AVAILABLE') available += owned;
+      else if (status === 'TAX_LOCKED') taxLocked += owned;
+      else hardLocked += owned;
     });
     return { available, taxLocked, hardLocked };
-  }, [accounts]);
+  }, [accounts, fiscalConfig]);
 
   const isConstrainedAccount = (type: AccountType) => {
     return [AccountType.ASSURANCE_VIE, AccountType.PEA, AccountType.PEE, AccountType.PER].includes(type);
@@ -121,57 +148,65 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
   // --- LOGIQUE CORRIGÉE : GESTION DU FUTUR ---
   const stackedData = useMemo(() => {
     const data: any[] = [];
-    const endDate = new Date(dateRange.end);
-    const startDate = new Date(dateRange.start);
+    // parseISODate (minuit LOCAL) et non `new Date('YYYY-MM-DD')` (minuit UTC) : l'ancien
+    // mélange UTC-parse + `setDate` local faisait SAUTER le jour du passage à l'heure
+    // d'hiver (reproduit : le 26/10/2025 n'était jamais généré), donc les mouvements de ce
+    // jour n'étaient jamais rembobinés et tout le graphique à gauche était décalé.
+    const endDate = parseISODate(dateRange.end);
+    const startDate = parseISODate(dateRange.start);
+    if (endDate < startDate) return []; // plage inversée : rien à tracer
     const endDateStr = dateRange.end;
-    
-    // 1. DÉPART : On prend les montants FINAUX du fichier
+
+    // Borne dure : la boucle est journalière, une date de fin fantaisiste (2099...) gelait
+    // l'onglet. ~5 ans suffisent largement pour l'historique visualisable.
+    const MAX_DAYS = 1830;
+    const effectiveStart = daysBetween(startDate, endDate) > MAX_DAYS
+      ? new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate() - MAX_DAYS)
+      : startDate;
+
+    // 1. DÉPART : montants finaux, corrigés des mouvements futurs (> dateRange.end), et
+    // index date→flux par compte pour ne pas re-filtrer tous les mouvements à chaque jour.
     const currentBalances = new Map<string, number>();
+    const flowsByAccountDate = new Map<string, Map<string, number>>();
     accounts.forEach(acc => {
       let balanceAtEndDate = acc.ownedAmount;
-      
-      // 2. CORRECTION FUTUR : On retire les mouvements qui n'ont pas encore eu lieu (ceux > dateRange.end)
-      const futureMovements = (acc.movements || []).filter(m => m.date > endDateStr);
-      futureMovements.forEach(m => {
-        if (m.type === 'IN') {
-           balanceAtEndDate -= m.amount; // On annule l'ajout futur
-        } else {
-           balanceAtEndDate += m.amount; // On annule le retrait futur
-        }
+      const byDate = new Map<string, number>();
+      (acc.movements || []).forEach(m => {
+        const flow = m.type === 'IN' ? m.amount : -m.amount;
+        if (m.date > endDateStr) balanceAtEndDate -= flow; // annule le mouvement futur
+        else byDate.set(m.date, (byDate.get(m.date) || 0) + flow);
       });
-      
+      flowsByAccountDate.set(acc.id, byDate);
       currentBalances.set(acc.id, balanceAtEndDate);
     });
 
-    // 3. BOUCLE : On remonte le temps
-    for (let d = new Date(endDate); d >= startDate; d.setDate(d.getDate() - 1)) {
-      const dateStr = d.toISOString().split('T')[0];
-      
-      const daySnapshot: any = { 
-        date: dateStr, 
-        displayDate: d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' }) 
+    // 2. BOUCLE : on remonte le temps (push + reverse : unshift réindexait tout le tableau
+    // à chaque itération, O(n²) sur les longues plages)
+    for (let d = new Date(endDate); d >= effectiveStart; d.setDate(d.getDate() - 1)) {
+      const dateStr = formatISODay(d);
+
+      const daySnapshot: any = {
+        date: dateStr,
+        displayDate: d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })
       };
-      
+
       let dailyTotal = 0;
       currentBalances.forEach((amount, id) => {
         const safeAmount = Math.round(amount * 100) / 100;
-        daySnapshot[id] = safeAmount; 
+        daySnapshot[id] = safeAmount;
         dailyTotal += safeAmount;
       });
       daySnapshot.total = dailyTotal;
-      
-      data.unshift(daySnapshot);
+
+      data.push(daySnapshot);
 
       accounts.forEach(acc => {
-        const movesOnDate = (acc.movements || []).filter(m => m.date === dateStr);
-        if (movesOnDate.length > 0) {
-          const currentBal = currentBalances.get(acc.id) || 0;
-          const flow = movesOnDate.reduce((sum, m) => sum + (m.type === 'IN' ? m.amount : -m.amount), 0);
-          currentBalances.set(acc.id, currentBal - flow);
-        }
+        const flow = flowsByAccountDate.get(acc.id)?.get(dateStr);
+        if (flow) currentBalances.set(acc.id, (currentBalances.get(acc.id) || 0) - flow);
       });
     }
 
+    data.reverse();
     return data;
   }, [accounts, dateRange]);
 
@@ -227,7 +262,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
   }, {} as Record<string, { name: string, value: number }>));
 
   const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4'];
-  const getAccountColor = (index: number) => COLORS[index % COLORS.length];
+  // Couleur stable par IDENTITÉ de compte (hash de l'id), plus par position dans le
+  // tableau : supprimer/restaurer/réordonner un compte remélangait toutes les couleurs du
+  // graphique et de sa légende.
+  const getAccountColor = (accountId: string) => {
+    let h = 0;
+    for (let i = 0; i < accountId.length; i++) h = (h * 31 + accountId.charCodeAt(i)) >>> 0;
+    return COLORS[h % COLORS.length];
+  };
 
   const exportSession = () => {
     const now = new Date();
@@ -375,8 +417,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={stackedData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
             <defs>
-              {accounts.map((acc, index) => {
-                const color = getAccountColor(index);
+              {accounts.map(acc => {
+                const color = getAccountColor(acc.id);
                 const isHatched = isConstrainedAccount(acc.type);
                 return (
                   <React.Fragment key={acc.id}>
@@ -407,14 +449,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
               labelStyle={{ color: '#64748b', marginBottom: '0.5rem', fontWeight: 'bold' }}
             />
             <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} formatter={(value) => accounts.find(a => a.id === value)?.name || value} />
-            {accounts.map((acc, index) => (
-              <Area 
+            {accounts.map(acc => (
+              <Area
                 key={acc.id}
-                type="monotone" 
-                dataKey={acc.id} 
-                name={acc.id} 
-                stackId="1" 
-                stroke={getAccountColor(index)} 
+                type="monotone"
+                dataKey={acc.id}
+                name={acc.id}
+                stackId="1"
+                stroke={getAccountColor(acc.id)}
                 fill={isConstrainedAccount(acc.type) ? `url(#stripe-${acc.id})` : `url(#color-${acc.id})`}
                 fillOpacity={1}
               />

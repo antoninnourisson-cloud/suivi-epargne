@@ -9,6 +9,7 @@ import {
   computeMaturityCountdown,
   computeAccountBalanceAtDate,
   computeRecentSavingsRate,
+  computeEffectiveSuperNet,
 } from './finance';
 import { DEFAULT_FISCAL_CONFIG, DEFAULT_WORK_BENEFITS } from '../constants';
 import { FiscalConfig, TaxBracket, WorkBenefits, AccountType } from '../types';
@@ -546,5 +547,20 @@ describe('computeRecentSavingsRate', () => {
     expect(rate).toBeCloseTo(30, 5); // 90 / 3 mois
     // Fenêtre se terminant aujourd'hui (bien après) ne contient plus ce dépôt isolé.
     expect(computeRecentSavingsRate(accounts, 90, new Date('2026-06-01'))).toBeNull();
+  });
+});
+
+describe('computeEffectiveSuperNet', () => {
+  it('retourne le théorique sans fiche active', () => {
+    expect(computeEffectiveSuperNet(2500)).toBe(2500);
+  });
+  it('préfère le net payé réel de la fiche', () => {
+    expect(computeEffectiveSuperNet(2500, { extracted: { netPaid: 2300 } })).toBe(2300);
+  });
+  it('reconstruit net - impôt si netPaid absent', () => {
+    expect(computeEffectiveSuperNet(2500, { extracted: { netAmount: 2600, incomeTaxWithheld: 200 } })).toBe(2400);
+  });
+  it('retombe sur le théorique si la fiche est incomplète', () => {
+    expect(computeEffectiveSuperNet(2500, { extracted: { netAmount: 2600 } })).toBe(2500);
   });
 });

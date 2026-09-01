@@ -9,9 +9,9 @@ import {
 import { 
   DEFAULT_FISCAL_CONFIG, DEFAULT_WORK_BENEFITS 
 } from '../constants';
-import { 
+import {
   findConfigFile, createConfigFile, readConfigFile, updateConfigFile, sendGmail,
-  getFileRevision, setOnAuthLost, ConflictError 
+  getFileRevision, setOnAuthLost, ConflictError, ApiError
 } from '../services/googleDriveService';
 
 // Miroir local de l'état courant : filet anti-crash, réécrit à chaque modification.
@@ -221,8 +221,11 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
         if (data.workBenefits) {
             setWorkBenefits(data.workBenefits);
         } else {
-            const legacyNavigoBase = data.config.navigoBase || 90.80;
-            const legacyNavigoRate = data.config.navigoRate || 67.24;
+            // `data.config?.` : un fichier sans `config` (version antérieure, édition
+            // manuelle) déréférençait ici AVANT le guard `if (data.config)` plus bas —
+            // TypeError avalé par le catch global, app vide sans message.
+            const legacyNavigoBase = data.config?.navigoBase || 90.80;
+            const legacyNavigoRate = data.config?.navigoRate || 67.24;
             setWorkBenefits({
                 ...DEFAULT_WORK_BENEFITS,
                 navigo: { active: true, basePrice: legacyNavigoBase, refundRate: legacyNavigoRate }
@@ -265,10 +268,11 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
             const sameAccount = !snap.fileId || snap.fileId === fileId;
             const diverges = canonicalize(snap.data) !== canonicalize(data);
             if (sameAccount && diverges) {
-              // Mise en quarantaine : le miroir courant va être réécrit en continu, la
-              // quarantaine ne bougera plus jusqu'à l'arbitrage de l'utilisateur.
-              localStorage.setItem(PENDING_KEY, JSON.stringify({ ...snap, fileId }));
+              // La bannière d'abord, la quarantaine ensuite : si le setItem échoue (quota
+              // plein), l'utilisateur doit quand même être PRÉVENU que des modifications
+              // locales divergent — l'ancien ordre jetait la détection avec l'écriture.
               setLocalBackup(snap);
+              try { localStorage.setItem(PENDING_KEY, JSON.stringify({ ...snap, fileId })); } catch { /* quota : la bannière reste */ }
             } else {
               localStorage.removeItem(PENDING_KEY);
               if (!sameAccount) localStorage.removeItem(BACKUP_KEY);
@@ -280,8 +284,13 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
         // Chargement réussi : les sauvegardes automatiques sont désormais autorisées.
         hasLoadedRef.current = true;
       }
-    } catch (error) {
+    } catch (error: any) {
+      // Un chargement raté doit être VISIBLE : l'ancien catch (console.error seul)
+      // affichait un portefeuille vide sans le moindre message — indiscernable, pour
+      // l'utilisateur, d'une perte totale de ses données.
       console.error("Erreur chargement", error);
+      if (error?.message === 'SESSION_EXPIRED') setSessionExpired(true);
+      else setSyncError(true);
     } finally {
       setIsLoadingData(false);
     }
@@ -379,6 +388,8 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
       // avant d'écrire, pour ne jamais courir en parallèle et voir l'une écraser l'autre.
       const newRevision = await runExclusive(() => updateConfigFile(driveFileId, buildData())); // sans expectedRevision : pas de contrôle de concurrence
       driveRevisionRef.current = newRevision;
+      announceSave(driveFileId, newRevision);
+      flushPendingParentMail();
       setSyncConflict(false);
       setSyncError(false);
       setLastSavedAt(new Date());
@@ -427,14 +438,71 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
     } catch { /* quota localStorage dépassé : tant pis, ce n'est qu'un filet de secours */ }
   }, [buildData]);
 
+  // --- MAIL PARENTS DIFFÉRÉ ---
+  // Le mail était envoyé AVANT toute persistance : si la sauvegarde Drive échouait ensuite
+  // (conflit, session expirée) puis que l'utilisateur rechargeait depuis Drive, les parents
+  // avaient été notifiés d'un mouvement qui n'a jamais existé. Le mail est donc mis en
+  // attente ici et n'est expédié qu'après une écriture Drive CONFIRMÉE.
+  const pendingParentMailRef = useRef<{ to: string; subject: string; body: string } | null>(null);
+  const flushPendingParentMail = () => {
+    const mail = pendingParentMailRef.current;
+    if (!mail) return;
+    pendingParentMailRef.current = null;
+    setMailError(null);
+    // Non bloquant, mais l'échec reste visible via mailError (bannière).
+    sendGmail(mail.to, mail.subject, mail.body).catch(err => {
+      console.error('Envoi du mail aux parents échoué', err);
+      setMailError(mail.to);
+    });
+  };
+
+  // --- COORDINATION MULTI-ONGLETS ---
+  // Chaque sauvegarde réussie est annoncée via localStorage (l'événement `storage` ne se
+  // déclenche que dans les AUTRES onglets). Sans ça, deux onglets du même appareil se
+  // faisaient mutuellement dérailler : révision périmée → faux conflit "un autre appareil
+  // a écrit" pour soi-même.
+  const LAST_SAVE_KEY = 'suivi_epargne_last_save';
+  const announceSave = (fileId: string, revision: string | null) => {
+    try { localStorage.setItem(LAST_SAVE_KEY, JSON.stringify({ fileId, revision, at: Date.now() })); } catch { /* informatif */ }
+  };
+  const isSavingRef = useRef(false);
+  useEffect(() => { isSavingRef.current = isSaving; }, [isSaving]);
+
+  useEffect(() => {
+    const onStorage = async (e: StorageEvent) => {
+      if (e.key !== LAST_SAVE_KEY || !e.newValue) return;
+      try {
+        const { fileId, revision } = JSON.parse(e.newValue);
+        if (!fileId || fileId !== driveFileIdRef.current) return;
+        if (!revision || revision === driveRevisionRef.current) return;
+        // Des modifications locales non sauvegardées existent ici : on NE se synchronise
+        // pas — la révision reste périmée et la prochaine sauvegarde lèvera le conflit,
+        // ce qui est la réponse honnête (édition concurrente réelle).
+        if (isSavingRef.current) return;
+        const remote = await readConfigFile(fileId);
+        driveRevisionRef.current = String(revision);
+        // Contenu identique (cas courant : l'autre onglet a poussé ce qu'on a déjà) : il
+        // suffit d'adopter la révision. Sinon on adopte aussi les données.
+        if (canonicalize(remote) !== canonicalize(buildData())) {
+          applyData(remote);
+        }
+      } catch { /* annonce illisible ou lecture Drive ratée : on laisse le conflit naturel jouer */ }
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, [buildData, applyData]);
+
   // --- SAUVEGARDE AUTO ---
   useEffect(() => {
-    if (!isAuthenticated || !driveFileId || isLoadingData || !hasLoadedRef.current) return;
-    if (syncConflict || sessionExpired) return; // on ne réécrit pas tant que non résolu
+    // Chaque retour anticipé remet isSaving à false : un run précédent a pu le passer à
+    // true puis voir son timeout annulé par le cleanup — passer hors-ligne pendant la
+    // fenêtre de debounce laissait sinon l'indicateur "Sauvegarde..." allumé à jamais.
+    if (!isAuthenticated || !driveFileId || isLoadingData || !hasLoadedRef.current) { setIsSaving(false); return; }
+    if (syncConflict || sessionExpired) { setIsSaving(false); return; } // on ne réécrit pas tant que non résolu
     // Hors ligne : on gèle silencieusement (le filet de sécurité local garde déjà tout).
     // `isOffline` est dans les deps ci-dessous : au retour du réseau, cet effet se
     // relance de lui-même et retente la sauvegarde sans attendre une nouvelle saisie.
-    if (isOffline) return;
+    if (isOffline) { setIsSaving(false); return; }
 
     setIsSaving(true);
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
@@ -456,6 +524,8 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
           return updateConfigFile(driveFileId, buildData(), driveRevisionRef.current);
         });
         driveRevisionRef.current = newRevision;
+        announceSave(driveFileId, newRevision);
+        flushPendingParentMail();
         setSyncError(false);
         setLastSavedAt(new Date());
       } catch (err: any) {
@@ -463,10 +533,33 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
           setSyncConflict(true); // un autre appareil a écrit : on n'écrase pas
         } else if (err?.message === 'SESSION_EXPIRED') {
           setSessionExpired(true);
+        } else if (err instanceof ApiError && err.status === 404) {
+          // Le fichier Drive a été supprimé/mis à la corbeille en dehors de l'app : sans
+          // ré-résolution, TOUTES les sauvegardes suivantes échouaient à l'identique
+          // (y compris forceSaveToDrive, la porte de sortie). On recrée/retrouve le
+          // fichier et on réécrit dedans immédiatement.
+          try {
+            const recoveredId = (await findConfigFile()) ?? (await createConfigFile(buildData()));
+            let recoveredRevision: string | null = null;
+            if (recoveredId !== driveFileId) {
+              setDriveFileId(recoveredId);
+              driveFileIdRef.current = recoveredId;
+              recoveredRevision = await getFileRevision(recoveredId).catch(() => null);
+            } else {
+              // Même id ressorti de la recherche : fichier restauré depuis la corbeille ?
+              recoveredRevision = await updateConfigFile(recoveredId, buildData(), null);
+            }
+            driveRevisionRef.current = recoveredRevision;
+            setSyncError(false);
+            setLastSavedAt(new Date());
+          } catch (recoveryErr) {
+            setSyncError(true);
+            console.error("Fichier Drive introuvable et récupération échouée", recoveryErr);
+          }
         } else if (err instanceof TypeError) {
           // fetch échoue par TypeError quand la requête ne peut pas partir (réseau coupé,
-          // DNS...) : navigator.onLine n'est pas toujours fiable (ex: portail captif), donc
-          // on traite ce cas comme hors-ligne plutôt que comme une vraie erreur inquiétante.
+          // DNS, timeout)... : navigator.onLine n'est pas toujours fiable (portail captif),
+          // donc on traite ce cas comme hors-ligne plutôt que comme une vraie erreur.
           setIsOffline(true);
         } else {
           setSyncError(true);
@@ -551,6 +644,9 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
     `;
     let shouldSendMail = false;
     const fmt = (n: number) => n.toLocaleString('fr-FR', {style:'currency', currency:'EUR'});
+    // Le mail part en text/html : toute valeur issue des données (dont un JSON importé,
+    // non validé champ par champ) doit être échappée avant interpolation.
+    const esc = (s: string) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
     updates.forEach(upd => {
        const oldAcc = accounts.find(a => a.id === upd.account.id);
@@ -566,7 +662,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
              mailBody += `
                 <tr style="border-bottom: 1px solid #e2e8f0;">
                   <td style="padding: 10px; vertical-align: top;">
-                    <b>${oldAcc.type}</b>
+                    <b>${esc(oldAcc.type)}</b>
                   </td>
                   <td style="padding: 10px; vertical-align: top;">
                     <b>${fmt(oldAcc.totalAmount)}</b><br/>
@@ -596,15 +692,9 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
     `;
 
     if (shouldSendMail && parentsEmail) {
-        // Envoi volontairement non bloquant (la saisie ne doit pas attendre le réseau),
-        // mais l'échec doit être VISIBLE : sinon un quota Gmail atteint ou un scope révoqué
-        // laissait croire que les parents avaient été prévenus alors que rien n'était parti.
-        setMailError(null);
-        sendGmail(parentsEmail, `Mise à jour Épargne`, mailBody)
-          .catch(err => {
-            console.error('Envoi du mail aux parents échoué', err);
-            setMailError(parentsEmail);
-          });
+        // Mis en attente : expédié uniquement après la prochaine écriture Drive confirmée
+        // (voir flushPendingParentMail) — jamais pour un mouvement qui n'a pas persisté.
+        pendingParentMailRef.current = { to: parentsEmail, subject: 'Mise à jour Épargne', body: mailBody };
     } else if (shouldSendMail && !parentsEmail) {
         console.warn("⚠️ Mouvement détecté mais aucun email parent configuré.");
     }
