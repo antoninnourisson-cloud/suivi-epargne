@@ -1,0 +1,27 @@
+# Serveur de Suivi Épargne (session persistante + notifications push).
+# Guide complet : worker/README.md
+name = "suivi-epargne-api"
+main = "src/index.ts"
+compatibility_date = "2025-06-01"
+
+[vars]
+# Client OAuth : DOIT être le même que celui de l'app (src/services/googleDriveService.ts),
+# sinon le scope drive.file ne donne pas accès au fichier de données déjà créé.
+GOOGLE_CLIENT_ID = "763862877733-hl1an9vcn0ibnoq2iq035927528mimd5.apps.googleusercontent.com"
+APP_URL = "https://antoninnourisson-cloud.github.io/suivi-epargne/"
+# Origine du serveur de dev Vite, pour tester l'app en local contre ce Worker.
+EXTRA_ORIGINS = "http://localhost:5173"
+# Contact exigé par le protocole VAPID. Une URL https est acceptée (RFC 8292) : évite de
+# publier une adresse e-mail dans ce fichier, visible dans le dépôt.
+VAPID_SUBJECT = "https://antoninnourisson-cloud.github.io/suivi-epargne/"
+
+# Secrets (jamais dans ce fichier) — posés par `npm run setup-secrets` et `wrangler secret put` :
+#   GOOGLE_CLIENT_SECRET, ENCRYPTION_KEY, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, ALLOWED_EMAILS
+
+[[kv_namespaces]]
+binding = "STORE"
+id = "REMPLACER_PAR_L_ID_DU_NAMESPACE"
+
+# Rappels quotidiens : 07:00 UTC = 9 h à Paris en été, 8 h en hiver.
+[triggers]
+crons = ["0 7 * * *"]

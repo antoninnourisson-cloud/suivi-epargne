@@ -1,10 +1,27 @@
 // ================================================
 // FILE: vite.config.ts
 // ================================================
-import { defineConfig } from 'vite';
+import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 import path from 'path';
+
+// Origine du Worker, injectée dans la CSP d'index.html (connect-src). Seule l'origine
+// EXACTE est autorisée : ouvrir tout *.workers.dev laisserait un script injecté exfiltrer
+// vers n'importe quel Worker tiers.
+const backendOriginPlugin = (): Plugin => {
+  let origin = '';
+  return {
+    name: 'backend-origin-csp',
+    // config.env = variables VITE_* déjà résolues pour le mode courant (.env.production au
+    // build, .env/.env.local en dev), comme les voit le code de l'app.
+    configResolved(config) {
+      const raw = config.env.VITE_BACKEND_URL || '';
+      try { origin = raw ? new URL(raw).origin : ''; } catch { origin = ''; }
+    },
+    transformIndexHtml: html => html.replace('__BACKEND_ORIGIN__', origin),
+  };
+};
 
 export default defineConfig({
   // Base relative : fonctionne aussi bien sur un user page (username.github.io)
@@ -13,8 +30,14 @@ export default defineConfig({
   base: './',
   plugins: [
     react(),
+    backendOriginPlugin(),
     VitePWA({
       registerType: 'autoUpdate',
+      // Réception des notifications push (public/push-sw.js), greffée sur le service
+      // worker généré plutôt que de réécrire toute la stratégie de cache à la main.
+      workbox: {
+        importScripts: ['push-sw.js'],
+      },
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg'],
       manifest: {
         name: 'Suivi Épargne',

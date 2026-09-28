@@ -7,6 +7,7 @@ import { Button } from './Button';
 import { Save, AlertTriangle, Settings as SettingsIcon, Plus, Trash2, Mail, Download, Upload, Database, KeyRound, FileText, Fingerprint, Hash } from 'lucide-react';
 import { isLockAvailable, isBiometricEnabled, isPinEnabled, enableLock, disableBiometric, enablePin, disablePin } from '../services/appLockService';
 import { safeNumber } from '../lib/numbers';
+import { NotificationSettings } from './NotificationSettings';
 
 interface SettingsProps {
   config: FiscalConfig;
@@ -274,6 +275,9 @@ export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parent
                 {pinError && <p className="text-[11px] text-rose-600 dark:text-rose-400 mt-2 font-bold">{pinError}</p>}
             </div>
         </div>
+
+        {/* SECTION NOTIFICATIONS (visible seulement si l'app est reliée au serveur) */}
+        <NotificationSettings />
 
         {/* SECTION 1: AVANTAGES SALARIAUX */}
         <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 lg:col-span-2">

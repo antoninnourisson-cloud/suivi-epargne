@@ -3,6 +3,11 @@
 // Version web-only (PWA). Auth Google Identity Services + Drive/Gmail via fetch.
 // ================================================
 
+import {
+  isBackendEnabled, hasBackendSession, fetchAccessToken, startBackendLogin, backendLogout, consumeLoginCode,
+  saveBackendSession,
+} from './backendService';
+
 const CLIENT_ID = '763862877733-hl1an9vcn0ibnoq2iq035927528mimd5.apps.googleusercontent.com';
 const SCOPES = 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/gmail.send';
 const FILE_NAME = 'suivi_epargne.json';
@@ -131,7 +136,28 @@ const requestToken = (prompt: '' | 'none' | 'consent'): Promise<void> =>
 // Connexion manuelle (bouton). prompt='' évite de redemander le consentement à
 // chaque fois une fois qu'il a été donné.
 export const handleAuthClick = async (silent: boolean = false): Promise<void> => {
+  if (isBackendEnabled()) {
+    // Mode serveur : silencieux = le Worker émet un jeton frais à partir du refresh token ;
+    // sinon, redirection vers la connexion Google (la page quitte l'app, d'où la promesse
+    // jamais résolue — le retour recharge tout).
+    if (silent) return refreshTokenSilently();
+    startBackendLogin();
+    return new Promise<void>(() => {});
+  }
   await requestToken(silent ? 'none' : '');
+};
+
+/**
+ * Mode serveur : finalise une connexion si l'URL porte le code de retour du Worker.
+ * Renvoie true si une session vient d'être ouverte.
+ */
+export const completeBackendLoginIfPresent = async (): Promise<boolean> => {
+  if (!isBackendEnabled()) return false;
+  const result = await consumeLoginCode();
+  if (!result) return false;
+  storeToken({ access_token: result.access_token, expires_in: result.expires_in });
+  saveBackendSession(result.session);
+  return true;
 };
 
 // Rafraîchissement mutualisé : plusieurs appels concurrents (ex. une sauvegarde Drive et
@@ -140,7 +166,10 @@ export const handleAuthClick = async (silent: boolean = false): Promise<void> =>
 let refreshInFlight: Promise<void> | null = null;
 const refreshTokenSilently = (): Promise<void> => {
   if (!refreshInFlight) {
-    refreshInFlight = requestToken('none').finally(() => { refreshInFlight = null; });
+    // Mode serveur : le jeton vient du Worker (refresh token longue durée), plus de l'iframe
+    // silencieuse de GIS — celle qui échouait régulièrement en PWA et forçait à se reconnecter.
+    const pending = isBackendEnabled() ? fetchAccessToken().then(storeToken) : requestToken('none');
+    refreshInFlight = pending.finally(() => { refreshInFlight = null; });
   }
   return refreshInFlight;
 };
@@ -149,8 +178,8 @@ const refreshTokenSilently = (): Promise<void> => {
 // pour n'afficher/autoriser que ce à quoi le compte connecté a accès.
 export const getAccessToken = async (): Promise<string> => {
   const stored = localStorage.getItem('google_token');
-  if (!stored) throw new Error('NO_TOKEN');
-  if (!isTokenValid()) {
+  if (!stored && !(isBackendEnabled() && hasBackendSession())) throw new Error('NO_TOKEN');
+  if (!stored || !isTokenValid()) {
     // Tente un refresh silencieux avant d'échouer.
     await refreshTokenSilently();
   }
@@ -212,7 +241,10 @@ const authedFetch = async (url: string, options: RequestInit = {}): Promise<Resp
   if (res.status === 401) {
     try {
       await refreshTokenSilently();
-    } catch {
+    } catch (e) {
+      // Réseau/serveur injoignable (TypeError) : c'est « hors ligne », pas une session
+      // perdue — sinon une simple coupure pendant un rafraîchissement déconnectait.
+      if (e instanceof TypeError) throw e;
       handleAuthLost();
       throw new Error('SESSION_EXPIRED');
     }
@@ -228,6 +260,13 @@ export const handleSignOut = async () => {
   localStorage.removeItem('google_token');
   localStorage.removeItem('token_expiry');
   localStorage.removeItem('auth_persistence');
+  if (isBackendEnabled()) {
+    // Surtout PAS de révocation Google ici : révoquer un jeton d'accès révoque tout
+    // l'accord, refresh token du serveur compris — ce qui déconnecterait aussi les AUTRES
+    // appareils. On ferme uniquement la session de cet appareil.
+    await backendLogout();
+    return;
+  }
   try {
     if (stored) {
       const token = JSON.parse(stored).access_token;

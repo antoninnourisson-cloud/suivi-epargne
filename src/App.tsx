@@ -12,8 +12,10 @@ import { QuickAddModal } from './components/QuickAddModal';
 import { BottomNav } from './components/BottomNav';
 import { AppLockScreen } from './components/AppLockScreen';
 import {
-  initGoogleApi, handleAuthClick, handleSignOut, isTokenValid
+  initGoogleApi, handleAuthClick, handleSignOut, isTokenValid, completeBackendLoginIfPresent
 } from './services/googleDriveService';
+import { isBackendEnabled, hasBackendSession } from './services/backendService';
+import { disablePush } from './services/pushService';
 import { isLockEnabled } from './services/appLockService';
 import { computeMaturityCountdown } from './lib/finance';
 import { localTodayISO } from './lib/dates';
@@ -191,11 +193,38 @@ const App: React.FC = () => {
     lastToastedSaveRef.current = ts;
   }, [data.lastSavedAt]);
 
-  // Init Google API
+  // Init Google API — une seule fois par chargement de page : en développement, React
+  // (StrictMode) rejoue les effets de montage, ce qui lançait deux initialisations
+  // concurrentes (deux rafraîchissements, deux consommations du code de connexion...).
+  const initStartedRef = useRef(false);
   useEffect(() => {
+    if (initStartedRef.current) return;
+    initStartedRef.current = true;
     initGoogleApi()
       .then(async () => {
         setIsApiLoaded(true);
+
+        // Mode serveur (Worker configuré) : la session vit côté serveur, plus besoin du
+        // rafraîchissement silencieux de GIS qui échouait souvent en PWA.
+        if (isBackendEnabled()) {
+          try {
+            const justLoggedIn = await completeBackendLoginIfPresent();
+            if (justLoggedIn || hasBackendSession()) {
+              if (!justLoggedIn && !isTokenValid()) await handleAuthClick(true);
+              setIsAuthenticated(true);
+              data.loadDriveData();
+            }
+          } catch (e: any) {
+            if (e instanceof TypeError) {
+              // Serveur injoignable : on garde la session, l'utilisateur pourra réessayer.
+              addToast({ message: 'Serveur injoignable — vérifie ta connexion puis recharge.', kind: 'error' });
+            } else {
+              console.log('Session serveur invalide, reconnexion requise.', e);
+            }
+          }
+          return;
+        }
+
         const storedToken = localStorage.getItem('google_token');
         const persistence = localStorage.getItem('auth_persistence') === 'true';
 
@@ -242,8 +271,11 @@ const App: React.FC = () => {
     }
   };
 
-  const handleLogout = () => {
-    handleSignOut();
+  const handleLogout = async () => {
+    // Un appareil déconnecté ne doit plus recevoir de notifications (qui contiennent des
+    // montants) : désabonnement AVANT de fermer la session, tant qu'elle est valide.
+    if (isBackendEnabled()) await disablePush().catch(() => undefined);
+    await handleSignOut();
     setIsAuthenticated(false);
     data.resetData();
   };
