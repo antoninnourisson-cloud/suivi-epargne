@@ -38,6 +38,9 @@ interface DraftPayslip {
   mimeType: string;
   status: 'picked' | 'extracting' | 'reviewing' | 'error';
   error?: string;
+  // Cause technique exacte (statut HTTP, message Google, adresse bloquée par la CSP) :
+  // affichée sous le message, pour diagnostiquer sans ouvrir la console.
+  errorDetail?: string;
   fields: PayslipExtractedData;
 }
 
@@ -50,6 +53,37 @@ const monthLabel = (period: string) => {
   if (!match) return period;
   const d = new Date(Number(match[1]), Number(match[2]) - 1, 1);
   return d.toLocaleDateString('fr-FR', { month: 'short', year: '2-digit' });
+};
+
+/**
+ * Exécute `fn` en notant les violations de CSP survenues pendant ce temps. Un appel réseau
+ * bloqué par la CSP ne lève qu'un « Failed to fetch » générique ; l'événement
+ * `securitypolicyviolation`, lui, donne l'adresse exacte refusée — indispensable pour
+ * diagnostiquer sans console (typiquement sur téléphone).
+ */
+const withCspWatch = async <T,>(fn: () => Promise<T>): Promise<{ result?: T; error?: unknown; blocked: string[] }> => {
+  const blocked: string[] = [];
+  const onViolation = (e: SecurityPolicyViolationEvent) => {
+    blocked.push(`${e.effectiveDirective} ${e.blockedURI || '(inline)'}`);
+  };
+  document.addEventListener('securitypolicyviolation', onViolation);
+  try {
+    return { result: await fn(), blocked };
+  } catch (error) {
+    // L'événement CSP est asynchrone : on lui laisse un instant pour arriver.
+    await new Promise(r => setTimeout(r, 50));
+    return { error, blocked };
+  } finally {
+    document.removeEventListener('securitypolicyviolation', onViolation);
+  }
+};
+
+const describeError = (e: unknown, blocked: string[]): string => {
+  const parts: string[] = [];
+  if (blocked.length) parts.push(`bloqué par la politique de sécurité : ${[...new Set(blocked)].join(', ')}`);
+  const msg = e instanceof Error ? `${e.name === 'Error' ? '' : e.name + ' : '}${e.message}` : String(e);
+  if (msg) parts.push(msg.slice(0, 300));
+  return parts.join(' — ');
 };
 
 export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, geminiApiKey, pickerApiKey, onApplyToPilotage, activePayslipId, onClearActivePayslip }) => {
@@ -71,6 +105,9 @@ export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, 
   const handlePick = async () => {
     if (!pickerApiKey) return;
     setPickerBusy(true);
+    const pickerBlocked: string[] = [];
+    const onPickerViolation = (ev: SecurityPolicyViolationEvent) => pickerBlocked.push(`${ev.effectiveDirective} ${ev.blockedURI || '(inline)'}`);
+    document.addEventListener('securitypolicyviolation', onPickerViolation);
     try {
       const picked = await openDrivePicker(pickerApiKey);
       if (picked) {
@@ -78,26 +115,32 @@ export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, 
       }
     } catch (e) {
       console.error('Ouverture du sélecteur Drive échouée', e);
-      setDraft({ fileId: '', fileName: '', mimeType: '', status: 'error', error: "Impossible d'ouvrir le sélecteur Google Drive. Vérifiez la clé API Picker dans les Paramètres.", fields: { ...emptyFields } });
+      setDraft({ fileId: '', fileName: '', mimeType: '', status: 'error', error: "Impossible d'ouvrir le sélecteur Google Drive. Vérifiez la clé API Picker dans les Paramètres.", errorDetail: describeError(e, pickerBlocked), fields: { ...emptyFields } });
     } finally {
+      document.removeEventListener('securitypolicyviolation', onPickerViolation);
       setPickerBusy(false);
     }
   };
 
   const handleExtract = async () => {
     if (!draft || !geminiApiKey) return;
-    setDraft({ ...draft, status: 'extracting', error: undefined });
-    try {
-      const base64 = await downloadFileAsBase64(draft.fileId);
-      const fields = await extractPayslipData(geminiApiKey, base64, draft.mimeType);
-      setDraft(d => d && ({ ...d, status: 'reviewing', fields }));
-    } catch (e) {
-      const message = e instanceof GeminiError
-        ? "L'extraction automatique a échoué. Vous pouvez saisir les montants manuellement ci-dessous."
-        : "Le téléchargement du fichier depuis Drive a échoué.";
-      console.error('Extraction fiche de paie échouée', e);
-      setDraft(d => d && ({ ...d, status: 'reviewing', error: message }));
+    setDraft({ ...draft, status: 'extracting', error: undefined, errorDetail: undefined });
+
+    // Étape 1 : téléchargement depuis Drive. Étape 2 : analyse Gemini. Chacune est
+    // diagnostiquée séparément, avec la cause technique exacte affichée à l'écran.
+    const download = await withCspWatch(() => downloadFileAsBase64(draft.fileId));
+    if (download.error !== undefined) {
+      console.error('Téléchargement fiche de paie échoué', download.error);
+      setDraft(d => d && ({ ...d, status: 'reviewing', error: 'Le téléchargement du fichier depuis Drive a échoué.', errorDetail: describeError(download.error, download.blocked) }));
+      return;
     }
+    const analysis = await withCspWatch(() => extractPayslipData(geminiApiKey, download.result as string, draft.mimeType));
+    if (analysis.error !== undefined) {
+      console.error('Analyse Gemini échouée', analysis.error);
+      setDraft(d => d && ({ ...d, status: 'reviewing', error: "L'extraction automatique a échoué. Vous pouvez saisir les montants manuellement ci-dessous.", errorDetail: describeError(analysis.error, analysis.blocked) }));
+      return;
+    }
+    setDraft(d => d && ({ ...d, status: 'reviewing', fields: analysis.result! }));
   };
 
   const patchDraftField = (field: keyof PayslipExtractedData, value: string) => {
@@ -181,7 +224,13 @@ export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, 
           )}
 
           {draft.status === 'error' && (
-            <p className="text-sm text-rose-600 dark:text-rose-400 flex items-start gap-2"><AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" /> {draft.error}</p>
+            <div className="text-sm text-rose-600 dark:text-rose-400 flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+              <div>
+                {draft.error}
+                {draft.errorDetail && <p className="mt-1 text-[11px] font-mono break-all opacity-80">Détail : {draft.errorDetail}</p>}
+              </div>
+            </div>
           )}
 
           {draft.status === 'picked' && (
@@ -204,7 +253,11 @@ export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, 
             <>
               {draft.error && (
                 <p className="text-xs text-amber-700 dark:text-amber-300 flex items-start gap-2 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-lg p-3">
-                  <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" /> {draft.error}
+                  <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                  <span>
+                    {draft.error}
+                    {draft.errorDetail && <span className="block mt-1 text-[11px] font-mono break-all opacity-80">Détail : {draft.errorDetail}</span>}
+                  </span>
                 </p>
               )}
               <p className="text-[11px] text-slate-400 dark:text-slate-500 -mt-1">Vérifie et corrige les valeurs avant d'enregistrer — l'extraction automatique peut se tromper.</p>
