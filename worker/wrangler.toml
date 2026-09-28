@@ -20,7 +20,7 @@ VAPID_SUBJECT = "https://antoninnourisson-cloud.github.io/suivi-epargne/"
 
 [[kv_namespaces]]
 binding = "STORE"
-id = "REMPLACER_PAR_L_ID_DU_NAMESPACE"
+id = "4fc93d52562e4d78a88691e38753518c"
 
 # Rappels quotidiens : 07:00 UTC = 9 h à Paris en été, 8 h en hiver.
 [triggers]

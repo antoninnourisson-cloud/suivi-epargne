@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Suivi Épargne — Confidentialité</title>
+<meta name="description" content="Règles de confidentialité de l'application personnelle Suivi Épargne.">
+<style>
+  :root { --bg: #f8fafc; --card: #ffffff; --text: #0f172a; --muted: #475569; --line: #e2e8f0; --accent: #4f46e5; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #0f172a; --card: #1e293b; --text: #e2e8f0; --muted: #94a3b8; --line: #334155; --accent: #818cf8; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 720px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { font-size: 28px; margin: 0 0 4px; }
+  .date { color: var(--muted); margin: 0 0 24px; font-size: 14px; }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 20px; margin-bottom: 16px; }
+  h2 { font-size: 18px; margin: 0 0 8px; }
+  p, li { color: var(--muted); }
+  ul { padding-left: 20px; margin: 8px 0 0; }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Règles de confidentialité</h1>
+  <p class="date">Suivi Épargne — application personnelle, non commerciale. Dernière mise à jour : septembre 2026.</p>
+
+  <section>
+    <h2>Où sont vos données</h2>
+    <p>Toutes les données de l'application (comptes, mouvements, objectifs, réglages) sont enregistrées dans un fichier unique sur <strong>votre propre Google Drive</strong>. L'application n'a accès qu'aux fichiers qu'elle a elle-même créés (autorisation Google « drive.file ») : elle ne voit pas le reste de votre Drive.</p>
+  </section>
+
+  <section>
+    <h2>Le serveur de l'application</h2>
+    <p>Un petit serveur (Cloudflare Workers) sert uniquement à deux choses :</p>
+    <ul>
+      <li><strong>Maintenir votre connexion Google</strong> : il conserve un jeton d'accès Google, chiffré, pour éviter de vous reconnecter à chaque ouverture. Il ne stocke aucune donnée financière.</li>
+      <li><strong>Envoyer des rappels</strong> si vous activez les notifications : une fois par jour, il lit votre fichier de données pour calculer les rappels (échéances, révision des taux…). Les notifications sont chiffrées de bout en bout.</li>
+    </ul>
+    <p>L'accès au serveur est limité au compte Google de son propriétaire.</p>
+  </section>
+
+  <section>
+    <h2>Services tiers</h2>
+    <ul>
+      <li><strong>Google Drive et Gmail</strong> : stockage des données, et envoi d'un e-mail récapitulatif à l'adresse que vous configurez vous-même (fonction facultative).</li>
+      <li><strong>Google Gemini</strong> (facultatif) : si vous importez une fiche de paie, le document est envoyé à l'API Gemini avec votre propre clé pour en extraire les montants.</li>
+      <li><strong>Services de notification</strong> (Google, Apple, Mozilla, selon l'appareil) : ils acheminent les notifications chiffrées sans pouvoir les lire.</li>
+    </ul>
+    <p>Aucune publicité, aucun outil de mesure d'audience, aucune revente de données.</p>
+  </section>
+
+  <section>
+    <h2>Supprimer vos données et révoquer l'accès</h2>
+    <p>Vous pouvez à tout moment retirer l'accès de l'application depuis <a href="https://myaccount.google.com/permissions">myaccount.google.com/permissions</a> : le serveur efface alors vos sessions. Le fichier de données reste sur votre Drive, où vous pouvez le supprimer.</p>
+  </section>
+</main>
+</body>
+</html>

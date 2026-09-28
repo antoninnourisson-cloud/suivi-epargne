@@ -19,6 +19,9 @@ import { webcrypto as crypto } from 'node:crypto';
 const args = new Set(process.argv.slice(2));
 const DEV = args.has('--dev');
 const FORCE = args.has('--force');
+// Ne pose que les secrets GÉNÉRÉS (aucune saisie) : le secret client Google et l'e-mail
+// autorisé peuvent alors être renseignés ailleurs (tableau de bord Cloudflare).
+const GENERATED_ONLY = args.has('--generated-only');
 
 const b64url = (bytes) => Buffer.from(bytes).toString('base64url');
 
@@ -79,6 +82,8 @@ const main = async () => {
     console.log(`✔ ${name} généré et enregistré`);
   }
   if (toSet.length === 0) console.log('✔ Clés de chiffrement et VAPID déjà présentes (inchangées)');
+
+  if (GENERATED_ONLY) { console.log('Secrets générés en place (mode --generated-only).'); return; }
 
   // 2. Secrets que TOI seul connais : wrangler te les demande directement (saisie masquée).
   for (const [name, hint] of [
