@@ -154,6 +154,13 @@ const App: React.FC = () => {
     [data.payslips, data.activePayslipId]
   );
 
+  // Même raison que `incomeCfg` : un littéral inline invaliderait les useMemo du Dashboard
+  // à chaque rendu d'App.
+  const dashboardConfig = useMemo(() => ({
+    grossAnnual: data.grossAnnual, navigoBase: data.navigoBase,
+    navigoRate: data.navigoRate, taxRateManual: data.taxRateManual,
+  }), [data.grossAnnual, data.navigoBase, data.navigoRate, data.taxRateManual]);
+
   // Sync view from data (au premier chargement)
   useEffect(() => {
       if (data.lastView && view === 'dashboard') {
@@ -611,7 +618,7 @@ const App: React.FC = () => {
             )}
 
             <Suspense fallback={<ViewLoader />}>
-            {view === 'dashboard' && <Dashboard accounts={data.accounts} history={data.history} expenses={data.expenses} fiscalConfig={data.fiscalConfig} onDeleteAccount={handleDeleteAccount} config={{ grossAnnual: data.grossAnnual, navigoBase: data.navigoBase, navigoRate: data.navigoRate, taxRateManual: data.taxRateManual }} />}
+            {view === 'dashboard' && <Dashboard accounts={data.accounts} history={data.history} expenses={data.expenses} fiscalConfig={data.fiscalConfig} workBenefits={data.workBenefits} onDeleteAccount={handleDeleteAccount} config={dashboardConfig} recurringMovements={data.recurringMovements} onRecordRecurring={(r, date) => handleQuickAdd(r.accountId, r.amount, r.type, r.label, date)} />}
 
             {view === 'pilot' && <AssistantPilot
                 accounts={data.accounts}
@@ -637,7 +644,7 @@ const App: React.FC = () => {
                 onClearActivePayslip={handleClearActivePayslip}
             />}
 
-            {view === 'transfers' && <TransferManager accounts={data.accounts} onUpdateAccountsComplex={data.updateAccountsWithMovements} onLinkedTransfer={data.executeLinkedTransfer} lastSavedAt={data.lastSavedAt} />}
+            {view === 'transfers' && <TransferManager accounts={data.accounts} onUpdateAccountsComplex={data.updateAccountsWithMovements} onLinkedTransfer={data.executeLinkedTransfer} lastSavedAt={data.lastSavedAt} recurringMovements={data.recurringMovements} onUpdateRecurring={data.setRecurringMovements} />}
             {view === 'update' && <AccountUpdate accounts={data.accounts} onUpdateAccountsComplex={data.updateAccountsWithMovements} lastSavedAt={data.lastSavedAt} />}
 
             {view === 'goals' && <Goals

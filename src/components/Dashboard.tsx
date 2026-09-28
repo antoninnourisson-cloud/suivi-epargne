@@ -3,9 +3,9 @@ import {
   ResponsiveContainer, Tooltip as RechartsTooltip, Legend, 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, AreaChart, Area 
 } from 'recharts';
-import { SavingsAccount, PortfolioSnapshot, AccountType, Expense, FiscalConfig } from '../types';
-import { Euro, Lock, Wallet, Filter, Unlock, Save, AlertTriangle, Trash2, Clock, TrendingUp, TrendingDown, PiggyBank } from 'lucide-react';
-import { computeParentalInterest, computeRecentSavingsRate, computeAccountBalanceAtDate } from '../lib/finance';
+import { SavingsAccount, PortfolioSnapshot, AccountType, Expense, FiscalConfig, WorkBenefits, RecurringMovement } from '../types';
+import { Euro, Lock, Wallet, Filter, Unlock, Save, AlertTriangle, Trash2, Clock, TrendingUp, TrendingDown, PiggyBank, Percent, ShieldAlert, Repeat } from 'lucide-react';
+import { computeAccruedParentalInterest, computeRecentSavingsRate, computeAccountBalanceAtDate, findStaleRegulatedRates, computeLepEligibility, computeIncome, findDueRecurring } from '../lib/finance';
 import { parseISODate, formatISODay, daysBetween, localTodayISO } from '../lib/dates';
 import { Button } from './Button';
 
@@ -14,7 +14,13 @@ interface DashboardProps {
   history: PortfolioSnapshot[];
   expenses: Expense[];
   fiscalConfig: FiscalConfig;
+  // Nécessaire au seul calcul du net imposable, pour l'alerte d'éligibilité LEP.
+  workBenefits?: WorkBenefits;
   onDeleteAccount?: (account: SavingsAccount) => void;
+  recurringMovements?: RecurringMovement[];
+  // Enregistre l'échéance proposée (passe par le même chemin que l'ajout rapide : notif
+  // parents, arrondis, toast).
+  onRecordRecurring?: (r: RecurringMovement, date: string) => void;
   config: {
     grossAnnual: number;
     navigoBase: number;
@@ -23,7 +29,7 @@ interface DashboardProps {
   };
 }
 
-export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expenses, fiscalConfig, onDeleteAccount, config }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expenses, fiscalConfig, workBenefits, onDeleteAccount, config, recurringMovements = [], onRecordRecurring }) => {
   const [dateRange, setDateRange] = useState(() => {
     try {
         const stored = localStorage.getItem('dashboard_date_range');
@@ -242,6 +248,51 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
 
   const fmtEUR = (v: number) => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v);
 
+  // --- RAPPEL DE RÉVISION DES TAUX RÉGLEMENTÉS (1er février / 1er août) ---
+  // Masquable par révision (clé locale) : si le taux n'a en fait pas bougé, l'utilisateur
+  // écarte le rappel une fois et ne le revoit qu'à la révision suivante.
+  const [dismissedRateRevision, setDismissedRateRevision] = useState<string | null>(() => {
+    try { return localStorage.getItem('dismissed_rate_revision'); } catch { return null; }
+  });
+  const staleRates = useMemo(() => findStaleRegulatedRates(accounts), [accounts]);
+  const showRateReminder = staleRates && staleRates.revision.key !== dismissedRateRevision;
+  const dismissRateReminder = () => {
+    if (!staleRates) return;
+    try { localStorage.setItem('dismissed_rate_revision', staleRates.revision.key); } catch { /* non bloquant */ }
+    setDismissedRateRevision(staleRates.revision.key);
+  };
+
+  // --- ÉLIGIBILITÉ LEP ---
+  // Le plafond porte sur le Revenu Fiscal de Référence du foyer ; on ne dispose ici que du
+  // net imposable du salaire, d'où une ESTIMATION clairement présentée comme telle.
+  const lepStatus = useMemo(() => {
+    if (!workBenefits) return null;
+    const breakdown = computeIncome(
+      { grossAnnual: config.grossAnnual, extraMonthlyIncome: 0, navigoBase: config.navigoBase, navigoRate: config.navigoRate, taxRateManual: config.taxRateManual },
+      fiscalConfig,
+      workBenefits
+    );
+    return computeLepEligibility(accounts, breakdown.netTaxableYear, fiscalConfig);
+  }, [accounts, config, fiscalConfig, workBenefits]);
+
+  // --- ÉCHÉANCES RÉCURRENTES À ENREGISTRER ---
+  // « Pas ce mois-ci » est mémorisé localement par mois : la même échéance revient
+  // naturellement le mois suivant.
+  const monthKey = localTodayISO().slice(0, 7);
+  const skippedKey = `skipped_recurring_${monthKey}`;
+  const [skippedRecurring, setSkippedRecurring] = useState<Set<string>>(() => {
+    try { return new Set(JSON.parse(localStorage.getItem(skippedKey) || '[]')); } catch { return new Set(); }
+  });
+  const dueRecurring = useMemo(
+    () => findDueRecurring(recurringMovements, accounts, new Date(), skippedRecurring),
+    [recurringMovements, accounts, skippedRecurring]
+  );
+  const skipRecurring = (id: string) => {
+    const next = new Set(skippedRecurring); next.add(id);
+    try { localStorage.setItem(skippedKey, JSON.stringify([...next])); } catch { /* non bloquant */ }
+    setSkippedRecurring(next);
+  };
+
   // --- RAPPEL DE FIN D'ANNÉE : INTÉRÊTS PARENTAUX ---
   // Le capital que les parents ont placé sur ces comptes reste intouchable, mais ses
   // intérêts sont offerts en fin d'année (accord familial, pas une règle fiscale) — même
@@ -250,7 +301,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
   const parentalYearEndReminder = useMemo(() => {
     const now = new Date();
     if (now.getMonth() !== 11) return null; // uniquement en décembre
-    const { totalAnnualParental } = computeParentalInterest(accounts, now.getFullYear());
+    // Intérêts RÉELLEMENT acquis : ce rappel annonce « cette année », il ne doit pas
+    // extrapoler douze mois sur le solde du jour (un versement de novembre s'y voyait
+    // crédité une année pleine).
+    const { totalAnnualParental } = computeAccruedParentalInterest(accounts, now.getFullYear(), now);
     return totalAnnualParental > 1 ? totalAnnualParental : null;
   }, [accounts]);
 
@@ -332,6 +386,44 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
         <div className="flex items-center gap-3 p-3 rounded-xl border bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-sm font-bold">
           <Clock className="w-4 h-4 flex-shrink-0" />
           Aucune actualisation de solde depuis {daysSinceLastUpdate} jours — pense à mettre tes comptes à jour.
+        </div>
+      )}
+
+      {onRecordRecurring && dueRecurring.map(({ recurring: r, dueDate }) => (
+        <div key={r.id} className="flex flex-wrap items-center gap-3 p-3 rounded-xl border bg-violet-50 dark:bg-violet-950/40 border-violet-200 dark:border-violet-900 text-violet-800 dark:text-violet-300 text-sm font-bold">
+          <Repeat className="w-4 h-4 flex-shrink-0" />
+          <span className="flex-1 min-w-0">
+            Échéance du {parseISODate(dueDate).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })} : {r.label} — {r.type === 'IN' ? '+' : '-'}{fmtEUR(r.amount)} sur {accounts.find(a => a.id === r.accountId)?.name}
+          </span>
+          <button onClick={() => onRecordRecurring(r, dueDate)} className="px-3 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-xs font-black flex-shrink-0">Enregistrer</button>
+          <button onClick={() => skipRecurring(r.id)} className="text-xs font-bold underline flex-shrink-0 hover:opacity-70">Pas ce mois-ci</button>
+        </div>
+      ))}
+
+      {lepStatus && lepStatus.status !== 'ok' && (
+        <div className={`flex items-start gap-3 p-3 rounded-xl border text-sm font-bold ${lepStatus.status === 'exceeded' ? 'bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-900 text-rose-800 dark:text-rose-300' : 'bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-900 text-amber-800 dark:text-amber-300'}`}>
+          <ShieldAlert className="w-4 h-4 flex-shrink-0 mt-0.5" />
+          <div>
+            {lepStatus.status === 'exceeded'
+              ? <>Ton revenu estimé ({fmtEUR(lepStatus.estimatedRfr)}) dépasse le plafond LEP ({fmtEUR(lepStatus.ceiling)}) : ton éligibilité pourrait ne pas être reconduite au prochain contrôle de ta banque.</>
+              : <>Ton revenu estimé ({fmtEUR(lepStatus.estimatedRfr)}) approche du plafond LEP ({fmtEUR(lepStatus.ceiling)}) — il reste {lepStatus.marginPct.toLocaleString('fr-FR', { maximumFractionDigits: lepStatus.marginPct < 1 ? 1 : 0 })} % de marge.</>}
+            <span className="block font-normal text-[11px] mt-1 opacity-80">
+              Estimation à partir de ton net imposable. Le vrai critère est le Revenu Fiscal de Référence du foyer, sur ton avis d'imposition — à vérifier là-bas avant toute décision.
+            </span>
+          </div>
+        </div>
+      )}
+
+      {showRateReminder && staleRates && (
+        <div className="flex items-start gap-3 p-3 rounded-xl border bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-900 text-amber-800 dark:text-amber-300 text-sm font-bold">
+          <Percent className="w-4 h-4 flex-shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            Les taux réglementés ont été révisés au {staleRates.revision.label}. Tu n'as pas encore mis à jour :{' '}
+            {staleRates.accounts.map(a => a.name).join(', ')} — un taux périmé fausse le rendement, la projection et la stratégie de placement.
+          </div>
+          <button onClick={dismissRateReminder} className="text-xs font-bold underline flex-shrink-0 hover:opacity-70">
+            Taux inchangé
+          </button>
         </div>
       )}
 

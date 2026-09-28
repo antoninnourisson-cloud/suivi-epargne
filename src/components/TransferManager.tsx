@@ -1,8 +1,9 @@
 // src/components/TransferManager.tsx
 import React, { useState } from 'react';
-import { SavingsAccount } from '../types';
+import { SavingsAccount, RecurringMovement } from '../types';
 import { Button } from './Button';
-import { ArrowRightLeft, Download, Calendar, ArrowDown, CheckCircle, AlertCircle, Wallet } from 'lucide-react';
+import { ArrowRightLeft, Download, Calendar, ArrowDown, CheckCircle, AlertCircle, Wallet, Repeat } from 'lucide-react';
+import { RecurringManager } from './RecurringManager';
 import { useSaveFeedback } from '../hooks/useSaveFeedback';
 import { safeNumber } from '../lib/numbers';
 import { localTodayISO } from '../lib/dates';
@@ -13,11 +14,13 @@ interface TransferManagerProps {
   onLinkedTransfer: (sourceId: string, destId: string, amount: number, date: string) => void;
   // Horodatage de la dernière écriture Drive CONFIRMÉE (voir useSaveFeedback).
   lastSavedAt?: Date | null;
+  recurringMovements: RecurringMovement[];
+  onUpdateRecurring: (next: RecurringMovement[]) => void;
 }
 
-export const TransferManager: React.FC<TransferManagerProps> = ({ accounts, onUpdateAccountsComplex, onLinkedTransfer, lastSavedAt }) => {
+export const TransferManager: React.FC<TransferManagerProps> = ({ accounts, onUpdateAccountsComplex, onLinkedTransfer, lastSavedAt, recurringMovements, onUpdateRecurring }) => {
   const today = localTodayISO();
-  const [activeTab, setActiveTab] = useState<'deposit' | 'transfer'>('deposit');
+  const [activeTab, setActiveTab] = useState<'deposit' | 'transfer' | 'recurring'>('deposit');
   const [opDate, setOpDate] = useState<string>(today);
   const { status: saveStatus, markPending } = useSaveFeedback(lastSavedAt);
   const [formError, setFormError] = useState<string | null>(null);
@@ -102,16 +105,19 @@ export const TransferManager: React.FC<TransferManagerProps> = ({ accounts, onUp
         <button onClick={() => setActiveTab('transfer')} className={`flex-1 py-4 text-sm font-black flex items-center justify-center gap-2 ${activeTab === 'transfer' ? 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-400 border-b-2 border-indigo-600' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
           <ArrowRightLeft className="w-4 h-4" /> VIREMENT
         </button>
+        <button onClick={() => setActiveTab('recurring')} className={`flex-1 py-4 text-sm font-black flex items-center justify-center gap-2 ${activeTab === 'recurring' ? 'bg-violet-50 dark:bg-violet-950/40 text-violet-700 dark:text-violet-400 border-b-2 border-violet-600' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
+          <Repeat className="w-4 h-4" /> RÉCURRENTS
+        </button>
       </div>
 
       <div className="p-6 max-w-lg mx-auto space-y-6">
-        <div className="bg-slate-50 dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-700 flex items-center gap-4">
+        {activeTab !== 'recurring' && <div className="bg-slate-50 dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-700 flex items-center gap-4">
           <Calendar className="w-5 h-5 text-slate-400 dark:text-slate-500" />
           <div className="flex-1">
             <label className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase block">Date de l'opération</label>
             <input type="date" value={opDate} onChange={e => setOpDate(e.target.value)} className="w-full bg-transparent font-bold text-slate-700 dark:text-slate-200 outline-none" />
           </div>
-        </div>
+        </div>}
 
         {saveStatus === 'saved' && (
             <div className="bg-emerald-100 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300 p-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2">
@@ -134,7 +140,7 @@ export const TransferManager: React.FC<TransferManagerProps> = ({ accounts, onUp
             <input type="text" value={depositAmount} onChange={e => setDepositAmount(e.target.value)} className="w-full p-4 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 border border-slate-300 dark:border-slate-700 rounded-lg text-2xl font-black" placeholder="0,00 €" inputMode="decimal" />
             <Button type="submit" isLoading={saveStatus === 'pending'} className="w-full bg-emerald-600 py-4">Valider le dépôt</Button>
           </form>
-        ) : (
+        ) : activeTab === 'transfer' ? (
           <form onSubmit={handleTransfer} className="space-y-4">
             <select value={sourceAccountId} onChange={e => setSourceAccountId(e.target.value)} className="w-full p-3 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-indigo-500 font-bold" required>
               <option value="">Depuis</option>
@@ -148,6 +154,8 @@ export const TransferManager: React.FC<TransferManagerProps> = ({ accounts, onUp
             <input type="text" value={transferAmount} onChange={e => setTransferAmount(e.target.value)} className="w-full p-4 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 border border-slate-300 dark:border-slate-700 rounded-lg text-2xl font-black" placeholder="0,00 €" inputMode="decimal" />
             <Button type="submit" isLoading={saveStatus === 'pending'} className="w-full py-4">Exécuter le virement</Button>
           </form>
+        ) : (
+          <RecurringManager accounts={accounts} recurringMovements={recurringMovements} onUpdate={onUpdateRecurring} />
         )}
       </div>
     </div>

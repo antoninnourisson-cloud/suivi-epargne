@@ -96,6 +96,19 @@ export interface PayslipExtractedData {
   netPaid?: number;
 }
 
+// Versement (ou retrait) qui revient chaque mois. L'app ne l'écrit JAMAIS toute seule :
+// elle le propose le moment venu, l'utilisateur confirme (cohérent avec le reste de l'app,
+// où aucun montant n'entre dans les données sans validation humaine).
+export interface RecurringMovement {
+  id: string;
+  accountId: string;
+  amount: number;
+  type: 'IN' | 'OUT';
+  label: string;
+  dayOfMonth: number; // 1-31 ; ramené au dernier jour pour les mois plus courts
+  active: boolean;
+}
+
 export interface PayslipRecord {
   id: string;
   // Fichier resté à sa place sur le Drive de l'utilisateur (sélectionné via Google
@@ -132,6 +145,12 @@ export interface FiscalConfig {
     assuranceVie: number;
     pee: number;
   };
+  // Plafond de Revenu Fiscal de Référence ouvrant droit au LEP, pour UNE part fiscale.
+  // Révisé chaque année. Optionnel : les fichiers antérieurs n'ont pas ce champ, l'alerte
+  // d'éligibilité est alors simplement désactivée.
+  lepIncomeCeiling?: number;
+  // Nombre de parts du foyer fiscal, pour ajuster le plafond ci-dessus.
+  lepHouseholdParts?: number;
   taxBrackets: TaxBracket[];
 }
 
@@ -180,6 +199,7 @@ export interface GlobalAppData {
   goals?: SavingsGoal[];
   lastView?: string;
   payslips?: PayslipRecord[];
+  recurringMovements?: RecurringMovement[];
   // Fiche de paie actuellement utilisée comme référence exacte dans le Pilotage Budgétaire
   // (bascule le détail charges/impôt sur les vrais chiffres au lieu de la formule
   // théorique). `undefined` = mode estimation (comportement historique, pour simuler des

@@ -3,9 +3,9 @@
 // Logique fiscale centralisée (calcul du "super net", impôt par tranches).
 // Fonctions pures, testables, réutilisées par le Pilotage et le Dashboard.
 // ================================================
-import { FiscalConfig, TaxBracket, WorkBenefits, RateChange, AccountType, AccountMovement } from '../types';
+import { FiscalConfig, TaxBracket, WorkBenefits, RateChange, AccountType, AccountMovement, RecurringMovement } from '../types';
 import { DEFAULT_STANDARD_ALLOWANCE_CAP } from '../constants';
-import { MS_PER_DAY, formatISODay } from './dates';
+import { MS_PER_DAY, formatISODay, parseISODate, daysBetween } from './dates';
 
 export interface IncomeInput {
   grossAnnual: number;
@@ -382,6 +382,229 @@ export const computeEffectiveSuperNet = (
   return real ?? theoreticalSuperNet;
 };
 
+// --- INTÉRÊTS RÉELLEMENT ACQUIS SUR UNE ANNÉE ---
+// Jusqu'ici, tout se calculait `taux × solde du jour`. C'est honnête pour un RYTHME annuel
+// ("voilà ce que rapportent mes comptes en l'état"), mais faux dès qu'on annonce une ANNÉE
+// précise : 5 000 € déposés en novembre se voyaient créditer une année pleine d'intérêts.
+// Deux endroits annoncent une année et étaient donc surévalués : l'export fiscal ("Intérêts
+// estimés 2026", destiné à la déclaration) et le rappel de décembre sur les intérêts
+// parentaux. D'où ce calcul, qui suit le mouvement réel de l'argent.
+
+/** Livrets réglementés : seuls comptes soumis à la règle des quinzaines. */
+const REGULATED_TYPES = [AccountType.LIVRET_A, AccountType.LDDS, AccountType.LEP];
+
+/**
+ * Taux en vigueur à une date donnée, d'après l'historique.
+ * Convention de `rateHistory` (identique à computeWeightedAnnualRate) : une entrée datée du
+ * jour J porte l'ANCIEN taux, valable JUSQU'À J. Le taux courant prend le relais après le
+ * dernier changement.
+ */
+const rateAtDate = (currentRate: number, rateHistory: RateChange[] | undefined, at: Date): number => {
+  if (!rateHistory || rateHistory.length === 0) return currentRate;
+  const lastByDate = new Map<string, number>();
+  for (const c of rateHistory) lastByDate.set(c.date, c.rate);
+  const sorted = [...lastByDate.entries()]
+    // parseISODate (minuit LOCAL) et non Date.parse (minuit UTC) : comparé à des bornes de
+    // quinzaine construites en local, un changement daté du 1er juillet tombait 2 h APRÈS
+    // la borne du 1er juillet et décalait le nouveau taux d'une quinzaine entière.
+    .map(([date, rate]) => ({ t: parseISODate(date).getTime(), rate }))
+    .sort((a, b) => a.t - b.t);
+  for (const c of sorted) {
+    if (c.t > at.getTime()) return c.rate; // ce taux courait encore à `at`
+  }
+  return currentRate;
+};
+
+/** Solde du compte juste AVANT `date` (on retire les mouvements postérieurs ou égaux). */
+const accountBalanceBefore = (
+  account: { totalAmount: number; movements?: AccountMovement[] },
+  date: Date
+): number => {
+  const key = formatISODay(date);
+  let balance = account.totalAmount;
+  (account.movements || []).forEach(m => {
+    if (m.date >= key) balance -= m.type === 'IN' ? m.amount : -m.amount;
+  });
+  return balance;
+};
+
+/** Bornes de quinzaine de l'année : les 1er et 16 de chaque mois (24 au total). */
+const quinzaineStarts = (year: number): Date[] => {
+  const out: Date[] = [];
+  for (let m = 0; m < 12; m++) {
+    out.push(new Date(year, m, 1));
+    out.push(new Date(year, m, 16));
+  }
+  return out;
+};
+
+/**
+ * Date à partir de laquelle un mouvement compte, selon la règle des quinzaines :
+ * - un VERSEMENT produit des intérêts à compter de la première borne STRICTEMENT après lui
+ *   (versé le 3 mars → rapporte à partir du 16 mars) ;
+ * - un RETRAIT cesse d'en produire dès la dernière borne à ou avant lui
+ *   (retiré le 3 mars → ne rapporte plus depuis le 1er mars).
+ */
+const quinzaineEffectiveDate = (d: Date, isDeposit: boolean): Date => {
+  const y = d.getFullYear(), m = d.getMonth(), day = d.getDate();
+  if (isDeposit) return day < 16 ? new Date(y, m, 16) : new Date(y, m + 1, 1);
+  return day >= 16 ? new Date(y, m, 16) : new Date(y, m, 1);
+};
+
+/**
+ * Intérêts RÉELLEMENT acquis sur l'année civile `year`, en tenant compte de la date à
+ * laquelle chaque euro est arrivé (ou parti).
+ *
+ * - Livrets réglementés : règle des quinzaines, exactement comme la banque (24 quinzaines,
+ *   taux annuel / 24 par quinzaine).
+ * - Autres comptes (AV, PEA...) : prorata journalier — approximation assumée, ces contrats
+ *   ont chacun leurs propres règles de valorisation, mais c'est bien plus proche du réel
+ *   que de compter une année pleine sur le solde du jour.
+ *
+ * Année en cours : ne compte que jusqu'à `asOfDate`.
+ */
+export const computeAccruedInterest = (
+  account: { type: AccountType; totalAmount: number; movements?: AccountMovement[]; interestRate?: number; rateHistory?: RateChange[] },
+  year: number,
+  asOfDate: Date = new Date()
+): number => {
+  const currentRate = account.interestRate || 0;
+  if (currentRate <= 0 && !(account.rateHistory && account.rateHistory.length > 0)) return 0;
+
+  const yearStart = new Date(year, 0, 1);
+  const yearEnd = new Date(year + 1, 0, 1);
+  const end = asOfDate < yearEnd ? asOfDate : yearEnd;
+  if (end <= yearStart) return 0; // année entièrement future
+
+  // Solde au 31/12 de l'année précédente : point de départ, les mouvements de l'année
+  // viennent ensuite s'y appliquer à leur date d'effet.
+  const startBalance = accountBalanceBefore(account, yearStart);
+  const yearMovements = (account.movements || []).filter(m => {
+    const d = parseISODate(m.date);
+    return d >= yearStart && d < yearEnd;
+  });
+
+  if (REGULATED_TYPES.includes(account.type)) {
+    let interest = 0;
+    for (const q of quinzaineStarts(year)) {
+      if (q >= end) break;
+      let balance = startBalance;
+      for (const m of yearMovements) {
+        const isDeposit = m.type === 'IN';
+        if (quinzaineEffectiveDate(parseISODate(m.date), isDeposit) <= q) {
+          balance += isDeposit ? m.amount : -m.amount;
+        }
+      }
+      if (balance > 0) interest += balance * (rateAtDate(currentRate, account.rateHistory, q) / 100) / 24;
+    }
+    return interest;
+  }
+
+  // Prorata journalier : on avance de mouvement en mouvement.
+  const events = [...yearMovements].sort((a, b) => a.date.localeCompare(b.date));
+  let balance = startBalance;
+  let cursor = yearStart;
+  let interest = 0;
+  const accrue = (from: Date, to: Date, bal: number) => {
+    // daysBetween arrondit en jours calendaires entiers : une division brute par MS_PER_DAY
+    // renvoie 184,04 jours sur une période traversant le passage à l'heure d'hiver.
+    const days = daysBetween(from, to);
+    if (days > 0 && bal > 0) interest += bal * (rateAtDate(currentRate, account.rateHistory, from) / 100) * (days / 365);
+  };
+  for (const m of events) {
+    const at = parseISODate(m.date);
+    if (at >= end) break;
+    accrue(cursor, at, balance);
+    balance += m.type === 'IN' ? m.amount : -m.amount;
+    cursor = at;
+  }
+  accrue(cursor, end, balance);
+  return interest;
+};
+
+/**
+ * Dernière révision réglementaire des taux (Livret A / LDDS / LEP) à la date donnée.
+ * Ces taux sont fixés par arrêté et révisés au 1er février et au 1er août. Un taux périmé
+ * saisi dans l'app fausse TOUT l'aval (rendement, projection, stratégie de placement,
+ * manque à gagner) sans le moindre signal — d'où ce rappel.
+ */
+export const lastRateRevision = (asOfDate: Date = new Date()): { key: string; date: Date; label: string } => {
+  const y = asOfDate.getFullYear();
+  const feb = new Date(y, 1, 1);
+  const aug = new Date(y, 7, 1);
+  if (asOfDate >= aug) return { key: `${y}-08`, date: aug, label: `1er août ${y}` };
+  if (asOfDate >= feb) return { key: `${y}-02`, date: feb, label: `1er février ${y}` };
+  return { key: `${y - 1}-08`, date: new Date(y - 1, 7, 1), label: `1er août ${y - 1}` };
+};
+
+/**
+ * Comptes réglementés dont le taux n'a pas été retouché depuis la dernière révision.
+ * Un `rateHistory` contient une entrée datée du jour où l'ancien taux a été remplacé :
+ * une entrée postérieure à la révision prouve donc que l'utilisateur s'en est occupé.
+ *
+ * `null` si la révision est trop ancienne pour être encore d'actualité (au-delà de la
+ * fenêtre de rappel) ou si tous les comptes sont à jour.
+ */
+export const findStaleRegulatedRates = (
+  accounts: { id: string; name: string; type: AccountType; interestRate?: number; rateHistory?: RateChange[] }[],
+  asOfDate: Date = new Date(),
+  reminderWindowDays = 45
+): { revision: { key: string; date: Date; label: string }; accounts: { id: string; name: string }[] } | null => {
+  const revision = lastRateRevision(asOfDate);
+  // Passé la fenêtre, on cesse de harceler : si l'utilisateur n'a rien changé après 45
+  // jours, c'est vraisemblablement que le taux de son livret n'a pas bougé.
+  if (daysBetween(revision.date, asOfDate) > reminderWindowDays) return null;
+
+  const stale = accounts
+    .filter(a => REGULATED_TYPES.includes(a.type))
+    .filter(a => {
+      const touched = (a.rateHistory || []).some(c => parseISODate(c.date) >= revision.date);
+      return !touched;
+    })
+    .map(a => ({ id: a.id, name: a.name }));
+
+  return stale.length > 0 ? { revision, accounts: stale } : null;
+};
+
+export interface LepEligibility {
+  ceiling: number;          // plafond ajusté au nombre de parts
+  estimatedRfr: number;     // estimation du RFR à partir du net imposable
+  status: 'ok' | 'approaching' | 'exceeded';
+  marginPct: number;        // écart au plafond, en % (négatif = dépassement)
+}
+
+/**
+ * Estime si le LEP reste accessible. Perdre l'éligibilité oblige à sortir le capital d'un
+ * livret à ~4 % vers un support moins rémunérateur : autant le voir venir.
+ *
+ * APPROXIMATION ASSUMÉE, à afficher comme telle : le vrai Revenu Fiscal de Référence
+ * figure sur l'avis d'imposition, porte sur le FOYER, et la banque contrôle celui de
+ * l'année N-2. On l'estime ici à partir du net imposable annuel du seul salaire connu.
+ * Le résultat sert à alerter, jamais à conclure.
+ *
+ * `null` si aucun LEP, ou si le plafond n'est pas renseigné dans la configuration.
+ */
+export const computeLepEligibility = (
+  accounts: { type: AccountType }[],
+  netTaxableYear: number,
+  fiscalConfig: FiscalConfig
+): LepEligibility | null => {
+  if (!accounts.some(a => a.type === AccountType.LEP)) return null;
+  const base = fiscalConfig.lepIncomeCeiling;
+  if (!base || base <= 0 || netTaxableYear <= 0) return null;
+
+  // Le plafond augmente avec les parts (approximation linéaire de la grille officielle,
+  // qui ajoute une fraction par demi-part).
+  const parts = fiscalConfig.lepHouseholdParts && fiscalConfig.lepHouseholdParts > 0 ? fiscalConfig.lepHouseholdParts : 1;
+  const ceiling = base * parts;
+  const marginPct = ((ceiling - netTaxableYear) / ceiling) * 100;
+
+  const status: LepEligibility['status'] =
+    netTaxableYear > ceiling ? 'exceeded' : marginPct < 10 ? 'approaching' : 'ok';
+
+  return { ceiling, estimatedRfr: netTaxableYear, status, marginPct };
+};
+
 export interface ParentalInterestBreakdown {
   totalAnnual: number;
   totalAnnualOwned: number;
@@ -406,6 +629,32 @@ export const computeParentalInterest = (
     const weightedRate = computeWeightedAnnualRate(a.interestRate || 0, a.rateHistory, year);
     totalAnnual += a.totalAmount * (weightedRate / 100);
     totalAnnualOwned += a.ownedAmount * (weightedRate / 100);
+  });
+  return { totalAnnual, totalAnnualOwned, totalAnnualParental: Math.max(0, totalAnnual - totalAnnualOwned) };
+};
+
+/**
+ * Variante de `computeParentalInterest` basée sur les intérêts RÉELLEMENT ACQUIS
+ * (computeAccruedInterest) et non sur le rythme annualisé. À utiliser partout où l'on
+ * annonce « cette année » : rappel de fin d'année, export fiscal.
+ *
+ * La répartition moi/parents se fait au prorata du capital détenu à ce jour — les
+ * mouvements ne distinguent pas la part parentale de la part propre, donc affiner
+ * davantage serait une fausse précision.
+ */
+export const computeAccruedParentalInterest = (
+  accounts: { type: AccountType; interestRate?: number; rateHistory?: RateChange[]; totalAmount: number; ownedAmount: number; movements?: AccountMovement[] }[],
+  year: number,
+  asOfDate: Date = new Date()
+): ParentalInterestBreakdown => {
+  let totalAnnual = 0;
+  let totalAnnualOwned = 0;
+  accounts.forEach(a => {
+    const accrued = computeAccruedInterest(a, year, asOfDate);
+    if (accrued <= 0) return;
+    totalAnnual += accrued;
+    const ownedShare = a.totalAmount > 0 ? a.ownedAmount / a.totalAmount : 1;
+    totalAnnualOwned += accrued * Math.min(1, Math.max(0, ownedShare));
   });
   return { totalAnnual, totalAnnualOwned, totalAnnualParental: Math.max(0, totalAnnual - totalAnnualOwned) };
 };
@@ -463,4 +712,45 @@ export const computeRecentSavingsRate = (
   const totalNow = computeAccountBalanceAtDate(accounts, nowStr);
   const totalPast = computeAccountBalanceAtDate(accounts, pastStr);
   return (totalNow - totalPast) / (windowDays / 30);
+};
+
+// --- MOUVEMENTS RÉCURRENTS ---
+
+export interface DueRecurring {
+  recurring: RecurringMovement;
+  dueDate: string; // 'YYYY-MM-DD' local, échéance de ce mois
+}
+
+/**
+ * Échéances récurrentes arrivées à terme ce mois-ci et pas encore enregistrées.
+ *
+ * « Déjà enregistrée » = un mouvement existe ce mois-ci sur le même compte, de même sens
+ * et de même montant. Le libellé n'est volontairement PAS exigé : un versement saisi à la
+ * main via l'ajout rapide (libellé différent) ne doit pas être proposé une seconde fois.
+ * `skipped` : identifiants déjà écartés par l'utilisateur pour ce mois.
+ */
+export const findDueRecurring = (
+  recurrings: RecurringMovement[],
+  accounts: { id: string; movements?: AccountMovement[] }[],
+  asOfDate: Date = new Date(),
+  skipped: Set<string> = new Set()
+): DueRecurring[] => {
+  const y = asOfDate.getFullYear();
+  const m = asOfDate.getMonth();
+  const monthKey = `${y}-${String(m + 1).padStart(2, '0')}`;
+  const lastDay = new Date(y, m + 1, 0).getDate();
+
+  return recurrings
+    .filter(r => r.active && r.amount > 0 && !skipped.has(r.id))
+    .flatMap(r => {
+      const day = Math.min(Math.max(1, Math.round(r.dayOfMonth)), lastDay);
+      if (asOfDate.getDate() < day) return [];
+      const account = accounts.find(a => a.id === r.accountId);
+      if (!account) return []; // compte supprimé depuis
+      const alreadyDone = (account.movements || []).some(mv =>
+        mv.date.startsWith(monthKey) && mv.type === r.type && Math.abs(mv.amount - r.amount) < 0.005
+      );
+      if (alreadyDone) return [];
+      return [{ recurring: r, dueDate: formatISODay(new Date(y, m, day)) }];
+    });
 };

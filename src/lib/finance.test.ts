@@ -10,6 +10,11 @@ import {
   computeAccountBalanceAtDate,
   computeRecentSavingsRate,
   computeEffectiveSuperNet,
+  computeAccruedInterest,
+  lastRateRevision,
+  findStaleRegulatedRates,
+  computeLepEligibility,
+  findDueRecurring,
 } from './finance';
 import { DEFAULT_FISCAL_CONFIG, DEFAULT_WORK_BENEFITS } from '../constants';
 import { FiscalConfig, TaxBracket, WorkBenefits, AccountType } from '../types';
@@ -562,5 +567,180 @@ describe('computeEffectiveSuperNet', () => {
   });
   it('retombe sur le théorique si la fiche est incomplète', () => {
     expect(computeEffectiveSuperNet(2500, { extracted: { netAmount: 2600 } })).toBe(2500);
+  });
+});
+
+describe('computeAccruedInterest (règle des quinzaines)', () => {
+  const AFTER = new Date('2026-06-01T00:00:00'); // 2025 est une année révolue vue d'ici
+  const livret = (over: any = {}) => ({
+    type: AccountType.LIVRET_A, totalAmount: 1000, interestRate: 3, movements: [], ...over,
+  });
+
+  it('année pleine sans mouvement : 24 quinzaines au taux annuel', () => {
+    // 1000 € à 3% sur les 24 quinzaines = exactement 30 €
+    expect(computeAccruedInterest(livret(), 2025, AFTER)).toBeCloseTo(30, 6);
+  });
+
+  it("un versement rapporte à partir de la borne STRICTEMENT suivante", () => {
+    // Compte vide, 1000 € versés le 3 mars -> comptent à partir du 16 mars.
+    // Bornes de 16/03 (index 5) à 16/12 (index 23) = 19 quinzaines.
+    const acc = livret({ movements: [{ id: '1', date: '2025-03-03', amount: 1000, label: 'x', type: 'IN' }] });
+    expect(computeAccruedInterest(acc, 2025, AFTER)).toBeCloseTo(1000 * 0.03 / 24 * 19, 6);
+  });
+
+  it('un versement fait LE 16 ne compte qu au 1er du mois suivant', () => {
+    // 16/03 est une borne : le versement de ce jour rapporte à partir du 01/04 (index 6)
+    // -> 18 quinzaines. C'est toute la différence avec un versement du 15.
+    const le16 = livret({ movements: [{ id: '1', date: '2025-03-16', amount: 1000, label: 'x', type: 'IN' }] });
+    const le15 = livret({ movements: [{ id: '1', date: '2025-03-15', amount: 1000, label: 'x', type: 'IN' }] });
+    expect(computeAccruedInterest(le16, 2025, AFTER)).toBeCloseTo(1000 * 0.03 / 24 * 18, 6);
+    expect(computeAccruedInterest(le15, 2025, AFTER)).toBeCloseTo(1000 * 0.03 / 24 * 19, 6);
+  });
+
+  it('un retrait fait perdre les intérêts depuis la borne PRÉCÉDENTE', () => {
+    // 1000 € présents depuis le début, retirés le 3 mars -> ne rapportent plus depuis le
+    // 1er mars (index 4) : seules les quinzaines 0 à 3 comptent.
+    const acc = livret({ totalAmount: 0, movements: [{ id: '1', date: '2025-03-03', amount: 1000, label: 'x', type: 'OUT' }] });
+    expect(computeAccruedInterest(acc, 2025, AFTER)).toBeCloseTo(1000 * 0.03 / 24 * 4, 6);
+  });
+
+  it('un retrait fait LE 16 conserve la première quinzaine du mois', () => {
+    // Retrait le 16/03 -> perte depuis le 16/03 (index 5), donc 5 quinzaines acquises.
+    const acc = livret({ totalAmount: 0, movements: [{ id: '1', date: '2025-03-16', amount: 1000, label: 'x', type: 'OUT' }] });
+    expect(computeAccruedInterest(acc, 2025, AFTER)).toBeCloseTo(1000 * 0.03 / 24 * 5, 6);
+  });
+
+  it("corrige la surévaluation qui motivait ce calcul", () => {
+    // LE cas de régression : 5 000 € déposés le 20 novembre. L'ancien calcul
+    // (taux × solde du jour) annonçait 150 €. Réel : comptent du 1er décembre
+    // (bornes 22 et 23) = 2 quinzaines = 12,50 €.
+    const acc = livret({ totalAmount: 5000, movements: [{ id: '1', date: '2025-11-20', amount: 5000, label: 'x', type: 'IN' }] });
+    expect(computeAccruedInterest(acc, 2025, AFTER)).toBeCloseTo(12.5, 6);
+    expect(5000 * 0.03).toBeCloseTo(150, 6); // ce que disait l'ancien calcul
+  });
+
+  it("ne compte que les quinzaines écoulées sur l'année en cours", () => {
+    // Au 1er mars 2025, seules les bornes du 01/01, 16/01, 01/02, 16/02 sont passées
+    // (celle du 01/03 n'est pas < asOf) = 4 quinzaines.
+    expect(computeAccruedInterest(livret(), 2025, new Date('2025-03-01T00:00:00'))).toBeCloseTo(1000 * 0.03 / 24 * 4, 6);
+  });
+
+  it('suit les changements de taux au fil des quinzaines', () => {
+    // rateHistory : 4% courait jusqu'au 01/07/2025, puis le taux courant 3% prend le relais.
+    // 12 quinzaines à 4% (01/01 -> 16/06 inclus) puis 12 à 3%.
+    const acc = livret({ interestRate: 3, rateHistory: [{ date: '2025-07-01', rate: 4 }] });
+    const expected = 1000 * 0.04 / 24 * 12 + 1000 * 0.03 / 24 * 12;
+    expect(computeAccruedInterest(acc, 2025, AFTER)).toBeCloseTo(expected, 6);
+  });
+
+  it('renvoie 0 sans taux, et pour une année future', () => {
+    expect(computeAccruedInterest(livret({ interestRate: 0 }), 2025, AFTER)).toBe(0);
+    expect(computeAccruedInterest(livret(), 2030, AFTER)).toBe(0);
+  });
+
+  it('ne descend jamais sous zéro même si le solde reconstruit est négatif', () => {
+    const acc = livret({ totalAmount: 0, movements: [{ id: '1', date: '2025-02-10', amount: 5000, label: 'x', type: 'OUT' }] });
+    expect(computeAccruedInterest(acc, 2025, AFTER)).toBeGreaterThanOrEqual(0);
+  });
+
+  it('applique un prorata journalier hors livret réglementé (pas de quinzaines)', () => {
+    // Assurance Vie : 1000 € à 3%, versés au 1er juillet 2025 sur un contrat vide.
+    // Du 01/07 au 31/12 = 184 jours -> 1000 * 3% * 184/365.
+    const av = {
+      type: AccountType.ASSURANCE_VIE, totalAmount: 1000, interestRate: 3,
+      movements: [{ id: '1', date: '2025-07-01', amount: 1000, label: 'x', type: 'IN' as const }],
+    };
+    expect(computeAccruedInterest(av, 2025, AFTER)).toBeCloseTo(1000 * 0.03 * 184 / 365, 6);
+  });
+});
+
+describe('lastRateRevision / findStaleRegulatedRates', () => {
+  it('identifie la dernière révision (1er février ou 1er août)', () => {
+    expect(lastRateRevision(new Date(2026, 0, 15)).key).toBe('2025-08');
+    expect(lastRateRevision(new Date(2026, 1, 1)).key).toBe('2026-02');
+    expect(lastRateRevision(new Date(2026, 6, 31)).key).toBe('2026-02');
+    expect(lastRateRevision(new Date(2026, 7, 1)).key).toBe('2026-08');
+  });
+
+  const livretA = { id: 'a', name: 'Livret A', type: AccountType.LIVRET_A, interestRate: 2.4 };
+
+  it("signale un livret non retouché depuis la révision, dans la fenêtre de rappel", () => {
+    const r = findStaleRegulatedRates([livretA], new Date(2026, 1, 10));
+    expect(r?.accounts.map(a => a.id)).toEqual(['a']);
+    expect(r?.revision.key).toBe('2026-02');
+  });
+
+  it("ne signale plus un livret dont le taux a été modifié après la révision", () => {
+    const updated = { ...livretA, rateHistory: [{ date: '2026-02-03', rate: 3 }] };
+    expect(findStaleRegulatedRates([updated], new Date(2026, 1, 10))).toBeNull();
+  });
+
+  it('se tait passé la fenêtre de rappel (taux vraisemblablement inchangé)', () => {
+    expect(findStaleRegulatedRates([livretA], new Date(2026, 4, 1))).toBeNull();
+  });
+
+  it('ignore les comptes non réglementés', () => {
+    const av = { id: 'b', name: 'AV', type: AccountType.ASSURANCE_VIE, interestRate: 2 };
+    expect(findStaleRegulatedRates([av], new Date(2026, 1, 10))).toBeNull();
+  });
+});
+
+describe('computeLepEligibility', () => {
+  const cfg = { ...DEFAULT_FISCAL_CONFIG, lepIncomeCeiling: 22000, lepHouseholdParts: 1 };
+  const withLep = [{ type: AccountType.LEP }];
+
+  it("renvoie null sans LEP ou sans plafond configuré", () => {
+    expect(computeLepEligibility([{ type: AccountType.LIVRET_A }], 30000, cfg)).toBeNull();
+    expect(computeLepEligibility(withLep, 30000, { ...cfg, lepIncomeCeiling: undefined })).toBeNull();
+  });
+
+  it('classe ok / proche / dépassé', () => {
+    expect(computeLepEligibility(withLep, 15000, cfg)?.status).toBe('ok');
+    expect(computeLepEligibility(withLep, 21000, cfg)?.status).toBe('approaching'); // < 10 % de marge
+    expect(computeLepEligibility(withLep, 23000, cfg)?.status).toBe('exceeded');
+  });
+
+  it('ajuste le plafond au nombre de parts', () => {
+    const r = computeLepEligibility(withLep, 30000, { ...cfg, lepHouseholdParts: 2 });
+    expect(r?.ceiling).toBe(44000);
+    expect(r?.status).toBe('ok');
+  });
+});
+
+describe('findDueRecurring', () => {
+  const rec = { id: 'r1', accountId: 'a1', amount: 200, type: 'IN' as const, label: 'Épargne auto', dayOfMonth: 5, active: true };
+  const acc = (movements: any[] = []) => [{ id: 'a1', movements }];
+
+  it("n'est pas due avant son jour", () => {
+    expect(findDueRecurring([rec], acc(), new Date(2026, 8, 4))).toEqual([]);
+  });
+
+  it('est due à partir de son jour, avec la date d échéance du mois', () => {
+    const r = findDueRecurring([rec], acc(), new Date(2026, 8, 10));
+    expect(r).toHaveLength(1);
+    expect(r[0].dueDate).toBe('2026-09-05');
+  });
+
+  it('ne se repropose pas une fois enregistrée ce mois-ci, même avec un autre libellé', () => {
+    const done = acc([{ id: 'm', date: '2026-09-06', amount: 200, type: 'IN', label: 'Dépôt rapide' }]);
+    expect(findDueRecurring([rec], done, new Date(2026, 8, 10))).toEqual([]);
+  });
+
+  it('un mouvement du mois précédent ne compte pas', () => {
+    const lastMonth = acc([{ id: 'm', date: '2026-08-05', amount: 200, type: 'IN', label: 'x' }]);
+    expect(findDueRecurring([rec], lastMonth, new Date(2026, 8, 10))).toHaveLength(1);
+  });
+
+  it('ramène le jour 31 au dernier jour des mois courts', () => {
+    const r31 = { ...rec, dayOfMonth: 31 };
+    expect(findDueRecurring([r31], acc(), new Date(2026, 1, 27))).toEqual([]);
+    expect(findDueRecurring([r31], acc(), new Date(2026, 1, 28))[0].dueDate).toBe('2026-02-28');
+  });
+
+  it("ignore les récurrences inactives, écartées, ou dont le compte n'existe plus", () => {
+    const d = new Date(2026, 8, 10);
+    expect(findDueRecurring([{ ...rec, active: false }], acc(), d)).toEqual([]);
+    expect(findDueRecurring([rec], acc(), d, new Set(['r1']))).toEqual([]);
+    expect(findDueRecurring([{ ...rec, accountId: 'gone' }], acc(), d)).toEqual([]);
   });
 });

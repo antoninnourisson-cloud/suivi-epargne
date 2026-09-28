@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { SavingsAccount, AccountType, FiscalConfig } from '../types';
-import { computeWeightedAnnualRate, computeCapitalGainsTax, computeParentalInterest, CapitalTaxRegime } from '../lib/finance';
+import { computeWeightedAnnualRate, computeCapitalGainsTax, computeParentalInterest, computeAccruedInterest, CapitalTaxRegime } from '../lib/finance';
 import { Coins, TrendingUp, AlertCircle, PiggyBank, FileDown, Landmark, Info } from 'lucide-react';
 
 const REGIME_LABEL: Record<CapitalTaxRegime, string> = {
@@ -31,8 +31,13 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig }) => {
           weightedRate,
           hasRateHistory: !!(a.rateHistory && a.rateHistory.length > 0),
           base: a.totalAmount,
+          // `annual` = rythme annualisé sur le solde actuel (projection).
           annual: a.totalAmount * (weightedRate / 100),
           annualOwned: a.ownedAmount * (weightedRate / 100),
+          // `accrued` = ce qui est VRAIMENT acquis depuis le 1er janvier, en tenant compte
+          // de la date d'arrivée de chaque euro. Les deux cohabitent volontairement : le
+          // premier répond à « combien ça rapporte », le second à « combien j'ai gagné ».
+          accrued: computeAccruedInterest(a, currentYear),
         };
       })
       .sort((x, y) => y.annual - x.annual),
@@ -88,7 +93,11 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig }) => {
       .map(a => {
         const base = a.totalAmount;
         const rate = a.interestRate || 0;
-        const estimatedAnnualInterest = base * (rate / 100);
+        // Intérêts RÉELLEMENT acquis sur l'année (règle des quinzaines pour les livrets,
+        // prorata journalier sinon) et non `taux × solde du jour` : cette colonne annonce
+        // une année précise et sert à la déclaration — un dépôt de novembre s'y voyait
+        // créditer douze mois d'intérêts.
+        const estimatedAnnualInterest = computeAccruedInterest(a, currentYear);
         const tax = computeCapitalGainsTax(a, estimatedAnnualInterest, fiscalConfig);
         return {
           id: a.id, name: a.name, type: a.type, institution: a.institution,
@@ -97,7 +106,7 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig }) => {
           tax,
         };
       }),
-    [accounts, fiscalConfig]);
+    [accounts, fiscalConfig, currentYear]);
 
   const totalGrossTaxable = taxableRows.reduce((s, r) => s + r.estimatedAnnualInterest, 0);
   // Total net = somme des seules lignes réellement calculées : additionner le BRUT des
@@ -107,7 +116,7 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig }) => {
   const hasUnmodeled = taxableRows.some(r => r.tax.regime === 'NON_MODELISE');
 
   const exportFiscalCsv = () => {
-    let csv = 'Compte,Type,Établissement,Solde,Taux (%),Intérêts bruts estimés (an),Prélèvements sociaux,Impôt sur le revenu,Net estimé,Régime,Date ouverture\n';
+    let csv = `Compte,Type,Établissement,Solde,Taux (%),Intérêts bruts acquis ${currentYear},Prélèvements sociaux,Impôt sur le revenu,Net estimé,Régime,Date ouverture\n`;
     taxableRows.forEach(r => {
       csv += `"${r.name}","${r.type}","${r.institution}",${r.base},${r.rate},${r.estimatedAnnualInterest.toFixed(2)},${r.tax.socialCharges.toFixed(2)},${r.tax.incomeTax.toFixed(2)},${r.tax.netInterest.toFixed(2)},${REGIME_LABEL[r.tax.regime]},${r.openingDate}\n`;
     });
@@ -124,7 +133,7 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig }) => {
     <div className="space-y-6 animate-fade-in pb-20">
       <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
         <h2 className="text-2xl font-black text-slate-800 dark:text-slate-100 flex items-center gap-2 mb-1"><Coins className="w-6 h-6 text-indigo-600" /> Rendement réel</h2>
-        <p className="text-sm text-slate-500 dark:text-slate-400">Intérêts annuels générés par tes comptes rémunérés (taux × solde).</p>
+        <p className="text-sm text-slate-500 dark:text-slate-400">« Acquis » = réellement gagné depuis le 1er janvier (règle des quinzaines pour les livrets). « Rythme » = ce que rapporteraient tes soldes actuels sur douze mois.</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -160,7 +169,8 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig }) => {
                 <th className="px-6 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Compte</th>
                 <th className="px-6 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase text-right">Taux</th>
                 <th className="px-6 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase text-right">Solde</th>
-                <th className="px-6 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase text-right">Intérêts / an</th>
+                <th className="px-6 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase text-right">Acquis {currentYear}</th>
+                <th className="px-6 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase text-right">Rythme / an</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -174,10 +184,11 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig }) => {
                     )}
                   </td>
                   <td className="px-6 py-3 text-right font-mono text-slate-600 dark:text-slate-300">{fmt(r.base)}</td>
-                  <td className="px-6 py-3 text-right font-black text-emerald-600">{fmt(r.annual)}</td>
+                  <td className="px-6 py-3 text-right font-black text-emerald-600">{fmt(r.accrued)}</td>
+                  <td className="px-6 py-3 text-right font-mono text-slate-500 dark:text-slate-400">{fmt(r.annual)}</td>
                 </tr>
               ))}
-              {rows.length === 0 && <tr><td colSpan={4} className="px-6 py-8 text-center text-slate-400 dark:text-slate-500 italic">Aucun compte rémunéré (renseigne un taux d'intérêt sur tes comptes).</td></tr>}
+              {rows.length === 0 && <tr><td colSpan={5} className="px-6 py-8 text-center text-slate-400 dark:text-slate-500 italic">Aucun compte rémunéré (renseigne un taux d'intérêt sur tes comptes).</td></tr>}
             </tbody>
           </table>
         </div>
@@ -195,7 +206,7 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig }) => {
 
           <div className="px-6 pt-4 flex flex-wrap gap-4">
             <div>
-              <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Brut estimé {currentYear}</p>
+              <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Brut acquis {currentYear}</p>
               <p className="text-lg font-black text-slate-500 dark:text-slate-400 line-through decoration-slate-300 dark:decoration-slate-600">{fmt(totalGrossTaxable)}</p>
             </div>
             <div>
@@ -215,7 +226,7 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig }) => {
                 <tr>
                   <th className="px-6 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Compte</th>
                   <th className="px-6 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase text-right">Solde</th>
-                  <th className="px-6 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase text-right">Brut estimé {currentYear}</th>
+                  <th className="px-6 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase text-right">Brut acquis {currentYear}</th>
                   <th className="px-6 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase text-right">Net estimé</th>
                 </tr>
               </thead>

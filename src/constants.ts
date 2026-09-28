@@ -24,6 +24,10 @@ export const DEFAULT_FISCAL_CONFIG: FiscalConfig = {
     assuranceVie: 8,
     pee: 5
   },
+  // Plafond RFR LEP 2025 pour 1 part (métropole). À réviser chaque année : le montant est
+  // publié avec la loi de finances.
+  lepIncomeCeiling: 22419,
+  lepHouseholdParts: 1,
 
   taxBrackets: [
     { limit: 11294, rate: 0 },

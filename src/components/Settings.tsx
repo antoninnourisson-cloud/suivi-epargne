@@ -341,6 +341,19 @@ export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parent
               <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Abattement Forfaitaire Impôt (Ex: 0.10)</label>
               <input type="number" step="0.01" value={localFiscal.standardAllowance} onChange={e => handleFiscalChange('standardAllowance', safeNumber(e.target.value, 0))} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded font-bold" />
             </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Plafond RFR LEP (1 part)</label>
+                <input type="number" value={localFiscal.lepIncomeCeiling ?? ''} onChange={e => handleFiscalChange('lepIncomeCeiling', safeNumber(e.target.value, 0))} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded font-bold" />
+              </div>
+              <div>
+                <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Parts fiscales</label>
+                <input type="number" step="0.5" value={localFiscal.lepHouseholdParts ?? 1} onChange={e => handleFiscalChange('lepHouseholdParts', safeNumber(e.target.value, 1))} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded font-bold" />
+              </div>
+            </div>
+            <p className="text-[10px] text-slate-400 dark:text-slate-500 -mt-2">
+              Sert à t'alerter si ton revenu approche du plafond d'éligibilité au LEP. Le montant est révisé chaque année ; le vrai critère reste le RFR de ton avis d'imposition.
+            </p>
           </div>
         </div>
 
