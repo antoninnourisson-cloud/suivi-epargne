@@ -41,6 +41,8 @@ interface DraftPayslip {
   // Cause technique exacte (statut HTTP, message Google, adresse bloquée par la CSP) :
   // affichée sous le message, pour diagnostiquer sans ouvrir la console.
   errorDetail?: string;
+  // Échec passager (saturation, réseau) : on propose de relancer l'extraction.
+  retryable?: boolean;
   fields: PayslipExtractedData;
 }
 
@@ -124,20 +126,26 @@ export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, 
 
   const handleExtract = async () => {
     if (!draft || !geminiApiKey) return;
-    setDraft({ ...draft, status: 'extracting', error: undefined, errorDetail: undefined });
+    setDraft({ ...draft, status: 'extracting', error: undefined, errorDetail: undefined, retryable: false });
 
     // Étape 1 : téléchargement depuis Drive. Étape 2 : analyse Gemini. Chacune est
     // diagnostiquée séparément, avec la cause technique exacte affichée à l'écran.
     const download = await withCspWatch(() => downloadFileAsBase64(draft.fileId));
     if (download.error !== undefined) {
       console.error('Téléchargement fiche de paie échoué', download.error);
-      setDraft(d => d && ({ ...d, status: 'reviewing', error: 'Le téléchargement du fichier depuis Drive a échoué.', errorDetail: describeError(download.error, download.blocked) }));
+      setDraft(d => d && ({ ...d, status: 'reviewing', error: 'Le téléchargement du fichier depuis Drive a échoué.', errorDetail: describeError(download.error, download.blocked), retryable: true }));
       return;
     }
     const analysis = await withCspWatch(() => extractPayslipData(geminiApiKey, download.result as string, draft.mimeType));
     if (analysis.error !== undefined) {
       console.error('Analyse Gemini échouée', analysis.error);
-      setDraft(d => d && ({ ...d, status: 'reviewing', error: "L'extraction automatique a échoué. Vous pouvez saisir les montants manuellement ci-dessous.", errorDetail: describeError(analysis.error, analysis.blocked) }));
+      const code = analysis.error instanceof GeminiError ? analysis.error.code : undefined;
+      const error = code === 'OVERLOADED'
+        ? "Gemini est très sollicité en ce moment (plusieurs tentatives et modèles essayés automatiquement). Réessaie dans quelques minutes, ou saisis les montants à la main."
+        : code === 'AUTH'
+          ? "Gemini refuse la clé API : vérifie-la dans les Paramètres."
+          : "L'extraction automatique a échoué. Vous pouvez saisir les montants manuellement ci-dessous.";
+      setDraft(d => d && ({ ...d, status: 'reviewing', error, errorDetail: describeError(analysis.error, analysis.blocked), retryable: code !== 'AUTH' }));
       return;
     }
     setDraft(d => d && ({ ...d, status: 'reviewing', fields: analysis.result! }));
@@ -257,6 +265,11 @@ export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, 
                   <span>
                     {draft.error}
                     {draft.errorDetail && <span className="block mt-1 text-[11px] font-mono break-all opacity-80">Détail : {draft.errorDetail}</span>}
+                    {draft.retryable && (
+                      <button type="button" onClick={handleExtract} className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold">
+                        <Sparkles className="w-3.5 h-3.5" /> Réessayer l'extraction
+                      </button>
+                    )}
                   </span>
                 </p>
               )}

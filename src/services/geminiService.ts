@@ -15,6 +15,15 @@ import { PayslipExtractedData } from '../types';
 // modèle cesse à son tour de fonctionner, la même erreur indiquera quoi mettre ici.
 const GEMINI_MODEL = 'gemini-3.6-flash';
 
+// Modèles de repli, essayés dans l'ordre si le principal est saturé ou a disparu. La
+// saturation (« the model is overloaded », HTTP 503) touche un modèle à la fois : un autre
+// Flash répond généralement. Tous acceptent le même schéma de sortie structurée.
+const FALLBACK_MODELS = ['gemini-3.8-flash', 'gemini-3.5-flash'];
+
+// Statuts qui justifient de réessayer : surcharge / quota momentané / erreur passagère.
+// 400 (requête invalide), 401/403 (clé refusée) ne changeront pas en réessayant.
+const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
+
 // Schéma de sortie structurée : Gemini est contraint de répondre avec exactement cette
 // forme (aucun champ n'est `required` — une extraction partielle sur une fiche
 // difficile à lire reste un résultat valide, à compléter/corriger par l'utilisateur).
@@ -45,60 +54,101 @@ information n'est pas présente ou illisible, omets ce champ plutôt que de devi
 valeur.`;
 
 export class GeminiError extends Error {
-  constructor(message: string) { super(message); this.name = 'GeminiError'; }
+  // 'OVERLOADED' : tous les modèles étaient saturés malgré les nouvelles tentatives —
+  // l'UI invite alors à réessayer plus tard plutôt que d'évoquer un problème de clé.
+  constructor(message: string, public code?: 'OVERLOADED' | 'AUTH') { super(message); this.name = 'GeminiError'; }
 }
+
+export interface ExtractOptions {
+  // Délais entre deux tentatives sur un même modèle (injectables pour les tests).
+  retryDelaysMs?: number[];
+  // Délai maximal d'UNE requête.
+  requestTimeoutMs?: number;
+}
+
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
 /**
  * Envoie le document (PDF ou image, encodé en base64 par downloadFileAsBase64) à Gemini
  * et renvoie les champs extraits. Lève une GeminiError explicite en cas d'échec (clé
  * invalide, quota dépassé, réponse inexploitable) : jamais de résultat inventé.
  */
-export const extractPayslipData = async (
-  apiKey: string,
-  base64Data: string,
-  mimeType: string
-): Promise<PayslipExtractedData> => {
-  if (!apiKey) throw new GeminiError('GEMINI_API_KEY_MISSING');
-
+/** Un appel à un modèle donné, avec son propre délai maximal. */
+const callModel = async (model: string, apiKey: string, body: string, timeoutMs: number): Promise<Response> => {
   // Timeout : sans lui, une requête qui pend laissait l'écran "Analyse en cours..." et le
   // bouton morts jusqu'au rechargement de la page.
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 90_000);
-
-  let res: Response;
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    res = await fetch(
+    return await fetch(
       // Clé dans l'en-tête, pas dans l'URL : une query string atterrit dans les logs
       // réseau, l'historique devtools et tout intermédiaire qui capture les URLs.
-      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
         signal: controller.signal,
-        body: JSON.stringify({
-        contents: [{
-          parts: [
-            { text: PROMPT },
-            { inline_data: { mime_type: mimeType, data: base64Data } },
-          ],
-        }],
-        generationConfig: {
-          responseMimeType: 'application/json',
-          responseSchema: RESPONSE_SCHEMA,
-        },
-      }),
+        body,
       }
     );
-  } catch (e: any) {
-    if (e?.name === 'AbortError') throw new GeminiError('DÉLAI_DÉPASSÉ — l\'analyse a pris trop de temps, réessaie.');
-    throw e;
   } finally {
     clearTimeout(timer);
   }
+};
 
-  if (!res.ok) {
-    const body = await res.text().catch(() => '');
-    throw new GeminiError(`Gemini API ${res.status} — ${body.slice(0, 300)}`);
+export const extractPayslipData = async (
+  apiKey: string,
+  base64Data: string,
+  mimeType: string,
+  options: ExtractOptions = {}
+): Promise<PayslipExtractedData> => {
+  if (!apiKey) throw new GeminiError('GEMINI_API_KEY_MISSING', 'AUTH');
+  const retryDelays = options.retryDelaysMs ?? [2_000, 6_000];
+  const timeoutMs = options.requestTimeoutMs ?? 60_000;
+
+  const body = JSON.stringify({
+    contents: [{
+      parts: [
+        { text: PROMPT },
+        { inline_data: { mime_type: mimeType, data: base64Data } },
+      ],
+    }],
+    generationConfig: {
+      responseMimeType: 'application/json',
+      responseSchema: RESPONSE_SCHEMA,
+    },
+  });
+
+  // Saturation fréquente aux heures de pointe : on réessaie le même modèle avec un délai
+  // croissant, puis on bascule sur les modèles de repli. Une erreur non passagère (clé
+  // refusée, requête invalide) interrompt tout de suite — réessayer n'y changerait rien.
+  let res: Response | null = null;
+  let lastFailure = '';
+  outer: for (const model of [GEMINI_MODEL, ...FALLBACK_MODELS]) {
+    for (let attempt = 0; attempt <= retryDelays.length; attempt++) {
+      if (attempt > 0) await sleep(retryDelays[attempt - 1]);
+      let r: Response;
+      try {
+        r = await callModel(model, apiKey, body, timeoutMs);
+      } catch (e: any) {
+        if (e?.name === 'AbortError') { lastFailure = `${model} : délai dépassé`; continue; }
+        throw e; // réseau coupé : inutile d'insister
+      }
+      if (r.ok) { res = r; break outer; }
+      const text = await r.text().catch(() => '');
+      lastFailure = `${model} : HTTP ${r.status} — ${text.slice(0, 200)}`;
+      // Modèle retiré (404) : inutile de le réessayer, on passe directement au suivant.
+      if (r.status === 404) continue outer;
+      if (!RETRYABLE_STATUS.has(r.status)) {
+        throw new GeminiError(`Gemini API ${r.status} — ${text.slice(0, 300)}`, r.status === 401 || r.status === 403 ? 'AUTH' : undefined);
+      }
+    }
+  }
+  if (!res) {
+    throw new GeminiError(
+      `Gemini indisponible après plusieurs tentatives sur ${1 + FALLBACK_MODELS.length} modèles (dernier échec : ${lastFailure})`,
+      'OVERLOADED'
+    );
   }
 
   const data = await res.json();

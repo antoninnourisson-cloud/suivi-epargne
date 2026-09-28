@@ -43,6 +43,36 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
     setUpdates(prev => ({ ...prev, [id]: { ...prev[id], date: val } }));
   };
 
+  // --- AJUSTEMENT RAPIDE : « +/- x € sur ma part / celle des parents » ---
+  // Évite de recalculer soi-même le nouveau solde : l'écart est appliqué au montant en
+  // cours de saisie (et donc cumulable), puis enregistré avec le reste via « Tout
+  // Enregistrer ». Les pastilles d'écart existantes montrent le résultat avant validation.
+  type Adjust = { sign: 1 | -1; amount: string; target: 'owned' | 'parental' };
+  const [adjusts, setAdjusts] = useState<Record<string, Adjust>>({});
+  const [adjustErrors, setAdjustErrors] = useState<Record<string, string | null>>({});
+  const DEFAULT_ADJUST: Adjust = { sign: 1, amount: '', target: 'owned' };
+  const adjustFor = (id: string): Adjust => adjusts[id] ?? DEFAULT_ADJUST;
+  const patchAdjust = (id: string, patch: Partial<Adjust>) => {
+    // Fusion sur l'état le plus RÉCENT (`prev`), pas sur celui du rendu courant : deux
+    // clics rapprochés (« − » puis « Parents ») s'écrasaient sinon l'un l'autre.
+    setAdjusts(prev => ({ ...prev, [id]: { ...(prev[id] ?? DEFAULT_ADJUST), ...patch } }));
+    setAdjustErrors(prev => ({ ...prev, [id]: null }));
+  };
+
+  const applyAdjust = (id: string) => {
+    const a = adjustFor(id);
+    const amount = safeNumber(a.amount, 0);
+    if (amount <= 0) { setAdjustErrors(prev => ({ ...prev, [id]: 'Saisis un montant supérieur à 0.' })); return; }
+    const current = safeNumber(updates[id][a.target], 0);
+    const next = Math.round((current + a.sign * amount) * 100) / 100;
+    if (next < 0) {
+      setAdjustErrors(prev => ({ ...prev, [id]: `Impossible : ${a.target === 'owned' ? 'ta part' : 'la part des parents'} deviendrait négative (${next.toLocaleString('fr-FR')} €).` }));
+      return;
+    }
+    setUpdates(prev => ({ ...prev, [id]: { ...prev[id], [a.target]: String(next) } }));
+    patchAdjust(id, { amount: '' });
+  };
+
   const handleSaveAll = () => {
     const payloads = accounts.map(account => {
       const u = updates[account.id];
@@ -94,9 +124,9 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {accounts.map(account => {
           const u = updates[account.id];
-          const newTotal = (parseFloat(u.owned) || 0) + (parseFloat(u.parental) || 0);
-          const diffOwned = (parseFloat(u.owned) || 0) - account.ownedAmount;
-          const diffParental = (parseFloat(u.parental) || 0) - account.parentalCapital;
+          const newTotal = safeNumber(u.owned, 0) + safeNumber(u.parental, 0);
+          const diffOwned = Math.round((safeNumber(u.owned, 0) - account.ownedAmount) * 100) / 100;
+          const diffParental = Math.round((safeNumber(u.parental, 0) - account.parentalCapital) * 100) / 100;
           const isChanged = diffOwned !== 0 || diffParental !== 0 || u.date !== today;
 
           return (
@@ -150,6 +180,43 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
                     </div>
                   )}
                 </div>
+
+                {/* Ajustement rapide */}
+                {(() => {
+                  const a = adjustFor(account.id);
+                  const seg = (active: boolean, activeClass: string) =>
+                    `px-3 py-2 text-xs font-black transition-colors ${active ? activeClass : 'bg-white dark:bg-slate-800 text-slate-400 dark:text-slate-500 hover:text-slate-600'}`;
+                  return (
+                    <div className="md:col-span-2 p-3 rounded-xl border border-dashed border-slate-300 dark:border-slate-600">
+                      <label className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase block mb-2">Ajuster d'un montant</label>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <div className="flex rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700" role="group" aria-label="Sens">
+                          <button type="button" onClick={() => patchAdjust(account.id, { sign: 1 })} aria-pressed={a.sign === 1} className={seg(a.sign === 1, 'bg-emerald-600 text-white')}>+</button>
+                          <button type="button" onClick={() => patchAdjust(account.id, { sign: -1 })} aria-pressed={a.sign === -1} className={seg(a.sign === -1, 'bg-rose-600 text-white')}>−</button>
+                        </div>
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          value={a.amount}
+                          onChange={e => patchAdjust(account.id, { amount: e.target.value })}
+                          onKeyDown={e => { if (e.key === 'Enter') applyAdjust(account.id); }}
+                          placeholder="0,00"
+                          aria-label="Montant de l'ajustement"
+                          className="w-24 p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold text-slate-800 dark:text-slate-100 text-sm"
+                        />
+                        <span className="text-xs font-bold text-slate-400 dark:text-slate-500">€ sur</span>
+                        <div className="flex rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700" role="group" aria-label="Part concernée">
+                          <button type="button" onClick={() => patchAdjust(account.id, { target: 'owned' })} aria-pressed={a.target === 'owned'} className={seg(a.target === 'owned', 'bg-indigo-600 text-white')}>Ma part</button>
+                          <button type="button" onClick={() => patchAdjust(account.id, { target: 'parental' })} aria-pressed={a.target === 'parental'} className={seg(a.target === 'parental', 'bg-amber-500 text-white')}>Parents</button>
+                        </div>
+                        <button type="button" onClick={() => applyAdjust(account.id)} className="px-3 py-2 rounded-lg bg-slate-800 dark:bg-slate-100 text-white dark:text-slate-900 text-xs font-black hover:opacity-90">Appliquer</button>
+                      </div>
+                      {adjustErrors[account.id] && (
+                        <p className="mt-2 text-[11px] font-bold text-rose-600 dark:text-rose-400">{adjustErrors[account.id]}</p>
+                      )}
+                    </div>
+                  );
+                })()}
 
                 {/* Date Input */}
                 <div className="md:col-span-2 bg-slate-50 dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-700 flex items-center gap-4">
