@@ -1,123 +1,144 @@
-> Un tableau de bord financier personnel, sécurisé et sans serveur, taillé sur mesure pour la fiscalité française.
+# Suivi Épargne
 
-[![React](https://img.shields.io/badge/React-18-blue?logo=react)](https://reactjs.org/)
+> Tableau de bord d'épargne personnel, calibré pour la fiscalité française. Vos données restent sur **votre** Google Drive.
+
+[![React](https://img.shields.io/badge/React-18-blue?logo=react)](https://react.dev/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?logo=typescript)](https://www.typescriptlang.org/)
 [![Vite](https://img.shields.io/badge/Vite-5-purple?logo=vite)](https://vitejs.dev/)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind-3-teal?logo=tailwindcss)](https://tailwindcss.com/)
-[![Google Drive API](https://img.shields.io/badge/Data-Google%20Drive-green?logo=google-drive)](https://developers.google.com/drive)
+[![Cloudflare Workers](https://img.shields.io/badge/Serveur-Cloudflare%20Workers-orange?logo=cloudflare)](https://workers.cloudflare.com/)
 
-## 📋 Présentation
+**App en ligne :** <https://antoninnourisson-cloud.github.io/suivi-epargne/> · [Règles de confidentialité](https://antoninnourisson-cloud.github.io/suivi-epargne/confidentialite.html)
 
-**Suivi Épargne** est une Progressive Web App (PWA) conçue pour reprendre le contrôle de vos finances personnelles. Contrairement aux agrégateurs bancaires classiques qui stockent vos données sur leurs serveurs, cette application fonctionne en **architecture "zéro-backend"**.
+## Présentation
 
-Vos données financières sont stockées **uniquement sur votre propre Google Drive personnel**, dans un fichier JSON auquel vous seul avez accès (portée OAuth `drive.file` : l'app ne voit que le fichier qu'elle a créé). Le contenu n'est pas chiffré côté application ; il repose sur la sécurité de votre compte Google.
+Suivi Épargne est une application web installable (PWA) pour suivre ses comptes d'épargne, piloter son budget et anticiper sa fiscalité. Elle n'a pas de base de données : toutes les données tiennent dans un seul fichier `suivi_epargne.json`, sur le Google Drive de l'utilisateur. L'app n'a accès qu'aux fichiers qu'elle a créés (portée OAuth `drive.file`).
 
-L'application est spécifiquement calibrée pour le système français, intégrant le calcul automatique du net après impôt, les plafonds des livrets réglementés (Livret A, LEP, LDDS) et la gestion des avantages salariaux.
+Un **petit serveur optionnel** (Cloudflare Worker, dossier [`worker/`](worker/)) ajoute deux choses impossibles depuis le seul navigateur : une **session Google persistante** et des **notifications push**. Sans lui, l'app fonctionne entièrement côté navigateur.
 
-## ✨ Fonctionnalités Clés
+## Fonctionnalités
 
-### 🔐 Sécurité & Confidentialité
-- **Zéro Serveur Intermédiaire :** L'application tourne entièrement dans votre navigateur.
-- **Stockage Privé :** Vos données restent dans votre cloud personnel (Google Drive).
-- **Authentification OAuth2 :** Connexion sécurisée via votre compte Google.
+### Tableau de bord
+- Épargne nette, répartie entre disponible, contrainte fiscale (AV/PEA récents) et bloqué (PEE, PER…).
+- Évolution empilée par compte, et répartition par établissement.
+- **Projection** à 6 et 12 mois d'après le rythme réel des 90 derniers jours, avec alerte si ce rythme ralentit ou accélère fortement.
+- Alertes :
+  - plafonds des livrets ;
+  - **révision des taux réglementés** (1er février / 1er août) ;
+  - **éligibilité au LEP** ;
+  - soldes non actualisés ;
+  - comptes vides inactifs ;
+  - intérêts parentaux de fin d'année.
+- **Échéances récurrentes** proposées à l'enregistrement, jamais écrites sans confirmation.
 
-### 🇫🇷 Pilotage Budgétaire "Made in France"
-- **Calculateur "Super Net" :** Conversion automatique du Brut Annuel en "Net dans la poche" après impôt à la source (barème progressif intégré), charges sociales et avantages.
-- **Gestion des Avantages Salariaux :** Intégration fine des tickets restaurant, mutuelle d'entreprise et remboursement Navigo pour un calcul de reste à vivre précis.
-- **Stratégie de Remplissage :** Algorithme intelligent suggérant l'ordre optimal de remplissage des livrets (LEP > Livret A > LDDS) selon les taux et plafonds en vigueur.
+### Comptes et mouvements
+- Distinction entre **part propre** et **capital des parents** sur chaque compte. Le capital parental est intouchable, ses intérêts reviennent à l'utilisateur.
+- Étiquettes, historique des mouvements, annulation d'une suppression, virements internes liés.
+- **Ajout rapide** : bouton flottant et raccourci sur l'icône de l'app installée.
+- **Actualiser solde** : saisie du nouveau solde, ou ajustement « + / − x € sur ma part / celle des parents ».
+- **Mouvements récurrents** mensuels (onglet Virements → Récurrents).
 
-### 📈 Suivi & Analyse
-- **Tableau de Bord Unifié :** Vue globale du patrimoine, répartition par type d'actifs et historique de l'évolution.
-- **Gestion des Comptes :** Suivi des soldes avec distinction de la part personnelle et du capital parental.
-- **Simulateur d'Intérêts :** Projection des gains futurs sur 1 à 20 ans.
-- **Gestionnaire de Virements :** Interface simplifiée pour enregistrer dépôts et virements inter-comptes.
+### Pilotage budgétaire
+- Calcul du **« super net »** :
+  - barème progressif ;
+  - charges salariales ;
+  - abattement de 10 % plafonné ;
+  - Navigo, mutuelle, titres-restaurant.
+- **Mode exact** : les chiffres réels d'une fiche de paie remplacent la formule.
+- Charges fixes, capacité d'épargne, stratégie de placement selon les taux et plafonds, remplissage des livrets, durée de survie.
+- **Horloge fiscale** : maturité des PEA, PEE et Assurance Vie.
 
-### 🤖 Assistant & Notifications
-- **Alertes Parents :** Envoi automatique d'un email récapitulatif détaillé (via votre Gmail) à un tiers lors de mouvements sur les comptes réglementés (Livret A, LEP).
+### Rendement et fiscalité
+- **Intérêts réellement acquis** selon la règle des quinzaines des livrets réglementés, à côté du rythme annualisé.
+- Taux pondérés dans le temps, et part des intérêts offerte par les parents.
+- Manque à gagner du cash dormant.
+- **Export fiscal** au net estimé : PFU, exonération d'IR du PEA/PEE après maturité, taux réduit de l'AV après 8 ans.
+- Compte à rebours avant la maturité fiscale de chaque compte.
 
-## 🛠️ Architecture Technique
+### Autres écrans
+- **Objectifs** : capacité théorique confrontée au rythme d'épargne réel.
+- **Historique** mensuel du patrimoine et des charges.
+- **Simulateur de retrait** : impact sur la durée de survie et sur un objectif.
+- **Fiches de paie** :
+  - import depuis Drive (Google Picker) ;
+  - extraction par Gemini, avec nouvelles tentatives et modèles de repli en cas de saturation ;
+  - relecture obligatoire, puis graphique d'évolution du net.
 
-Le projet est une **SPA (Single Page Application)** construite avec :
-- **Framework :** React 18 + TypeScript pour la robustesse.
-- **Build Tool :** Vite pour la rapidité de développement.
-- **Styling :** Tailwind CSS pour un design moderne et réactif.
-- **État & Logique :** Hooks personnalisés (`usePortfolioData`) gérant la synchronisation, la persistance et la logique métier complexe.
+### Sécurité et notifications
+- **Verrou de l'appareil** par biométrie (WebAuthn) ou code PIN (PBKDF2). Il se réactive dès que l'app passe en arrière-plan.
+- **Notifications push**, activables appareil par appareil. Vérification quotidienne des rappels ; chaque rappel n'est envoyé qu'une fois.
+- **E-mail récapitulatif aux parents** (via Gmail) lors des mouvements sur Livret A / LEP, envoyé seulement après une sauvegarde confirmée.
+- Export et import JSON complets, export CSV.
 
-**Flux de données :**
-1. L'utilisateur se connecte via Google OAuth2 (popup client-side).
-2. L'app obtient un token d'accès temporaire.
-3. Elle cherche un fichier `suivi_epargne.json` sur le Drive de l'utilisateur via l'API Google Drive.
-4. Si inexistant, elle le crée avec des données par défaut. Si existant, elle le charge en mémoire.
-5. Les modifications locales sont sauvegardées automatiquement dans ce fichier (avec "debounce").
-6. Pour les notifications, l'app utilise l'API Gmail avec le token de l'utilisateur pour envoyer des mails en son nom.
+## Architecture
 
-## 🚀 Installation & Développement Local
+```
+Navigateur (React, PWA sur GitHub Pages)
+  ├── Google Drive  ← lecture/écriture directes du fichier de données
+  ├── Gmail         ← e-mail aux parents
+  ├── Gemini        ← extraction des fiches de paie (clé de l'utilisateur)
+  └── Worker Cloudflare (optionnel)
+        ├── session : refresh token chiffré → jetons d'accès d'une heure
+        └── tâche quotidienne : lit le fichier Drive → notifications push
+```
 
-### Prérequis
-- Node.js (v18+)
-- Un compte Google Cloud Platform (pour les clés API)
+Les données financières ne transitent pas par le serveur, sauf la lecture quotidienne pour les notifications.
 
-### 1. Cloner le projet
+**Robustesse de la synchronisation** (`src/hooks/usePortfolioData.ts`) :
+- **Contrôle de révision** Drive : aucune écriture à l'aveugle par-dessus un autre appareil.
+- **Écritures sérialisées.**
+- **Mise en quarantaine** locale des modifications non synchronisées.
+- **Coordination entre onglets**, et mode hors-ligne.
+- **Délais maximaux** sur tous les appels réseau.
+- **Rechargement automatique** quand une nouvelle version de l'app est déployée, pour qu'un vieil onglet n'écrase pas des champs récents.
+
+### Organisation du code
+| Dossier | Contenu |
+|---|---|
+| `src/components/` | Écrans et composants d'interface |
+| `src/hooks/` | État applicatif et synchronisation Drive |
+| `src/lib/` | Calculs purs et testés : fiscalité, intérêts, dates, saisie des nombres |
+| `src/services/` | Google (Drive, Gmail, Picker), Gemini, serveur, notifications, verrou |
+| `public/` | Icônes, page de confidentialité, extension du service worker (push) |
+| `worker/` | Serveur Cloudflare — voir [worker/README.md](worker/README.md) |
+
+## Développement
+
+Prérequis : Node.js 20+.
+
 ```bash
-git clone [https://github.com/votre-utilisateur/suivi-epargne.git](https://github.com/votre-utilisateur/suivi-epargne.git)
-cd suivi-epargne
 npm install
+npm run dev        # http://localhost:5173
+npm test           # tests unitaires (app + serveur)
+npm run typecheck  # vérification des types (app + serveur)
+npm run build
+```
 
-2. Configuration Google Cloud (Critique)
+En local, l'app tourne **sans serveur** par défaut. Pour la tester contre le Worker local, lance `npm run dev` dans `worker/` (sur le port 8787), et crée à la racine un fichier `.env.development.local` contenant :
 
-Pour que l'application fonctionne, vous devez créer un projet Google Cloud et obtenir un CLIENT_ID.
+```
+VITE_BACKEND_URL=http://localhost:8787
+```
 
-    Rendez-vous sur la Google Cloud Console.
+**Configuration Google Cloud** (client OAuth « Application Web », identifiant dans `src/services/googleDriveService.ts`) :
+- **Origines JavaScript autorisées** : `https://antoninnourisson-cloud.github.io` et `http://localhost:5173`.
+- **URI de redirection autorisé** : `https://<worker>.workers.dev/auth/callback` (mode serveur).
+- **API activées** : Google Drive, Gmail, Google Picker.
+- **Écran de consentement « En production »** : en mode test, les sessions expirent après 7 jours.
 
-    Créez un nouveau projet.
+## Déploiement
 
-    Dans "APIs & Services" > "Library", activez les APIs suivantes :
+- **App** : chaque push sur `main` déclenche GitHub Actions (tests, vérification des types, build, publication sur GitHub Pages). L'adresse du serveur est définie dans `.env.production`.
+- **Serveur** : `npm run deploy` dans `worker/`. L'installation initiale, les secrets et la révocation sont décrits dans [worker/README.md](worker/README.md).
 
-        Google Drive API
+## Sur mobile
 
-        Gmail API (pour les notifications)
+Installe l'app sur l'écran d'accueil :
+- **iPhone** : dans Safari, Partager → *Sur l'écran d'accueil*.
+- **Android** : dans Chrome, menu → *Installer l'application*.
 
-    Dans "APIs & Services" > "Credentials" :
+Sur iPhone, les notifications ne fonctionnent que dans l'app installée.
 
-        Créez un "OAuth client ID".
+---
 
-        Type d'application : "Web application".
-
-        Ajoutez http://localhost:5173 (le port par défaut de Vite) dans "Authorized JavaScript origins".
-
-    Copiez votre Client ID.
-
-    Ouvrez le fichier src/services/googleDriveService.ts et remplacez la valeur de CLIENT_ID par le vôtre.
-
-3. Lancer le serveur de développement
-Bash
-
-npm run dev
-
-L'application sera accessible sur http://localhost:5173.
-
-## 🌐 Déploiement sur GitHub Pages
-
-Le projet inclut un workflow GitHub Actions (`.github/workflows/deploy.yml`) qui build et déploie automatiquement à chaque push sur `main`.
-
-### 1. Activer GitHub Pages
-Dans les paramètres du repo → **Settings → Pages → Source**, choisissez **GitHub Actions** (pas "Deploy from a branch").
-
-### 2. Autoriser l'origine dans Google Cloud Console (étape obligatoire)
-C'est la seule configuration réellement nécessaire pour que l'authentification fonctionne une fois déployé. Le `CLIENT_ID` présent dans le code est un identifiant public — ce n'est pas un secret et il n'y a rien à cacher — mais Google refuse toute requête OAuth venant d'une origine non déclarée. Sans cette étape, la connexion Google échouera silencieusement sur le site déployé.
-
-Dans Google Cloud Console → **APIs & Services → Credentials** → votre OAuth Client ID → **Authorized JavaScript origins**, ajoutez l'URL de votre déploiement :
-- Repo utilisateur/organisation (`username.github.io`) : `https://username.github.io`
-- Repo de projet (`username.github.io/nom-du-repo`) : `https://username.github.io` (l'origine à autoriser est le domaine seul, sans le sous-chemin)
-
-### 3. Pousser sur `main`
-Le workflow build l'app avec des chemins relatifs (`base: './'` dans `vite.config.ts`), donc elle fonctionne aussi bien à la racine du domaine que dans un sous-dossier, sans configuration supplémentaire à connaître à l'avance.
-
-## 📱 Utilisation sur Mobile (PWA)
-
-L'application est une PWA. Vous pouvez l'ajouter à votre écran d'accueil sur iOS (via Safari > Partager > Sur l'écran d'accueil) ou Android (via Chrome) pour une expérience proche d'une application native.
-
-Note : La persistance de la session Google sur mobile peut être limitée par les navigateurs. Une migration future vers un wrapper natif (Capacitor) est envisagée.
-📄 Licence
-
-Distribué sous la licence MIT. Voir LICENSE pour plus d'informations.
+Projet personnel, non commercial.

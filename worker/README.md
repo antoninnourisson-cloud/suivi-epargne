@@ -59,6 +59,11 @@ saisie masquée :
 - `GOOGLE_CLIENT_SECRET` : le code secret de l'étape 4 ;
 - `ALLOWED_EMAILS` : ton adresse Gmail. Le serveur refuse tout autre compte.
 
+**Sans terminal pour les secrets personnels** : `npm run setup-secrets -- --generated-only` ne pose
+que les clés générées, sans rien demander. Les deux autres se renseignent ensuite dans le tableau
+de bord Cloudflare : Workers & Pages → `suivi-epargne-api` → Paramètres → Variables et secrets →
+*Ajouter* → type **Secret**. C'est la méthode utilisée pour le déploiement actuel.
+
 ### 6. Relier l'app
 Crée `.env.production` à la racine du dépôt :
 ```

@@ -511,7 +511,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
             <defs>
               {accounts.map(acc => {
                 const color = getAccountColor(acc.id);
-                const isHatched = isConstrainedAccount(acc.type);
                 return (
                   <React.Fragment key={acc.id}>
                     <linearGradient id={`color-${acc.id}`} x1="0" y1="0" x2="0" y2="1">

@@ -114,7 +114,6 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
   // À AFFICHER : reste honnêtement indéfini ("—") en mode réel si la fiche n'a pas encore
   // été (ré)extraite avec les champs impôt/net payé — jamais de repli silencieux sur la
   // formule théorique qui se ferait passer pour un chiffre exact.
-  const effectiveMonthlyTax = display.isReal ? display.effectiveMonthlyTax : autoValues.effectiveMonthlyTax;
   const effectiveSuperNet = display.isReal ? display.effectiveSuperNet : autoValues.superNet;
   // À CALCULER (capacité d'épargne, etc.) : a besoin d'un nombre pour continuer à
   // fonctionner même si la fiche active est incomplète sur ce point précis.

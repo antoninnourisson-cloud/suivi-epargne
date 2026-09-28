@@ -38,7 +38,9 @@ export default defineConfig({
       workbox: {
         importScripts: ['push-sw.js'],
       },
-      includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg'],
+      // Seules les icônes réellement présentes dans public/ (les anciennes entrées
+      // favicon.ico / apple-touch-icon.png / mask-icon.svg pointaient vers des fichiers absents).
+      includeAssets: ['pwa-192x192.png', 'pwa-512x512.png'],
       manifest: {
         name: 'Suivi Épargne',
         short_name: 'Épargne',

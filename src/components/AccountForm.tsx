@@ -6,7 +6,7 @@ import { AccountType, SavingsAccount, FiscalConfig } from '../types';
 import { Button } from './Button';
 import { NumberInput } from './NumberInput';
 import { localTodayISO } from '../lib/dates';
-import { PlusCircle, Save, Users, Calculator, ShieldCheck, TrendingUp, TrendingDown, Tag, X, History } from 'lucide-react';
+import { PlusCircle, Save, Users, Calculator, ShieldCheck, Tag, X, History } from 'lucide-react';
 
 interface AccountFormProps {
   onSave: (account: SavingsAccount) => void;

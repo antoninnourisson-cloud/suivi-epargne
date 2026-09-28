@@ -27,7 +27,16 @@ jobs:
           node-version: 20
 
       - name: Installation des dépendances
-        run: npm install
+        # npm ci : installation exacte d'après package-lock.json (reproductible).
+        run: npm ci
+
+      # Garde-fous : un déploiement ne part jamais si les calculs (fiscalité, quinzaines,
+      # chiffrement des notifications...) ou le typage sont cassés.
+      - name: Tests
+        run: npm test
+
+      - name: Vérification des types (app)
+        run: npx tsc --noEmit
 
       - name: Build de production
         run: npm run build
