@@ -10,6 +10,7 @@ import {
   subscriptionsAsExpenses,
   totalFixedCharges,
   computeSavingsRateHistory,
+  computeDonationSummary,
 } from './finance';
 import { DEFAULT_FISCAL_CONFIG as CFG } from '../constants';
 import { AccountType, SavingsAccount, Subscription } from '../types';
@@ -152,5 +153,20 @@ describe("taux d'épargne", () => {
     const h = computeSavingsRateHistory(accounts, 2500, 3, NOW);
     expect(h.map(m => m.month)).toEqual(['2026-07', '2026-08', '2026-09']);
     expect(h.map(m => m.rate)).toEqual([0, 20, 10]);
+  });
+});
+
+describe('dons', () => {
+  it('plafonne le taux de 75 % et bascule l’excédent à 66 %', () => {
+    const s = computeDonationSummary([
+      { id: 'a', date: '2026-02-01', amount: 1200, organization: 'Restos', rate: 75, receiptReceived: true },
+      { id: 'b', date: '2026-06-01', amount: 100, organization: 'MSF', rate: 66, receiptReceived: false },
+      { id: 'c', date: '2025-06-01', amount: 500, organization: 'Autre année', rate: 66, receiptReceived: false },
+    ], 2026);
+    expect(s.total).toBe(1300);
+    expect(s.total75).toBe(1000);
+    expect(s.total66).toBe(300);
+    expect(s.reduction).toBeCloseTo(750 + 198);
+    expect(s.missingReceipts.map(d => d.id)).toEqual(['b']);
   });
 });

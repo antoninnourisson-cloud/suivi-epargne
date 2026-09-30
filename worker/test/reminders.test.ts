@@ -159,4 +159,19 @@ describe('computeReminders', () => {
       expect(computeReminders(base({ accounts: [updated] }), new Date(2027, 0, 15, 9), APP).some(x => x.key.startsWith('annual-statement'))).toBe(false);
     });
   });
+
+  describe('dons', () => {
+    const donations = [
+      { id: 'd1', date: '2026-03-01', amount: 100, organization: 'Restos du cœur', rate: 75 as const, receiptReceived: true },
+      { id: 'd2', date: '2026-11-20', amount: 50, organization: 'MSF', rate: 66 as const, receiptReceived: false },
+      { id: 'd3', date: '2027-01-05', amount: 999, organization: 'Hors période', rate: 66 as const, receiptReceived: false },
+    ];
+    it("rappelle en avril les dons de l'année écoulée et les reçus manquants", () => {
+      const r = computeReminders(base({ donations }), new Date(2027, 3, 10, 9), APP).find(x => x.key === 'donations:2026');
+      expect(r?.message.title).toMatch(/150\s€ de dons en 2026/);
+      expect(r?.message.body).toMatch(/108\s€ de réduction.*1 reçu fiscal manquant/);
+      expect(r?.message.url).toBe(`${APP}?view=donations`);
+      expect(computeReminders(base({ donations }), new Date(2027, 3, 25, 9), APP).some(x => x.key.startsWith('donations'))).toBe(false);
+    });
+  });
 });

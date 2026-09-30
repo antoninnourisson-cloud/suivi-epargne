@@ -18,6 +18,7 @@ import {
   computeAccruedInterest,
   computeMonthlyPay,
   findAccountsAwaitingAnnualStatement,
+  computeDonationSummary,
 } from '../../src/lib/finance';
 import { formatISODay } from '../../src/lib/dates';
 import { DEFAULT_FISCAL_CONFIG } from '../../src/constants';
@@ -218,6 +219,25 @@ export const computeReminders = (data: GlobalAppData, now: Date, appUrl: string)
           body: `Reporte la valeur au 31/12 et les versements de ${waiting.map(a => a.name).join(', ')} : les plus-values restent justes.`,
           url: link('update'),
           tag: 'annual-statement',
+        },
+      });
+    }
+  }
+
+
+  // 9. Avril, ouverture de la déclaration en ligne : les dons de l'année écoulée à déclarer.
+  if (now.getMonth() === 3 && now.getDate() >= 10 && now.getDate() <= 20) {
+    const sum = computeDonationSummary(data.donations || [], now.getFullYear() - 1);
+    if (sum.count > 0) {
+      const missing = sum.missingReceipts.length;
+      out.push({
+        key: `donations:${sum.year}`,
+        message: {
+          title: `Déclaration : ${eur(sum.total)} de dons en ${sum.year}`,
+          body: `≈ ${eur(sum.reduction)} de réduction d'impôt.` +
+            (missing > 0 ? ` ${missing} reçu${missing > 1 ? 's' : ''} fiscal${missing > 1 ? 'aux' : ''} manquant${missing > 1 ? 's' : ''}.` : ' Tous les reçus sont là.'),
+          url: link('donations'),
+          tag: 'donations',
         },
       });
     }

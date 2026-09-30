@@ -5,7 +5,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { tracksDeposits, depositsAfterCashFlow, totalFixedCharges } from '../lib/finance';
 import {
   GlobalAppData, SavingsAccount, Expense, PortfolioSnapshot, ExpenseSnapshot,
-  FiscalConfig, WorkBenefits, AccountMovement, SavingsGoal, PayslipRecord, RecurringMovement, Subscription
+  FiscalConfig, WorkBenefits, AccountMovement, SavingsGoal, PayslipRecord, RecurringMovement, Subscription, Donation
 } from '../types';
 import { 
   DEFAULT_FISCAL_CONFIG, DEFAULT_WORK_BENEFITS 
@@ -47,6 +47,7 @@ const canonicalize = (data: GlobalAppData | null | undefined): string => {
     payslips: data.payslips || [],
     recurringMovements: data.recurringMovements || [],
     subscriptions: data.subscriptions || [],
+    donations: data.donations || [],
     activePayslipId: data.activePayslipId ?? null,
     fiscalConfig: data.fiscalConfig || null,
     workBenefits: data.workBenefits || null,
@@ -109,6 +110,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
   const [payslips, setPayslips] = useState<PayslipRecord[]>([]);
   const [recurringMovements, setRecurringMovements] = useState<RecurringMovement[]>([]);
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
+  const [donations, setDonations] = useState<Donation[]>([]);
   // Fiche de paie servant de référence exacte au Pilotage Budgétaire (undefined = mode
   // estimation théorique, comportement historique).
   const [activePayslipId, setActivePayslipId] = useState<string | undefined>(undefined);
@@ -228,6 +230,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
         setPayslips(data.payslips || []);
         setRecurringMovements(data.recurringMovements || []);
         setSubscriptions(data.subscriptions || []);
+        setDonations(data.donations || []);
         setActivePayslipId(data.activePayslipId || undefined);
         setFiscalConfig(data.fiscalConfig || DEFAULT_FISCAL_CONFIG);
         
@@ -323,6 +326,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
     payslips,
     recurringMovements,
     subscriptions,
+    donations,
     activePayslipId,
     config: {
       grossAnnual, leisureBudget, projectSavings, navigoBase, navigoRate,
@@ -332,7 +336,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
     lastView: lastViewRef.current,
   }), [accounts, expenses, history, expensesHistory, fiscalConfig, workBenefits, grossAnnual,
        leisureBudget, projectSavings, navigoBase, navigoRate, taxRateManual,
-       extraMonthlyIncome, parentsEmail, goals, payslips, recurringMovements, subscriptions, activePayslipId, geminiApiKey, pickerApiKey,
+       extraMonthlyIncome, parentsEmail, goals, payslips, recurringMovements, subscriptions, donations, activePayslipId, geminiApiKey, pickerApiKey,
        paydayDay, paydayAmount]);
 
   // Applique un objet de données (import / rechargement) à l'état.
@@ -345,6 +349,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
     setPayslips(data.payslips || []);
     setRecurringMovements(data.recurringMovements || []);
     setSubscriptions(data.subscriptions || []);
+    setDonations(data.donations || []);
     setActivePayslipId(data.activePayslipId || undefined);
     if (data.fiscalConfig) setFiscalConfig(data.fiscalConfig);
     if (data.workBenefits) setWorkBenefits(data.workBenefits);
@@ -600,7 +605,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
     taxRateManual, extraMonthlyIncome, parentsEmail, geminiApiKey, pickerApiKey,
     paydayDay, paydayAmount,
     isAuthenticated, driveFileId, isLoadingData,
-    buildData, syncConflict, sessionExpired, goals, payslips, recurringMovements, subscriptions, activePayslipId, isOffline, runExclusive
+    buildData, syncConflict, sessionExpired, goals, payslips, recurringMovements, subscriptions, donations, activePayslipId, isOffline, runExclusive
   ]);
 
   // Réveil périodique pour que les snapshots ci-dessous s'ouvrent sur le nouveau mois même
@@ -809,6 +814,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
       setPayslips([]);
       setRecurringMovements([]);
       setSubscriptions([]);
+      setDonations([]);
       setActivePayslipId(undefined);
       setDriveFileId(null);
       // Purge des sauvegardes locales à la déconnexion : sans ça, se reconnecter avec un
@@ -830,6 +836,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
     payslips, setPayslips,
     recurringMovements, setRecurringMovements,
     subscriptions, setSubscriptions,
+    donations, setDonations,
     activePayslipId, setActivePayslipId,
     fiscalConfig, setFiscalConfig,
     workBenefits, setWorkBenefits,

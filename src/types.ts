@@ -130,6 +130,21 @@ export interface Subscription {
   active: boolean;
 }
 
+// Don à une association, noté pour la déclaration de revenus (réduction d'impôt).
+export interface Donation {
+  id: string;
+  date: string;          // 'YYYY-MM-DD' : l'année du don = l'année de revenus déclarée
+  amount: number;
+  organization: string;
+  // 75 : organisme d'aide aux personnes en difficulté (repas, soins, logement) ;
+  // 66 : tout autre organisme d'intérêt général.
+  rate: 66 | 75;
+  receiptReceived: boolean;
+  receiptFileId?: string;   // reçu fiscal choisi sur le Drive (Google Picker)
+  receiptFileName?: string;
+  note?: string;
+}
+
 export interface PayslipRecord {
   id: string;
   // Fichier resté à sa place sur le Drive de l'utilisateur (sélectionné via Google
@@ -226,6 +241,7 @@ export interface GlobalAppData {
   payslips?: PayslipRecord[];
   recurringMovements?: RecurringMovement[];
   subscriptions?: Subscription[];
+  donations?: Donation[];
   // Fiche de paie actuellement utilisée comme référence exacte dans le Pilotage Budgétaire
   // (bascule le détail charges/impôt sur les vrais chiffres au lieu de la formule
   // théorique). `undefined` = mode estimation (comportement historique, pour simuler des

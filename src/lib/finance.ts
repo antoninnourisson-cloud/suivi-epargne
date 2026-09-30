@@ -3,7 +3,7 @@
 // Logique fiscale centralisée (calcul du "super net", impôt par tranches).
 // Fonctions pures, testables, réutilisées par le Pilotage et le Dashboard.
 // ================================================
-import { FiscalConfig, TaxBracket, WorkBenefits, RateChange, AccountType, AccountMovement, RecurringMovement, SavingsAccount, GlobalAppData, PayslipExtractedData, Subscription, Expense } from '../types';
+import { FiscalConfig, TaxBracket, WorkBenefits, RateChange, AccountType, AccountMovement, RecurringMovement, SavingsAccount, GlobalAppData, PayslipExtractedData, Subscription, Expense, Donation } from '../types';
 import { DEFAULT_STANDARD_ALLOWANCE_CAP, DEFAULT_FISCAL_CONFIG, DEFAULT_WORK_BENEFITS } from '../constants';
 import { MS_PER_DAY, formatISODay, parseISODate, daysBetween } from './dates';
 
@@ -1219,4 +1219,43 @@ export const findAccountsAwaitingAnnualStatement = (
     tracksDeposits(a.type) && a.totalAmount > 0 &&
     !(a.movements || []).some(m => m.kind === 'valuation' && m.date >= yearStart)
   );
+};
+
+// ---------------------------------------------------------------------------
+// Dons aux associations (réduction d'impôt)
+// ---------------------------------------------------------------------------
+
+// Plafond des dons ouvrant droit au taux de 75 % (aide aux personnes en difficulté) ; au-delà,
+// ils basculent à 66 %. Montant fixé par la loi de finances : à revoir chaque année.
+export const DONATION_75_CEILING = 1000;
+
+export interface DonationSummary {
+  year: number;
+  count: number;
+  total: number;
+  total66: number;        // à déclarer au taux de 66 % (y compris l'excédent des dons à 75 %)
+  total75: number;        // à déclarer au taux de 75 % (plafonné)
+  reduction: number;      // réduction d'impôt estimée
+  missingReceipts: Donation[];
+}
+
+/**
+ * Récapitulatif d'une année de dons. Simplifié : ne vérifie pas le plafond global de 20 %
+ * du revenu imposable (l'excédent se reporte sur 5 ans), rarement atteint.
+ */
+export const computeDonationSummary = (donations: Donation[], year: number): DonationSummary => {
+  const ofYear = donations.filter(d => d.date.startsWith(`${year}-`) && d.amount > 0);
+  const raw75 = ofYear.filter(d => d.rate === 75).reduce((sum, d) => sum + d.amount, 0);
+  const raw66 = ofYear.filter(d => d.rate !== 75).reduce((sum, d) => sum + d.amount, 0);
+  const total75 = Math.min(raw75, DONATION_75_CEILING);
+  const total66 = raw66 + (raw75 - total75);
+  return {
+    year,
+    count: ofYear.length,
+    total: raw66 + raw75,
+    total66,
+    total75,
+    reduction: total75 * 0.75 + total66 * 0.66,
+    missingReceipts: ofYear.filter(d => !d.receiptReceived),
+  };
 };
