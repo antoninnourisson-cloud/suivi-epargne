@@ -12,8 +12,10 @@ import {
   computeDonationSummary,
   accountAgeYears,
   computeUnlockCost,
+  findFiscalReview,
+  applyTaxScale,
 } from './finance';
-import { DEFAULT_FISCAL_CONFIG as CFG } from '../constants';
+import { DEFAULT_FISCAL_CONFIG as CFG, TAX_SCALES, LATEST_TAX_SCALE } from '../constants';
 import { AccountType, SavingsAccount, Subscription } from '../types';
 import { formatISODay } from './dates';
 
@@ -160,5 +162,27 @@ describe('ancienneté et déblocage', () => {
     expect(u.closesPea).toBe(true);
     expect(u.unknown).toEqual(['Inconnu']);
     expect(u.nextFree).toEqual({ date: '2028-01-15', name: 'PEA' });
+  });
+});
+
+describe('barème et vérification annuelle', () => {
+  const old = { ...CFG, taxBrackets: TAX_SCALES[0].brackets, taxScaleYear: undefined };
+  it('propose le nouveau barème et garde l’ancien en historique', () => {
+    expect(findFiscalReview(old, NOW).newScale?.year).toBe(LATEST_TAX_SCALE.year);
+    const next = applyTaxScale(old, LATEST_TAX_SCALE, NOW);
+    expect(findFiscalReview(next, NOW).newScale).toBeUndefined();
+    expect(next.taxBracketsHistory?.[0]).toMatchObject({ year: 2024, replacedOn: '2026-09-30' });
+  });
+  it('reconnaît un barème revenu du JSON (Infinity → null)', () => {
+    const fromJson = JSON.parse(JSON.stringify({ ...CFG }));
+    expect(findFiscalReview(fromJson, NOW).newScale).toBeUndefined();
+  });
+  it('ne propose rien pour un barème saisi à la main plus récent', () => {
+    expect(findFiscalReview({ ...CFG, taxBrackets: [{ limit: Infinity, rate: 0.2 }], taxScaleYear: 2030 }, NOW).newScale).toBeUndefined();
+  });
+  it('demande la vérification de janvier à mars, une fois par an', () => {
+    expect(findFiscalReview(CFG, new Date(2027, 1, 1)).annualCheckDue).toBe(true);
+    expect(findFiscalReview({ ...CFG, paramsReviewedYear: 2027 }, new Date(2027, 1, 1)).annualCheckDue).toBe(false);
+    expect(findFiscalReview(CFG, NOW).annualCheckDue).toBe(false);
   });
 });

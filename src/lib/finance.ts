@@ -4,7 +4,7 @@
 // Fonctions pures, testables, réutilisées par le Pilotage et le Dashboard.
 // ================================================
 import { FiscalConfig, TaxBracket, WorkBenefits, RateChange, AccountType, AccountMovement, RecurringMovement, SavingsAccount, GlobalAppData, PayslipExtractedData, Subscription, Expense, Donation } from '../types';
-import { DEFAULT_STANDARD_ALLOWANCE_CAP, DEFAULT_FISCAL_CONFIG, DEFAULT_WORK_BENEFITS } from '../constants';
+import { DEFAULT_STANDARD_ALLOWANCE_CAP, DEFAULT_FISCAL_CONFIG, DEFAULT_WORK_BENEFITS, TAX_SCALES, LATEST_TAX_SCALE, TaxScale } from '../constants';
 import { MS_PER_DAY, formatISODay, parseISODate, daysBetween } from './dates';
 
 export interface IncomeInput {
@@ -1235,3 +1235,41 @@ export const computeUnlockCost = (
   }
   return out;
 };
+
+// ---------------------------------------------------------------------------
+// Paramètres fiscaux : nouveau barème, vérification annuelle
+// ---------------------------------------------------------------------------
+
+// Infinity devient `null` une fois passé par le JSON du fichier Drive.
+const bracketLimit = (b: TaxBracket) => (b.limit === null || b.limit === undefined ? Infinity : b.limit);
+export const sameTaxBrackets = (a: TaxBracket[], b: TaxBracket[]) =>
+  a.length === b.length && a.every((x, i) => bracketLimit(x) === bracketLimit(b[i]) && Math.abs(x.rate - b[i].rate) < 1e-9);
+
+/** Barème officiel correspondant exactement au barème utilisé, s'il y en a un. */
+export const identifyTaxScale = (brackets: TaxBracket[]): TaxScale | undefined =>
+  TAX_SCALES.find(sc => sameTaxBrackets(sc.brackets, brackets));
+
+export interface FiscalReview {
+  newScale?: TaxScale;      // barème officiel plus récent que celui utilisé
+  annualCheckDue: boolean;  // janvier à mars : paramètres de l'année pas encore vérifiés
+}
+
+export const findFiscalReview = (cfg: FiscalConfig, asOfDate: Date = new Date()): FiscalReview => {
+  const current = identifyTaxScale(cfg.taxBrackets);
+  const usedYear = current?.year ?? cfg.taxScaleYear;
+  const newScale = !sameTaxBrackets(cfg.taxBrackets, LATEST_TAX_SCALE.brackets) && (usedYear === undefined || usedYear < LATEST_TAX_SCALE.year)
+    ? LATEST_TAX_SCALE : undefined;
+  const annualCheckDue = asOfDate.getMonth() <= 2 && (cfg.paramsReviewedYear ?? 0) < asOfDate.getFullYear();
+  return { newScale, annualCheckDue };
+};
+
+/** Applique un barème officiel en gardant l'ancien dans l'historique. */
+export const applyTaxScale = (cfg: FiscalConfig, scale: TaxScale, asOfDate: Date = new Date()): FiscalConfig => ({
+  ...cfg,
+  taxBrackets: scale.brackets.map(b => ({ ...b })),
+  taxScaleYear: scale.year,
+  taxBracketsHistory: [
+    ...(cfg.taxBracketsHistory || []),
+    { year: identifyTaxScale(cfg.taxBrackets)?.year ?? cfg.taxScaleYear, replacedOn: formatISODay(asOfDate), brackets: cfg.taxBrackets },
+  ],
+});

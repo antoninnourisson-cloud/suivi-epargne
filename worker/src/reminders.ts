@@ -20,6 +20,7 @@ import {
   findAccountsAwaitingAnnualStatement,
   computeDonationSummary,
 } from '../../src/lib/finance';
+import { LATEST_TAX_SCALE } from '../../src/constants';
 import { formatISODay } from '../../src/lib/dates';
 import { DEFAULT_FISCAL_CONFIG } from '../../src/constants';
 import type { PushMessage } from './webpush';
@@ -241,6 +242,22 @@ export const computeReminders = (data: GlobalAppData, now: Date, appUrl: string)
         },
       });
     }
+  }
+
+
+  // 10. Fin janvier : vérifier les paramètres fiscaux de l'année (barème, plafond LEP,
+  //     abattement), tant qu'ils n'ont pas été marqués comme vérifiés dans l'app.
+  const year = now.getFullYear();
+  if (now.getMonth() === 0 && now.getDate() >= 20 && now.getDate() <= 25 && (data.fiscalConfig?.paramsReviewedYear ?? 0) < year) {
+    out.push({
+      key: `fiscal-review:${year}`,
+      message: {
+        title: `Paramètres fiscaux ${year}`,
+        body: `Vérifiez le barème de l'impôt, le plafond du LEP et l'abattement de 10 % : ils changent chaque année.${LATEST_TAX_SCALE.year < year ? '' : ` ${LATEST_TAX_SCALE.label} disponible dans l'app.`}`,
+        url: link('settings'),
+        tag: 'fiscal-review',
+      },
+    });
   }
 
   return out;

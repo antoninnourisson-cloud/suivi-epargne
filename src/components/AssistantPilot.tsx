@@ -2,7 +2,7 @@
 import React, { useState, useMemo } from 'react';
 import { SavingsAccount, Expense, AccountType, FiscalConfig, WorkBenefits, PayslipRecord, Subscription, PayChecklist as PayChecklistData } from '../types';
 import { PayChecklist } from './PayChecklist';
-import { computeIncome, computeMaturityCountdown, computePlacementStrategy, payslipSuperNet, subscriptionsAsExpenses, computePayTransfers } from '../lib/finance';
+import { computeIncome, computeMaturityCountdown, computePlacementStrategy, payslipSuperNet, subscriptionsAsExpenses, computePayTransfers, computeRecentSavingsRate } from '../lib/finance';
 import { parseISODate } from '../lib/dates';
 import { parseFrenchNumber, safeNumber } from '../lib/numbers';
 import { NumberInput } from './NumberInput';
@@ -207,6 +207,12 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
         return {
           id: acc.id, name: acc.name, type, ceiling,
           parentAmount: acc.parentalCapital, ownedAmount: acc.ownedAmount,
+          // Rythme réel des 90 derniers jours sur CE livret : dans combien de mois il sera plein.
+          monthsToFull: (() => {
+            const remaining = ceiling - acc.totalAmount;
+            const rate = computeRecentSavingsRate([acc], 90);
+            return remaining > 0 && rate && rate > 0 ? Math.ceil(remaining / rate) : null;
+          })(),
           parentPct, ownedPct, totalPct: parentPct + ownedPct,
           remainingSpace: Math.max(0, ceiling - acc.totalAmount),
         };
@@ -493,7 +499,7 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
 
             <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-6">
                <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-2 flex items-center gap-2"><BarChart3 className="w-5 h-5 text-indigo-600" /> Remplissage Livrets</h3>
-               {bookletStats.map(b => (<div key={b.id} className="space-y-2"><div className="flex justify-between text-sm font-bold text-slate-700 dark:text-slate-200"><span>{b?.name}</span><span>{Math.round(b?.totalPct || 0)}%</span></div><div className="w-full h-3 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden flex"><div className="h-full bg-amber-400" style={{ width: `${b?.parentPct}%` }} title={`Parents : ${formatEUR(b?.parentAmount || 0)}`}></div><div className="h-full bg-indigo-600" style={{ width: `${b?.ownedPct}%` }} title={`Moi : ${formatEUR(b?.ownedAmount || 0)}`}></div></div><div className="flex justify-between text-[11px] text-slate-500 dark:text-slate-400 font-bold"><span className="text-amber-500">Parents {formatEUR(b?.parentAmount || 0)}</span><span className="text-indigo-600">Moi {formatEUR(b?.ownedAmount || 0)}</span>{b.parentAmount > 0 && b.ownedAmount > 0 && <span className="text-slate-600 dark:text-slate-300">Total {formatEUR(b.parentAmount + b.ownedAmount)}</span>}<span>Max {formatEUR(b?.ceiling || 0)}</span></div></div>))}
+               {bookletStats.map(b => (<div key={b.id} className="space-y-2"><div className="flex justify-between text-sm font-bold text-slate-700 dark:text-slate-200"><span>{b?.name}</span><span>{Math.round(b?.totalPct || 0)}%</span></div><div className="w-full h-3 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden flex"><div className="h-full bg-amber-400" style={{ width: `${b?.parentPct}%` }} title={`Parents : ${formatEUR(b?.parentAmount || 0)}`}></div><div className="h-full bg-indigo-600" style={{ width: `${b?.ownedPct}%` }} title={`Moi : ${formatEUR(b?.ownedAmount || 0)}`}></div></div><div className="flex justify-between text-[11px] text-slate-500 dark:text-slate-400 font-bold"><span className="text-amber-500">Parents {formatEUR(b?.parentAmount || 0)}</span><span className="text-indigo-600">Moi {formatEUR(b?.ownedAmount || 0)}</span>{b.parentAmount > 0 && b.ownedAmount > 0 && <span className="text-slate-600 dark:text-slate-300">Total {formatEUR(b.parentAmount + b.ownedAmount)}</span>}<span>Max {formatEUR(b?.ceiling || 0)}</span></div>{b.monthsToFull !== null && <p className="text-[11px] text-slate-500 dark:text-slate-400">Plein dans ~{b.monthsToFull} mois au rythme actuel</p>}{b.totalPct >= 100 && <p className="text-[11px] font-bold text-emerald-600">Plein</p>}</div>))}
             </div>
           </div>
 

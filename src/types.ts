@@ -204,6 +204,13 @@ export interface FiscalConfig {
   // Nombre de parts du foyer fiscal, pour ajuster le plafond ci-dessus.
   lepHouseholdParts?: number;
   taxBrackets: TaxBracket[];
+  // Année du barème officiel appliqué (ex. 2026 = barème publié en 2026, revenus 2025).
+  // Absent = barème saisi à la main, ou fichier antérieur à ce suivi.
+  taxScaleYear?: number;
+  // Barèmes remplacés, conservés pour mémoire (le plus récent en dernier).
+  taxBracketsHistory?: { year?: number; replacedOn: string; brackets: TaxBracket[] }[];
+  // Dernière année pour laquelle les paramètres fiscaux ont été vérifiés (rappel de janvier).
+  paramsReviewedYear?: number;
 }
 
 // --- NOUVELLE INTERFACE ---

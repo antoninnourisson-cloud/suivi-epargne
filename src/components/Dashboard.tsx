@@ -3,9 +3,9 @@ import {
   ResponsiveContainer, Tooltip as RechartsTooltip, Legend, 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, AreaChart, Area 
 } from 'recharts';
-import { SavingsAccount, PortfolioSnapshot, AccountType, Expense, FiscalConfig, WorkBenefits, RecurringMovement } from '../types';
-import { Euro, Lock, Wallet, ListTodo, ChevronDown, Unlock, Save, AlertTriangle, Trash2, Clock, TrendingUp, TrendingDown, PiggyBank, Percent, ShieldAlert, Repeat } from 'lucide-react';
-import { computeAccruedParentalInterest, computeRecentSavingsRate, computeAccountBalanceAtDate, findStaleRegulatedRates, computeLepEligibility, computeIncome, findDueRecurring, computeMonthSavedAmount, computeSavingsRateHistory, computeUnlockCost } from '../lib/finance';
+import { SavingsAccount, PortfolioSnapshot, AccountType, Expense, FiscalConfig, WorkBenefits, RecurringMovement, Subscription } from '../types';
+import { Euro, Lock, Wallet, ListTodo, ChevronDown, Landmark, CalendarClock, Unlock, Save, AlertTriangle, Trash2, Clock, TrendingUp, TrendingDown, PiggyBank, Percent, ShieldAlert, Repeat } from 'lucide-react';
+import { computeAccruedParentalInterest, computeRecentSavingsRate, computeAccountBalanceAtDate, findStaleRegulatedRates, computeLepEligibility, computeIncome, findDueRecurring, computeMonthSavedAmount, computeSavingsRateHistory, computeUnlockCost, findFiscalReview, applyTaxScale, nextSubscriptionDate } from '../lib/finance';
 import { parseISODate, formatISODay, daysBetween, localTodayISO } from '../lib/dates';
 import { Button } from './Button';
 import { formatEUR } from '../lib/format';
@@ -26,6 +26,10 @@ interface DashboardProps {
   monthPlan?: number;
   // Paie nette mensuelle, pour le taux d'épargne.
   monthlyPay?: number;
+  subscriptions?: Subscription[];
+  // Mise à jour des paramètres fiscaux (nouveau barème, vérification annuelle).
+  onUpdateFiscalConfig?: (update: (prev: FiscalConfig) => FiscalConfig) => void;
+  onOpenSettings?: () => void;
   config: {
     grossAnnual: number;
     navigoBase: number;
@@ -34,7 +38,7 @@ interface DashboardProps {
   };
 }
 
-export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expenses, fiscalConfig, workBenefits, onDeleteAccount, config, recurringMovements = [], onRecordRecurring, monthPlan, monthlyPay = 0 }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expenses, fiscalConfig, workBenefits, onDeleteAccount, config, recurringMovements = [], onRecordRecurring, monthPlan, monthlyPay = 0, subscriptions = [], onUpdateFiscalConfig, onOpenSettings }) => {
   const [dateRange, setDateRange] = useState(() => {
     try {
         const stored = localStorage.getItem('dashboard_date_range');
@@ -153,6 +157,18 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
   }, [accounts, fiscalConfig]);
 
   const unlockCost = useMemo(() => computeUnlockCost(accounts, fiscalConfig), [accounts, fiscalConfig]);
+  const fiscalReview = useMemo(() => findFiscalReview(fiscalConfig), [fiscalConfig]);
+
+  // Prélèvements des 7 prochains jours (aujourd'hui compris), du plus proche au plus lointain.
+  const upcomingDebits = useMemo(() => {
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    return subscriptions
+      .filter(s => s.active && s.amount > 0)
+      .map(s => ({ s, date: nextSubscriptionDate(s, today) }))
+      .map(x => ({ ...x, inDays: daysBetween(today, x.date) }))
+      .filter(x => x.inDays <= 7)
+      .sort((a, b) => a.date.getTime() - b.date.getTime());
+  }, [subscriptions]);
 
   const isConstrainedAccount = (type: AccountType) => {
     return [AccountType.ASSURANCE_VIE, AccountType.PEA, AccountType.PEE, AccountType.PER].includes(type);
@@ -393,7 +409,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
     (showRateReminder && staleRates ? 1 : 0) +
     (parentalYearEndReminder !== null ? 1 : 0) +
     (onDeleteAccount ? inactiveEmptyAccounts.length : 0) +
-    ceilingAlerts.length;
+    ceilingAlerts.length +
+    (onUpdateFiscalConfig && fiscalReview.newScale ? 1 : 0) +
+    (onUpdateFiscalConfig && fiscalReview.annualCheckDue ? 1 : 0);
 
   return (
     <div className="space-y-6">
@@ -476,6 +494,26 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
         </div>
       )}
 
+      {onUpdateFiscalConfig && fiscalReview.newScale && (
+        <div className="flex flex-wrap items-center gap-3 p-3 rounded-xl border bg-indigo-50 dark:bg-indigo-950/40 border-indigo-200 dark:border-indigo-900 text-indigo-800 dark:text-indigo-300 text-sm font-bold">
+          <Landmark className="w-4 h-4 flex-shrink-0" />
+          <span className="flex-1 min-w-0">Nouveau barème de l'impôt : {fiscalReview.newScale.label}. Votre « super net » est encore calculé avec l'ancien.</span>
+          <button onClick={() => onUpdateFiscalConfig(prev => applyTaxScale(prev, fiscalReview.newScale!))} className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black flex-shrink-0">Appliquer</button>
+          <span className="basis-full text-[11px] font-normal opacity-80">L'ancien barème est conservé dans l'historique (Paramètres → Fiscalité).</span>
+        </div>
+      )}
+
+      {onUpdateFiscalConfig && fiscalReview.annualCheckDue && (
+        <div className="flex flex-wrap items-center gap-3 p-3 rounded-xl border bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-sm font-bold">
+          <Landmark className="w-4 h-4 flex-shrink-0" />
+          <span className="flex-1 min-w-0">
+            Nouvelle année : vérifiez vos paramètres fiscaux — plafond LEP {formatEUR(fiscalConfig.lepIncomeCeiling ?? 0)}, abattement de 10 % plafonné à {formatEUR(fiscalConfig.standardAllowanceCap ?? 0)}, barème {fiscalConfig.taxScaleYear ?? 'personnalisé'}.
+          </span>
+          {onOpenSettings && <button onClick={onOpenSettings} className="text-xs font-bold underline flex-shrink-0 hover:opacity-70">Ouvrir les paramètres</button>}
+          <button onClick={() => onUpdateFiscalConfig(prev => ({ ...prev, paramsReviewedYear: new Date().getFullYear() }))} className="px-3 py-1.5 rounded-lg bg-slate-800 dark:bg-slate-100 text-white dark:text-slate-900 text-xs font-black flex-shrink-0">C'est à jour</button>
+        </div>
+      )}
+
       {ceilingAlerts.length > 0 && (
         <div className="space-y-2">
           {ceilingAlerts.map(a => {
@@ -509,6 +547,28 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
         )} />
         <StatCard title="Bloqué" amount={availabilityStats.hardLocked} icon={Lock} color="bg-slate-800" subtext="Retraite/PEE" />
       </div>
+
+      {upcomingDebits.length > 0 && (
+        <div className="bg-white dark:bg-slate-800 p-5 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
+          <div className="flex items-baseline justify-between gap-3 mb-2">
+            <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2"><CalendarClock className="w-4 h-4 text-indigo-600" /> Prélèvements des 7 prochains jours</h3>
+            <p className="text-sm font-black text-slate-700 dark:text-slate-200">{formatEUR(upcomingDebits.reduce((sum, x) => sum + x.s.amount, 0))}</p>
+          </div>
+          <ul className="divide-y divide-slate-100 dark:divide-slate-700">
+            {upcomingDebits.map(({ s, date, inDays }) => (
+              <li key={s.id} className="flex items-center justify-between gap-3 py-1.5 text-sm">
+                <span className="min-w-0 truncate text-slate-700 dark:text-slate-200">
+                  <b>{s.name}</b>{s.debitAccount && <span className="text-slate-500 dark:text-slate-400"> · {s.debitAccount}</span>}
+                </span>
+                <span className="flex-shrink-0 text-right">
+                  <span className="font-mono font-bold text-slate-700 dark:text-slate-200">{formatEUR(s.amount)}</span>
+                  <span className="block text-[11px] text-slate-500 dark:text-slate-400">{inDays === 0 ? "aujourd'hui" : inDays === 1 ? 'demain' : date.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' })}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {((monthPlan !== undefined && monthPlan > 0) || monthlyPay > 0) && (() => {
         const hasPlan = monthPlan !== undefined && monthPlan > 0;

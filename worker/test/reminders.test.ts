@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { computeReminders } from '../src/reminders';
 import { AccountType, GlobalAppData } from '../../src/types';
+import { DEFAULT_FISCAL_CONFIG } from '../../src/constants';
 
 const base = (over: Partial<GlobalAppData> = {}): GlobalAppData => ({
   accounts: [], expenses: [], history: [],
@@ -172,6 +173,15 @@ describe('computeReminders', () => {
       expect(r?.message.body).toMatch(/108\s€ de réduction.*1 reçu fiscal manquant/);
       expect(r?.message.url).toBe(`${APP}?view=donations`);
       expect(computeReminders(base({ donations }), new Date(2027, 3, 25, 9), APP).some(x => x.key.startsWith('donations'))).toBe(false);
+    });
+  });
+
+  describe('paramètres fiscaux', () => {
+    it('rappelle fin janvier de vérifier les paramètres, sauf si déjà fait', () => {
+      const at = (reviewed?: number) => computeReminders(base({ fiscalConfig: { ...DEFAULT_FISCAL_CONFIG, paramsReviewedYear: reviewed } }), new Date(2027, 0, 20, 9), APP)
+        .find(x => x.key === 'fiscal-review:2027');
+      expect(at()?.message.url).toBe(`${APP}?view=settings`);
+      expect(at(2027)).toBeUndefined();
     });
   });
 });

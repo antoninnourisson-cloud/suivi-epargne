@@ -16,7 +16,10 @@ import {
   computeLepEligibility,
   findDueRecurring,
 } from './finance';
-import { DEFAULT_FISCAL_CONFIG, DEFAULT_WORK_BENEFITS } from '../constants';
+import { DEFAULT_FISCAL_CONFIG, DEFAULT_WORK_BENEFITS, TAX_SCALES, LATEST_TAX_SCALE } from '../constants';
+// Les valeurs attendues ci-dessous ont été calculées avec le barème 2024 : on le fige ici
+// pour que ces tests vérifient l'algorithme, pas le barème de l'année.
+const LEGACY_CFG = { ...DEFAULT_FISCAL_CONFIG, taxBrackets: TAX_SCALES[0].brackets };
 import { FiscalConfig, TaxBracket, WorkBenefits, AccountType } from '../types';
 
 const NO_BENEFITS: WorkBenefits = {
@@ -26,7 +29,7 @@ const NO_BENEFITS: WorkBenefits = {
 };
 
 describe('computeIncomeTax (barème progressif FR)', () => {
-  const brackets = DEFAULT_FISCAL_CONFIG.taxBrackets;
+  const brackets = LEGACY_CFG.taxBrackets;
 
   it('ne taxe pas un revenu sous le seuil de la 1re tranche', () => {
     expect(computeIncomeTax(10000, brackets)).toBe(0);
@@ -123,7 +126,7 @@ describe('computeIncome (super net)', () => {
   // impôt = 17503*0.11 + 2663.40*0.30 = 1925.33 + 799.02 = 2724.35
 
   it('déduit les charges salariales du brut', () => {
-    const r = computeIncome(baseInput, DEFAULT_FISCAL_CONFIG, NO_BENEFITS);
+    const r = computeIncome(baseInput, LEGACY_CFG, NO_BENEFITS);
     expect(r.grossMonth).toBeCloseTo(3750, 2);
     expect(r.socialCharges).toBeCloseTo(837, 2);
     expect(r.netSalaryOnly).toBeCloseTo(2913, 2);
@@ -133,7 +136,7 @@ describe('computeIncome (super net)', () => {
   });
 
   it('exclut le remboursement Navigo de l\'assiette imposable', () => {
-    const withNavigo = computeIncome(baseInput, DEFAULT_FISCAL_CONFIG, {
+    const withNavigo = computeIncome(baseInput, LEGACY_CFG, {
       ...NO_BENEFITS,
       navigo: { active: true, basePrice: 90, refundRate: 50 },
     });
@@ -149,14 +152,14 @@ describe('computeIncome (super net)', () => {
     // (avant : netBeforeTax * 10 %, ce qui imposait aussi le Navigo).
     const forced = computeIncome(
       { ...baseInput, taxRateManual: 10 },
-      DEFAULT_FISCAL_CONFIG,
+      LEGACY_CFG,
       NO_BENEFITS
     );
     expect(forced.effectiveMonthlyTax).toBeCloseTo(262.17, 2);
 
     const forcedWithNavigo = computeIncome(
       { ...baseInput, taxRateManual: 10 },
-      DEFAULT_FISCAL_CONFIG,
+      LEGACY_CFG,
       { ...NO_BENEFITS, navigo: { active: true, basePrice: 90, refundRate: 50 } }
     );
     // Même impôt forcé qu'sans Navigo : le remboursement n'est plus imposé.
@@ -169,7 +172,7 @@ describe('computeIncome (super net)', () => {
     // Sans plafond l'assiette serait 279 648 et l'impôt 102 986.08 (-7 605.45).
     const r = computeIncome(
       { ...baseInput, grossAnnual: 400000 },
-      DEFAULT_FISCAL_CONFIG,
+      LEGACY_CFG,
       NO_BENEFITS
     );
     expect(r.netTaxableYear).toBeCloseTo(296549, 2);
@@ -179,7 +182,7 @@ describe('computeIncome (super net)', () => {
   it('retombe sur le plafond par défaut si le champ est absent des données', () => {
     // Rétrocompatibilité : les fichiers enregistrés avant l'ajout du champ n'ont pas
     // standardAllowanceCap. Le résultat doit être identique, et surtout jamais NaN.
-    const { standardAllowanceCap: _omit, ...legacyConfig } = DEFAULT_FISCAL_CONFIG;
+    const { standardAllowanceCap: _omit, ...legacyConfig } = LEGACY_CFG;
     const r = computeIncome(
       { ...baseInput, grossAnnual: 400000 },
       legacyConfig as FiscalConfig,
@@ -191,7 +194,7 @@ describe('computeIncome (super net)', () => {
   });
 
   it('retire mutuelle et tickets resto du super net', () => {
-    const r = computeIncome(baseInput, DEFAULT_FISCAL_CONFIG, DEFAULT_WORK_BENEFITS);
+    const r = computeIncome(baseInput, LEGACY_CFG, DEFAULT_WORK_BENEFITS);
     expect(r.superNet).toBeCloseTo(r.superNetRaw - r.effectiveMonthlyTax, 2);
     expect(r.superNetRaw).toBeCloseTo(r.netBeforeTax - r.mutuelleCost - r.swileCost, 2);
     expect(r.mutuelleCost).toBeCloseTo(25, 2);
@@ -199,7 +202,7 @@ describe('computeIncome (super net)', () => {
   });
 
   it('compte le remboursement Navigo comme un gain', () => {
-    const withNavigo = computeIncome(baseInput, DEFAULT_FISCAL_CONFIG, {
+    const withNavigo = computeIncome(baseInput, LEGACY_CFG, {
       ...NO_BENEFITS,
       navigo: { active: true, basePrice: 90, refundRate: 50 },
     });
@@ -209,7 +212,7 @@ describe('computeIncome (super net)', () => {
   it('utilise navigoBase/navigoRate en repli quand l\'avantage est inactif', () => {
     const r = computeIncome(
       { ...baseInput, navigoBase: 90.8, navigoRate: 67.24 },
-      DEFAULT_FISCAL_CONFIG,
+      LEGACY_CFG,
       NO_BENEFITS
     );
     expect(r.navigoGain).toBeCloseTo(61.05, 2);
@@ -218,7 +221,7 @@ describe('computeIncome (super net)', () => {
   });
 
   it('ne produit aucun NaN sur un revenu nul', () => {
-    const r = computeIncome({ ...baseInput, grossAnnual: 0 }, DEFAULT_FISCAL_CONFIG, NO_BENEFITS);
+    const r = computeIncome({ ...baseInput, grossAnnual: 0 }, LEGACY_CFG, NO_BENEFITS);
     expect(r.netTaxableYear).toBe(0);
     expect(r.taxAmount).toBe(0);
     expect(r.autoRate).toBe(0);
@@ -337,7 +340,7 @@ describe('computeWeightedAnnualRate', () => {
 });
 
 describe('computeCapitalGainsTax (PFU / prélèvements sociaux)', () => {
-  const fiscal = DEFAULT_FISCAL_CONFIG; // socialChargesCapital: 0.172, legalMaturity: {pea:5, assuranceVie:8, pee:5}
+  const fiscal = LEGACY_CFG; // socialChargesCapital: 0.172, legalMaturity: {pea:5, assuranceVie:8, pee:5}
   const NOW = new Date('2026-01-01T00:00:00Z');
 
   it("n'applique rien à un gain nul ou négatif", () => {
@@ -449,7 +452,7 @@ describe('computeParentalInterest', () => {
 });
 
 describe('computeMaturityCountdown', () => {
-  const fiscal = DEFAULT_FISCAL_CONFIG; // legalMaturity: {pea:5, assuranceVie:8, pee:5}
+  const fiscal = LEGACY_CFG; // legalMaturity: {pea:5, assuranceVie:8, pee:5}
   const NOW = new Date('2026-01-01T00:00:00Z');
 
   it('annonce le passage en régime favorable pour un PEA pas encore mature', () => {
@@ -683,7 +686,7 @@ describe('lastRateRevision / findStaleRegulatedRates', () => {
 });
 
 describe('computeLepEligibility', () => {
-  const cfg = { ...DEFAULT_FISCAL_CONFIG, lepIncomeCeiling: 22000, lepHouseholdParts: 1 };
+  const cfg = { ...LEGACY_CFG, lepIncomeCeiling: 22000, lepHouseholdParts: 1 };
   const withLep = [{ type: AccountType.LEP }];
 
   it("renvoie null sans LEP ou sans plafond configuré", () => {
@@ -739,5 +742,11 @@ describe('findDueRecurring', () => {
     expect(findDueRecurring([{ ...rec, active: false }], acc(), d)).toEqual([]);
     expect(findDueRecurring([rec], acc(), d, new Set(['r1']))).toEqual([]);
     expect(findDueRecurring([{ ...rec, accountId: 'gone' }], acc(), d)).toEqual([]);
+  });
+});
+
+describe('barème 2026', () => {
+  it("retrouve l'exemple officiel : 30 000 € imposables → 2 103,99 €", () => {
+    expect(computeIncomeTax(30000, LATEST_TAX_SCALE.brackets)).toBeCloseTo(2103.99, 2);
   });
 });
