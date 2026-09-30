@@ -11,6 +11,7 @@ import { Calculator, TrendingUp, Target, Lock, Unlock, Info, Plus, Trash2, Hourg
 import { formatEUR } from '../lib/format';
 import { useUndoableRemove } from './Toast';
 
+
 interface AssistantPilotProps {
   accounts: SavingsAccount[];
   expenses: Expense[];
@@ -492,7 +493,7 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
 
             <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-6">
                <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-2 flex items-center gap-2"><BarChart3 className="w-5 h-5 text-indigo-600" /> Remplissage Livrets</h3>
-               {bookletStats.map(b => (<div key={b.id} className="space-y-2"><div className="flex justify-between text-sm font-bold text-slate-700 dark:text-slate-200"><span>{b?.name}</span><span>{Math.round(b?.totalPct || 0)}%</span></div><div className="w-full h-3 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden flex"><div className="h-full bg-amber-400" style={{ width: `${b?.parentPct}%` }} title={`Parents : ${formatEUR(b?.parentAmount || 0)}`}></div><div className="h-full bg-indigo-600" style={{ width: `${b?.ownedPct}%` }} title={`Moi : ${formatEUR(b?.ownedAmount || 0)}`}></div></div><div className="flex justify-between text-[11px] text-slate-500 dark:text-slate-400 font-bold"><span className="text-amber-500">Parents {formatEUR(b?.parentAmount || 0)}</span><span className="text-indigo-600">Moi {formatEUR(b?.ownedAmount || 0)}</span><span>Max {formatEUR(b?.ceiling || 0)}</span></div></div>))}
+               {bookletStats.map(b => (<div key={b.id} className="space-y-2"><div className="flex justify-between text-sm font-bold text-slate-700 dark:text-slate-200"><span>{b?.name}</span><span>{Math.round(b?.totalPct || 0)}%</span></div><div className="w-full h-3 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden flex"><div className="h-full bg-amber-400" style={{ width: `${b?.parentPct}%` }} title={`Parents : ${formatEUR(b?.parentAmount || 0)}`}></div><div className="h-full bg-indigo-600" style={{ width: `${b?.ownedPct}%` }} title={`Moi : ${formatEUR(b?.ownedAmount || 0)}`}></div></div><div className="flex justify-between text-[11px] text-slate-500 dark:text-slate-400 font-bold"><span className="text-amber-500">Parents {formatEUR(b?.parentAmount || 0)}</span><span className="text-indigo-600">Moi {formatEUR(b?.ownedAmount || 0)}</span>{b.parentAmount > 0 && b.ownedAmount > 0 && <span className="text-slate-600 dark:text-slate-300">Total {formatEUR(b.parentAmount + b.ownedAmount)}</span>}<span>Max {formatEUR(b?.ceiling || 0)}</span></div></div>))}
             </div>
           </div>
 

@@ -21,6 +21,7 @@ import { computeMaturityCountdown, depositsAfterCashFlow, computeMonthlySavingsC
 import { localTodayISO } from './lib/dates';
 import { formatEUR, formatSignedEUR } from './lib/format';
 import { MovementSearch } from './components/MovementSearch';
+import { AccountTotal } from './components/AccountTotal';
 import {
   LayoutDashboard, Wallet, Trash2, Edit2, ShieldCheck,
   ArrowRightLeft, RefreshCcw, PlusCircle, Cloud, LogOut,
@@ -836,7 +837,7 @@ const App: React.FC = () => {
                                     );
                                   })()}
                                 </td>
-                                <td className="px-6 py-4 text-right font-black text-indigo-600 text-lg">{formatEUR(acc.ownedAmount)}</td>
+                                <td className="px-6 py-4 text-right"><div className="font-black text-indigo-600 text-lg">{formatEUR(acc.ownedAmount)}</div><AccountTotal account={acc} /></td>
                                 <td className="px-6 py-4 text-right font-bold text-amber-500">{formatEUR(acc.parentalCapital)}</td>
                                 <td className="px-6 py-4 text-right flex justify-end gap-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                                    <button onClick={(e) => { e.stopPropagation(); setEditingAccount(acc); setShowForm(true); }} className="p-2 text-indigo-600 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/40 rounded-lg hover:bg-indigo-100 dark:hover:bg-indigo-900"><Edit2 className="w-4 h-4"/></button>

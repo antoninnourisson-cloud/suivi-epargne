@@ -2,12 +2,13 @@ import React, { useMemo } from 'react';
 import { SavingsAccount } from '../types';
 import { Users, User } from 'lucide-react';
 import { formatEUR } from '../lib/format';
+import { AccountTotal } from './AccountTotal';
 
 interface ParentalShareProps {
   accounts: SavingsAccount[];
 }
 
-const fmt = (n: number) => formatEUR(n, 0);
+const fmt = (n: number) => formatEUR(n);
 
 export const ParentalShare: React.FC<ParentalShareProps> = ({ accounts }) => {
   const { totalOwned, totalParental, rows } = useMemo(() => {
@@ -72,7 +73,7 @@ export const ParentalShare: React.FC<ParentalShareProps> = ({ accounts }) => {
                 return (
                   <tr key={r.id} className="hover:bg-slate-50 dark:hover:bg-slate-800">
                     <td className="px-6 py-3"><div className="font-bold text-slate-800 dark:text-slate-100">{r.name}</div><div className="text-[11px] uppercase text-slate-500 dark:text-slate-400 font-bold">{r.type}</div></td>
-                    <td className="px-6 py-3 text-right font-mono text-indigo-600">{fmt(r.owned)}</td>
+                    <td className="px-6 py-3 text-right"><div className="font-mono text-indigo-600">{fmt(r.owned)}</div><AccountTotal account={{ ownedAmount: r.owned, parentalCapital: r.parental }} /></td>
                     <td className="px-6 py-3 text-right font-mono text-amber-500">{fmt(r.parental)}</td>
                     <td className="px-6 py-3">
                       <div className="w-full h-2.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden flex">
