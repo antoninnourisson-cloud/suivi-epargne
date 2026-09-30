@@ -4,7 +4,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, AreaChart, Area 
 } from 'recharts';
 import { SavingsAccount, PortfolioSnapshot, AccountType, Expense, FiscalConfig, WorkBenefits, RecurringMovement } from '../types';
-import { Euro, Lock, Wallet, Filter, Unlock, Save, AlertTriangle, Trash2, Clock, TrendingUp, TrendingDown, PiggyBank, Percent, ShieldAlert, Repeat } from 'lucide-react';
+import { Euro, Lock, Wallet, ListTodo, ChevronDown, Unlock, Save, AlertTriangle, Trash2, Clock, TrendingUp, TrendingDown, PiggyBank, Percent, ShieldAlert, Repeat } from 'lucide-react';
 import { computeAccruedParentalInterest, computeRecentSavingsRate, computeAccountBalanceAtDate, findStaleRegulatedRates, computeLepEligibility, computeIncome, findDueRecurring, computeMonthSavedAmount, computeSavingsRateHistory } from '../lib/finance';
 import { parseISODate, formatISODay, daysBetween, localTodayISO } from '../lib/dates';
 import { Button } from './Button';
@@ -228,6 +228,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
   // partagées avec Objectifs, pour que les deux écrans ne puissent jamais raconter deux
   // rythmes différents.
   const monthSaved = useMemo(() => computeMonthSavedAmount(accounts), [accounts]);
+
+  const [todoOpen, setTodoOpen] = useState(() => {
+    try { return localStorage.getItem('dashboard_todo_open') !== '0'; } catch { return true; }
+  });
+  const toggleTodo = () => setTodoOpen(open => {
+    try { localStorage.setItem('dashboard_todo_open', open ? '0' : '1'); } catch { /* préférence non mémorisée */ }
+    return !open;
+  });
   const rateHistory = useMemo(() => computeSavingsRateHistory(accounts, monthlyPay), [accounts, monthlyPay]);
   // Moyenne des mois COMPLETS seulement : le mois en cours n'est pas encore fini.
   const avgRate = useMemo(() => {
@@ -375,26 +383,33 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
 
   if (accounts.length === 0) return <div className="text-center py-20 text-slate-600 dark:text-slate-300">Aucune donnée disponible.</div>;
 
+  const todoCount =
+    (daysSinceLastUpdate !== null && daysSinceLastUpdate >= 21 ? 1 : 0) +
+    (onRecordRecurring ? dueRecurring.length : 0) +
+    (lepStatus && lepStatus.status !== 'ok' ? 1 : 0) +
+    (showRateReminder && staleRates ? 1 : 0) +
+    (parentalYearEndReminder !== null ? 1 : 0) +
+    (onDeleteAccount ? inactiveEmptyAccounts.length : 0) +
+    ceilingAlerts.length;
+
   return (
     <div className="space-y-6">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 text-slate-700 dark:text-slate-200 font-medium">
-            <Filter className="w-4 h-4" />
-            <span>Dashboard</span>
-          </div>
-          <Button onClick={exportSession} variant="secondary" className="text-xs h-9 gap-2">
-            <Save className="w-4 h-4 text-indigo-600" />
-            Sauvegarder l'état (CSV)
-          </Button>
-        </div>
-        <div className="flex items-center gap-2">
-          <input type="date" value={dateRange.start} onChange={(e) => setDateRange((prev: any) => ({ ...prev, start: e.target.value }))} className="bg-slate-50 dark:bg-slate-900 text-sm border p-2 rounded-lg" />
-          <span className="text-slate-500 dark:text-slate-400 text-sm">à</span>
-          <input type="date" value={dateRange.end} onChange={(e) => setDateRange((prev: any) => ({ ...prev, end: e.target.value }))} className="bg-slate-50 dark:bg-slate-900 text-sm border p-2 rounded-lg" />
-        </div>
-      </div>
-
+      {todoCount > 0 && (
+        <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
+          <button
+            type="button"
+            onClick={toggleTodo}
+            aria-expanded={todoOpen}
+            className="w-full flex items-center justify-between gap-3 p-4 text-left"
+          >
+            <span className="text-sm font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+              <ListTodo className="w-4 h-4 text-indigo-600" /> À faire
+              <span className="px-2 py-0.5 rounded-full bg-indigo-600 text-white text-[11px] font-black">{todoCount}</span>
+            </span>
+            <ChevronDown className={`w-4 h-4 text-slate-500 dark:text-slate-400 transition-transform ${todoOpen ? 'rotate-180' : ''}`} />
+          </button>
+          {todoOpen && (
+            <div className="px-4 pb-4 space-y-2">
       {daysSinceLastUpdate !== null && daysSinceLastUpdate >= 21 && (
         <div className="flex items-center gap-3 p-3 rounded-xl border bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-sm font-bold">
           <Clock className="w-4 h-4 flex-shrink-0" />
@@ -471,6 +486,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
               </div>
             );
           })}
+        </div>
+      )}
+            </div>
+          )}
         </div>
       )}
 
@@ -571,8 +590,19 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
         </div>
       )}
 
-      <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 h-96">
-        <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100 mb-4">Évolution de mon Épargne Nette (Empilé)</h3>
+      <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 mb-4">
+          <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100">Évolution de mon épargne nette</h3>
+          <div className="flex flex-wrap items-center gap-2">
+            <input type="date" value={dateRange.start} onChange={(e) => setDateRange((prev: any) => ({ ...prev, start: e.target.value }))} aria-label="Début de la période" className="bg-slate-50 dark:bg-slate-900 text-sm border border-slate-200 dark:border-slate-700 p-2 rounded-lg" />
+            <span className="text-slate-500 dark:text-slate-400 text-sm">à</span>
+            <input type="date" value={dateRange.end} onChange={(e) => setDateRange((prev: any) => ({ ...prev, end: e.target.value }))} aria-label="Fin de la période" className="bg-slate-50 dark:bg-slate-900 text-sm border border-slate-200 dark:border-slate-700 p-2 rounded-lg" />
+            <Button onClick={exportSession} variant="secondary" className="text-xs h-9 gap-2">
+              <Save className="w-4 h-4 text-indigo-600" /> Export CSV
+            </Button>
+          </div>
+        </div>
+        <div className="h-80">
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={stackedData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
             <defs>
@@ -621,6 +651,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
             ))}
           </AreaChart>
         </ResponsiveContainer>
+        </div>
       </div>
 
       <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 h-80">
