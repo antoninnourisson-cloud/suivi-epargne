@@ -89,7 +89,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
         const pct = (a.totalAmount / ceiling) * 100;
         return { id: a.id, name: a.name, type: a.type, pct, remaining: ceiling - a.totalAmount, ceiling };
       })
-      .filter(x => x.pct >= 90)
+      // Presque plein seulement : un livret déjà plein n'appelle aucune action (le plan de
+      // placement l'ignore déjà), inutile de le rappeler en permanence.
+      .filter(x => x.pct >= 90 && x.pct < 100)
       .sort((a, b) => b.pct - a.pct);
   }, [accounts, fiscalConfig]);
 
@@ -517,13 +519,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
       {ceilingAlerts.length > 0 && (
         <div className="space-y-2">
           {ceilingAlerts.map(a => {
-            const full = a.pct >= 100;
             return (
-              <div key={a.id} className={`flex items-center gap-3 p-3 rounded-xl border text-sm font-bold ${full ? 'bg-rose-50 border-rose-200 text-rose-700 dark:bg-rose-950/40 dark:border-rose-800 dark:text-rose-300' : 'bg-amber-50 border-amber-200 text-amber-800 dark:bg-amber-950/40 dark:border-amber-800 dark:text-amber-300'}`}>
+              <div key={a.id} className="flex items-center gap-3 p-3 rounded-xl border text-sm font-bold bg-amber-50 border-amber-200 text-amber-800 dark:bg-amber-950/40 dark:border-amber-800 dark:text-amber-300">
                 <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-                {full
-                  ? <span>{a.name} ({a.type}) est au plafond ({formatEUR(a.ceiling)}). Redirigez vos prochains versements ailleurs.</span>
-                  : <span>{a.name} ({a.type}) est rempli à {a.pct.toFixed(0)}% — il reste {formatEUR(a.remaining, 0)} avant le plafond.</span>}
+                <span>{a.name} ({a.type}) est rempli à {a.pct.toFixed(0)} % — il reste {formatEUR(a.remaining, 0)} avant le plafond.</span>
               </div>
             );
           })}

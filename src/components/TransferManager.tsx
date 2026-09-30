@@ -141,7 +141,7 @@ export const TransferManager: React.FC<TransferManagerProps> = ({ accounts, onUp
               {accounts.map(acc => <option key={acc.id} value={acc.id}>{acc.name} ({acc.institution})</option>)}
             </select>
             <input type="text" value={depositAmount} onChange={e => setDepositAmount(e.target.value)} className="w-full p-4 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 border border-slate-300 dark:border-slate-700 rounded-lg text-2xl font-black" placeholder="0,00 €" inputMode="decimal" />
-            <Button type="submit" isLoading={saveStatus === 'pending'} className="w-full bg-emerald-600 py-4">Valider le dépôt</Button>
+            <Button type="submit" isLoading={saveStatus === 'pending'} className="w-full !bg-emerald-600 hover:!bg-emerald-700 py-4">Valider le dépôt</Button>
           </form>
         ) : activeTab === 'transfer' ? (
           <form onSubmit={handleTransfer} className="space-y-4">
