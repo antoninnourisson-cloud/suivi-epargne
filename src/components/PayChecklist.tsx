@@ -8,7 +8,7 @@
 import React, { useState } from 'react';
 import { PayChecklist as PayChecklistData, PayChecklistLine } from '../types';
 import { PayTransfer, PlacementStep } from '../lib/finance';
-import { formatEUR } from '../lib/format';
+import { formatEUR, toInputAmount, formatRate } from '../lib/format';
 import { parseFrenchNumber } from '../lib/numbers';
 import { Wallet, Info, CheckCircle2, RotateCcw, PiggyBank } from 'lucide-react';
 
@@ -40,7 +40,7 @@ export const PayChecklist: React.FC<PayChecklistProps> = ({
     ...transfers.map(t => ({ key: `t:${t.label}`, label: t.label, amount: t.amount, kind: 'transfer' as const })),
     ...steps.filter(st => !st.alert && st.accountId).map(st => ({
       key: `s:${st.accountId}`, label: st.accountName, amount: st.fillAmount, kind: 'saving' as const,
-      accountId: st.accountId, detail: `${st.type}${st.rate ? ` · ${st.rate.toLocaleString('fr-FR')} %` : ''}`,
+      accountId: st.accountId, detail: `${st.type}${st.rate ? ` · ${formatRate(st.rate)}` : ''}`,
     })),
   ];
   const openAccountStep = steps.find(st => st.alert);
@@ -74,7 +74,7 @@ export const PayChecklist: React.FC<PayChecklistProps> = ({
     if (entry?.movementId && l.accountId) onCancelDeposit(l.accountId, entry.movementId);
     const { [l.key]: _removed, ...rest } = frozen.done;
     onChange({ ...frozen, done: rest });
-    setDrafts(d => ({ ...d, [l.key]: String(entry?.amount ?? l.amount) }));
+    setDrafts(d => ({ ...d, [l.key]: toInputAmount(entry?.amount ?? l.amount) }));
   };
 
   const renderLine = (l: PayChecklistLine & { detail?: string }) => {
@@ -109,7 +109,7 @@ export const PayChecklist: React.FC<PayChecklistProps> = ({
             <input
               type="text"
               inputMode="decimal"
-              value={drafts[l.key] ?? String(Math.round(l.amount * 100) / 100).replace('.', ',')}
+              value={drafts[l.key] ?? toInputAmount(l.amount)}
               onChange={e => setDrafts(d => ({ ...d, [l.key]: e.target.value }))}
               onKeyDown={e => { if (e.key === 'Enter') check(l); }}
               className={`w-24 p-1.5 text-right font-mono font-bold bg-white dark:bg-slate-800 border rounded-lg ${invalid ? 'border-rose-400' : 'border-slate-200 dark:border-slate-700'} text-slate-700 dark:text-slate-200`}

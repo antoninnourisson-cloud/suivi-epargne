@@ -7,7 +7,7 @@ import { useSaveFeedback } from '../hooks/useSaveFeedback';
 import { safeNumber, parseFrenchNumber } from '../lib/numbers';
 import { tracksDeposits, depositsAfterWithdrawal } from '../lib/finance';
 import { localTodayISO } from '../lib/dates';
-import { formatEUR, formatSignedEUR } from '../lib/format';
+import { formatEUR, formatSignedEUR, toInputAmount } from '../lib/format';
 
 interface AccountUpdateProps {
   accounts: SavingsAccount[];
@@ -30,10 +30,10 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
     accounts.reduce((acc, account) => ({ 
       ...acc, 
       [account.id]: { 
-        owned: account.ownedAmount.toString(), 
-        parental: account.parentalCapital.toString(), 
+        owned: toInputAmount(account.ownedAmount), 
+        parental: toInputAmount(account.parentalCapital), 
         date: today,
-        deposits: account.totalDeposits !== undefined ? String(account.totalDeposits) : '',
+        deposits: account.totalDeposits !== undefined ? toInputAmount(account.totalDeposits) : '',
         cashFlow: 0,
       } 
     }), {})
@@ -94,10 +94,10 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
       ...prev,
       [id]: {
         ...prev[id],
-        [a.target]: String(next),
+        [a.target]: toInputAmount(next),
         ...(tracksCash ? {
           cashFlow: prev[id].cashFlow + a.sign * amount,
-          deposits: String(Math.round((a.sign > 0 ? deposits + amount : depositsAfterWithdrawal(deposits, valueBefore, amount)) * 100) / 100),
+          deposits: toInputAmount(Math.round((a.sign > 0 ? deposits + amount : depositsAfterWithdrawal(deposits, valueBefore, amount)) * 100) / 100),
         } : {}),
       },
     }));
@@ -122,7 +122,7 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
       const parental = safeNumber(u.parental, 0);
       // Total inférieur à la part des parents : saisie incohérente, la part propre n'est
       // pas touchée (message sous le champ).
-      const owned = total === null || total < parental ? u.owned : String(Math.round((total - parental) * 100) / 100);
+      const owned = total === null || total < parental ? u.owned : toInputAmount(Math.round((total - parental) * 100) / 100);
       return { ...prev, [id]: { ...u, bankTotal: val, owned } };
     });
   };
@@ -248,7 +248,7 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
                     <input
                       type="text"
                       inputMode="decimal"
-                      value={u.bankTotal ?? String(Math.round(newTotal * 100) / 100).replace('.', ',')}
+                      value={u.bankTotal ?? toInputAmount(newTotal)}
                       onChange={(e) => handleBankTotalChange(account.id, e.target.value)}
                       className="w-full bg-transparent text-lg font-black text-slate-800 dark:text-slate-100 outline-none"
                     />

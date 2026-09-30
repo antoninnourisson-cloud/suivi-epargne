@@ -98,9 +98,10 @@ export const AccountForm: React.FC<AccountFormProps> = ({ onSave, initialData, o
 
     onSave({
       id: initialData?.id || crypto.randomUUID(),
-      name: name || `${type} - ${institution}`,
+      // Espaces superflus retirés : « BPVF » et « BPVF  » apparaissaient comme deux établissements.
+      name: name.trim().replace(/\s+/g, ' ') || `${type} - ${institution.trim()}`,
       type,
-      institution,
+      institution: institution.trim().replace(/\s+/g, ' '),
       totalAmount,
       ownedAmount,
       parentalCapital,

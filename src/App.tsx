@@ -176,6 +176,29 @@ const App: React.FC = () => {
   // Lien direct vers un écran (`?view=update`), utilisé par les notifications. Traité
   // après authentification + déverrouillage, comme le raccourci d'ajout rapide.
   const deepLinkedRef = useRef(false);
+
+  // Le bouton d'ajout rapide recouvrait les montants alignés à droite : il s'efface quand
+  // on fait défiler vers le bas et revient dès qu'on remonte.
+  const [fabHidden, setFabHidden] = useState(false);
+  const lastScrollRef = useRef(0);
+  const handleMainScroll = (e: React.UIEvent<HTMLElement>) => {
+    const y = e.currentTarget.scrollTop;
+    const delta = y - lastScrollRef.current;
+    if (Math.abs(delta) > 8) setFabHidden(delta > 0 && y > 80);
+    lastScrollRef.current = y;
+  };
+  useEffect(() => { setFabHidden(false); lastScrollRef.current = 0; }, [view]);
+
+  // Les écrans sont chargés à la demande : on précharge les plus utilisés une fois connecté,
+  // pour éviter le petit temps de chargement à leur première ouverture.
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const t = setTimeout(() => {
+      import('./components/AccountUpdate'); import('./components/AssistantPilot');
+      import('./components/TransferManager'); import('./components/Yield');
+    }, 1500);
+    return () => clearTimeout(t);
+  }, [isAuthenticated]);
   useEffect(() => {
     if (!isAuthenticated || locked) return;
     const params = new URLSearchParams(window.location.search);
@@ -585,7 +608,7 @@ const App: React.FC = () => {
           <div className="w-16 h-16 bg-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-indigo-500/30">
             <RefreshCcw className="w-8 h-8 text-white" />
           </div>
-          <h1 className="text-2xl font-black text-slate-900 mb-2">Suivi Épargne</h1>
+          <h1 className="text-2xl font-black text-slate-900 dark:text-slate-100 mb-2">Suivi Épargne</h1>
           <p className="text-slate-500 dark:text-slate-400 mb-8">Vos données sont stockées en sécurité sur votre Google Drive personnel.</p>
           {apiError ? (
             <div className="text-left bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-xl p-4">
@@ -659,7 +682,7 @@ const App: React.FC = () => {
         </div>
       </header>
 
-      <main className="flex-1 p-4 md:p-8 overflow-y-auto relative h-screen pb-24 md:pb-8">
+      <main onScroll={handleMainScroll} className="flex-1 p-4 md:p-8 overflow-y-auto relative h-screen pb-40 md:pb-24">
         <div className="absolute top-4 right-4 hidden sm:flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-800 px-3 py-1 rounded-full border border-slate-200 dark:border-slate-700 shadow-sm font-mono">
             <Cloud className="w-3 h-3 text-indigo-400"/> Drive: suivi_epargne.json
         </div>
@@ -780,7 +803,7 @@ const App: React.FC = () => {
 
             {view === 'accounts' && (
               <div className="space-y-6 animate-fade-in">
-                <div className="flex justify-between items-center bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700">
+                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700">
                   <div><h2 className="text-2xl font-black text-slate-800 dark:text-slate-100">Mes comptes</h2><p className="text-sm text-slate-500 dark:text-slate-400 font-medium">{data.accounts.length} comptes actifs</p></div>
                   {!showForm && <button onClick={() => { setEditingAccount(undefined); setShowForm(true); }} className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-xl font-bold flex gap-2 transition-colors shadow-lg shadow-indigo-200"><PlusCircle className="w-5 h-5"/> Ajouter un compte</button>}
                 </div>
@@ -805,15 +828,15 @@ const App: React.FC = () => {
                   )}
                   <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
                     <div className="overflow-x-auto">
-                      <table className="w-full text-left min-w-[34rem]">
+                      <table className="w-full text-left md:min-w-[34rem]">
                         <thead className="bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700">
-                          <tr><th className="px-6 py-4 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider">Compte</th><th className="px-6 py-4 text-[11px] text-right text-slate-500 dark:text-slate-400 uppercase tracking-wider">Mien</th><th className="px-6 py-4 text-[11px] text-right text-slate-500 dark:text-slate-400 uppercase tracking-wider">Parents</th><th className="px-6 py-4 text-right"></th></tr>
+                          <tr><th className="px-6 py-4 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider">Compte</th><th className="px-6 py-4 text-[11px] text-right text-slate-500 dark:text-slate-400 uppercase tracking-wider">Ma part</th><th className="hidden md:table-cell px-6 py-4 text-[11px] text-right text-slate-500 dark:text-slate-400 uppercase tracking-wider">Parents</th><th className="hidden md:table-cell px-6 py-4 text-right"></th></tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                           {filteredAccounts.map(acc => (
                             <React.Fragment key={acc.id}>
                               <tr onClick={() => setEditingAccount(editingAccount?.id === acc.id ? undefined : acc)} className="hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer group transition-colors">
-                                <td className="px-6 py-4">
+                                <td className="px-4 md:px-6 py-4">
                                   <div className="font-bold text-slate-800 dark:text-slate-100">{acc.name}</div>
                                   <div className="text-[11px] uppercase text-slate-500 dark:text-slate-400 font-bold">{acc.institution}</div>
                                   {acc.tags && acc.tags.length > 0 && (
@@ -836,13 +859,19 @@ const App: React.FC = () => {
                                       </div>
                                     );
                                   })()}
+                                  <div className="md:hidden mt-2 flex items-center gap-2">
+                                    {acc.parentalCapital > 0 && <span className="text-xs font-bold text-amber-600 dark:text-amber-400 flex-1">Parents : {formatEUR(acc.parentalCapital)}</span>}
+                                    <span className="flex-1" />
+                                    <button onClick={(e) => { e.stopPropagation(); setEditingAccount(acc); setShowForm(true); }} aria-label={`Modifier ${acc.name}`} className="p-2.5 text-indigo-600 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/40 rounded-lg"><Edit2 className="w-4 h-4"/></button>
+                                    <button onClick={(e) => { e.stopPropagation(); handleDeleteAccount(acc); }} aria-label={`Supprimer ${acc.name}`} className="p-2.5 text-rose-600 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/40 rounded-lg"><Trash2 className="w-4 h-4"/></button>
+                                  </div>
                                 </td>
-                                <td className="px-6 py-4 text-right"><div className="font-black text-indigo-600 text-lg">{formatEUR(acc.ownedAmount)}</div><AccountTotal account={acc} /></td>
-                                <td className="px-6 py-4 text-right font-bold text-amber-500">{formatEUR(acc.parentalCapital)}</td>
-                                <td className="px-6 py-4 text-right flex justify-end gap-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+                                <td className="px-4 md:px-6 py-4 text-right align-top"><div className="font-black text-indigo-600 text-lg whitespace-nowrap">{formatEUR(acc.ownedAmount)}</div><AccountTotal account={acc} /></td>
+                                <td className="hidden md:table-cell px-6 py-4 text-right font-bold text-amber-500">{formatEUR(acc.parentalCapital)}</td>
+                                <td className="hidden md:table-cell px-6 py-4 text-right"><div className="flex justify-end gap-2 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                                    <button onClick={(e) => { e.stopPropagation(); setEditingAccount(acc); setShowForm(true); }} className="p-2 text-indigo-600 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/40 rounded-lg hover:bg-indigo-100 dark:hover:bg-indigo-900"><Edit2 className="w-4 h-4"/></button>
                                    <button onClick={(e) => { e.stopPropagation(); handleDeleteAccount(acc); }} className="p-2 text-rose-600 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/40 rounded-lg hover:bg-rose-100 dark:hover:bg-rose-900"><Trash2 className="w-4 h-4"/></button>
-                                </td>
+                                </div></td>
                               </tr>
                               {editingAccount?.id === acc.id && !showForm && (
                                  <tr className="bg-slate-50 dark:bg-slate-900 animate-in slide-in-from-top-2"><td colSpan={4} className="p-4"><div className="space-y-2 p-2">
@@ -854,7 +883,7 @@ const App: React.FC = () => {
                                    {buildDisplayMovements(acc.movements).map(m => (
                                      <div key={m.id} className={`flex justify-between items-center p-3 rounded-xl text-xs border shadow-sm ${m.grouped ? 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 italic' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700'}`}>
                                        <div className="flex items-center gap-3">
-                                           <span className="text-slate-500 dark:text-slate-400 font-mono bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded">{m.date}</span>
+                                           <span className="text-slate-500 dark:text-slate-400 font-mono bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded whitespace-nowrap">{m.date.split('-').reverse().join('/')}</span>
                                            <span className="font-bold text-slate-700 dark:text-slate-200">{m.label}</span>
                                            {!m.grouped && <button onClick={()=>handleRenameMovement(acc.id, m.id, m.label)} aria-label={`Renommer « ${m.label} »`} className="p-2 -m-1 opacity-60 hover:opacity-100"><Edit2 className="w-4 h-4 text-slate-500 dark:text-slate-400"/></button>}
                                        </div>
@@ -886,7 +915,8 @@ const App: React.FC = () => {
       {data.accounts.length > 0 && (
         <button
           onClick={() => setQuickAddOpen(true)}
-          className="fixed bottom-20 md:bottom-6 right-4 z-40 w-14 h-14 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-900/30 flex items-center justify-center transition-transform hover:scale-105"
+          className={`fixed bottom-20 md:bottom-6 right-4 z-40 w-14 h-14 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-900/30 flex items-center justify-center transition-all duration-200 ${fabHidden ? 'translate-y-24 opacity-0 pointer-events-none' : 'hover:scale-105'}`}
+          aria-label="Ajout rapide"
           title="Ajout rapide"
         >
           <Zap className="w-6 h-6" />

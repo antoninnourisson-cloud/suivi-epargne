@@ -8,7 +8,7 @@ import { parseFrenchNumber, safeNumber } from '../lib/numbers';
 import { NumberInput } from './NumberInput';
 import { isBackendEnabled } from '../services/backendService';
 import { Calculator, TrendingUp, Target, Lock, Unlock, Info, Plus, Trash2, Hourglass, Coins, BarChart3, X, Check, FileCheck2, Wand2, BellRing, Wallet } from 'lucide-react';
-import { formatEUR } from '../lib/format';
+import { formatEUR, formatPeriod } from '../lib/format';
 import { useUndoableRemove } from './Toast';
 
 
@@ -290,13 +290,13 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
       {activeTab === 'budget' && (
         <>
           <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
-            <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-2"><Calculator className="w-5 h-5 text-indigo-600" /> Revenus & Salaires</h3>
+            <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-2"><Calculator className="w-5 h-5 text-indigo-600" /> Revenus et salaire</h3>
 
             {activePayslip && (
-              <div className="mb-4 flex items-center justify-between gap-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-xl p-3">
+              <div className="mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-xl p-3">
                 <div className="flex items-center gap-2 text-amber-800 dark:text-amber-300 text-xs font-bold">
                   <FileCheck2 className="w-4 h-4 flex-shrink-0" />
-                  Chiffres exacts de votre fiche de {activePayslip.extracted.period || 'paie'} ({activePayslip.extracted.employer || activePayslip.fileName}) — pas de calcul, valeurs verbatim.
+                  Chiffres exacts de votre fiche de {activePayslip.extracted.period ? formatPeriod(activePayslip.extracted.period) : 'paie'} ({activePayslip.extracted.employer || activePayslip.fileName}) — recopiés tels quels, sans calcul.
                 </div>
                 <button onClick={onClearActivePayslip} className="flex items-center gap-1 text-xs font-bold text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900 px-3 py-1.5 rounded-lg flex-shrink-0"><Wand2 className="w-3.5 h-3.5" /> Repasser en estimation</button>
               </div>
@@ -310,7 +310,7 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
             )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-              <div className="bg-slate-50 dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-700"><label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Brut annuel</label><NumberInput value={Math.round(grossAnnual)} onChange={updateFromGrossAnnual} min={0} className="w-full bg-transparent font-black text-slate-800 dark:text-slate-100 text-lg outline-none" /></div>
+              <div className="bg-slate-50 dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-700"><label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Brut annuel</label><NumberInput value={Math.round(grossAnnual)} onChange={updateFromGrossAnnual} min={0} suffix="€" className="w-full bg-transparent font-black text-slate-800 dark:text-slate-100 text-lg outline-none" /></div>
               <div className="bg-slate-50 dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
                 <label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Brut mensuel</label>
                 {activePayslip

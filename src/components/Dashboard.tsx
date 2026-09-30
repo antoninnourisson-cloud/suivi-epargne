@@ -1,14 +1,14 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { 
   ResponsiveContainer, Tooltip as RechartsTooltip, Legend, 
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, AreaChart, Area 
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, AreaChart, Area, LabelList 
 } from 'recharts';
 import { SavingsAccount, PortfolioSnapshot, AccountType, Expense, FiscalConfig, WorkBenefits, RecurringMovement, Subscription } from '../types';
 import { Euro, Lock, Wallet, ListTodo, ChevronDown, Landmark, CalendarClock, Unlock, Save, AlertTriangle, Trash2, Clock, TrendingUp, TrendingDown, PiggyBank, Percent, ShieldAlert, Repeat } from 'lucide-react';
 import { computeAccruedParentalInterest, computeRecentSavingsRate, computeAccountBalanceAtDate, findStaleRegulatedRates, computeLepEligibility, computeIncome, findDueRecurring, computeMonthSavedAmount, computeSavingsRateHistory, computeUnlockCost, findFiscalReview, applyTaxScale, nextSubscriptionDate } from '../lib/finance';
 import { parseISODate, formatISODay, daysBetween, localTodayISO } from '../lib/dates';
 import { Button } from './Button';
-import { formatEUR } from '../lib/format';
+import { formatEUR, formatSignedEUR } from '../lib/format';
 
 interface DashboardProps {
   accounts: SavingsAccount[];
@@ -349,9 +349,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
     return totalAnnualParental > 1 ? totalAnnualParental : null;
   }, [accounts]);
 
+  // Regroupement insensible aux espaces et à la casse : « BPVF » et « BPVF  » formaient
+  // deux barres distinctes.
   const dataByInstitution = Object.values(accounts.reduce((acc, curr) => {
-    const key = curr.institution;
-    if (!acc[key]) acc[key] = { name: key, value: 0 };
+    const name = (curr.institution || 'Sans établissement').trim().replace(/\s+/g, ' ');
+    const key = name.toLowerCase();
+    if (!acc[key]) acc[key] = { name, value: 0 };
     acc[key].value += curr.ownedAmount;
     return acc;
   }, {} as Record<string, { name: string, value: number }>));
@@ -385,17 +388,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
   };
 
   const StatCard = ({ title, amount, icon: Icon, color, subtext, extra }: any) => (
-    <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
-      <div className="flex justify-between items-start">
-        <div>
-          <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">{title}</p>
-          <h3 className="text-2xl font-bold text-slate-800 dark:text-slate-100 mt-1">
+    <div className="bg-white dark:bg-slate-800 p-4 md:p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 min-w-0">
+      <div className="flex justify-between items-start gap-2">
+        <div className="min-w-0">
+          <p className="text-slate-500 dark:text-slate-400 text-xs md:text-sm font-medium">{title}</p>
+          <h3 className="text-lg md:text-2xl font-bold text-slate-800 dark:text-slate-100 mt-1 whitespace-nowrap">
             {formatEUR(amount, 2)}
           </h3>
           {subtext && <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 uppercase font-bold tracking-wide">{subtext}</p>}
           {extra}
         </div>
-        <div className={`p-3 rounded-lg ${color}`}>
+        <div className={`hidden md:block p-3 rounded-lg ${color}`}>
           <Icon className="w-6 h-6 text-white" />
         </div>
       </div>
@@ -533,17 +536,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
         <StatCard title="Mon épargne nette" amount={mySavings} icon={Wallet} color="bg-indigo-600" subtext="Capital réel" />
         <StatCard title="Disponibilité immédiate" amount={availabilityStats.available} icon={Unlock} color="bg-emerald-500" subtext="Liquide" />
-        <StatCard title="Contrainte fiscale" amount={availabilityStats.taxLocked} icon={Euro} color="bg-amber-500" subtext="AV/PEA récents" extra={availabilityStats.taxLocked > 0 && (
+        <div className="col-span-2 lg:col-span-1"><StatCard title="Contrainte fiscale" amount={availabilityStats.taxLocked} icon={Euro} color="bg-amber-500" subtext="AV/PEA récents" extra={availabilityStats.taxLocked > 0 && (
           <div className="mt-2 space-y-0.5 text-[11px] text-slate-600 dark:text-slate-300">
             {unlockCost.extraTax >= 1 && <p>Tout retirer aujourd'hui : <b>≈ {formatEUR(unlockCost.extraTax, 0)}</b> d'impôt en plus qu'après la maturité.</p>}
             {unlockCost.closesPea && <p className="text-rose-600 dark:text-rose-400 font-bold">Un retrait clôturerait votre PEA.</p>}
             {unlockCost.nextFree && <p>Libre de surcoût le <b>{parseISODate(unlockCost.nextFree.date).toLocaleDateString('fr-FR')}</b> ({unlockCost.nextFree.name}).</p>}
             {unlockCost.unknown.length > 0 && <p className="text-slate-500 dark:text-slate-400">Versements à renseigner pour chiffrer : {unlockCost.unknown.join(', ')}.</p>}
           </div>
-        )} />
+        )} /></div>
         <StatCard title="Bloqué" amount={availabilityStats.hardLocked} icon={Lock} color="bg-slate-800" subtext="Retraite/PEE" />
       </div>
 
@@ -582,7 +585,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
           <div className="bg-white dark:bg-slate-800 p-5 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
             <div className="flex items-baseline justify-between gap-3 mb-2">
               <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2"><PiggyBank className="w-4 h-4 text-indigo-600" /> Placé ce mois-ci</h3>
-              <p className="text-sm font-black text-slate-700 dark:text-slate-200">{fmtEUR(Math.max(0, monthSaved))}{hasPlan && <span className="text-slate-500 dark:text-slate-400 font-bold"> / {fmtEUR(plan)}</span>}</p>
+              <p className="text-sm font-black text-slate-700 dark:text-slate-200">{monthSaved < 0 ? formatSignedEUR(monthSaved, 0) : fmtEUR(monthSaved)}{hasPlan && <span className="text-slate-500 dark:text-slate-400 font-bold"> / {fmtEUR(plan)}</span>}</p>
             </div>
             {hasPlan && (
               <div className="h-2.5 rounded-full bg-slate-100 dark:bg-slate-700 overflow-hidden">
@@ -597,8 +600,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
             </p>
             {monthlyPay > 0 && (
               <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-700">
-                <div className="flex items-baseline justify-between gap-3 mb-2">
-                  <p className="text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5"><Percent className="w-3.5 h-3.5 text-indigo-600" /> Taux d'épargne</p>
+                <div className="flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-1 sm:gap-3 mb-2">
+                  <p className="text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5 whitespace-nowrap"><Percent className="w-3.5 h-3.5 text-indigo-600" /> Taux d'épargne</p>
                   <p className="text-xs text-slate-500 dark:text-slate-400">
                     Ce mois-ci <b className="text-slate-800 dark:text-slate-100">{Math.round(rateHistory[rateHistory.length - 1]?.rate ?? 0)} %</b>
                     {avgRate !== null && <> · moyenne 12 mois <b className="text-slate-800 dark:text-slate-100">{Math.round(avgRate)} %</b></>}
@@ -728,9 +731,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={dataByInstitution} layout="vertical">
             <XAxis type="number" hide />
-            <YAxis dataKey="name" type="category" width={150} tick={{fontSize: 11, fontWeight: 500}} />
+            <YAxis dataKey="name" type="category" width={96} tick={{fontSize: 11, fontWeight: 600, fill: '#94a3b8'}} />
             <RechartsTooltip formatter={(v: number) => formatEUR(v)} cursor={{fill: 'transparent'}} />
-            <Bar dataKey="value" fill="#6366f1" radius={[0, 4, 4, 0]} barSize={24} />
+            <Bar dataKey="value" fill="#6366f1" radius={[0, 4, 4, 0]} barSize={24}>
+              <LabelList dataKey="value" position="insideRight" formatter={(v: number) => formatEUR(v, 0)} style={{ fill: '#fff', fontSize: 11, fontWeight: 700 }} />
+            </Bar>
           </BarChart>
         </ResponsiveContainer>
       </div>

@@ -23,3 +23,18 @@ export const formatEUR = (n: number, decimals: 'auto' | 0 | 2 = 'auto'): string 
 /** Idem avec un signe explicite : « +13,50 € », « −250 € ». */
 export const formatSignedEUR = (n: number, decimals: 'auto' | 0 | 2 = 'auto'): string =>
   `${n > 0 ? '+' : n < 0 ? '−' : ''}${formatEUR(Math.abs(n), decimals)}`;
+
+/** Valeur éditable dans un champ texte, à la française : « 410,80 », « 250 ». */
+export const toInputAmount = (n: number): string =>
+  Math.round(n * 100) % 100 === 0 ? String(Math.round(n)) : n.toFixed(2).replace('.', ',');
+
+/** Taux en pourcentage, à la française : « 2,5 % ». */
+export const formatRate = (pct: number): string =>
+  `${pct.toLocaleString('fr-FR', { maximumFractionDigits: 2 })} %`;
+
+/** « 2026-09 » → « septembre 2026 » ; toute autre valeur est rendue telle quelle. */
+export const formatPeriod = (period: string): string => {
+  const m = /^(\d{4})-(\d{2})$/.exec(period.trim());
+  if (!m) return period;
+  return new Date(Number(m[1]), Number(m[2]) - 1, 1).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+};

@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { SavingsAccount, AccountType, FiscalConfig } from '../types';
 import { computeWeightedAnnualRate, computeCapitalGainsTax, computeParentalInterest, computeAccruedInterest, CapitalTaxRegime, computeWithdrawalTax, tracksDeposits, PEA_DEPOSIT_CEILING } from '../lib/finance';
 import { Coins, TrendingUp, AlertCircle, PiggyBank, FileDown, Landmark, Info } from 'lucide-react';
-import { formatEUR } from '../lib/format';
+import { formatEUR, formatRate } from '../lib/format';
 
 const REGIME_LABEL: Record<CapitalTaxRegime, string> = {
   PFU: 'PFU 30%',
@@ -160,15 +160,15 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig }) => {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="bg-slate-900 text-white p-6 rounded-2xl">
-          <p className="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase mb-1 flex items-center gap-2"><TrendingUp className="w-4 h-4" /> Intérêts annuels qui me reviennent</p>
+          <p className="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase mb-1 flex items-center gap-2"><TrendingUp className="w-4 h-4" /> Intérêts annuels qui vous reviennent</p>
           <p className="text-4xl font-black text-emerald-400">{fmt(totalAnnual)}</p>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">soit ≈ {fmt(totalAnnual / 12)}/mois — capital parental inclus</p>
         </div>
         <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-6 rounded-2xl">
-          <p className="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase mb-1 flex items-center gap-2"><PiggyBank className="w-4 h-4" /> Dont offerts par mes parents</p>
+          <p className="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase mb-1 flex items-center gap-2"><PiggyBank className="w-4 h-4" /> Dont offerts par vos parents</p>
           <p className="text-4xl font-black text-indigo-600">{fmt(totalAnnualParental)}</p>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            Intérêts générés par leur capital, qu'ils m'offrent en fin d'année. Le reste ({fmt(totalAnnualOwned)}) vient de ma part propre.
+            Intérêts générés par leur capital, qu'ils vous offrent en fin d'année. Le reste ({fmt(totalAnnualOwned)}) vient de votre part propre.
           </p>
         </div>
       </div>
@@ -178,7 +178,7 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig }) => {
           <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
           <div className="text-sm text-amber-800 dark:text-amber-300">
             <p className="font-black mb-1">Manque à gagner détecté</p>
-            <p>Vous avez <b>{fmt(missed.idleCash)}</b> sur compte courant. En plaçant <b>{fmt(missed.placeable)}</b> sur vos livrets non pleins (jusqu'à {missed.bestRate}%), vous généreriez environ <b>{fmt(missed.extra)}/an</b> d'intérêts supplémentaires.</p>
+            <p>Vous avez <b>{fmt(missed.idleCash)}</b> sur compte courant. En plaçant <b>{fmt(missed.placeable)}</b> sur vos livrets non pleins (jusqu'à {formatRate(missed.bestRate)}), vous généreriez environ <b>{fmt(missed.extra)}/an</b> d'intérêts supplémentaires.</p>
           </div>
         </div>
       )}
@@ -200,9 +200,9 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig }) => {
                 <tr key={r.id} className="hover:bg-slate-50 dark:hover:bg-slate-800">
                   <td className="px-6 py-3"><div className="font-bold text-slate-800 dark:text-slate-100">{r.name}</div><div className="text-[11px] uppercase text-slate-500 dark:text-slate-400 font-bold">{r.type}</div></td>
                   <td className="px-6 py-3 text-right font-mono text-slate-600 dark:text-slate-300">
-                    {r.rate}%
+                    {formatRate(r.rate)}
                     {r.hasRateHistory && Math.abs(r.weightedRate - r.rate) > 0.01 && (
-                      <span className="block text-[11px] text-indigo-400 font-bold normal-case" title="Moyenne pondérée dans le temps suite à un changement de taux">≈{r.weightedRate.toFixed(2)}% pondéré</span>
+                      <span className="block text-[11px] text-indigo-400 font-bold normal-case" title="Moyenne pondérée dans le temps suite à un changement de taux">≈ {formatRate(Math.round(r.weightedRate * 100) / 100)} pondéré</span>
                     )}
                   </td>
                   <td className="px-6 py-3 text-right font-mono text-slate-600 dark:text-slate-300">{fmt(r.base)}</td>
