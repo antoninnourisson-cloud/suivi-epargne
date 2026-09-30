@@ -25,7 +25,7 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
   // `deposits` : versements cumulés des placements (PEA, AV…), '' = inconnus.
   // `cashFlow` : argent réellement versé/retiré via l'ajustement rapide, pour distinguer
   // un versement d'une simple variation de valeur à l'enregistrement.
-  type Draft = { owned: string, parental: string, date: string, deposits: string, cashFlow: number };
+  type Draft = { owned: string, parental: string, date: string, deposits: string, cashFlow: number, bankTotal?: string };
   const [updates, setUpdates] = useState<Record<string, Draft>>(
     accounts.reduce((acc, account) => ({ 
       ...acc, 
@@ -40,11 +40,11 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
   );
 
   const handleOwnedChange = (id: string, val: string) => {
-    setUpdates(prev => ({ ...prev, [id]: { ...prev[id], owned: val } }));
+    setUpdates(prev => ({ ...prev, [id]: { ...prev[id], owned: val, bankTotal: undefined } }));
   };
 
   const handleParentalChange = (id: string, val: string) => {
-    setUpdates(prev => ({ ...prev, [id]: { ...prev[id], parental: val } }));
+    setUpdates(prev => ({ ...prev, [id]: { ...prev[id], parental: val, bankTotal: undefined } }));
   };
 
   const handleDepositsChange = (id: string, val: string) => {
@@ -104,6 +104,29 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
     patchAdjust(id, { amount: '' });
   };
 
+  const changedCount = accounts.filter(account => {
+    const u = updates[account.id];
+    if (!u) return false;
+    const deposits = parseDeposits(u.deposits);
+    return Math.abs(safeNumber(u.owned, 0) - account.ownedAmount) > 0.004
+      || Math.abs(safeNumber(u.parental, 0) - account.parentalCapital) > 0.004
+      || (tracksDeposits(account.type) && deposits !== null && deposits !== account.totalDeposits);
+  }).length;
+
+  // Saisie directe du total affiché par la banque : la part propre en est déduite, le
+  // capital parental (qui ne bouge pas) restant tel quel.
+  const handleBankTotalChange = (id: string, val: string) => {
+    setUpdates(prev => {
+      const u = prev[id];
+      const total = parseFrenchNumber(val);
+      const parental = safeNumber(u.parental, 0);
+      // Total inférieur à la part des parents : saisie incohérente, la part propre n'est
+      // pas touchée (message sous le champ).
+      const owned = total === null || total < parental ? u.owned : String(Math.round((total - parental) * 100) / 100);
+      return { ...prev, [id]: { ...u, bankTotal: val, owned } };
+    });
+  };
+
   const handleSaveAll = () => {
     const payloads = accounts.map(account => {
       const u = updates[account.id];
@@ -142,7 +165,7 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
       <div className="bg-indigo-600 text-white p-6 rounded-2xl shadow-lg flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h3 className="text-xl font-bold flex items-center gap-2">
-            <RefreshCw className="w-6 h-6" /> Actualisation Précise
+            <RefreshCw className="w-6 h-6" /> Actualiser les soldes
           </h3>
           <p className="text-indigo-100 text-sm mt-1">
             Indiquez vos nouveaux soldes et la date du constat. Vos graphiques s'adapteront automatiquement.
@@ -150,7 +173,7 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
         </div>
         <div className="flex flex-col items-end gap-2">
              <Button onClick={handleSaveAll} isLoading={saveStatus === 'pending'} className="bg-white dark:bg-slate-800 text-indigo-600 hover:bg-indigo-50 border-none font-black px-8 py-3 shadow-xl">
-                <Save className="w-5 h-5 mr-2" /> Tout Enregistrer
+                <Save className="w-5 h-5 mr-2" /> Tout enregistrer
             </Button>
             {saveStatus === 'saved' && <span className="text-emerald-300 font-bold text-sm flex items-center gap-1"><CheckCircle className="w-4 h-4"/> Enregistré sur Drive</span>}
         </div>
@@ -184,7 +207,7 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
                 {/* Part Personnelle */}
                 <div className="bg-indigo-50 dark:bg-indigo-950/40 p-3 rounded-xl border border-indigo-100 dark:border-indigo-900">
                   <label className="text-[11px] font-black text-indigo-700 dark:text-indigo-300 uppercase tracking-widest flex items-center gap-1 mb-2">
-                    <User className="w-3 h-3" /> Ma Part (€)
+                    <User className="w-3 h-3" /> Ma part (€)
                   </label>
                   <input
                     type="text"
@@ -203,7 +226,7 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
                 {/* Part Parents */}
                 <div className="bg-amber-50 dark:bg-amber-950/40 p-3 rounded-xl border border-amber-100 dark:border-amber-900">
                   <label className="text-[11px] font-black text-amber-700 dark:text-amber-300 uppercase tracking-widest flex items-center gap-1 mb-2">
-                    <Users className="w-3 h-3" /> Part Parents (€)
+                    <Users className="w-3 h-3" /> Part des parents (€)
                   </label>
                   <input
                     type="text"
@@ -218,6 +241,22 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
                     </div>
                   )}
                 </div>
+
+                {safeNumber(u.parental, 0) > 0 && (
+                  <div className="md:col-span-2 bg-slate-50 dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
+                    <label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest block mb-1">Total affiché par la banque (€)</label>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={u.bankTotal ?? String(Math.round(newTotal * 100) / 100).replace('.', ',')}
+                      onChange={(e) => handleBankTotalChange(account.id, e.target.value)}
+                      className="w-full bg-transparent text-lg font-black text-slate-800 dark:text-slate-100 outline-none"
+                    />
+                    {u.bankTotal !== undefined && (parseFrenchNumber(u.bankTotal) ?? Infinity) < safeNumber(u.parental, 0)
+                      ? <p className="text-[11px] font-bold text-rose-600">Ce total est inférieur à la part de vos parents ({formatEUR(safeNumber(u.parental, 0))}) : vérifiez la saisie.</p>
+                      : <p className="text-[11px] text-slate-500 dark:text-slate-400">Saisissez le solde de l'app bancaire : votre part est recalculée, celle de vos parents ne change pas.</p>}
+                  </div>
+                )}
 
                 {/* Ajustement rapide */}
                 {(() => {
@@ -301,6 +340,16 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
           );
         })}
       </div>
+
+      {changedCount > 0 && (
+        <div className="fixed left-4 right-4 bottom-20 md:bottom-6 md:left-auto md:right-8 md:w-96 z-30 flex items-center justify-between gap-3 p-3 pl-4 rounded-2xl bg-slate-900 text-white shadow-2xl dark:bg-slate-100 dark:text-slate-900">
+          <span className="text-sm font-bold">{changedCount} compte{changedCount > 1 ? 's' : ''} modifié{changedCount > 1 ? 's' : ''}</span>
+          <Button onClick={handleSaveAll} isLoading={saveStatus === 'pending'} className="gap-2 px-5">
+            <Save className="w-4 h-4" /> Enregistrer
+          </Button>
+        </div>
+      )}
+      {changedCount > 0 && <div className="h-16" aria-hidden />}
     </div>
   );
 };
