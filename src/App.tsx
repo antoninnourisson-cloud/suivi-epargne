@@ -787,6 +787,8 @@ const App: React.FC = () => {
                     pickerApiKey={data.pickerApiKey}
                     onExport={data.exportData}
                     onImport={data.importData}
+                    paydayDay={data.paydayDay}
+                    onOpenPayday={() => setView('pilot')}
                     onSave={(newFiscal, newBenefits, newEmail, newGeminiKey, newPickerKey) => {
                        data.setFiscalConfig(newFiscal);
                        data.setWorkBenefits(newBenefits);

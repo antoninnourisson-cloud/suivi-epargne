@@ -68,7 +68,7 @@ export const History: React.FC<HistoryProps> = ({ history, expensesHistory }) =>
       )}
       {sorted.length < 2 ? (
         <div className="text-center py-16 text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700">
-          L'historique se construit au fil des mois. Reviens après quelques actualisations pour voir la courbe évoluer.
+          L'historique se construit au fil des mois. Revenez après quelques actualisations pour voir la courbe évoluer.
         </div>
       ) : (
         <>

@@ -8,7 +8,9 @@ import { Bell, BellOff, Loader2, Send, AlertTriangle, CheckCircle } from 'lucide
 import { isBackendEnabled } from '../services/backendService';
 import { getPushState, enablePush, disablePush, sendTestPush, isIosOutsideHomeScreen, PushState } from '../services/pushService';
 
-export const NotificationSettings: React.FC = () => {
+// `paydayDay` / `onOpenPayday` : raccourci vers le réglage du rappel de paie, qui vit dans
+// le Pilotage (on le cherchait ici).
+export const NotificationSettings: React.FC<{ paydayDay?: number; onOpenPayday?: () => void }> = ({ paydayDay, onOpenPayday }) => {
   const [state, setState] = useState<PushState | 'loading'>('loading');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
@@ -51,7 +53,7 @@ export const NotificationSettings: React.FC = () => {
         <Bell className="w-4 h-4 text-indigo-600" /> Notifications
       </h3>
       <p className="text-[11px] text-slate-500 dark:text-slate-400 -mt-2">
-        Reçois les rappels même app fermée : échéances récurrentes, révision des taux réglementés, intérêts parentaux de décembre, soldes non actualisés depuis un mois. Vérification une fois par jour ; chaque rappel n’est envoyé qu’une fois. Réglage propre à cet appareil.
+        Recevez les rappels même app fermée : jour de paie, abonnements, échéances récurrentes, révision des taux réglementés, bilan du mois, dons à déclarer, soldes non actualisés… Vérification une fois par jour ; chaque rappel n’est envoyé qu’une fois. Réglage propre à cet appareil.
       </p>
 
       {state === 'loading' && <Loader2 className="w-4 h-4 animate-spin text-slate-400" />}
@@ -60,7 +62,7 @@ export const NotificationSettings: React.FC = () => {
         <p className="text-xs font-bold text-amber-700 dark:text-amber-300 flex items-start gap-2">
           <AlertTriangle className="w-4 h-4 flex-shrink-0" />
           {isIosOutsideHomeScreen()
-            ? 'Sur iPhone, les notifications ne fonctionnent que dans l’app installée : Partager → « Sur l’écran d’accueil », puis ouvre-la depuis l’icône.'
+            ? 'Sur iPhone, les notifications ne fonctionnent que dans l’app installée : Partager → « Sur l’écran d’accueil », puis ouvrez-la depuis l’icône.'
             : 'Ce navigateur ne prend pas en charge les notifications push (ou l’app n’est pas encore installée comme application).'}
         </p>
       )}
@@ -89,6 +91,13 @@ export const NotificationSettings: React.FC = () => {
             </>
           )}
         </div>
+      )}
+
+      {onOpenPayday && (
+        <p className="text-xs text-slate-600 dark:text-slate-300 flex flex-wrap items-center gap-2">
+          <span>Rappel du jour de paie : <b>{paydayDay ? `le ${paydayDay} du mois` : 'désactivé'}</b></span>
+          <button type="button" onClick={onOpenPayday} className="font-bold text-indigo-600 dark:text-indigo-300 hover:underline">Modifier dans le Pilotage</button>
+        </p>
       )}
 
       {message && (

@@ -305,7 +305,7 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
             {activePayslip && display.effectiveMonthlyTax === undefined && (
               <div className="mb-4 text-xs text-rose-600 dark:text-rose-400 font-bold flex items-center gap-2">
                 <Info className="w-3.5 h-3.5 flex-shrink-0" />
-                Cette fiche n'a pas encore l'impôt réellement prélevé / le net payé (extraite avant l'ajout de ces champs) : "Net réel perçu" affiche "—" plutôt qu'une estimation. Réimporte-la depuis Drive pour compléter.
+                Cette fiche n'a pas encore l'impôt réellement prélevé / le net payé (extraite avant l'ajout de ces champs) : "Net réel perçu" affiche "—" plutôt qu'une estimation. Réimportez-la depuis Drive pour compléter.
               </div>
             )}
 

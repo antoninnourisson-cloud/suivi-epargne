@@ -23,9 +23,11 @@ interface SettingsProps {
   onSave: (newConfig: FiscalConfig, newBenefits: WorkBenefits, newEmail: string, newGeminiKey: string, newPickerKey: string) => void;
   onExport: () => void;
   onImport: (file: File) => Promise<boolean>;
+  paydayDay?: number;
+  onOpenPayday?: () => void;
 }
 
-export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parentsEmail, geminiApiKey, pickerApiKey, onSave, onExport, onImport }) => {
+export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parentsEmail, geminiApiKey, pickerApiKey, onSave, onExport, onImport, paydayDay, onOpenPayday }) => {
   const [importMsg, setImportMsg] = useState<string | null>(null);
   // L'import écrase TOUT (comptes, mouvements, objectifs, fiches de paie, réglages) puis
   // resynchronise sur Drive : il faut une confirmation explicite, la boîte de sélection de
@@ -282,7 +284,7 @@ export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parent
         </div>
 
         {/* SECTION NOTIFICATIONS (visible seulement si l'app est reliée au serveur) */}
-        <NotificationSettings />
+        <NotificationSettings paydayDay={paydayDay} onOpenPayday={onOpenPayday} />
 
         {/* RÉGLAGES AVANCÉS : rarement modifiés, repliés par défaut */}
         <details className="lg:col-span-2 group">
