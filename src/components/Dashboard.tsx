@@ -5,7 +5,7 @@ import {
 } from 'recharts';
 import { SavingsAccount, PortfolioSnapshot, AccountType, Expense, FiscalConfig, WorkBenefits, RecurringMovement } from '../types';
 import { Euro, Lock, Wallet, ListTodo, ChevronDown, Unlock, Save, AlertTriangle, Trash2, Clock, TrendingUp, TrendingDown, PiggyBank, Percent, ShieldAlert, Repeat } from 'lucide-react';
-import { computeAccruedParentalInterest, computeRecentSavingsRate, computeAccountBalanceAtDate, findStaleRegulatedRates, computeLepEligibility, computeIncome, findDueRecurring, computeMonthSavedAmount, computeSavingsRateHistory } from '../lib/finance';
+import { computeAccruedParentalInterest, computeRecentSavingsRate, computeAccountBalanceAtDate, findStaleRegulatedRates, computeLepEligibility, computeIncome, findDueRecurring, computeMonthSavedAmount, computeSavingsRateHistory, computeUnlockCost } from '../lib/finance';
 import { parseISODate, formatISODay, daysBetween, localTodayISO } from '../lib/dates';
 import { Button } from './Button';
 import { formatEUR } from '../lib/format';
@@ -151,6 +151,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
     });
     return { available, taxLocked, hardLocked };
   }, [accounts, fiscalConfig]);
+
+  const unlockCost = useMemo(() => computeUnlockCost(accounts, fiscalConfig), [accounts, fiscalConfig]);
 
   const isConstrainedAccount = (type: AccountType) => {
     return [AccountType.ASSURANCE_VIE, AccountType.PEA, AccountType.PEE, AccountType.PER].includes(type);
@@ -364,7 +366,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
     document.body.removeChild(link);
   };
 
-  const StatCard = ({ title, amount, icon: Icon, color, subtext }: any) => (
+  const StatCard = ({ title, amount, icon: Icon, color, subtext, extra }: any) => (
     <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
       <div className="flex justify-between items-start">
         <div>
@@ -373,6 +375,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
             {formatEUR(amount, 2)}
           </h3>
           {subtext && <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 uppercase font-bold tracking-wide">{subtext}</p>}
+          {extra}
         </div>
         <div className={`p-3 rounded-lg ${color}`}>
           <Icon className="w-6 h-6 text-white" />
@@ -496,7 +499,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard title="Mon Épargne Nette" amount={mySavings} icon={Wallet} color="bg-indigo-600" subtext="Capital réel" />
         <StatCard title="Disponibilité Immédiate" amount={availabilityStats.available} icon={Unlock} color="bg-emerald-500" subtext="Liquide" />
-        <StatCard title="Contrainte Fiscale" amount={availabilityStats.taxLocked} icon={Euro} color="bg-amber-500" subtext="AV/PEA récents" />
+        <StatCard title="Contrainte Fiscale" amount={availabilityStats.taxLocked} icon={Euro} color="bg-amber-500" subtext="AV/PEA récents" extra={availabilityStats.taxLocked > 0 && (
+          <div className="mt-2 space-y-0.5 text-[11px] text-slate-600 dark:text-slate-300">
+            {unlockCost.extraTax >= 1 && <p>Tout retirer aujourd'hui : <b>≈ {formatEUR(unlockCost.extraTax, 0)}</b> d'impôt en plus qu'après la maturité.</p>}
+            {unlockCost.closesPea && <p className="text-rose-600 dark:text-rose-400 font-bold">Un retrait clôturerait votre PEA.</p>}
+            {unlockCost.nextFree && <p>Libre de surcoût le <b>{parseISODate(unlockCost.nextFree.date).toLocaleDateString('fr-FR')}</b> ({unlockCost.nextFree.name}).</p>}
+            {unlockCost.unknown.length > 0 && <p className="text-slate-500 dark:text-slate-400">Versements à renseigner pour chiffrer : {unlockCost.unknown.join(', ')}.</p>}
+          </div>
+        )} />
         <StatCard title="Bloqué" amount={availabilityStats.hardLocked} icon={Lock} color="bg-slate-800" subtext="Retraite/PEE" />
       </div>
 

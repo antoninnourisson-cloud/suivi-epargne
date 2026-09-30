@@ -185,6 +185,22 @@ export interface CapitalTaxBreakdown {
  *
  * `asOfDate` est injectable pour les tests (sinon non-déterministe).
  */
+/**
+ * Ancienneté d'un compte en années, alignée sur le calendrier : la partie entière est le
+ * nombre d'anniversaires d'ouverture passés (5 ans pile le jour du 5e anniversaire, ni la
+ * veille ni le lendemain), la partie décimale la progression vers le suivant.
+ */
+export const accountAgeYears = (openingISO: string, asOfDate: Date = new Date()): number => {
+  const o = parseISODate(openingISO);
+  const today = new Date(asOfDate.getFullYear(), asOfDate.getMonth(), asOfDate.getDate());
+  if (today < o) return 0;
+  let full = today.getFullYear() - o.getFullYear();
+  const anniversary = (years: number) => new Date(o.getFullYear() + years, o.getMonth(), o.getDate());
+  if (today < anniversary(full)) full -= 1;
+  const last = anniversary(full), next = anniversary(full + 1);
+  return full + (today.getTime() - last.getTime()) / (next.getTime() - last.getTime());
+};
+
 export const computeCapitalGainsTax = (
   account: { type: AccountType; openingDate?: string },
   grossInterest: number,
@@ -199,7 +215,7 @@ export const computeCapitalGainsTax = (
   // exonération : on suppose le cas le moins favorable (compte récent) plutôt que d'afficher
   // un net optimiste et faux.
   const ageYears = account.openingDate
-    ? (asOfDate.getTime() - new Date(account.openingDate).getTime()) / (1000 * 3600 * 24 * 365.25)
+    ? accountAgeYears(account.openingDate, asOfDate)
     : 0;
 
   const socialCharges = grossInterest * fiscalConfig.socialChargesCapital;
@@ -285,11 +301,13 @@ export const computeMaturityCountdown = (
   else if (account.type === AccountType.PEE) maturityYears = fiscalConfig.legalMaturity.pee;
   if (maturityYears === undefined) return null;
 
-  const opening = new Date(account.openingDate);
-  const ageYearsNow = (asOfDate.getTime() - opening.getTime()) / (MS_PER_DAY * 365.25);
+  const opening = parseISODate(account.openingDate);
+  const ageYearsNow = accountAgeYears(account.openingDate, asOfDate);
   if (ageYearsNow >= maturityYears) return null; // déjà mature
 
-  const maturityDate = new Date(opening.getTime() + maturityYears * 365.25 * MS_PER_DAY);
+  // Maturité = date anniversaire (le 5e anniversaire d'un PEA ouvert le 12/03/2021 est le
+  // 12/03/2026), et non « ouverture + 5 × 365,25 jours » qui pouvait tomber la veille.
+  const maturityDate = new Date(opening.getFullYear() + maturityYears, opening.getMonth(), opening.getDate());
   const monthsRemaining = Math.max(1, Math.ceil((maturityDate.getTime() - asOfDate.getTime()) / (MS_PER_DAY * 30.4375)));
 
   const regimeBefore = regimeForAge(account.type, ageYearsNow, fiscalConfig);
@@ -302,7 +320,7 @@ export const computeMaturityCountdown = (
   const rateAfter = CAPITAL_INCOME_TAX_RATE[regimeAfter] ?? 0;
   const annualTaxSaving = Math.max(0, grossInterest * (rateBefore - rateAfter));
 
-  return { maturityDate: maturityDate.toISOString().split('T')[0], monthsRemaining, regimeBefore, regimeAfter, annualTaxSaving };
+  return { maturityDate: formatISODay(maturityDate), monthsRemaining, regimeBefore, regimeAfter, annualTaxSaving };
 };
 
 /**
@@ -897,7 +915,7 @@ export const computeWithdrawalTax = (
   asOfDate: Date = new Date()
 ): WithdrawalTax => {
   const ageYears = account.openingDate
-    ? (asOfDate.getTime() - parseISODate(account.openingDate).getTime()) / (MS_PER_DAY * 365.25)
+    ? accountAgeYears(account.openingDate, asOfDate)
     : 0;
   const closesPea = account.type === AccountType.PEA && ageYears < fiscalConfig.legalMaturity.pea;
   const unknown: WithdrawalTax = { known: false, gainPart: 0, socialCharges: 0, incomeTax: 0, net: amount, closesPea };
@@ -1179,4 +1197,41 @@ export const computeDonationSummary = (donations: Donation[], year: number): Don
     reduction: total75 * 0.75 + total66 * 0.66,
     missingReceipts: ofYear.filter(d => !d.receiptReceived),
   };
+};
+
+// ---------------------------------------------------------------------------
+// Coût de déblocage de l'épargne « sous contrainte fiscale »
+// ---------------------------------------------------------------------------
+
+export interface UnlockCost {
+  extraTax: number;          // impôt en plus d'un retrait aujourd'hui, par rapport à après la maturité
+  unknown: string[];         // comptes dont on ignore les versements (coût non calculable)
+  closesPea: boolean;        // un retrait clôturerait un PEA de moins de 5 ans
+  nextFree?: { date: string; name: string }; // prochaine maturité atteinte
+}
+
+/**
+ * Pour les PEA et Assurances Vie pas encore matures : ce que coûterait de TOUT retirer
+ * aujourd'hui plutôt qu'après la maturité (seul l'impôt sur le revenu change, les
+ * prélèvements sociaux sont dus dans les deux cas), et quand cet argent devient libre.
+ */
+export const computeUnlockCost = (
+  accounts: SavingsAccount[],
+  fiscalConfig: FiscalConfig,
+  asOfDate: Date = new Date()
+): UnlockCost => {
+  const out: UnlockCost = { extraTax: 0, unknown: [], closesPea: false };
+  for (const a of accounts) {
+    if (a.type !== AccountType.PEA && a.type !== AccountType.ASSURANCE_VIE) continue;
+    if (a.ownedAmount <= 0) continue;
+    const maturity = computeMaturityCountdown(a, fiscalConfig, asOfDate);
+    if (!maturity) continue; // déjà mature, ou date d'ouverture inconnue
+    if (!out.nextFree || maturity.maturityDate < out.nextFree.date) out.nextFree = { date: maturity.maturityDate, name: a.name };
+    const now = computeWithdrawalTax(a, a.ownedAmount, fiscalConfig, asOfDate);
+    if (now.closesPea) out.closesPea = true;
+    if (!now.known) { out.unknown.push(a.name); continue; }
+    const later = computeWithdrawalTax(a, a.ownedAmount, fiscalConfig, parseISODate(maturity.maturityDate));
+    out.extraTax += Math.max(0, now.incomeTax - later.incomeTax);
+  }
+  return out;
 };

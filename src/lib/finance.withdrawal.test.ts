@@ -10,6 +10,8 @@ import {
   totalFixedCharges,
   computeSavingsRateHistory,
   computeDonationSummary,
+  accountAgeYears,
+  computeUnlockCost,
 } from './finance';
 import { DEFAULT_FISCAL_CONFIG as CFG } from '../constants';
 import { AccountType, SavingsAccount, Subscription } from '../types';
@@ -139,5 +141,24 @@ describe('dons', () => {
     expect(s.total66).toBe(300);
     expect(s.reduction).toBeCloseTo(750 + 198);
     expect(s.missingReceipts.map(d => d.id)).toEqual(['b']);
+  });
+});
+
+describe('ancienneté et déblocage', () => {
+  it("compte les années au jour anniversaire près", () => {
+    expect(Math.floor(accountAgeYears('2021-03-12', new Date(2026, 2, 11)))).toBe(4);
+    expect(accountAgeYears('2021-03-12', new Date(2026, 2, 12))).toBe(5);
+  });
+
+  it("chiffre l'impôt en plus d'un retrait avant maturité et la date de libération", () => {
+    const av = acc({ name: 'AV', type: AccountType.ASSURANCE_VIE, openingDate: '2022-06-01', totalAmount: 20000, ownedAmount: 20000, totalDeposits: 15000 });
+    const pea = acc({ name: 'PEA', type: AccountType.PEA, openingDate: '2023-01-15', totalDeposits: 8000 });
+    const u = computeUnlockCost([av, pea, acc({ name: 'Inconnu', type: AccountType.PEA, openingDate: '2024-01-01' })], CFG, NOW);
+    // AV : 5 000 € de gains → 12,8 % maintenant, 7,5 % au-delà de l'abattement de 4 600 € après 8 ans.
+    // PEA : 2 000 € de gains → 12,8 % maintenant, exonéré après 5 ans.
+    expect(u.extraTax).toBeCloseTo(5000 * 0.128 - 400 * 0.075 + 2000 * 0.128);
+    expect(u.closesPea).toBe(true);
+    expect(u.unknown).toEqual(['Inconnu']);
+    expect(u.nextFree).toEqual({ date: '2028-01-15', name: 'PEA' });
   });
 });
