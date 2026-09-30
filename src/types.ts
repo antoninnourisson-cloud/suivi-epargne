@@ -220,6 +220,8 @@ export interface GlobalAppData {
     paydayDay?: number; // 1-31 (ramené au dernier jour des mois plus courts)
     // Montant à placer chaque mois. Absent = capacité d'épargne calculée par le Pilotage.
     paydayAmount?: number;
+    // Argent laissé sur le compte courant pour vivre le mois (courses, sorties…).
+    livingBudget?: number;
   };
   goals?: SavingsGoal[];
   lastView?: string;

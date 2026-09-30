@@ -143,14 +143,15 @@ export const computeIncome = (
 };
 
 /**
- * Capacité d'épargne mensuelle = super net - charges fixes - plaisir - projets.
+ * Capacité d'épargne mensuelle = super net - charges fixes - plaisir - projets - reste à vivre.
  */
 export const computeSavingsCapacity = (
   superNet: number,
   totalFixedExpenses: number,
   leisureBudget: number,
-  projectSavings: number
-): number => superNet - totalFixedExpenses - leisureBudget - projectSavings;
+  projectSavings: number,
+  livingBudget: number = 0
+): number => superNet - totalFixedExpenses - leisureBudget - projectSavings - livingBudget;
 
 // --- FISCALITÉ DU CAPITAL (PFU / prélèvements sociaux) ---
 // `socialChargesCapital` (17,2 %) existait dans FiscalConfig depuis le début mais n'était
@@ -792,7 +793,7 @@ export const computeMonthlySavingsCapacity = (data: GlobalAppData): number => {
   const payslip = (data.payslips || []).find(p => p.id === data.activePayslipId);
   const superNet = (payslip && payslipSuperNet(payslip.extracted)) ?? formula;
   const totalFixed = totalFixedCharges(data.expenses || [], data.subscriptions || []);
-  return superNet - totalFixed - (c.leisureBudget ?? 0) - (c.projectSavings ?? 0);
+  return computeSavingsCapacity(superNet, totalFixed, c.leisureBudget ?? 0, c.projectSavings ?? 0, c.livingBudget ?? 0);
 };
 
 export interface PlacementStep {
@@ -1100,13 +1101,19 @@ export const depositsAfterCashFlow = (
   return Math.round(next * 100) / 100;
 };
 
+/** Seuls ces abonnements reviennent chaque mois : les autres ne font que déclencher un rappel. */
+export const isMonthlyCharge = (s: Pick<Subscription, 'frequency'>) =>
+  s.frequency === 'monthly' || s.frequency === 'weekly';
+
 /**
- * Abonnements actifs vus comme des charges fixes mensuelles (un annuel de 120 € pèse
- * 10 €/mois). Identifiants préfixés `sub:` : jamais confondus avec une charge saisie.
+ * Abonnements mensuels (et hebdomadaires, ramenés au mois) vus comme des charges fixes.
+ * Les trimestriels, semestriels et annuels n'y figurent PAS : ils sont payés quand ils
+ * tombent, l'app se contente de prévenir avant. Identifiants préfixés `sub:` : jamais
+ * confondus avec une charge saisie.
  */
 export const subscriptionsAsExpenses = (subs: Subscription[]): Expense[] =>
   subs
-    .filter(s => s.active && s.amount > 0)
+    .filter(s => s.active && s.amount > 0 && isMonthlyCharge(s))
     .map(s => ({
       id: `sub:${s.id}`,
       name: s.name,
@@ -1118,3 +1125,41 @@ export const subscriptionsAsExpenses = (subs: Subscription[]): Expense[] =>
 export const totalFixedCharges = (expenses: Expense[], subs: Subscription[] = []): number =>
   expenses.reduce((sum, e) => sum + e.amount, 0) +
   subscriptionsAsExpenses(subs).reduce((sum, e) => sum + e.amount, 0);
+
+// ---------------------------------------------------------------------------
+// Répartition de la paie, virement par virement
+// ---------------------------------------------------------------------------
+
+export interface PayTransfer {
+  label: string;
+  amount: number;
+}
+
+/**
+ * Ce qui part de la paie AVANT l'épargne, dans l'ordre des virements : chaque charge
+ * saisie (ex. « Revolut commun »), les abonnements mensuels (avec leur compte s'ils
+ * partent tous du même), l'argent plaisir, l'épargne projets et le reste à vivre.
+ * Ce qui reste est l'épargne, répartie par computePlacementStrategy.
+ */
+export const computePayTransfers = (input: {
+  expenses: Expense[];
+  subscriptions?: Subscription[];
+  leisureBudget: number;
+  projectSavings: number;
+  livingBudget?: number;
+}): PayTransfer[] => {
+  const out: PayTransfer[] = input.expenses
+    .filter(e => e.amount > 0)
+    .map(e => ({ label: e.name, amount: e.amount }));
+  const subs = subscriptionsAsExpenses(input.subscriptions || []);
+  const subsTotal = Math.round(subs.reduce((sum, e) => sum + e.amount, 0) * 100) / 100;
+  if (subsTotal > 0) {
+    const accounts = new Set(subs.map(e => e.paymentMethod || ''));
+    const only = accounts.size === 1 ? [...accounts][0] : '';
+    out.push({ label: only ? `Abonnements (${only})` : 'Abonnements mensuels', amount: subsTotal });
+  }
+  if (input.leisureBudget > 0) out.push({ label: 'Argent plaisir', amount: input.leisureBudget });
+  if (input.projectSavings > 0) out.push({ label: 'Épargne projets', amount: input.projectSavings });
+  if ((input.livingBudget ?? 0) > 0) out.push({ label: 'Reste à vivre (compte courant)', amount: input.livingBudget! });
+  return out;
+};

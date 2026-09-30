@@ -63,6 +63,7 @@ const canonicalize = (data: GlobalAppData | null | undefined): string => {
       pickerApiKey: c.pickerApiKey ?? null,
       paydayDay: c.paydayDay ?? null,
       paydayAmount: c.paydayAmount ?? null,
+      livingBudget: c.livingBudget ?? null,
     },
   });
 };
@@ -130,6 +131,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
   // facultatif — absent, le serveur prend la capacité d'épargne calculée du Pilotage.
   const [paydayDay, setPaydayDay] = useState<number | undefined>(undefined);
   const [paydayAmount, setPaydayAmount] = useState<number | undefined>(undefined);
+  const [livingBudget, setLivingBudget] = useState<number>(0);
 
   const [lastView, setLastViewState] = useState<string>(
     () => localStorage.getItem('last_view') || 'dashboard'
@@ -258,6 +260,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
           setPickerApiKey(data.config.pickerApiKey ?? '');
           setPaydayDay(data.config.paydayDay ?? undefined);
           setPaydayAmount(data.config.paydayAmount ?? undefined);
+          setLivingBudget(data.config.livingBudget ?? 0);
         }
         if (data.lastView) setLastView(data.lastView);
 
@@ -327,13 +330,13 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
     config: {
       grossAnnual, leisureBudget, projectSavings, navigoBase, navigoRate,
       taxRateManual, extraMonthlyIncome, parentsEmail, geminiApiKey, pickerApiKey,
-      paydayDay, paydayAmount,
+      paydayDay, paydayAmount, livingBudget,
     },
     lastView: lastViewRef.current,
   }), [accounts, expenses, history, expensesHistory, fiscalConfig, workBenefits, grossAnnual,
        leisureBudget, projectSavings, navigoBase, navigoRate, taxRateManual,
        extraMonthlyIncome, parentsEmail, goals, payslips, recurringMovements, subscriptions, activePayslipId, geminiApiKey, pickerApiKey,
-       paydayDay, paydayAmount]);
+       paydayDay, paydayAmount, livingBudget]);
 
   // Applique un objet de données (import / rechargement) à l'état.
   const applyData = useCallback((data: GlobalAppData) => {
@@ -361,6 +364,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
       setPickerApiKey(data.config.pickerApiKey ?? '');
       setPaydayDay(data.config.paydayDay ?? undefined);
       setPaydayAmount(data.config.paydayAmount ?? undefined);
+      setLivingBudget(data.config.livingBudget ?? 0);
     }
   }, []);
 
@@ -598,7 +602,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
     accounts, expenses, history, expensesHistory, fiscalConfig, workBenefits, 
     grossAnnual, leisureBudget, projectSavings, navigoBase, navigoRate, 
     taxRateManual, extraMonthlyIncome, parentsEmail, geminiApiKey, pickerApiKey,
-    paydayDay, paydayAmount,
+    paydayDay, paydayAmount, livingBudget,
     isAuthenticated, driveFileId, isLoadingData,
     buildData, syncConflict, sessionExpired, goals, payslips, recurringMovements, subscriptions, activePayslipId, isOffline, runExclusive
   ]);
@@ -845,6 +849,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
     pickerApiKey, setPickerApiKey,
     paydayDay, setPaydayDay,
     paydayAmount, setPaydayAmount,
+    livingBudget, setLivingBudget,
     buildData,
     lastView, setLastView,
     

@@ -105,4 +105,43 @@ describe('computeReminders', () => {
       expect(eve[0].message.title).toBe('Prélèvement demain : Netflix');
     });
   });
+
+  describe('liens et bilan mensuel', () => {
+    it("ouvre l'écran concerné au clic", () => {
+      const data = base({
+        accounts: [livret],
+        recurringMovements: [{ id: 'r1', accountId: 'la', amount: 200, type: 'IN', label: 'x', dayOfMonth: 5, active: true }],
+      });
+      const r = computeReminders(data, new Date(2026, 8, 28, 9), APP);
+      expect(r[0].message.url).toBe(APP); // échéance → Dashboard
+      const stale = computeReminders(base({ accounts: [{ ...livret, movements: [{ id: 'm', date: '2026-07-01', amount: 1, label: 'x', type: 'IN' as const }] }] }), new Date(2026, 8, 28, 9), APP)
+        .find(x => x.key.startsWith('stale:'));
+      expect(stale?.message.url).toBe(`${APP}?view=update`);
+    });
+
+    it('envoie le bilan du mois écoulé les 3 premiers jours', () => {
+      const acc = { ...livret, totalAmount: 1300, ownedAmount: 1300, movements: [
+        { id: 'a', date: '2026-08-10', amount: 1000, label: 'x', type: 'IN' as const },
+        { id: 'b', date: '2026-09-05', amount: 300, label: 'x', type: 'IN' as const },
+      ] };
+      const data = base({ accounts: [acc], config: { ...base().config, paydayAmount: 300 } });
+      const r = computeReminders(data, new Date(2026, 9, 1, 9), APP).find(x => x.key === 'recap:2026-09');
+      expect(r?.message.title).toBe('Bilan de septembre');
+      expect(r?.message.body).toMatch(/\+300\s€ placés \(objectif 300\s€\)/);
+      expect(r?.message.body).toMatch(/\+30 %/);
+      expect(computeReminders(data, new Date(2026, 9, 4, 9), APP).some(x => x.key.startsWith('recap:'))).toBe(false);
+    });
+
+    it('détaille toute la paie dans le rappel du jour de paie', () => {
+      const data = base({
+        accounts: [livret],
+        expenses: [{ id: 'e', name: 'Revolut commun', amount: 900 }],
+        subscriptions: [{ id: 's', name: 'Spotify', amount: 11, debitAccount: 'Revolut perso', frequency: 'monthly', anchorDate: '2026-01-10', active: true }],
+        config: { ...base().config, leisureBudget: 200, livingBudget: 750, paydayDay: 28, paydayAmount: 500 },
+      });
+      const r = computeReminders(data, new Date(2026, 8, 28, 9), APP).find(x => x.key === 'payday:2026-09');
+      expect(r?.message.body).toMatch(/900.*Revolut commun · 11.*Abonnements \(Revolut perso\) · 200.*Argent plaisir · 750.*Reste à vivre.*Épargne : 500.*Livret A/);
+      expect(r?.message.url).toBe(`${APP}?view=pilot`);
+    });
+  });
 });

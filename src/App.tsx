@@ -58,6 +58,7 @@ const NavButton = ({ active, onClick, icon: Icon, label, highlight }: any) => (
 );
 
 type View = 'dashboard' | 'accounts' | 'transfers' | 'pilot' | 'update' | 'settings' | 'goals' | 'yield' | 'history' | 'parental' | 'simulator' | 'payslips' | 'subscriptions';
+const VALID_VIEWS: View[] = ['dashboard', 'accounts', 'transfers', 'pilot', 'update', 'settings', 'goals', 'yield', 'history', 'parental', 'simulator', 'payslips', 'subscriptions'];
 
 const App: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -149,8 +150,8 @@ const App: React.FC = () => {
   const incomeCfg = useMemo(() => ({
     grossAnnual: data.grossAnnual, extraMonthlyIncome: data.extraMonthlyIncome,
     navigoBase: data.navigoBase, navigoRate: data.navigoRate, taxRateManual: data.taxRateManual,
-    leisureBudget: data.leisureBudget, projectSavings: data.projectSavings,
-  }), [data.grossAnnual, data.extraMonthlyIncome, data.navigoBase, data.navigoRate, data.taxRateManual, data.leisureBudget, data.projectSavings]);
+    leisureBudget: data.leisureBudget, projectSavings: data.projectSavings, livingBudget: data.livingBudget,
+  }), [data.grossAnnual, data.extraMonthlyIncome, data.navigoBase, data.navigoRate, data.taxRateManual, data.leisureBudget, data.projectSavings, data.livingBudget]);
 
   const activePayslipRecord = useMemo(
     () => data.payslips.find(p => p.id === data.activePayslipId),
@@ -177,11 +178,37 @@ const App: React.FC = () => {
     [data.paydayAmount, data.buildData]
   );
 
+  // Lien direct vers un écran (`?view=update`), utilisé par les notifications. Traité
+  // après authentification + déverrouillage, comme le raccourci d'ajout rapide.
+  const deepLinkedRef = useRef(false);
+  useEffect(() => {
+    if (!isAuthenticated || locked) return;
+    const params = new URLSearchParams(window.location.search);
+    const target = params.get('view') as View | null;
+    if (target) {
+      if (VALID_VIEWS.includes(target)) { deepLinkedRef.current = true; setView(target); }
+      params.delete('view');
+      const rest = params.toString();
+      window.history.replaceState({}, '', window.location.pathname + (rest ? `?${rest}` : ''));
+    }
+  }, [isAuthenticated, locked]);
+
+  // App déjà ouverte au clic sur une notification : le service worker la ramène au
+  // premier plan et envoie l'écran à afficher (sans recharger la page).
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return;
+    const onMessage = (e: MessageEvent) => {
+      const target = e.data && e.data.type === 'open-view' ? e.data.view as View : null;
+      if (target && VALID_VIEWS.includes(target)) { deepLinkedRef.current = true; setView(target); }
+    };
+    navigator.serviceWorker.addEventListener('message', onMessage);
+    return () => navigator.serviceWorker.removeEventListener('message', onMessage);
+  }, []);
+
   // Sync view from data (au premier chargement)
   useEffect(() => {
-      if (data.lastView && view === 'dashboard') {
-          const validViews: View[] = ['dashboard', 'accounts', 'transfers', 'pilot', 'update', 'settings', 'goals', 'yield', 'history', 'parental', 'simulator', 'payslips', 'subscriptions'];
-          if (validViews.includes(data.lastView as View)) {
+      if (data.lastView && view === 'dashboard' && !deepLinkedRef.current) {
+          if (VALID_VIEWS.includes(data.lastView as View)) {
               setView(data.lastView as View);
           }
       }
@@ -691,6 +718,8 @@ const App: React.FC = () => {
                 onClearActivePayslip={handleClearActivePayslip}
                 subscriptions={data.subscriptions}
                 onOpenSubscriptions={() => setView('subscriptions')}
+                livingBudget={data.livingBudget}
+                setLivingBudget={data.setLivingBudget}
                 paydayDay={data.paydayDay}
                 setPaydayDay={data.setPaydayDay}
                 paydayAmount={data.paydayAmount}

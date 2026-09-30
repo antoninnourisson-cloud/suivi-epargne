@@ -26,14 +26,20 @@ self.addEventListener('push', (event) => {
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const target = new URL((event.notification.data && event.notification.data.url) || './', self.registration.scope).href;
+  const target = new URL((event.notification.data && event.notification.data.url) || './', self.registration.scope);
+  // Écran visé (`?view=update`…) : transmis à une fenêtre déjà ouverte, ou lu au démarrage.
+  const view = target.searchParams.get('view') || 'dashboard';
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windows) => {
-      // Une fenêtre de l'app est déjà ouverte : on la ramène au premier plan.
+      // Une fenêtre de l'app est déjà ouverte : on la ramène au premier plan sur le bon
+      // écran, sans la recharger.
       for (const w of windows) {
-        if (w.url.startsWith(self.registration.scope) && 'focus' in w) return w.focus();
+        if (w.url.startsWith(self.registration.scope) && 'focus' in w) {
+          w.postMessage({ type: 'open-view', view });
+          return w.focus();
+        }
       }
-      return self.clients.openWindow(target);
+      return self.clients.openWindow(target.href);
     })
   );
 });

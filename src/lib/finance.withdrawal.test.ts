@@ -130,13 +130,14 @@ describe('abonnements', () => {
     expect(subscriptionMonthlyCost({ amount: 120, frequency: 'yearly' })).toBe(10);
   });
 
-  it('ajoute les abonnements actifs aux charges fixes, au coût mensuel', () => {
+  it('ajoute les seuls abonnements mensuels actifs aux charges fixes', () => {
     const subs = [
       sub({ id: 'n', amount: 13.49 }),
       sub({ id: 'a', name: 'Assurance', amount: 120, frequency: 'yearly' }),
       sub({ id: 'p', name: 'En pause', amount: 50, active: false }),
     ];
-    expect(subscriptionsAsExpenses(subs).map(e => e.id)).toEqual(['sub:n', 'sub:a']);
-    expect(totalFixedCharges([{ id: 'loyer', name: 'Loyer', amount: 800 }], subs)).toBeCloseTo(800 + 13.49 + 10);
+    // L'annuel ne pèse pas sur les charges mensuelles : il ne fait que déclencher un rappel.
+    expect(subscriptionsAsExpenses(subs).map(e => e.id)).toEqual(['sub:n']);
+    expect(totalFixedCharges([{ id: 'loyer', name: 'Loyer', amount: 800 }], subs)).toBeCloseTo(800 + 13.49);
   });
 });

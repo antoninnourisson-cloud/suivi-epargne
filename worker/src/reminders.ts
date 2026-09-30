@@ -12,7 +12,12 @@ import {
   computeMonthlySavingsCapacity,
   computePlacementStrategy,
   findDueSubscriptions,
+  computePayTransfers,
+  computeMonthSavedAmount,
+  computeAccountBalanceAtDate,
+  computeAccruedInterest,
 } from '../../src/lib/finance';
+import { formatISODay } from '../../src/lib/dates';
 import { DEFAULT_FISCAL_CONFIG } from '../../src/constants';
 import type { PushMessage } from './webpush';
 
@@ -31,8 +36,15 @@ const STALE_UPDATE_DAYS = 30;
 // ne doit pas faire sauter le mois. La clé mensuelle garantit un seul envoi.
 const PAYDAY_WINDOW_DAYS = 3;
 
+// Écran de l'app ouvert au clic (voir le traitement de `?view=` dans App.tsx).
+export const viewUrl = (appUrl: string, view: string) =>
+  view === 'dashboard' ? appUrl : `${appUrl}${appUrl.includes('?') ? '&' : '?'}view=${view}`;
+
+const MONTH_NAMES = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
+
 export const computeReminders = (data: GlobalAppData, now: Date, appUrl: string): Reminder[] => {
   const accounts = data.accounts || [];
+  const link = (view: string) => viewUrl(appUrl, view);
   const out: Reminder[] = [];
   const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
@@ -44,7 +56,7 @@ export const computeReminders = (data: GlobalAppData, now: Date, appUrl: string)
       message: {
         title: `Échéance : ${r.label}`,
         body: `${r.type === 'IN' ? '+' : '-'}${eur(r.amount)} sur ${account?.name ?? 'ton compte'} — à enregistrer dans l'app.`,
-        url: appUrl,
+        url: link('dashboard'),
         tag: `recurring-${r.id}`,
       },
     });
@@ -58,7 +70,7 @@ export const computeReminders = (data: GlobalAppData, now: Date, appUrl: string)
       message: {
         title: 'Taux réglementés révisés',
         body: `Révision du ${stale.revision.label} : pense à mettre à jour ${stale.accounts.map(a => a.name).join(', ')}.`,
-        url: appUrl,
+        url: link('accounts'),
         tag: 'rate-revision',
       },
     });
@@ -73,7 +85,7 @@ export const computeReminders = (data: GlobalAppData, now: Date, appUrl: string)
         message: {
           title: 'Intérêts de fin d’année',
           body: `Les intérêts acquis cette année sur la part de tes parents représentent environ ${eur(totalAnnualParental)}.`,
-          url: appUrl,
+          url: link('parental'),
           tag: 'parental-interest',
         },
       });
@@ -99,7 +111,7 @@ export const computeReminders = (data: GlobalAppData, now: Date, appUrl: string)
         message: {
           title: 'Soldes à actualiser',
           body: `Aucune mise à jour de tes comptes depuis ${days} jours.`,
-          url: appUrl,
+          url: link('update'),
           tag: 'stale-balances',
         },
       });
@@ -122,8 +134,17 @@ export const computeReminders = (data: GlobalAppData, now: Date, appUrl: string)
           key: `payday:${monthKey}`,
           message: {
             title: `Salaire versé : ${eur(amount)} à placer`,
-            body: steps.map(s => `${eur(s.fillAmount)} ${s.alert ? '→ ouvrir un PEA/AV' : `sur ${s.accountName}`}`).join(', ') + '.',
-            url: appUrl,
+            body: [
+              ...computePayTransfers({
+                expenses: data.expenses || [],
+                subscriptions: data.subscriptions,
+                leisureBudget: data.config.leisureBudget ?? 0,
+                projectSavings: data.config.projectSavings ?? 0,
+                livingBudget: data.config.livingBudget ?? 0,
+              }).map(t => `${eur(t.amount)} ${t.label}`),
+              `Épargne : ${steps.map(s => `${eur(s.fillAmount)} ${s.alert ? '→ ouvrir un PEA/AV' : `sur ${s.accountName}`}`).join(', ')}`,
+            ].join(' · ') + '.',
+            url: link('pilot'),
             tag: 'payday',
           },
         });
@@ -143,8 +164,41 @@ export const computeReminders = (data: GlobalAppData, now: Date, appUrl: string)
       message: {
         title: `Prélèvement ${daysUntil === 1 ? 'demain' : `dans ${daysUntil} jours`} : ${sub.name}`,
         body: `${eur2(sub.amount)}${sub.debitAccount ? ` sur ${sub.debitAccount}` : ''}, ${day}.`,
-        url: appUrl,
+        url: link('subscriptions'),
         tag: `sub-${sub.id}`,
+      },
+    });
+  }
+
+
+  // 7. Bilan du mois écoulé (1er au 3 du mois, une fois) : épargne placée face au plan,
+  //    évolution de l'épargne nette, intérêts acquis.
+  if (now.getDate() <= 3 && accounts.length > 0) {
+    const prevEnd = new Date(now.getFullYear(), now.getMonth(), 0);          // dernier jour du mois écoulé
+    const prevStart = new Date(prevEnd.getFullYear(), prevEnd.getMonth(), 1);
+    const beforeStart = new Date(prevEnd.getFullYear(), prevEnd.getMonth(), 0); // veille du mois écoulé
+    const saved = computeMonthSavedAmount(accounts, prevEnd);
+    const plan = data.config?.paydayAmount ?? computeMonthlySavingsCapacity(data);
+    const ownedEnd = computeAccountBalanceAtDate(accounts, formatISODay(prevEnd));
+    const ownedStart = computeAccountBalanceAtDate(accounts, formatISODay(beforeStart));
+    const year = prevEnd.getFullYear();
+    const interest = accounts.reduce((sum, a) =>
+      sum + computeAccruedInterest(a, year, prevEnd)
+          - (prevStart.getMonth() === 0 ? 0 : computeAccruedInterest(a, year, beforeStart)), 0);
+    const pct = ownedStart > 0 ? ((ownedEnd - ownedStart) / ownedStart) * 100 : 0;
+    const month = MONTH_NAMES[prevEnd.getMonth()];
+    const parts = [
+      `${saved >= 0 ? '+' : ''}${eur(saved)} placés${plan > 0 ? ` (objectif ${eur(plan)})` : ''}`,
+      `épargne ${eur(ownedEnd)} (${pct >= 0 ? '+' : ''}${pct.toLocaleString('fr-FR', { maximumFractionDigits: 1 })} %)`,
+      ...(interest >= 1 ? [`≈ ${eur(interest)} d'intérêts acquis`] : []),
+    ];
+    out.push({
+      key: `recap:${year}-${String(prevEnd.getMonth() + 1).padStart(2, '0')}`,
+      message: {
+        title: `Bilan de ${month}`,
+        body: parts.join(' · ') + '.',
+        url: link('dashboard'),
+        tag: 'monthly-recap',
       },
     });
   }

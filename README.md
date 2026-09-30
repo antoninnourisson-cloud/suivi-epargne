@@ -47,8 +47,9 @@ Un **petit serveur optionnel** (Cloudflare Worker, dossier [`worker/`](worker/))
   - abattement de 10 % plafonné ;
   - Navigo, mutuelle, titres-restaurant.
 - **Mode exact** : les chiffres réels d'une fiche de paie remplacent la formule.
-- Charges fixes (saisies à la main, plus les abonnements ajoutés automatiquement au coût mensuel), capacité d'épargne, stratégie de placement selon les taux et plafonds, remplissage des livrets, durée de survie.
-- **Rappel du jour de paie** (notification) : « 400 € sur le LEP, 250 € sur le Livret A », recalculé sur les soldes du moment.
+- **Ta paie, virement par virement** : charges fixes saisies (un virement sortant = une ligne), abonnements mensuels (automatiques), argent plaisir, épargne projets, reste à vivre, puis l'épargne répartie entre les comptes.
+- Capacité d'épargne, stratégie de placement selon les taux et plafonds, remplissage des livrets, durée de survie.
+- **Rappel du jour de paie** (notification) : toute la répartition, jusqu'à « 400 € sur le LEP, 250 € sur le Livret A », recalculée sur les soldes du moment.
 - **Horloge fiscale** : maturité des PEA, PEE et Assurance Vie.
 
 ### Rendement et fiscalité
@@ -63,7 +64,7 @@ Un **petit serveur optionnel** (Cloudflare Worker, dossier [`worker/`](worker/))
 - **Objectifs** : capacité théorique confrontée au rythme d'épargne réel.
 - **Historique** mensuel du patrimoine et des charges.
 - **Simulateur de retrait** : compte le moins coûteux à ponctionner (impôt, quinzaine perdue, intérêts sacrifiés), impact sur la durée de survie et sur un objectif.
-- **Abonnements** : rappel la veille du prélèvement, ou une semaine avant à partir de 100 €.
+- **Abonnements** : rappel la veille du prélèvement, ou une semaine avant à partir de 100 €. Seuls les mensuels comptent dans les charges fixes.
 - **Fiches de paie** :
   - import depuis Drive (Google Picker) ;
   - extraction par Gemini, avec nouvelles tentatives et modèles de repli en cas de saturation ;
@@ -71,7 +72,7 @@ Un **petit serveur optionnel** (Cloudflare Worker, dossier [`worker/`](worker/))
 
 ### Sécurité et notifications
 - **Verrou de l'appareil** par biométrie (WebAuthn) ou code PIN (PBKDF2). Il se réactive dès que l'app passe en arrière-plan.
-- **Notifications push**, activables appareil par appareil. Vérification quotidienne des rappels ; chaque rappel n'est envoyé qu'une fois.
+- **Notifications push**, activables appareil par appareil. Vérification quotidienne des rappels ; chaque rappel n'est envoyé qu'une fois et ouvre l'écran concerné. Bilan du mois écoulé le 1er.
 - **E-mail récapitulatif aux parents** (via Gmail) lors des mouvements sur Livret A / LEP, envoyé seulement après une sauvegarde confirmée.
 - Export et import JSON complets, export CSV.
 

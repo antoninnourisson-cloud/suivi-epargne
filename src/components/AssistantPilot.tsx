@@ -1,12 +1,12 @@
 // src/components/AssistantPilot.tsx
 import React, { useState, useMemo } from 'react';
 import { SavingsAccount, Expense, AccountType, FiscalConfig, WorkBenefits, PayslipRecord, Subscription } from '../types';
-import { computeIncome, computeMaturityCountdown, computePlacementStrategy, payslipSuperNet, subscriptionsAsExpenses } from '../lib/finance';
+import { computeIncome, computeMaturityCountdown, computePlacementStrategy, payslipSuperNet, subscriptionsAsExpenses, computePayTransfers } from '../lib/finance';
 import { parseISODate } from '../lib/dates';
 import { parseFrenchNumber, safeNumber } from '../lib/numbers';
 import { NumberInput } from './NumberInput';
 import { isBackendEnabled } from '../services/backendService';
-import { Calculator, TrendingUp, Target, Lock, Unlock, Info, Plus, Trash2, Hourglass, Coins, BarChart3, X, Check, FileCheck2, Wand2, BellRing } from 'lucide-react';
+import { Calculator, TrendingUp, Target, Lock, Unlock, Info, Plus, Trash2, Hourglass, Coins, BarChart3, X, Check, FileCheck2, Wand2, BellRing, Wallet } from 'lucide-react';
 
 interface AssistantPilotProps {
   accounts: SavingsAccount[];
@@ -35,6 +35,8 @@ interface AssistantPilotProps {
   onClearActivePayslip: () => void;
   subscriptions: Subscription[];
   onOpenSubscriptions: () => void;
+  livingBudget: number;
+  setLivingBudget: (val: number) => void;
   paydayDay?: number;
   setPaydayDay: (day: number | undefined) => void;
   paydayAmount?: number;
@@ -46,7 +48,7 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
   grossAnnual, setGrossAnnual, leisureBudget, setLeisureBudget, projectSavings, setProjectSavings,
   navigoBase, setNavigoBase, navigoRate, setNavigoRate, taxRateManual, setTaxRateManual,
   extraMonthlyIncome, setExtraMonthlyIncome, fiscalConfig, workBenefits, activePayslip, onClearActivePayslip,
-  subscriptions, onOpenSubscriptions, paydayDay, setPaydayDay, paydayAmount, setPaydayAmount
+  subscriptions, onOpenSubscriptions, livingBudget, setLivingBudget, paydayDay, setPaydayDay, paydayAmount, setPaydayAmount
 }) => {
   const [showDetails, setShowDetails] = useState(false);
   const [externalSavings, setExternalSavings] = useState<number>(0);
@@ -161,7 +163,7 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
     const manualFixed = expenses.reduce((sum, e) => sum + e.amount, 0);
     const subscriptionsFixed = subscriptionCharges.reduce((sum, e) => sum + e.amount, 0);
     const totalFixed = manualFixed + subscriptionsFixed;
-    const theoreticalCapacity = effectiveSuperNetForCalc - totalFixed - leisureBudget - projectSavings;
+    const theoreticalCapacity = effectiveSuperNetForCalc - totalFixed - leisureBudget - projectSavings - livingBudget;
     // parseFrenchNumber et non parseFloat : vider le champ (ou taper "-" seul) donnait
     // NaN → "Placement (NaN €)" et un plan de placement qui disparaissait sans message.
     // Saisie non interprétable = retour au calcul automatique.
@@ -169,7 +171,12 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
     const finalCapacity = manualParsed ?? theoreticalCapacity;
     const totalToInvest = Math.max(0, finalCapacity + externalSavings);
     return { totalFixed, subscriptionsFixed, theoreticalCapacity, finalCapacity, totalToInvest };
-  }, [effectiveSuperNetForCalc, expenses, subscriptionCharges, leisureBudget, projectSavings, manualSavingsCapacity, externalSavings]);
+  }, [effectiveSuperNetForCalc, expenses, subscriptionCharges, leisureBudget, projectSavings, livingBudget, manualSavingsCapacity, externalSavings]);
+
+  const payTransfers = useMemo(
+    () => computePayTransfers({ expenses, subscriptions, leisureBudget, projectSavings, livingBudget }),
+    [expenses, subscriptions, leisureBudget, projectSavings, livingBudget]
+  );
 
   const strategy = useMemo(
     () => computePlacementStrategy(budgetData.totalToInvest, accounts, fiscalConfig),
@@ -399,7 +406,7 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
                 ) : (
                   <p className="text-xs text-slate-400 dark:text-slate-500 italic">Aucun abonnement actif.</p>
                 )}
-                {subscriptionCharges.length > 0 && <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">Coût ramené au mois (un annuel de 120 € compte 10 €).</p>}
+                <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">Seuls les abonnements mensuels (et hebdomadaires) comptent ici. Les annuels, semestriels et trimestriels ne font que déclencher un rappel avant le prélèvement.</p>
               </div>
               <div className="mt-4 pt-4 border-t flex justify-between font-black text-rose-600"><span>TOTAL CHARGES</span><span>{Math.round(budgetData.totalFixed).toLocaleString('fr-FR')} €</span></div>
             </div>
@@ -408,6 +415,7 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
               <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm grid grid-cols-2 gap-4">
                   <div><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Argent Plaisir</label><NumberInput value={leisureBudget} onChange={setLeisureBudget} min={0} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
                   <div><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Épargne Projets</label><NumberInput value={projectSavings} onChange={setProjectSavings} min={0} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
+                  <div><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Reste à vivre (compte courant)</label><NumberInput value={livingBudget} onChange={setLivingBudget} min={0} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
               </div>
 
               <div className="bg-slate-900 p-6 rounded-2xl shadow-lg text-white grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
@@ -427,6 +435,26 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm lg:col-span-2">
+               <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-1 flex items-center gap-2"><Wallet className="w-5 h-5 text-indigo-600" /> Ta paie, virement par virement</h3>
+               <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">Sur {Math.round(effectiveSuperNetForCalc).toLocaleString('fr-FR')} € de paie. Ajoute une charge fixe par virement sortant (ex. « Revolut commun »), sans détailler ce qu'elle paie.</p>
+               <div className="space-y-2">
+                 {payTransfers.map((t, idx) => (
+                   <div key={t.label + idx} className="flex items-center justify-between text-sm p-2 rounded-lg bg-slate-50 dark:bg-slate-900">
+                     <span className="font-bold text-slate-700 dark:text-slate-200 min-w-0 truncate">{t.label}</span>
+                     <span className="font-mono font-bold text-slate-700 dark:text-slate-200 flex-shrink-0">{Math.round(t.amount).toLocaleString('fr-FR')} €</span>
+                   </div>
+                 ))}
+                 <div className="flex items-center justify-between text-sm p-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900">
+                   <span className="font-black text-emerald-700 dark:text-emerald-300">Épargne{strategy.length > 0 && <span className="font-bold text-emerald-600/80 dark:text-emerald-400/80"> : {strategy.map(st => `${Math.round(st.fillAmount).toLocaleString('fr-FR')} € ${st.alert ? 'à ouvrir (PEA/AV)' : st.accountName}`).join(', ')}</span>}</span>
+                   <span className="font-mono font-black text-emerald-700 dark:text-emerald-300 flex-shrink-0">{Math.round(budgetData.totalToInvest).toLocaleString('fr-FR')} €</span>
+                 </div>
+               </div>
+               {budgetData.finalCapacity < 0 && (
+                 <p className="mt-3 text-xs font-bold text-rose-600 flex items-center gap-1"><Info className="w-3.5 h-3.5" /> Il manque {Math.round(-budgetData.finalCapacity).toLocaleString('fr-FR')} € : les virements dépassent la paie.</p>
+               )}
+            </div>
+
             <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
                <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-2"><Target className="w-5 h-5 text-indigo-600" /> Placement ({Math.round(budgetData.totalToInvest).toLocaleString('fr-FR')} €)</h3>
                <div className="space-y-3">{strategy.length > 0 ? strategy.map((step, idx) => (<div key={step.accountName + idx} className="flex items-center justify-between p-4 rounded-xl border-l-4 bg-indigo-50 border-indigo-600"><div className="flex items-center gap-4"><div className="w-6 h-6 rounded-full flex center items-center justify-center bg-indigo-600 text-white font-bold text-xs">{idx + 1}</div><div><p className="font-bold text-slate-800 dark:text-slate-100">{step.accountName}</p><p className="text-xs text-slate-500 dark:text-slate-400">{step.type} • Taux {step.rate}%</p></div></div><p className="text-xl font-black text-indigo-600">+ {Math.round(step.fillAmount).toLocaleString('fr-FR')} €</p></div>)) : <p className="text-sm text-slate-400 dark:text-slate-500 italic">Rien à placer.</p>}</div>
