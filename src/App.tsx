@@ -20,6 +20,7 @@ import { isLockEnabled } from './services/appLockService';
 import { computeMaturityCountdown, depositsAfterCashFlow, computeMonthlySavingsCapacity, subscriptionsAsExpenses, computeMonthlyPay } from './lib/finance';
 import { localTodayISO } from './lib/dates';
 import { formatEUR, formatSignedEUR } from './lib/format';
+import { MovementSearch } from './components/MovementSearch';
 import {
   LayoutDashboard, Wallet, Trash2, Edit2, ShieldCheck,
   ArrowRightLeft, RefreshCcw, PlusCircle, Cloud, LogOut,
@@ -782,6 +783,7 @@ const App: React.FC = () => {
                   <div><h2 className="text-2xl font-black text-slate-800 dark:text-slate-100">Mes Comptes</h2><p className="text-sm text-slate-500 dark:text-slate-400 font-medium">{data.accounts.length} comptes actifs</p></div>
                   {!showForm && <button onClick={() => { setEditingAccount(undefined); setShowForm(true); }} className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-xl font-bold flex gap-2 transition-colors shadow-lg shadow-indigo-200"><PlusCircle className="w-5 h-5"/> Ajouter un compte</button>}
                 </div>
+                {!showForm && <MovementSearch accounts={data.accounts} />}
                 {showForm ? (
                   <AccountForm
                       onSave={handleSaveAccount}
