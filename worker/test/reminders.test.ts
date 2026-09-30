@@ -128,6 +128,7 @@ describe('computeReminders', () => {
       const r = computeReminders(data, new Date(2026, 9, 1, 9), APP).find(x => x.key === 'recap:2026-09');
       expect(r?.message.title).toBe('Bilan de septembre');
       expect(r?.message.body).toMatch(/\+300\s€ placés \(objectif 300\s€\)/);
+      expect(r?.message.body).not.toContain('% de ta paie'); // paie inconnue dans ce jeu de test
       expect(r?.message.body).toMatch(/\+30 %/);
       expect(computeReminders(data, new Date(2026, 9, 4, 9), APP).some(x => x.key.startsWith('recap:'))).toBe(false);
     });
@@ -142,6 +143,20 @@ describe('computeReminders', () => {
       const r = computeReminders(data, new Date(2026, 8, 28, 9), APP).find(x => x.key === 'payday:2026-09');
       expect(r?.message.body).toMatch(/900.*Revolut commun · 11.*Abonnements \(Revolut perso\) · 200.*Épargne projets · 750.*Argent plaisir.*Épargne : 500.*Livret A/);
       expect(r?.message.url).toBe(`${APP}?view=pilot`);
+    });
+  });
+
+  describe('relevés annuels', () => {
+    const pea = { ...livret, id: 'pea', name: 'PEA', type: AccountType.PEA, totalDeposits: 800 };
+    it('rappelle mi-janvier les placements non actualisés, pas les livrets', () => {
+      const r = computeReminders(base({ accounts: [livret, pea] }), new Date(2027, 0, 15, 9), APP).find(x => x.key === 'annual-statement:2027');
+      expect(r?.message.body).toContain('PEA');
+      expect(r?.message.body).not.toContain('Livret A');
+      expect(r?.message.url).toBe(`${APP}?view=update`);
+    });
+    it('se tait si la valeur a déjà été reportée cette année', () => {
+      const updated = { ...pea, movements: [{ id: 'v', date: '2027-01-08', amount: 40, label: 'Valorisation (+)', type: 'IN' as const, kind: 'valuation' as const }] };
+      expect(computeReminders(base({ accounts: [updated] }), new Date(2027, 0, 15, 9), APP).some(x => x.key.startsWith('annual-statement'))).toBe(false);
     });
   });
 });

@@ -5,7 +5,7 @@ import {
 } from 'recharts';
 import { SavingsAccount, PortfolioSnapshot, AccountType, Expense, FiscalConfig, WorkBenefits, RecurringMovement } from '../types';
 import { Euro, Lock, Wallet, Filter, Unlock, Save, AlertTriangle, Trash2, Clock, TrendingUp, TrendingDown, PiggyBank, Percent, ShieldAlert, Repeat } from 'lucide-react';
-import { computeAccruedParentalInterest, computeRecentSavingsRate, computeAccountBalanceAtDate, findStaleRegulatedRates, computeLepEligibility, computeIncome, findDueRecurring, computeMonthSavedAmount } from '../lib/finance';
+import { computeAccruedParentalInterest, computeRecentSavingsRate, computeAccountBalanceAtDate, findStaleRegulatedRates, computeLepEligibility, computeIncome, findDueRecurring, computeMonthSavedAmount, computeSavingsRateHistory } from '../lib/finance';
 import { parseISODate, formatISODay, daysBetween, localTodayISO } from '../lib/dates';
 import { Button } from './Button';
 
@@ -23,6 +23,8 @@ interface DashboardProps {
   onRecordRecurring?: (r: RecurringMovement, date: string) => void;
   // Objectif d'épargne du mois : montant du rappel de paie, sinon capacité du Pilotage.
   monthPlan?: number;
+  // Paie nette mensuelle, pour le taux d'épargne.
+  monthlyPay?: number;
   config: {
     grossAnnual: number;
     navigoBase: number;
@@ -31,7 +33,7 @@ interface DashboardProps {
   };
 }
 
-export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expenses, fiscalConfig, workBenefits, onDeleteAccount, config, recurringMovements = [], onRecordRecurring, monthPlan }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expenses, fiscalConfig, workBenefits, onDeleteAccount, config, recurringMovements = [], onRecordRecurring, monthPlan, monthlyPay = 0 }) => {
   const [dateRange, setDateRange] = useState(() => {
     try {
         const stored = localStorage.getItem('dashboard_date_range');
@@ -225,6 +227,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
   // partagées avec Objectifs, pour que les deux écrans ne puissent jamais raconter deux
   // rythmes différents.
   const monthSaved = useMemo(() => computeMonthSavedAmount(accounts), [accounts]);
+  const rateHistory = useMemo(() => computeSavingsRateHistory(accounts, monthlyPay), [accounts, monthlyPay]);
+  // Moyenne des mois COMPLETS seulement : le mois en cours n'est pas encore fini.
+  const avgRate = useMemo(() => {
+    const full = rateHistory.slice(0, -1).filter(m => m.saved !== 0);
+    return full.length > 0 ? full.reduce((sum, m) => sum + m.rate, 0) / full.length : null;
+  }, [rateHistory]);
 
   const projection = useMemo(() => {
     const now = new Date();
@@ -472,26 +480,56 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
         <StatCard title="Bloqué" amount={availabilityStats.hardLocked} icon={Lock} color="bg-slate-800" subtext="Retraite/PEE" />
       </div>
 
-      {monthPlan !== undefined && monthPlan > 0 && (() => {
+      {((monthPlan !== undefined && monthPlan > 0) || monthlyPay > 0) && (() => {
+        const hasPlan = monthPlan !== undefined && monthPlan > 0;
+        const plan = monthPlan || 0;
         const now = new Date();
         const daysLeft = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate() - now.getDate();
-        const pct = Math.max(0, Math.min(100, (monthSaved / monthPlan) * 100));
-        const done = monthSaved >= monthPlan;
+        const pct = hasPlan ? Math.max(0, Math.min(100, (monthSaved / plan) * 100)) : 0;
+        const done = hasPlan && monthSaved >= plan;
+        const maxRate = Math.max(1, ...rateHistory.map(m => Math.abs(m.rate)));
+        const MONTH_INITIALS = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'];
         return (
           <div className="bg-white dark:bg-slate-800 p-5 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
             <div className="flex items-baseline justify-between gap-3 mb-2">
               <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2"><PiggyBank className="w-4 h-4 text-indigo-600" /> Placé ce mois-ci</h3>
-              <p className="text-sm font-black text-slate-700 dark:text-slate-200">{fmtEUR(Math.max(0, monthSaved))} <span className="text-slate-400 dark:text-slate-500 font-bold">/ {fmtEUR(monthPlan)}</span></p>
+              <p className="text-sm font-black text-slate-700 dark:text-slate-200">{fmtEUR(Math.max(0, monthSaved))}{hasPlan && <span className="text-slate-400 dark:text-slate-500 font-bold"> / {fmtEUR(plan)}</span>}</p>
             </div>
-            <div className="h-2.5 rounded-full bg-slate-100 dark:bg-slate-700 overflow-hidden">
-              <div className={`h-full rounded-full ${done ? 'bg-emerald-500' : 'bg-indigo-600'}`} style={{ width: `${pct}%` }} />
-            </div>
+            {hasPlan && (
+              <div className="h-2.5 rounded-full bg-slate-100 dark:bg-slate-700 overflow-hidden">
+                <div className={`h-full rounded-full ${done ? 'bg-emerald-500' : 'bg-indigo-600'}`} style={{ width: `${pct}%` }} />
+              </div>
+            )}
             <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-2">
-              {done ? 'Objectif du mois atteint.'
-                : monthSaved < 0 ? `Tu as plus retiré que versé ce mois-ci (${fmtEUR(monthSaved)}).`
-                : `Reste ${fmtEUR(monthPlan - monthSaved)} à placer, ${daysLeft} jour${daysLeft > 1 ? 's' : ''} avant la fin du mois.`}
-              {' '}Versements moins retraits sur tes comptes d'épargne, hors variations de valeur.
+              {!hasPlan ? '' : done ? 'Objectif du mois atteint. '
+                : monthSaved < 0 ? `Tu as plus retiré que versé ce mois-ci (${fmtEUR(monthSaved)}). `
+                : `Reste ${fmtEUR(plan - monthSaved)} à placer, ${daysLeft} jour${daysLeft > 1 ? 's' : ''} avant la fin du mois. `}
+              Versements moins retraits sur tes comptes d'épargne, hors variations de valeur.
             </p>
+            {monthlyPay > 0 && (
+              <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-700">
+                <div className="flex items-baseline justify-between gap-3 mb-2">
+                  <p className="text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5"><Percent className="w-3.5 h-3.5 text-indigo-600" /> Taux d'épargne</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Ce mois-ci <b className="text-slate-800 dark:text-slate-100">{Math.round(rateHistory[rateHistory.length - 1]?.rate ?? 0)} %</b>
+                    {avgRate !== null && <> · moyenne 12 mois <b className="text-slate-800 dark:text-slate-100">{Math.round(avgRate)} %</b></>}
+                  </p>
+                </div>
+                <div className="flex items-end gap-1 h-16" role="img" aria-label="Taux d'épargne des 12 derniers mois">
+                  {rateHistory.map((m, i) => {
+                    const h = Math.max(2, (Math.abs(m.rate) / maxRate) * 100);
+                    const current = i === rateHistory.length - 1;
+                    return (
+                      <div key={m.month} className="flex-1 flex flex-col items-center justify-end h-full gap-1" title={`${m.month} : ${Math.round(m.rate)} % (${fmtEUR(m.saved)})`}>
+                        <div className={`w-full rounded-sm ${m.rate < 0 ? 'bg-rose-400' : current ? 'bg-indigo-300 dark:bg-indigo-700' : 'bg-indigo-600'}`} style={{ height: `${h}%` }} />
+                        <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500">{MONTH_INITIALS[Number(m.month.slice(5)) - 1]}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+                <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">Part de ta paie actuelle ({fmtEUR(monthlyPay)}) mise de côté chaque mois. Mois en cours en clair, retraits nets en rouge.</p>
+              </div>
+            )}
           </div>
         );
       })()}

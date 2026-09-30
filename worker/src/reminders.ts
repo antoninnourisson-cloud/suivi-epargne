@@ -16,6 +16,8 @@ import {
   computeMonthSavedAmount,
   computeAccountBalanceAtDate,
   computeAccruedInterest,
+  computeMonthlyPay,
+  findAccountsAwaitingAnnualStatement,
 } from '../../src/lib/finance';
 import { formatISODay } from '../../src/lib/dates';
 import { DEFAULT_FISCAL_CONFIG } from '../../src/constants';
@@ -186,8 +188,9 @@ export const computeReminders = (data: GlobalAppData, now: Date, appUrl: string)
           - (prevStart.getMonth() === 0 ? 0 : computeAccruedInterest(a, year, beforeStart)), 0);
     const pct = ownedStart > 0 ? ((ownedEnd - ownedStart) / ownedStart) * 100 : 0;
     const month = MONTH_NAMES[prevEnd.getMonth()];
+    const pay = computeMonthlyPay(data);
     const parts = [
-      `${saved >= 0 ? '+' : ''}${eur(saved)} placés${plan > 0 ? ` (objectif ${eur(plan)})` : ''}`,
+      `${saved >= 0 ? '+' : ''}${eur(saved)} placés${plan > 0 ? ` (objectif ${eur(plan)})` : ''}${pay > 0 ? `, soit ${Math.round((saved / pay) * 100)} % de ta paie` : ''}`,
       `épargne ${eur(ownedEnd)} (${pct >= 0 ? '+' : ''}${pct.toLocaleString('fr-FR', { maximumFractionDigits: 1 })} %)`,
       ...(interest >= 1 ? [`≈ ${eur(interest)} d'intérêts acquis`] : []),
     ];
@@ -200,6 +203,24 @@ export const computeReminders = (data: GlobalAppData, now: Date, appUrl: string)
         tag: 'monthly-recap',
       },
     });
+  }
+
+
+  // 8. Mi-janvier : les relevés au 31/12 des placements arrivent. Un seul rappel par an,
+  //    et seulement pour les placements dont la valeur n'a pas encore été actualisée.
+  if (now.getMonth() === 0 && now.getDate() >= 15 && now.getDate() <= 20) {
+    const waiting = findAccountsAwaitingAnnualStatement(accounts, now);
+    if (waiting.length > 0) {
+      out.push({
+        key: `annual-statement:${now.getFullYear()}`,
+        message: {
+          title: 'Relevés annuels de tes placements',
+          body: `Reporte la valeur au 31/12 et les versements de ${waiting.map(a => a.name).join(', ')} : les plus-values restent justes.`,
+          url: link('update'),
+          tag: 'annual-statement',
+        },
+      });
+    }
   }
 
   return out;

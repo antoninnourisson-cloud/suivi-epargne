@@ -9,6 +9,7 @@ import {
   subscriptionMonthlyCost,
   subscriptionsAsExpenses,
   totalFixedCharges,
+  computeSavingsRateHistory,
 } from './finance';
 import { DEFAULT_FISCAL_CONFIG as CFG } from '../constants';
 import { AccountType, SavingsAccount, Subscription } from '../types';
@@ -139,5 +140,17 @@ describe('abonnements', () => {
     // L'annuel ne pèse pas sur les charges mensuelles : il ne fait que déclencher un rappel.
     expect(subscriptionsAsExpenses(subs).map(e => e.id)).toEqual(['sub:n']);
     expect(totalFixedCharges([{ id: 'loyer', name: 'Loyer', amount: 800 }], subs)).toBeCloseTo(800 + 13.49);
+  });
+});
+
+describe("taux d'épargne", () => {
+  it('rapporte les versements de chaque mois à la paie, mois en cours inclus', () => {
+    const accounts = [acc({ movements: [
+      { id: '1', date: '2026-08-05', amount: 500, label: 'x', type: 'IN' },
+      { id: '2', date: '2026-09-05', amount: 250, label: 'x', type: 'IN' },
+    ] })];
+    const h = computeSavingsRateHistory(accounts, 2500, 3, NOW);
+    expect(h.map(m => m.month)).toEqual(['2026-07', '2026-08', '2026-09']);
+    expect(h.map(m => m.rate)).toEqual([0, 20, 10]);
   });
 });

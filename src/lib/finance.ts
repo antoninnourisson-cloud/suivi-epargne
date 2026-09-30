@@ -776,7 +776,8 @@ export const payslipSuperNet = (e: PayslipExtractedData): number | undefined =>
  * Le super net vient de la fiche de paie de référence si elle en donne un, sinon de la
  * formule (même règle que le Pilotage).
  */
-export const computeMonthlySavingsCapacity = (data: GlobalAppData): number => {
+/** Paie mensuelle nette (« super net ») : fiche de paie de référence, sinon la formule. */
+export const computeMonthlyPay = (data: GlobalAppData): number => {
   const c = data.config || ({} as GlobalAppData['config']);
   const formula = computeIncome(
     {
@@ -790,7 +791,12 @@ export const computeMonthlySavingsCapacity = (data: GlobalAppData): number => {
     data.workBenefits || DEFAULT_WORK_BENEFITS
   ).superNet;
   const payslip = (data.payslips || []).find(p => p.id === data.activePayslipId);
-  const superNet = (payslip && payslipSuperNet(payslip.extracted)) ?? formula;
+  return (payslip && payslipSuperNet(payslip.extracted)) ?? formula;
+};
+
+export const computeMonthlySavingsCapacity = (data: GlobalAppData): number => {
+  const c = data.config || ({} as GlobalAppData['config']);
+  const superNet = computeMonthlyPay(data);
   const totalFixed = totalFixedCharges(data.expenses || [], data.subscriptions || []);
   return computeSavingsCapacity(superNet, totalFixed, c.leisureBudget ?? 0, c.projectSavings ?? 0);
 };
@@ -1159,4 +1165,58 @@ export const computePayTransfers = (input: {
   if (input.projectSavings > 0) out.push({ label: 'Épargne projets', amount: input.projectSavings });
   if (input.leisureBudget > 0) out.push({ label: 'Argent plaisir (reste sur le compte courant)', amount: input.leisureBudget });
   return out;
+};
+
+// ---------------------------------------------------------------------------
+// Taux d'épargne
+// ---------------------------------------------------------------------------
+
+export interface MonthSavingsRate {
+  month: string;  // 'YYYY-MM'
+  saved: number;  // versements − retraits du mois (voir computeMonthSavedAmount)
+  rate: number;   // part de la paie, en % (0 si paie inconnue)
+}
+
+/**
+ * Taux d'épargne des `months` derniers mois, mois en cours inclus (partiel). Rapporté à la
+ * paie ACTUELLE : l'app ne connaît pas l'historique exact des salaires.
+ */
+export const computeSavingsRateHistory = (
+  accounts: { type: AccountType; movements?: AccountMovement[] }[],
+  monthlyPay: number,
+  months: number = 12,
+  asOfDate: Date = new Date()
+): MonthSavingsRate[] => {
+  const out: MonthSavingsRate[] = [];
+  for (let k = months - 1; k >= 0; k--) {
+    const end = k === 0
+      ? asOfDate
+      : new Date(asOfDate.getFullYear(), asOfDate.getMonth() - k + 1, 0);
+    const saved = computeMonthSavedAmount(accounts, end);
+    out.push({
+      month: `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, '0')}`,
+      saved,
+      rate: monthlyPay > 0 ? (saved / monthlyPay) * 100 : 0,
+    });
+  }
+  return out;
+};
+
+// ---------------------------------------------------------------------------
+// Relevés annuels des placements
+// ---------------------------------------------------------------------------
+
+/**
+ * Placements (PEA, AV…) dont la valeur n'a pas encore été actualisée cette année : en
+ * janvier, les relevés au 31/12 arrivent, c'est le moment de reporter valeur et versements.
+ */
+export const findAccountsAwaitingAnnualStatement = (
+  accounts: SavingsAccount[],
+  asOfDate: Date = new Date()
+): SavingsAccount[] => {
+  const yearStart = `${asOfDate.getFullYear()}-01-01`;
+  return accounts.filter(a =>
+    tracksDeposits(a.type) && a.totalAmount > 0 &&
+    !(a.movements || []).some(m => m.kind === 'valuation' && m.date >= yearStart)
+  );
 };

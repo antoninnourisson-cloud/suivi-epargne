@@ -22,6 +22,7 @@ Un **petit serveur optionnel** (Cloudflare Worker, dossier [`worker/`](worker/))
 - Épargne nette, répartie entre disponible, contrainte fiscale (AV/PEA récents) et bloqué (PEE, PER…).
 - Évolution empilée par compte, et répartition par établissement.
 - **Placé ce mois-ci** : jauge des versements du mois face au plan d'épargne.
+- **Taux d'épargne** : part de la paie mise de côté, mois par mois sur un an.
 - **Projection** à 6 et 12 mois d'après le rythme réel des 90 derniers jours, avec alerte si ce rythme ralentit ou accélère fortement.
 - Alertes :
   - plafonds des livrets ;
@@ -72,7 +73,7 @@ Un **petit serveur optionnel** (Cloudflare Worker, dossier [`worker/`](worker/))
 
 ### Sécurité et notifications
 - **Verrou de l'appareil** par biométrie (WebAuthn) ou code PIN (PBKDF2). Il se réactive dès que l'app passe en arrière-plan.
-- **Notifications push**, activables appareil par appareil. Vérification quotidienne des rappels ; chaque rappel n'est envoyé qu'une fois et ouvre l'écran concerné. Bilan du mois écoulé le 1er.
+- **Notifications push**, activables appareil par appareil. Vérification quotidienne des rappels ; chaque rappel n'est envoyé qu'une fois et ouvre l'écran concerné. Bilan du mois écoulé le 1er, rappel des relevés annuels des placements mi-janvier.
 - **E-mail récapitulatif aux parents** (via Gmail) lors des mouvements sur Livret A / LEP, envoyé seulement après une sauvegarde confirmée.
 - Export et import JSON complets, export CSV.
 
