@@ -198,7 +198,7 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
                   <p className="text-xs text-slate-500 dark:text-slate-400 uppercase font-bold tracking-wider">{account.institution}</p>
                 </div>
                 <div className="text-right">
-                  <div className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase mb-1">Total Actuel</div>
+                  <div className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase mb-1">Total actuel</div>
                   <div className="text-xl font-black text-slate-800 dark:text-slate-100 font-mono">{formatEUR(newTotal, 2)}</div>
                 </div>
               </div>
@@ -223,7 +223,7 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
                   )}
                 </div>
 
-                {/* Part Parents */}
+                {/* Part des parents */}
                 <div className="bg-amber-50 dark:bg-amber-950/40 p-3 rounded-xl border border-amber-100 dark:border-amber-900">
                   <label className="text-[11px] font-black text-amber-700 dark:text-amber-300 uppercase tracking-widest flex items-center gap-1 mb-2">
                     <Users className="w-3 h-3" /> Part des parents (€)

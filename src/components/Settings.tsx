@@ -172,7 +172,7 @@ export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parent
 
         {/* SECTION EMAIL */}
         <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 lg:col-span-2">
-            <h3 className="font-bold text-slate-800 dark:text-slate-100 mb-4 border-b border-slate-200 dark:border-slate-700 pb-2 flex items-center gap-2"><Mail className="w-4 h-4 text-indigo-600"/> Notification Parents</h3>
+            <h3 className="font-bold text-slate-800 dark:text-slate-100 mb-4 border-b border-slate-200 dark:border-slate-700 pb-2 flex items-center gap-2"><Mail className="w-4 h-4 text-indigo-600"/> Notification aux parents</h3>
             <div className="bg-slate-50 dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-700">
                 <label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase block mb-2">Email destinataire (Alertes Livret A / LEP)</label>
                 <input 

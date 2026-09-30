@@ -58,7 +58,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
   }, [dateRange]);
 
   // Part possédée À CE JOUR : les mouvements datés dans le futur sont neutralisés, comme
-  // le fait déjà le graphique — sinon la carte "Mon Épargne Nette" et le dernier point de
+  // le fait déjà le graphique — sinon la carte "Mon épargne nette" et le dernier point de
   // la courbe divergeaient dès qu'un mouvement futur existait.
   const ownedToday = (acc: SavingsAccount): number => {
     const today = localTodayISO();
@@ -120,7 +120,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
   }, [accounts]);
 
   // Les seuils de maturité viennent de fiscalConfig.legalMaturity (comme lib/finance.ts et
-  // l'Horloge Fiscale) : ils étaient codés en dur ici (5/8), seul écran incapable de suivre
+  // l'Horloge fiscale) : ils étaient codés en dur ici (5/8), seul écran incapable de suivre
   // la config — trois réponses différentes possibles pour le même compte.
   const getAccountStatus = (account: SavingsAccount): 'AVAILABLE' | 'TAX_LOCKED' | 'HARD_LOCKED' => {
     const { pea, assuranceVie, pee } = fiscalConfig.legalMaturity;
@@ -535,9 +535,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard title="Mon Épargne Nette" amount={mySavings} icon={Wallet} color="bg-indigo-600" subtext="Capital réel" />
-        <StatCard title="Disponibilité Immédiate" amount={availabilityStats.available} icon={Unlock} color="bg-emerald-500" subtext="Liquide" />
-        <StatCard title="Contrainte Fiscale" amount={availabilityStats.taxLocked} icon={Euro} color="bg-amber-500" subtext="AV/PEA récents" extra={availabilityStats.taxLocked > 0 && (
+        <StatCard title="Mon épargne nette" amount={mySavings} icon={Wallet} color="bg-indigo-600" subtext="Capital réel" />
+        <StatCard title="Disponibilité immédiate" amount={availabilityStats.available} icon={Unlock} color="bg-emerald-500" subtext="Liquide" />
+        <StatCard title="Contrainte fiscale" amount={availabilityStats.taxLocked} icon={Euro} color="bg-amber-500" subtext="AV/PEA récents" extra={availabilityStats.taxLocked > 0 && (
           <div className="mt-2 space-y-0.5 text-[11px] text-slate-600 dark:text-slate-300">
             {unlockCost.extraTax >= 1 && <p>Tout retirer aujourd'hui : <b>≈ {formatEUR(unlockCost.extraTax, 0)}</b> d'impôt en plus qu'après la maturité.</p>}
             {unlockCost.closesPea && <p className="text-rose-600 dark:text-rose-400 font-bold">Un retrait clôturerait votre PEA.</p>}
@@ -725,7 +725,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
       </div>
 
       <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 h-80">
-        <h3 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-4">Par Établissement</h3>
+        <h3 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-4">Par établissement</h3>
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={dataByInstitution} layout="vertical">
             <XAxis type="number" hide />

@@ -18,7 +18,7 @@ interface PayslipsProps {
   onUpdatePayslips: (payslips: PayslipRecord[]) => void;
   geminiApiKey: string;
   pickerApiKey: string;
-  // Bascule le Pilotage Budgétaire sur les chiffres exacts de cette fiche (brut, charges,
+  // Bascule le Pilotage budgétaire sur les chiffres exacts de cette fiche (brut, charges,
   // navigo, mutuelle, titres resto, impôt réellement prélevé) à la place de la formule
   // théorique. L'appelant (App.tsx) est responsable de demander confirmation avant
   // d'écraser l'état courant — ce composant ne fait que déclencher la demande.
@@ -356,7 +356,7 @@ export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, 
                     <td className="px-6 py-3">
                       <div className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
                         {p.extracted.period || '—'}
-                        {isActive && <span className="text-[11px] font-black uppercase bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300 px-1.5 py-0.5 rounded">Référence Pilotage</span>}
+                        {isActive && <span className="text-[11px] font-black uppercase bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300 px-1.5 py-0.5 rounded">Référence du Pilotage</span>}
                       </div>
                       <div className="text-[11px] uppercase text-slate-500 dark:text-slate-400 font-bold">{p.extracted.employer || p.fileName}</div>
                     </td>
@@ -367,7 +367,7 @@ export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, 
                         {isActive ? (
                           <button onClick={onClearActivePayslip} className="p-2 text-amber-600 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900 rounded-lg" title="Revenir à l'estimation théorique"><Wand2 className="w-4 h-4" /></button>
                         ) : p.extracted.grossAmount !== undefined && (
-                          <button onClick={() => onApplyToPilotage(p)} className="p-2 text-amber-600 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/40 rounded-lg" title="Utiliser pour mon Pilotage Budgétaire (chiffres exacts)"><Wand2 className="w-4 h-4" /></button>
+                          <button onClick={() => onApplyToPilotage(p)} className="p-2 text-amber-600 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/40 rounded-lg" title="Utiliser pour mon Pilotage budgétaire (chiffres exacts)"><Wand2 className="w-4 h-4" /></button>
                         )}
                         <a href={`https://drive.google.com/file/d/${p.fileId}/view`} target="_blank" rel="noopener noreferrer" className="p-2 text-indigo-600 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 rounded-lg" title="Ouvrir sur Drive"><ExternalLink className="w-4 h-4" /></a>
                         <button onClick={() => removePayslip(p.id)} className="p-2 text-slate-300 dark:text-slate-600 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg" title="Retirer de la liste"><Trash2 className="w-4 h-4" /></button>

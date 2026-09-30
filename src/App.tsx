@@ -503,7 +503,7 @@ const App: React.FC = () => {
     });
   };
 
-  // Bascule le Pilotage Budgétaire sur les chiffres EXACTS de cette fiche de paie (brut,
+  // Bascule le Pilotage budgétaire sur les chiffres EXACTS de cette fiche de paie (brut,
   // charges, navigo, mutuelle, titres resto, impôt réellement prélevé), à la place de la
   // formule théorique — utile pour un mois réel plutôt que pour simuler un salaire
   // hypothétique. Le brut annuel affiché est extrapolé (mois × 12, potentiellement partiel
@@ -515,7 +515,7 @@ const App: React.FC = () => {
     setDialog({
       open: true, kind: 'confirm', confirmLabel: 'Appliquer',
       title: 'Utiliser les chiffres réels de cette fiche',
-      message: `Le Pilotage Budgétaire affichera les montants exacts de la fiche de ${p.extracted.period || 'cette fiche'} (brut, charges, impôt réellement prélevé...) à la place de la formule théorique. Le brut annuel sera aussi mis à jour (${estimate.toLocaleString('fr-FR')} €, extrapolé), à la place de ${Math.round(data.grossAnnual).toLocaleString('fr-FR')} € actuellement.`,
+      message: `Le Pilotage budgétaire affichera les montants exacts de la fiche de ${p.extracted.period || 'cette fiche'} (brut, charges, impôt réellement prélevé...) à la place de la formule théorique. Le brut annuel sera aussi mis à jour (${estimate.toLocaleString('fr-FR')} €, extrapolé), à la place de ${Math.round(data.grossAnnual).toLocaleString('fr-FR')} € actuellement.`,
       onConfirm: () => {
         data.setGrossAnnual(estimate);
         data.setActivePayslipId(p.id);
@@ -601,14 +601,14 @@ const App: React.FC = () => {
     );
   }
 
-  if (data.isLoadingData) return <div className="min-h-screen flex justify-center items-center flex-col gap-4"><Loader2 className="animate-spin w-10 h-10 text-indigo-600"/><p className="text-slate-500 dark:text-slate-400 font-bold">Chargement du portfolio...</p></div>;
+  if (data.isLoadingData) return <div className="min-h-screen flex justify-center items-center flex-col gap-4"><Loader2 className="animate-spin w-10 h-10 text-indigo-600"/><p className="text-slate-500 dark:text-slate-400 font-bold">Chargement de vos données…</p></div>;
 
   return (
     <ToastContext.Provider value={addToast}>
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900 flex flex-col md:flex-row font-sans text-slate-900 dark:text-slate-100">
       <aside className="hidden md:flex bg-slate-900 text-white w-full md:w-64 flex-shrink-0 flex-col border-r border-slate-800">
         <div className="p-6 border-b border-slate-800">
-          <h1 className="text-xl font-bold flex items-center gap-2"><div className="w-8 h-8 bg-indigo-600 rounded flex center justify-center items-center"><RefreshCcw className="w-4 h-4 text-white"/></div> Assistant Épargne</h1>
+          <h1 className="text-xl font-bold flex items-center gap-2"><div className="w-8 h-8 bg-indigo-600 rounded flex center justify-center items-center"><RefreshCcw className="w-4 h-4 text-white"/></div> Suivi Épargne</h1>
           <div className="mt-2 text-[11px] uppercase text-slate-500 dark:text-slate-400 font-bold tracking-wider flex items-center justify-between gap-2">
             <div className="flex items-center gap-2" title={data.lastSavedAt ? `Dernière écriture confirmée sur Drive : ${data.lastSavedAt.toLocaleTimeString('fr-FR')}` : undefined}>
               <div className={`w-2 h-2 rounded-full flex-shrink-0 ${data.isOffline ? 'bg-slate-400' : data.isSaving ? 'bg-amber-500 animate-pulse' : data.syncError || data.syncConflict ? 'bg-rose-500' : 'bg-emerald-500'}`}></div>
@@ -620,17 +620,17 @@ const App: React.FC = () => {
           </div>
         </div>
         <nav className="flex-1 p-4 overflow-y-auto">
-          <NavButton active={view === 'dashboard'} onClick={() => setView('dashboard')} icon={LayoutDashboard} label="Dashboard" />
-          <NavButton active={view === 'update'} onClick={() => setView('update')} icon={RefreshCcw} label="Actualiser Solde" highlight />
+          <NavButton active={view === 'dashboard'} onClick={() => setView('dashboard')} icon={LayoutDashboard} label="Tableau de bord" />
+          <NavButton active={view === 'update'} onClick={() => setView('update')} icon={RefreshCcw} label="Actualiser solde" highlight />
 
           <div className="pt-6 pb-2 text-[11px] font-black text-slate-600 dark:text-slate-300 uppercase px-4 tracking-widest">Analyses</div>
           <NavButton active={view === 'pilot'} onClick={() => setView('pilot')} icon={ShieldCheck} label="Pilotage" />
           <NavButton active={view === 'yield'} onClick={() => setView('yield')} icon={Coins} label="Rendement" />
           <NavButton active={view === 'history'} onClick={() => setView('history')} icon={LineChart} label="Historique" />
-          <NavButton active={view === 'parental'} onClick={() => setView('parental')} icon={Users} label="Part Parentale" />
+          <NavButton active={view === 'parental'} onClick={() => setView('parental')} icon={Users} label="Part parentale" />
 
           <div className="pt-6 pb-2 text-[11px] font-black text-slate-600 dark:text-slate-300 uppercase px-4 tracking-widest">Gestion</div>
-          <NavButton active={view === 'accounts'} onClick={() => setView('accounts')} icon={Wallet} label="Mes Comptes" />
+          <NavButton active={view === 'accounts'} onClick={() => setView('accounts')} icon={Wallet} label="Mes comptes" />
           <NavButton active={view === 'transfers'} onClick={() => setView('transfers')} icon={ArrowRightLeft} label="Virements" />
           <NavButton active={view === 'payslips'} onClick={() => setView('payslips')} icon={FileText} label="Fiches de paie" />
           <NavButton active={view === 'subscriptions'} onClick={() => setView('subscriptions')} icon={CalendarClock} label="Abonnements" />
@@ -646,7 +646,7 @@ const App: React.FC = () => {
 
       {/* Header compact mobile (la sidebar est masquée en dessous de md) */}
       <header className="md:hidden sticky top-0 z-30 bg-slate-900 text-white px-4 py-3 flex items-center justify-between">
-        <h1 className="text-base font-bold flex items-center gap-2"><div className="w-6 h-6 bg-indigo-600 rounded flex items-center justify-center"><RefreshCcw className="w-3.5 h-3.5 text-white"/></div> Assistant Épargne</h1>
+        <h1 className="text-base font-bold flex items-center gap-2"><div className="w-6 h-6 bg-indigo-600 rounded flex items-center justify-center"><RefreshCcw className="w-3.5 h-3.5 text-white"/></div> Suivi Épargne</h1>
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1.5" title={data.lastSavedAt ? `Dernière écriture confirmée sur Drive : ${data.lastSavedAt.toLocaleTimeString('fr-FR')}` : undefined}>
             <div className={`w-2 h-2 rounded-full flex-shrink-0 ${data.isOffline ? 'bg-slate-400' : data.isSaving ? 'bg-amber-500 animate-pulse' : data.syncError || data.syncConflict ? 'bg-rose-500' : 'bg-emerald-500'}`}></div>
@@ -781,7 +781,7 @@ const App: React.FC = () => {
             {view === 'accounts' && (
               <div className="space-y-6 animate-fade-in">
                 <div className="flex justify-between items-center bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700">
-                  <div><h2 className="text-2xl font-black text-slate-800 dark:text-slate-100">Mes Comptes</h2><p className="text-sm text-slate-500 dark:text-slate-400 font-medium">{data.accounts.length} comptes actifs</p></div>
+                  <div><h2 className="text-2xl font-black text-slate-800 dark:text-slate-100">Mes comptes</h2><p className="text-sm text-slate-500 dark:text-slate-400 font-medium">{data.accounts.length} comptes actifs</p></div>
                   {!showForm && <button onClick={() => { setEditingAccount(undefined); setShowForm(true); }} className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-xl font-bold flex gap-2 transition-colors shadow-lg shadow-indigo-200"><PlusCircle className="w-5 h-5"/> Ajouter un compte</button>}
                 </div>
                 {!showForm && <MovementSearch accounts={data.accounts} />}
@@ -909,7 +909,7 @@ const App: React.FC = () => {
           { key: 'transfers', label: 'Virements', icon: ArrowRightLeft },
           { key: 'yield', label: 'Rendement', icon: Coins },
           { key: 'history', label: 'Historique', icon: LineChart },
-          { key: 'parental', label: 'Part Parentale', icon: Users },
+          { key: 'parental', label: 'Part parentale', icon: Users },
           { key: 'payslips', label: 'Fiches de paie', icon: FileText },
           { key: 'subscriptions', label: 'Abonnements', icon: CalendarClock },
           { key: 'donations', label: 'Dons', icon: HandHeart },

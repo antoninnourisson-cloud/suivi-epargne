@@ -81,10 +81,10 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
   );
 
   // Bascule d'affichage : quand une fiche de paie sert de référence, on montre ses
-  // montants EXACTS, verbatim, plutôt que de les recalculer. Le "Net Avant Impôt"
+  // montants EXACTS, verbatim, plutôt que de les recalculer. Le "Net avant impôt"
   // théorique (formule) devient le "Net à payer avant impôt" réel de la fiche — déjà net
   // de charges, Navigo et mutuelle sur une vraie fiche, donc directement comparable au
-  // "Net Cash Avant Impôt" de la formule. `autoRate` est reconstruit à partir de l'impôt
+  // "Net cash avant impôt" de la formule. `autoRate` est reconstruit à partir de l'impôt
   // et de l'assiette réellement prélevés, pour rester cohérent avec le libellé existant.
   const display = useMemo(() => {
     if (activePayslip) {
@@ -102,7 +102,7 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
         effectiveMonthlyTax: e.incomeTaxWithheld,
         effectiveSuperNet: effectiveSuperNetReal,
         // Assiette : le NET IMPOSABLE quand la fiche le fournit (c'est le dénominateur du
-        // barème, donc comparable au "Taux Barème" théorique) — l'ancien calcul divisait
+        // barème, donc comparable au "Taux du barème" théorique) — l'ancien calcul divisait
         // par le net à payer, ce qui décalait le taux affiché de plusieurs points au
         // simple basculement fiche/formule.
         autoRate: e.incomeTaxWithheld !== undefined && (e.netTaxable || e.netAmount)
@@ -258,7 +258,7 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
           const years = Math.floor(diffDays / 365); const months = Math.floor((diffDays % 365) / 30);
           return { id: acc.id, name: acc.name, type: acc.type, date: endDate.toLocaleDateString('fr-FR'), timeLeft: isAvailable ? "Disponible" : `${years > 0 ? years + 'a ' : ''}${months}m`, isAvailable };
         }
-        // Sinon : MÊME calcul que le badge de "Mes Comptes" (computeMaturityCountdown),
+        // Sinon : MÊME calcul que le badge de "Mes comptes" (computeMaturityCountdown),
         // qui applique la bonne maturité par type — l'ancien code donnait au PEE la
         // maturité de l'Assurance Vie (8 ans au lieu de legalMaturity.pee), et ses
         // conventions d'arrondi divergeaient du badge d'un mois.
@@ -283,8 +283,8 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
   return (
     <div className="space-y-8 animate-fade-in pb-20">
       <div className="flex gap-4 border-b border-slate-200 dark:border-slate-700">
-        <button onClick={() => setActiveTab('budget')} className={`pb-2 px-4 font-bold text-sm ${activeTab === 'budget' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-500 dark:text-slate-400'}`}>Pilotage Budgétaire</button>
-        <button onClick={() => setActiveTab('fiscal')} className={`pb-2 px-4 font-bold text-sm ${activeTab === 'fiscal' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-500 dark:text-slate-400'}`}>Horloge Fiscale</button>
+        <button onClick={() => setActiveTab('budget')} className={`pb-2 px-4 font-bold text-sm ${activeTab === 'budget' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-500 dark:text-slate-400'}`}>Pilotage budgétaire</button>
+        <button onClick={() => setActiveTab('fiscal')} className={`pb-2 px-4 font-bold text-sm ${activeTab === 'fiscal' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-500 dark:text-slate-400'}`}>Horloge fiscale</button>
       </div>
 
       {activeTab === 'budget' && (
@@ -305,50 +305,50 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
             {activePayslip && display.effectiveMonthlyTax === undefined && (
               <div className="mb-4 text-xs text-rose-600 dark:text-rose-400 font-bold flex items-center gap-2">
                 <Info className="w-3.5 h-3.5 flex-shrink-0" />
-                Cette fiche n'a pas encore l'impôt réellement prélevé / le net payé (extraite avant l'ajout de ces champs) : "Net Réel Perçu" affiche "—" plutôt qu'une estimation. Réimporte-la depuis Drive pour compléter.
+                Cette fiche n'a pas encore l'impôt réellement prélevé / le net payé (extraite avant l'ajout de ces champs) : "Net réel perçu" affiche "—" plutôt qu'une estimation. Réimporte-la depuis Drive pour compléter.
               </div>
             )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-              <div className="bg-slate-50 dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-700"><label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Brut Annuel</label><NumberInput value={Math.round(grossAnnual)} onChange={updateFromGrossAnnual} min={0} className="w-full bg-transparent font-black text-slate-800 dark:text-slate-100 text-lg outline-none" /></div>
+              <div className="bg-slate-50 dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-700"><label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Brut annuel</label><NumberInput value={Math.round(grossAnnual)} onChange={updateFromGrossAnnual} min={0} className="w-full bg-transparent font-black text-slate-800 dark:text-slate-100 text-lg outline-none" /></div>
               <div className="bg-slate-50 dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
-                <label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Brut Mensuel</label>
+                <label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Brut mensuel</label>
                 {activePayslip
                   ? <p className="font-black text-slate-800 dark:text-slate-100 text-lg">{showEUR(display.grossMonth)}</p>
                   : <NumberInput value={Math.round(autoValues.grossMonth)} onChange={updateFromGrossMonth} min={0} className="w-full bg-transparent font-black text-slate-800 dark:text-slate-100 text-lg outline-none" />}
               </div>
               <div className="bg-indigo-50 dark:bg-indigo-950/40 p-3 rounded-xl border border-indigo-100 dark:border-indigo-900">
-                <label className="text-[11px] font-black text-indigo-400 dark:text-indigo-400 uppercase">Net Avant Impôt</label>
+                <label className="text-[11px] font-black text-indigo-400 dark:text-indigo-400 uppercase">Net avant impôt</label>
                 {activePayslip
                   ? <p className="font-black text-indigo-700 dark:text-indigo-300 text-lg">{showEUR(display.netBeforeTax)}</p>
                   : <NumberInput value={Math.round(autoValues.netBeforeTax * 100)/100} onChange={updateFromNet} min={0} className="w-full bg-transparent font-black text-indigo-700 dark:text-indigo-300 text-lg outline-none" />}
               </div>
               <div className="bg-emerald-50 dark:bg-emerald-950/40 p-3 rounded-xl border border-emerald-100 dark:border-emerald-900 relative">
-                <label className="text-[11px] font-black text-emerald-600 dark:text-emerald-400 uppercase flex items-center gap-1">{activePayslip ? 'Net Réel Perçu' : 'Super Net (Poche)'} <Info className="w-3 h-3 cursor-pointer" onClick={() => setShowDetails(!showDetails)}/></label>
+                <label className="text-[11px] font-black text-emerald-600 dark:text-emerald-400 uppercase flex items-center gap-1">{activePayslip ? 'Net réel perçu' : 'Super net (Poche)'} <Info className="w-3 h-3 cursor-pointer" onClick={() => setShowDetails(!showDetails)}/></label>
                 <p className="font-black text-emerald-700 dark:text-emerald-300 text-2xl">{showEUR(effectiveSuperNet)}</p>
               </div>
             </div>
 
             {showDetails && (
               <div className="bg-white dark:bg-slate-800 p-4 rounded-xl text-xs space-y-3 border border-slate-200 dark:border-slate-700 animate-in slide-in-from-top-2 shadow-inner mb-4">
-                 <div className="flex justify-between font-bold border-b pb-1"><span>Salaire Brut Mensuel</span> <span>{showEUR(display.grossMonth)}</span></div>
-                 <div className="flex justify-between text-rose-500"><span>Charges Salariales{!activePayslip && ` (${(fiscalConfig.salaryChargesRate*100).toFixed(2)}%)`}</span> <span>- {showEUR(display.socialCharges)}</span></div>
+                 <div className="flex justify-between font-bold border-b pb-1"><span>Salaire brut mensuel</span> <span>{showEUR(display.grossMonth)}</span></div>
+                 <div className="flex justify-between text-rose-500"><span>Charges salariales{!activePayslip && ` (${(fiscalConfig.salaryChargesRate*100).toFixed(2)}%)`}</span> <span>- {showEUR(display.socialCharges)}</span></div>
                  <div className="flex justify-between text-emerald-600"><span>Remboursement Navigo</span> <span>+ {showEUR(display.navigoGain)}</span></div>
-                 {(activePayslip ? display.mutuelleCost !== undefined : workBenefits.mutuelle.active) && <div className="flex justify-between text-rose-500"><span>Mutuelle (Part Salarié)</span><span>- {showEUR(display.mutuelleCost)}</span></div>}
-                 {(activePayslip ? display.swileCost !== undefined : workBenefits.mealVouchers.active) && <div className="flex justify-between text-rose-500"><span>Titres Resto (Part Salarié)</span><span>- {showEUR(display.swileCost)}</span></div>}
-                 <div className="flex justify-between font-bold text-indigo-700 pt-1 border-t border-slate-100 dark:border-slate-800"><span>= Net Cash Avant Impôt</span> <span>{showEUR(display.superNetRaw)}</span></div>
+                 {(activePayslip ? display.mutuelleCost !== undefined : workBenefits.mutuelle.active) && <div className="flex justify-between text-rose-500"><span>Mutuelle (part salarié)</span><span>- {showEUR(display.mutuelleCost)}</span></div>}
+                 {(activePayslip ? display.swileCost !== undefined : workBenefits.mealVouchers.active) && <div className="flex justify-between text-rose-500"><span>Titres-restaurant (part salarié)</span><span>- {showEUR(display.swileCost)}</span></div>}
+                 <div className="flex justify-between font-bold text-indigo-700 pt-1 border-t border-slate-100 dark:border-slate-800"><span>= Net cash avant impôt</span> <span>{showEUR(display.superNetRaw)}</span></div>
                  <div className="bg-amber-50 p-2 rounded-lg border border-amber-100">
                     <div className="flex justify-between items-center mb-2"><span className="text-amber-800 font-bold">{activePayslip ? 'Impôt réellement prélevé' : 'Impôt à la source'}</span><span className="text-amber-600 font-mono font-black">- {showEUR(display.effectiveMonthlyTax)}</span></div>
                     {activePayslip ? (
                       <p className="text-[11px] text-slate-500 dark:text-slate-400">Taux réel constaté : <strong>{display.autoRate !== undefined ? `${display.autoRate.toFixed(1)}%` : '—'}</strong> (montant tel que retenu sur la fiche, pas une estimation)</p>
                     ) : (
                     <div className="flex items-center justify-between text-[11px] gap-2">
-                        <div className="flex flex-col"><span className="text-slate-500 dark:text-slate-400">Taux Barème (Auto) : <strong>{autoValues.autoRate.toFixed(1)}%</strong></span>{taxRateManual > 0 && <span className="text-amber-600">Force à : <strong>{taxRateManual}%</strong></span>}</div>
+                        <div className="flex flex-col"><span className="text-slate-500 dark:text-slate-400">Taux du barème (Auto) : <strong>{autoValues.autoRate.toFixed(1)}%</strong></span>{taxRateManual > 0 && <span className="text-amber-600">Force à : <strong>{taxRateManual}%</strong></span>}</div>
                         <div className="flex items-center gap-1"><label className="text-slate-500 dark:text-slate-400">Forcer taux :</label><NumberInput value={taxRateManual} onChange={setTaxRateManual} min={0} className="w-12 p-1 text-right bg-white dark:bg-slate-800 border border-amber-200 rounded font-bold outline-none" placeholder="Auto"/><span className="text-slate-500 dark:text-slate-400">%</span></div>
                     </div>
                     )}
                  </div>
-                 {activePayslip && <div className="flex justify-between font-bold text-emerald-700 pt-1 border-t border-slate-100 dark:border-slate-800"><span>= Net Réel Perçu</span> <span>{showEUR(effectiveSuperNet)}</span></div>}
+                 {activePayslip && <div className="flex justify-between font-bold text-emerald-700 pt-1 border-t border-slate-100 dark:border-slate-800"><span>= Net réel perçu</span> <span>{showEUR(effectiveSuperNet)}</span></div>}
               </div>
             )}
           </div>
@@ -356,7 +356,7 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-1 bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
               <div className="flex justify-between items-center mb-4">
-                  <h4 className="font-bold text-slate-700 dark:text-slate-200 flex items-center gap-2"><TrendingUp className="w-4 h-4 text-rose-500"/> Charges Fixes</h4>
+                  <h4 className="font-bold text-slate-700 dark:text-slate-200 flex items-center gap-2"><TrendingUp className="w-4 h-4 text-rose-500"/> Charges fixes</h4>
                   <button onClick={() => setIsAddingExpense(true)} aria-label="Ajouter une charge fixe" className="p-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded hover:bg-slate-200 dark:hover:bg-slate-600"><Plus className="w-4 h-4"/></button>
               </div>
               
@@ -421,13 +421,13 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
                 )}
                 <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">Seuls les abonnements mensuels (et hebdomadaires) comptent ici. Les annuels, semestriels et trimestriels ne font que déclencher un rappel avant le prélèvement.</p>
               </div>
-              <div className="mt-4 pt-4 border-t flex justify-between font-black text-rose-600"><span>TOTAL CHARGES</span><span>{formatEUR(budgetData.totalFixed)}</span></div>
+              <div className="mt-4 pt-4 border-t flex justify-between font-black text-rose-600"><span>Total des charges</span><span>{formatEUR(budgetData.totalFixed)}</span></div>
             </div>
 
             <div className="lg:col-span-2 space-y-6">
               <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm grid grid-cols-2 gap-4">
-                  <div><label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Argent Plaisir</label><NumberInput value={leisureBudget} onChange={setLeisureBudget} min={0} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
-                  <div><label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Épargne Projets</label><NumberInput value={projectSavings} onChange={setProjectSavings} min={0} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
+                  <div><label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Argent plaisir</label><NumberInput value={leisureBudget} onChange={setLeisureBudget} min={0} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
+                  <div><label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Épargne projets</label><NumberInput value={projectSavings} onChange={setProjectSavings} min={0} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
               </div>
 
               <div className="bg-slate-900 p-6 rounded-2xl shadow-lg text-white grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
@@ -439,7 +439,7 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
                       </div>
                   </div>
                   <div className="bg-slate-800 p-4 rounded-xl border border-slate-700">
-                      <label className="text-[11px] font-black text-indigo-300 uppercase flex items-center gap-2"><Coins className="w-3 h-3"/> Ajout Somme Externe</label>
+                      <label className="text-[11px] font-black text-indigo-300 uppercase flex items-center gap-2"><Coins className="w-3 h-3"/> Ajout d'une somme externe</label>
                       <NumberInput value={externalSavings} onChange={setExternalSavings} className="w-full bg-slate-900 border border-slate-600 rounded-lg p-2 mt-2 text-white font-bold focus:ring-2 focus:ring-indigo-500 outline-none" />
                   </div>
               </div>
@@ -498,7 +498,7 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
             </PayChecklist>
 
             <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-6">
-               <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-2 flex items-center gap-2"><BarChart3 className="w-5 h-5 text-indigo-600" /> Remplissage Livrets</h3>
+               <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-2 flex items-center gap-2"><BarChart3 className="w-5 h-5 text-indigo-600" /> Remplissage des livrets</h3>
                {bookletStats.map(b => (<div key={b.id} className="space-y-2"><div className="flex justify-between text-sm font-bold text-slate-700 dark:text-slate-200"><span>{b?.name}</span><span>{Math.round(b?.totalPct || 0)}%</span></div><div className="w-full h-3 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden flex"><div className="h-full bg-amber-400" style={{ width: `${b?.parentPct}%` }} title={`Parents : ${formatEUR(b?.parentAmount || 0)}`}></div><div className="h-full bg-indigo-600" style={{ width: `${b?.ownedPct}%` }} title={`Moi : ${formatEUR(b?.ownedAmount || 0)}`}></div></div><div className="flex justify-between text-[11px] text-slate-500 dark:text-slate-400 font-bold"><span className="text-amber-500">Parents {formatEUR(b?.parentAmount || 0)}</span><span className="text-indigo-600">Moi {formatEUR(b?.ownedAmount || 0)}</span>{b.parentAmount > 0 && b.ownedAmount > 0 && <span className="text-slate-600 dark:text-slate-300">Total {formatEUR(b.parentAmount + b.ownedAmount)}</span>}<span>Max {formatEUR(b?.ceiling || 0)}</span></div>{b.monthsToFull !== null && <p className="text-[11px] text-slate-500 dark:text-slate-400">Plein dans ~{b.monthsToFull} mois au rythme actuel</p>}{b.totalPct >= 100 && <p className="text-[11px] font-bold text-emerald-600">Plein</p>}</div>))}
             </div>
           </div>

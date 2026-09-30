@@ -20,7 +20,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ view, setView, moreOpen, s
   return (
     <>
       <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 flex pb-[env(safe-area-inset-bottom)]">
-        <TabButton active={view === 'dashboard'} onClick={() => setView('dashboard')} icon={LayoutDashboard} label="Dashboard" />
+        <TabButton active={view === 'dashboard'} onClick={() => setView('dashboard')} icon={LayoutDashboard} label="Accueil" />
         <TabButton active={view === 'update'} onClick={() => setView('update')} icon={RefreshCcw} label="Actualiser" />
         <TabButton active={view === 'accounts'} onClick={() => setView('accounts')} icon={Wallet} label="Comptes" />
         <TabButton active={view === 'pilot'} onClick={() => setView('pilot')} icon={ShieldCheck} label="Pilotage" />
