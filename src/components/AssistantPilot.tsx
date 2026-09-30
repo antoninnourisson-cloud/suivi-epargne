@@ -1,7 +1,7 @@
 // src/components/AssistantPilot.tsx
 import React, { useState, useMemo } from 'react';
-import { SavingsAccount, Expense, AccountType, FiscalConfig, WorkBenefits, PayslipRecord } from '../types';
-import { computeIncome, computeMaturityCountdown, computePlacementStrategy, payslipSuperNet } from '../lib/finance';
+import { SavingsAccount, Expense, AccountType, FiscalConfig, WorkBenefits, PayslipRecord, Subscription } from '../types';
+import { computeIncome, computeMaturityCountdown, computePlacementStrategy, payslipSuperNet, subscriptionsAsExpenses } from '../lib/finance';
 import { parseISODate } from '../lib/dates';
 import { parseFrenchNumber, safeNumber } from '../lib/numbers';
 import { NumberInput } from './NumberInput';
@@ -33,6 +33,8 @@ interface AssistantPilotProps {
   // de paie, verbatim, à la place de la formule théorique (computeIncome).
   activePayslip?: PayslipRecord;
   onClearActivePayslip: () => void;
+  subscriptions: Subscription[];
+  onOpenSubscriptions: () => void;
   paydayDay?: number;
   setPaydayDay: (day: number | undefined) => void;
   paydayAmount?: number;
@@ -44,7 +46,7 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
   grossAnnual, setGrossAnnual, leisureBudget, setLeisureBudget, projectSavings, setProjectSavings,
   navigoBase, setNavigoBase, navigoRate, setNavigoRate, taxRateManual, setTaxRateManual,
   extraMonthlyIncome, setExtraMonthlyIncome, fiscalConfig, workBenefits, activePayslip, onClearActivePayslip,
-  paydayDay, setPaydayDay, paydayAmount, setPaydayAmount
+  subscriptions, onOpenSubscriptions, paydayDay, setPaydayDay, paydayAmount, setPaydayAmount
 }) => {
   const [showDetails, setShowDetails] = useState(false);
   const [externalSavings, setExternalSavings] = useState<number>(0);
@@ -146,8 +148,19 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
       }
   };
 
+  // Abonnements actifs, en coût mensuel : ajoutés d'office aux charges fixes, gérés depuis
+  // l'écran Abonnements (jamais supprimables d'ici, pour ne pas désynchroniser les rappels).
+  const subscriptionCharges = useMemo(() => subscriptionsAsExpenses(subscriptions), [subscriptions]);
+  // Charge saisie à la main qui porte le nom d'un abonnement : sans doute comptée deux fois.
+  const duplicateNames = useMemo(() => {
+    const names = new Set(subscriptionCharges.map(c => c.name.trim().toLowerCase()));
+    return new Set(expenses.filter(e => names.has(e.name.trim().toLowerCase())).map(e => e.id));
+  }, [expenses, subscriptionCharges]);
+
   const budgetData = useMemo(() => {
-    const totalFixed = expenses.reduce((sum, e) => sum + e.amount, 0);
+    const manualFixed = expenses.reduce((sum, e) => sum + e.amount, 0);
+    const subscriptionsFixed = subscriptionCharges.reduce((sum, e) => sum + e.amount, 0);
+    const totalFixed = manualFixed + subscriptionsFixed;
     const theoreticalCapacity = effectiveSuperNetForCalc - totalFixed - leisureBudget - projectSavings;
     // parseFrenchNumber et non parseFloat : vider le champ (ou taper "-" seul) donnait
     // NaN → "Placement (NaN €)" et un plan de placement qui disparaissait sans message.
@@ -155,8 +168,8 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
     const manualParsed = manualSavingsCapacity !== null ? parseFrenchNumber(manualSavingsCapacity) : null;
     const finalCapacity = manualParsed ?? theoreticalCapacity;
     const totalToInvest = Math.max(0, finalCapacity + externalSavings);
-    return { totalFixed, theoreticalCapacity, finalCapacity, totalToInvest };
-  }, [effectiveSuperNetForCalc, expenses, leisureBudget, projectSavings, manualSavingsCapacity, externalSavings]);
+    return { totalFixed, subscriptionsFixed, theoreticalCapacity, finalCapacity, totalToInvest };
+  }, [effectiveSuperNetForCalc, expenses, subscriptionCharges, leisureBudget, projectSavings, manualSavingsCapacity, externalSavings]);
 
   const strategy = useMemo(
     () => computePlacementStrategy(budgetData.totalToInvest, accounts, fiscalConfig),
@@ -361,6 +374,32 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
                           </div>
                       </div>
                   ))}
+                  {expenses.length === 0 && <p className="text-xs text-slate-400 dark:text-slate-500 italic p-2">Aucune charge saisie.</p>}
+              </div>
+              {expenses.some(e => duplicateNames.has(e.id)) && (
+                <p className="mt-2 text-[11px] font-bold text-amber-600 flex items-start gap-1"><Info className="w-3 h-3 flex-shrink-0 mt-0.5" /> {expenses.filter(e => duplicateNames.has(e.id)).map(e => e.name).join(', ')} : aussi dans tes abonnements, donc compté deux fois. Supprime la charge saisie.</p>
+              )}
+              <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-700">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Abonnements (automatique)</p>
+                  <button type="button" onClick={onOpenSubscriptions} className="text-[11px] font-bold text-indigo-600 hover:underline">Gérer</button>
+                </div>
+                {subscriptionCharges.length > 0 ? (
+                  <div className="space-y-2 max-h-48 overflow-y-auto pr-2">
+                    {subscriptionCharges.map(c => (
+                      <div key={c.id} className="flex justify-between items-center text-sm p-2 bg-indigo-50/60 dark:bg-indigo-950/30 rounded gap-2">
+                        <span className="min-w-0 truncate">
+                          {c.name}
+                          {c.paymentMethod && <span className="ml-2 text-[10px] font-bold uppercase text-slate-400 dark:text-slate-500">{c.paymentMethod}</span>}
+                        </span>
+                        <span className="font-mono font-bold flex-shrink-0">{c.amount.toLocaleString('fr-FR', { maximumFractionDigits: 2 })}€</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate-400 dark:text-slate-500 italic">Aucun abonnement actif.</p>
+                )}
+                {subscriptionCharges.length > 0 && <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">Coût ramené au mois (un annuel de 120 € compte 10 €).</p>}
               </div>
               <div className="mt-4 pt-4 border-t flex justify-between font-black text-rose-600"><span>TOTAL CHARGES</span><span>{Math.round(budgetData.totalFixed).toLocaleString('fr-FR')} €</span></div>
             </div>

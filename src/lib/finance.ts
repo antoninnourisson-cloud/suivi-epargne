@@ -3,7 +3,7 @@
 // Logique fiscale centralisée (calcul du "super net", impôt par tranches).
 // Fonctions pures, testables, réutilisées par le Pilotage et le Dashboard.
 // ================================================
-import { FiscalConfig, TaxBracket, WorkBenefits, RateChange, AccountType, AccountMovement, RecurringMovement, SavingsAccount, GlobalAppData, PayslipExtractedData, Subscription } from '../types';
+import { FiscalConfig, TaxBracket, WorkBenefits, RateChange, AccountType, AccountMovement, RecurringMovement, SavingsAccount, GlobalAppData, PayslipExtractedData, Subscription, Expense } from '../types';
 import { DEFAULT_STANDARD_ALLOWANCE_CAP, DEFAULT_FISCAL_CONFIG, DEFAULT_WORK_BENEFITS } from '../constants';
 import { MS_PER_DAY, formatISODay, parseISODate, daysBetween } from './dates';
 
@@ -791,7 +791,7 @@ export const computeMonthlySavingsCapacity = (data: GlobalAppData): number => {
   ).superNet;
   const payslip = (data.payslips || []).find(p => p.id === data.activePayslipId);
   const superNet = (payslip && payslipSuperNet(payslip.extracted)) ?? formula;
-  const totalFixed = (data.expenses || []).reduce((sum, e) => sum + e.amount, 0);
+  const totalFixed = totalFixedCharges(data.expenses || [], data.subscriptions || []);
   return superNet - totalFixed - (c.leisureBudget ?? 0) - (c.projectSavings ?? 0);
 };
 
@@ -1099,3 +1099,22 @@ export const depositsAfterCashFlow = (
     : depositsAfterWithdrawal(account.totalDeposits, account.totalAmount, -signedAmount);
   return Math.round(next * 100) / 100;
 };
+
+/**
+ * Abonnements actifs vus comme des charges fixes mensuelles (un annuel de 120 € pèse
+ * 10 €/mois). Identifiants préfixés `sub:` : jamais confondus avec une charge saisie.
+ */
+export const subscriptionsAsExpenses = (subs: Subscription[]): Expense[] =>
+  subs
+    .filter(s => s.active && s.amount > 0)
+    .map(s => ({
+      id: `sub:${s.id}`,
+      name: s.name,
+      amount: Math.round(subscriptionMonthlyCost(s) * 100) / 100,
+      paymentMethod: s.debitAccount || undefined,
+    }));
+
+/** Charges fixes mensuelles : charges saisies + abonnements actifs. */
+export const totalFixedCharges = (expenses: Expense[], subs: Subscription[] = []): number =>
+  expenses.reduce((sum, e) => sum + e.amount, 0) +
+  subscriptionsAsExpenses(subs).reduce((sum, e) => sum + e.amount, 0);

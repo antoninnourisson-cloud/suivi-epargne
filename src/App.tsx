@@ -17,7 +17,7 @@ import {
 import { isBackendEnabled, hasBackendSession } from './services/backendService';
 import { disablePush } from './services/pushService';
 import { isLockEnabled } from './services/appLockService';
-import { computeMaturityCountdown, depositsAfterCashFlow, computeMonthlySavingsCapacity } from './lib/finance';
+import { computeMaturityCountdown, depositsAfterCashFlow, computeMonthlySavingsCapacity, subscriptionsAsExpenses } from './lib/finance';
 import { localTodayISO } from './lib/dates';
 import {
   LayoutDashboard, Wallet, Trash2, Edit2, ShieldCheck,
@@ -163,6 +163,13 @@ const App: React.FC = () => {
     grossAnnual: data.grossAnnual, navigoBase: data.navigoBase,
     navigoRate: data.navigoRate, taxRateManual: data.taxRateManual,
   }), [data.grossAnnual, data.navigoBase, data.navigoRate, data.taxRateManual]);
+
+  // Charges fixes vues par les écrans en lecture seule (survie, objectifs, simulateur) :
+  // charges saisies + abonnements actifs. Le Pilotage, lui, les affiche séparément.
+  const allCharges = useMemo(
+    () => [...data.expenses, ...subscriptionsAsExpenses(data.subscriptions)],
+    [data.expenses, data.subscriptions]
+  );
 
   // Objectif du mois pour la jauge « Placé ce mois-ci » : même montant que le rappel de paie.
   const monthPlan = useMemo(
@@ -658,7 +665,7 @@ const App: React.FC = () => {
             )}
 
             <Suspense fallback={<ViewLoader />}>
-            {view === 'dashboard' && <Dashboard accounts={data.accounts} history={data.history} expenses={data.expenses} fiscalConfig={data.fiscalConfig} workBenefits={data.workBenefits} onDeleteAccount={handleDeleteAccount} config={dashboardConfig} monthPlan={monthPlan} recurringMovements={data.recurringMovements} onRecordRecurring={(r, date) => handleQuickAdd(r.accountId, r.amount, r.type, r.label, date)} />}
+            {view === 'dashboard' && <Dashboard accounts={data.accounts} history={data.history} expenses={allCharges} fiscalConfig={data.fiscalConfig} workBenefits={data.workBenefits} onDeleteAccount={handleDeleteAccount} config={dashboardConfig} monthPlan={monthPlan} recurringMovements={data.recurringMovements} onRecordRecurring={(r, date) => handleQuickAdd(r.accountId, r.amount, r.type, r.label, date)} />}
 
             {view === 'pilot' && <AssistantPilot
                 accounts={data.accounts}
@@ -682,6 +689,8 @@ const App: React.FC = () => {
                 workBenefits={data.workBenefits}
                 activePayslip={activePayslipRecord}
                 onClearActivePayslip={handleClearActivePayslip}
+                subscriptions={data.subscriptions}
+                onOpenSubscriptions={() => setView('subscriptions')}
                 paydayDay={data.paydayDay}
                 setPaydayDay={data.setPaydayDay}
                 paydayAmount={data.paydayAmount}
@@ -694,7 +703,7 @@ const App: React.FC = () => {
             {view === 'goals' && <Goals
                 goals={data.goals}
                 onUpdateGoals={data.setGoals}
-                expenses={data.expenses}
+                expenses={allCharges}
                 income={incomeCfg}
                 fiscalConfig={data.fiscalConfig}
                 workBenefits={data.workBenefits}
@@ -704,7 +713,7 @@ const App: React.FC = () => {
             {view === 'yield' && <Yield accounts={data.accounts} fiscalConfig={data.fiscalConfig} />}
             {view === 'history' && <History history={data.history} expensesHistory={data.expensesHistory} />}
             {view === 'parental' && <ParentalShare accounts={data.accounts} />}
-            {view === 'simulator' && <WithdrawalSimulator accounts={data.accounts} expenses={data.expenses} goals={data.goals} fiscalConfig={data.fiscalConfig} />}
+            {view === 'simulator' && <WithdrawalSimulator accounts={data.accounts} expenses={allCharges} goals={data.goals} fiscalConfig={data.fiscalConfig} />}
             {view === 'subscriptions' && <Subscriptions subscriptions={data.subscriptions} onUpdate={data.setSubscriptions} />}
             {view === 'payslips' && <Payslips payslips={data.payslips} onUpdatePayslips={data.setPayslips} geminiApiKey={data.geminiApiKey} pickerApiKey={data.pickerApiKey} onApplyToPilotage={handleApplyPayslipToPilotage} activePayslipId={data.activePayslipId} onClearActivePayslip={handleClearActivePayslip} />}
 

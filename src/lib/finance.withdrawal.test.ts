@@ -7,6 +7,8 @@ import {
   nextSubscriptionDate,
   findDueSubscriptions,
   subscriptionMonthlyCost,
+  subscriptionsAsExpenses,
+  totalFixedCharges,
 } from './finance';
 import { DEFAULT_FISCAL_CONFIG as CFG } from '../constants';
 import { AccountType, SavingsAccount, Subscription } from '../types';
@@ -126,5 +128,15 @@ describe('abonnements', () => {
   it('ignore les abonnements désactivés et calcule le coût mensuel', () => {
     expect(findDueSubscriptions([sub({ active: false, anchorDate: '2026-10-01' })], NOW)).toEqual([]);
     expect(subscriptionMonthlyCost({ amount: 120, frequency: 'yearly' })).toBe(10);
+  });
+
+  it('ajoute les abonnements actifs aux charges fixes, au coût mensuel', () => {
+    const subs = [
+      sub({ id: 'n', amount: 13.49 }),
+      sub({ id: 'a', name: 'Assurance', amount: 120, frequency: 'yearly' }),
+      sub({ id: 'p', name: 'En pause', amount: 50, active: false }),
+    ];
+    expect(subscriptionsAsExpenses(subs).map(e => e.id)).toEqual(['sub:n', 'sub:a']);
+    expect(totalFixedCharges([{ id: 'loyer', name: 'Loyer', amount: 800 }], subs)).toBeCloseTo(800 + 13.49 + 10);
   });
 });

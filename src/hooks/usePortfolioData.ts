@@ -2,7 +2,7 @@
 // FILE: src/hooks/usePortfolioData.ts
 // ================================================
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { tracksDeposits, depositsAfterCashFlow } from '../lib/finance';
+import { tracksDeposits, depositsAfterCashFlow, totalFixedCharges } from '../lib/finance';
 import {
   GlobalAppData, SavingsAccount, Expense, PortfolioSnapshot, ExpenseSnapshot,
   FiscalConfig, WorkBenefits, AccountMovement, SavingsGoal, PayslipRecord, RecurringMovement, Subscription
@@ -637,7 +637,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
   // --- SNAPSHOT CHARGES (alimente la répartition dans le temps) ---
   useEffect(() => {
     if (!hasLoadedRef.current) return;
-    const total = expenses.reduce((s, e) => s + e.amount, 0);
+    const total = Math.round(totalFixedCharges(expenses, subscriptions) * 100) / 100;
     const now = new Date();
     const month = localMonthKey(now);
     const today = localDayKey(now);
@@ -648,7 +648,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
       const snapshot: ExpenseSnapshot = { date: existing ? existing.date : today, total };
       return [...others, snapshot].sort((a, b) => a.date.localeCompare(b.date));
     });
-  }, [expenses, monthTick]);
+  }, [expenses, monthTick, subscriptions]);
 
   // Construit et envoie l'email récapitulatif aux parents si un mouvement Livret A/LEP
   // est détecté. Factorisé pour être réutilisable par l'ajout rapide (FAB) et par les
