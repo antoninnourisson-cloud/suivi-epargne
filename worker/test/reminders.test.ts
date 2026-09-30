@@ -137,10 +137,10 @@ describe('computeReminders', () => {
         accounts: [livret],
         expenses: [{ id: 'e', name: 'Revolut commun', amount: 900 }],
         subscriptions: [{ id: 's', name: 'Spotify', amount: 11, debitAccount: 'Revolut perso', frequency: 'monthly', anchorDate: '2026-01-10', active: true }],
-        config: { ...base().config, leisureBudget: 200, livingBudget: 750, paydayDay: 28, paydayAmount: 500 },
+        config: { ...base().config, leisureBudget: 750, projectSavings: 200, paydayDay: 28, paydayAmount: 500 },
       });
       const r = computeReminders(data, new Date(2026, 8, 28, 9), APP).find(x => x.key === 'payday:2026-09');
-      expect(r?.message.body).toMatch(/900.*Revolut commun · 11.*Abonnements \(Revolut perso\) · 200.*Argent plaisir · 750.*Reste à vivre.*Épargne : 500.*Livret A/);
+      expect(r?.message.body).toMatch(/900.*Revolut commun · 11.*Abonnements \(Revolut perso\) · 200.*Épargne projets · 750.*Argent plaisir.*Épargne : 500.*Livret A/);
       expect(r?.message.url).toBe(`${APP}?view=pilot`);
     });
   });

@@ -143,15 +143,14 @@ export const computeIncome = (
 };
 
 /**
- * Capacité d'épargne mensuelle = super net - charges fixes - plaisir - projets - reste à vivre.
+ * Capacité d'épargne mensuelle = super net - charges fixes - plaisir - projets.
  */
 export const computeSavingsCapacity = (
   superNet: number,
   totalFixedExpenses: number,
   leisureBudget: number,
-  projectSavings: number,
-  livingBudget: number = 0
-): number => superNet - totalFixedExpenses - leisureBudget - projectSavings - livingBudget;
+  projectSavings: number
+): number => superNet - totalFixedExpenses - leisureBudget - projectSavings;
 
 // --- FISCALITÉ DU CAPITAL (PFU / prélèvements sociaux) ---
 // `socialChargesCapital` (17,2 %) existait dans FiscalConfig depuis le début mais n'était
@@ -793,7 +792,7 @@ export const computeMonthlySavingsCapacity = (data: GlobalAppData): number => {
   const payslip = (data.payslips || []).find(p => p.id === data.activePayslipId);
   const superNet = (payslip && payslipSuperNet(payslip.extracted)) ?? formula;
   const totalFixed = totalFixedCharges(data.expenses || [], data.subscriptions || []);
-  return computeSavingsCapacity(superNet, totalFixed, c.leisureBudget ?? 0, c.projectSavings ?? 0, c.livingBudget ?? 0);
+  return computeSavingsCapacity(superNet, totalFixed, c.leisureBudget ?? 0, c.projectSavings ?? 0);
 };
 
 export interface PlacementStep {
@@ -1138,7 +1137,7 @@ export interface PayTransfer {
 /**
  * Ce qui part de la paie AVANT l'épargne, dans l'ordre des virements : chaque charge
  * saisie (ex. « Revolut commun »), les abonnements mensuels (avec leur compte s'ils
- * partent tous du même), l'argent plaisir, l'épargne projets et le reste à vivre.
+ * partent tous du même), l'épargne projets, puis l'argent plaisir qui reste sur le compte.
  * Ce qui reste est l'épargne, répartie par computePlacementStrategy.
  */
 export const computePayTransfers = (input: {
@@ -1146,7 +1145,6 @@ export const computePayTransfers = (input: {
   subscriptions?: Subscription[];
   leisureBudget: number;
   projectSavings: number;
-  livingBudget?: number;
 }): PayTransfer[] => {
   const out: PayTransfer[] = input.expenses
     .filter(e => e.amount > 0)
@@ -1158,8 +1156,7 @@ export const computePayTransfers = (input: {
     const only = accounts.size === 1 ? [...accounts][0] : '';
     out.push({ label: only ? `Abonnements (${only})` : 'Abonnements mensuels', amount: subsTotal });
   }
-  if (input.leisureBudget > 0) out.push({ label: 'Argent plaisir', amount: input.leisureBudget });
   if (input.projectSavings > 0) out.push({ label: 'Épargne projets', amount: input.projectSavings });
-  if ((input.livingBudget ?? 0) > 0) out.push({ label: 'Reste à vivre (compte courant)', amount: input.livingBudget! });
+  if (input.leisureBudget > 0) out.push({ label: 'Argent plaisir (reste sur le compte courant)', amount: input.leisureBudget });
   return out;
 };

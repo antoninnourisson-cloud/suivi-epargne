@@ -140,7 +140,6 @@ export const computeReminders = (data: GlobalAppData, now: Date, appUrl: string)
                 subscriptions: data.subscriptions,
                 leisureBudget: data.config.leisureBudget ?? 0,
                 projectSavings: data.config.projectSavings ?? 0,
-                livingBudget: data.config.livingBudget ?? 0,
               }).map(t => `${eur(t.amount)} ${t.label}`),
               `Épargne : ${steps.map(s => `${eur(s.fillAmount)} ${s.alert ? '→ ouvrir un PEA/AV' : `sur ${s.accountName}`}`).join(', ')}`,
             ].join(' · ') + '.',

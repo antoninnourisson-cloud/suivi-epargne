@@ -150,8 +150,8 @@ const App: React.FC = () => {
   const incomeCfg = useMemo(() => ({
     grossAnnual: data.grossAnnual, extraMonthlyIncome: data.extraMonthlyIncome,
     navigoBase: data.navigoBase, navigoRate: data.navigoRate, taxRateManual: data.taxRateManual,
-    leisureBudget: data.leisureBudget, projectSavings: data.projectSavings, livingBudget: data.livingBudget,
-  }), [data.grossAnnual, data.extraMonthlyIncome, data.navigoBase, data.navigoRate, data.taxRateManual, data.leisureBudget, data.projectSavings, data.livingBudget]);
+    leisureBudget: data.leisureBudget, projectSavings: data.projectSavings,
+  }), [data.grossAnnual, data.extraMonthlyIncome, data.navigoBase, data.navigoRate, data.taxRateManual, data.leisureBudget, data.projectSavings]);
 
   const activePayslipRecord = useMemo(
     () => data.payslips.find(p => p.id === data.activePayslipId),
@@ -718,8 +718,6 @@ const App: React.FC = () => {
                 onClearActivePayslip={handleClearActivePayslip}
                 subscriptions={data.subscriptions}
                 onOpenSubscriptions={() => setView('subscriptions')}
-                livingBudget={data.livingBudget}
-                setLivingBudget={data.setLivingBudget}
                 paydayDay={data.paydayDay}
                 setPaydayDay={data.setPaydayDay}
                 paydayAmount={data.paydayAmount}

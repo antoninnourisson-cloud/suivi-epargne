@@ -47,7 +47,7 @@ Un **petit serveur optionnel** (Cloudflare Worker, dossier [`worker/`](worker/))
   - abattement de 10 % plafonné ;
   - Navigo, mutuelle, titres-restaurant.
 - **Mode exact** : les chiffres réels d'une fiche de paie remplacent la formule.
-- **Ta paie, virement par virement** : charges fixes saisies (un virement sortant = une ligne), abonnements mensuels (automatiques), argent plaisir, épargne projets, reste à vivre, puis l'épargne répartie entre les comptes.
+- **Ta paie, virement par virement** : charges fixes saisies (un virement sortant = une ligne), abonnements mensuels (automatiques), épargne projets, argent plaisir, puis l'épargne répartie entre les comptes.
 - Capacité d'épargne, stratégie de placement selon les taux et plafonds, remplissage des livrets, durée de survie.
 - **Rappel du jour de paie** (notification) : toute la répartition, jusqu'à « 400 € sur le LEP, 250 € sur le Livret A », recalculée sur les soldes du moment.
 - **Horloge fiscale** : maturité des PEA, PEE et Assurance Vie.

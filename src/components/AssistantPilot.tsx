@@ -35,8 +35,6 @@ interface AssistantPilotProps {
   onClearActivePayslip: () => void;
   subscriptions: Subscription[];
   onOpenSubscriptions: () => void;
-  livingBudget: number;
-  setLivingBudget: (val: number) => void;
   paydayDay?: number;
   setPaydayDay: (day: number | undefined) => void;
   paydayAmount?: number;
@@ -48,7 +46,7 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
   grossAnnual, setGrossAnnual, leisureBudget, setLeisureBudget, projectSavings, setProjectSavings,
   navigoBase, setNavigoBase, navigoRate, setNavigoRate, taxRateManual, setTaxRateManual,
   extraMonthlyIncome, setExtraMonthlyIncome, fiscalConfig, workBenefits, activePayslip, onClearActivePayslip,
-  subscriptions, onOpenSubscriptions, livingBudget, setLivingBudget, paydayDay, setPaydayDay, paydayAmount, setPaydayAmount
+  subscriptions, onOpenSubscriptions, paydayDay, setPaydayDay, paydayAmount, setPaydayAmount
 }) => {
   const [showDetails, setShowDetails] = useState(false);
   const [externalSavings, setExternalSavings] = useState<number>(0);
@@ -163,7 +161,7 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
     const manualFixed = expenses.reduce((sum, e) => sum + e.amount, 0);
     const subscriptionsFixed = subscriptionCharges.reduce((sum, e) => sum + e.amount, 0);
     const totalFixed = manualFixed + subscriptionsFixed;
-    const theoreticalCapacity = effectiveSuperNetForCalc - totalFixed - leisureBudget - projectSavings - livingBudget;
+    const theoreticalCapacity = effectiveSuperNetForCalc - totalFixed - leisureBudget - projectSavings;
     // parseFrenchNumber et non parseFloat : vider le champ (ou taper "-" seul) donnait
     // NaN → "Placement (NaN €)" et un plan de placement qui disparaissait sans message.
     // Saisie non interprétable = retour au calcul automatique.
@@ -171,11 +169,11 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
     const finalCapacity = manualParsed ?? theoreticalCapacity;
     const totalToInvest = Math.max(0, finalCapacity + externalSavings);
     return { totalFixed, subscriptionsFixed, theoreticalCapacity, finalCapacity, totalToInvest };
-  }, [effectiveSuperNetForCalc, expenses, subscriptionCharges, leisureBudget, projectSavings, livingBudget, manualSavingsCapacity, externalSavings]);
+  }, [effectiveSuperNetForCalc, expenses, subscriptionCharges, leisureBudget, projectSavings, manualSavingsCapacity, externalSavings]);
 
   const payTransfers = useMemo(
-    () => computePayTransfers({ expenses, subscriptions, leisureBudget, projectSavings, livingBudget }),
-    [expenses, subscriptions, leisureBudget, projectSavings, livingBudget]
+    () => computePayTransfers({ expenses, subscriptions, leisureBudget, projectSavings }),
+    [expenses, subscriptions, leisureBudget, projectSavings]
   );
 
   const strategy = useMemo(
@@ -415,7 +413,6 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
               <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm grid grid-cols-2 gap-4">
                   <div><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Argent Plaisir</label><NumberInput value={leisureBudget} onChange={setLeisureBudget} min={0} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
                   <div><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Épargne Projets</label><NumberInput value={projectSavings} onChange={setProjectSavings} min={0} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
-                  <div><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Reste à vivre (compte courant)</label><NumberInput value={livingBudget} onChange={setLivingBudget} min={0} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
               </div>
 
               <div className="bg-slate-900 p-6 rounded-2xl shadow-lg text-white grid grid-cols-1 md:grid-cols-2 gap-8 items-center">

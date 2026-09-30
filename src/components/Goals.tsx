@@ -14,7 +14,6 @@ interface IncomeCfg {
   taxRateManual: number;
   leisureBudget: number;
   projectSavings: number;
-  livingBudget?: number;
 }
 
 interface GoalsProps {
@@ -47,7 +46,7 @@ export const Goals: React.FC<GoalsProps> = ({ goals, onUpdateGoals, expenses, in
     // Même règle que le Pilotage : le net réel de la fiche de référence prime sur la formule.
     const superNet = computeEffectiveSuperNet(breakdown.superNet, activePayslip);
     const totalFixed = expenses.reduce((s, e) => s + e.amount, 0);
-    return computeSavingsCapacity(superNet, totalFixed, income.leisureBudget, income.projectSavings, income.livingBudget ?? 0);
+    return computeSavingsCapacity(superNet, totalFixed, income.leisureBudget, income.projectSavings);
   }, [income, expenses, fiscalConfig, workBenefits, activePayslip]);
 
   // Rythme RÉEL des 90 derniers jours (même calcul que la projection du Dashboard, voir
