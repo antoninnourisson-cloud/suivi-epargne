@@ -8,7 +8,8 @@ import { Euro, Lock, Wallet, ListTodo, ChevronDown, Landmark, CalendarClock, Unl
 import { computeAccruedParentalInterest, computeRecentSavingsRate, computeAccountBalanceAtDate, findStaleRegulatedRates, computeLepEligibility, computeIncome, findDueRecurring, computeMonthSavedAmount, computeSavingsRateHistory, computeUnlockCost, findFiscalReview, applyTaxScale, nextSubscriptionDate } from '../lib/finance';
 import { parseISODate, formatISODay, daysBetween, localTodayISO } from '../lib/dates';
 import { Button } from './Button';
-import { formatEUR, formatSignedEUR } from '../lib/format';
+import { formatEUR, formatSignedEUR, frenchDay } from '../lib/format';
+import { InstallPrompt } from './InstallPrompt';
 
 interface DashboardProps {
   accounts: SavingsAccount[];
@@ -420,6 +421,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
 
   return (
     <div className="space-y-6">
+      <InstallPrompt />
+
       {todoCount > 0 && (
         <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
           <button
@@ -536,10 +539,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
         </div>
       )}
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 md:gap-4">
         <StatCard title="Mon épargne nette" amount={mySavings} icon={Wallet} color="bg-indigo-600" subtext="Capital réel" />
         <StatCard title="Disponibilité immédiate" amount={availabilityStats.available} icon={Unlock} color="bg-emerald-500" subtext="Liquide" />
-        <div className="col-span-2 lg:col-span-1"><StatCard title="Contrainte fiscale" amount={availabilityStats.taxLocked} icon={Euro} color="bg-amber-500" subtext="AV/PEA récents" extra={availabilityStats.taxLocked > 0 && (
+        <div className="col-span-2 lg:col-span-2"><StatCard title="Contrainte fiscale" amount={availabilityStats.taxLocked} icon={Euro} color="bg-amber-500" subtext="AV/PEA récents" extra={availabilityStats.taxLocked > 0 && (
           <div className="mt-2 space-y-0.5 text-[11px] text-slate-600 dark:text-slate-300">
             {unlockCost.extraTax >= 1 && <p>Tout retirer aujourd'hui : <b>≈ {formatEUR(unlockCost.extraTax, 0)}</b> d'impôt en plus qu'après la maturité.</p>}
             {unlockCost.closesPea && <p className="text-rose-600 dark:text-rose-400 font-bold">Un retrait clôturerait votre PEA.</p>}
@@ -547,9 +550,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
             {unlockCost.unknown.length > 0 && <p className="text-slate-500 dark:text-slate-400">Versements à renseigner pour chiffrer : {unlockCost.unknown.join(', ')}.</p>}
           </div>
         )} /></div>
-        <StatCard title="Bloqué" amount={availabilityStats.hardLocked} icon={Lock} color="bg-slate-800" subtext="Retraite/PEE" />
+        <StatCard title="Bloqué" amount={availabilityStats.hardLocked} icon={Lock} color="bg-slate-500" subtext="Retraite/PEE" />
       </div>
 
+      {/* Sur grand écran, les cartes se rangent sur deux colonnes au lieu de s'étirer. */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
       {upcomingDebits.length > 0 && (
         <div className="bg-white dark:bg-slate-800 p-5 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
           <div className="flex items-baseline justify-between gap-3 mb-2">
@@ -564,7 +569,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
                 </span>
                 <span className="flex-shrink-0 text-right">
                   <span className="font-mono font-bold text-slate-700 dark:text-slate-200">{formatEUR(s.amount)}</span>
-                  <span className="block text-[11px] text-slate-500 dark:text-slate-400">{inDays === 0 ? "aujourd'hui" : inDays === 1 ? 'demain' : date.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' })}</span>
+                  <span className="block text-[11px] text-slate-500 dark:text-slate-400">{inDays === 0 ? "aujourd'hui" : inDays === 1 ? 'demain' : frenchDay(date, true)}</span>
                 </span>
               </li>
             ))}
@@ -662,7 +667,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
         </div>
       )}
 
-      <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
+      <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 xl:col-span-2">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 mb-4">
           <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100">Évolution de mon épargne nette</h3>
           <div className="flex flex-wrap items-center gap-2">
@@ -738,6 +743,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
             </Bar>
           </BarChart>
         </ResponsiveContainer>
+      </div>
       </div>
     </div>
   );

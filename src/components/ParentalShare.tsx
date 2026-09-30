@@ -46,8 +46,8 @@ export const ParentalShare: React.FC<ParentalShareProps> = ({ accounts }) => {
 
       <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
         <div className="flex justify-between text-xs font-bold mb-2">
-          <span className="text-indigo-600">Moi {ownedPct.toFixed(0)}%</span>
-          <span className="text-amber-500">Parents {(100 - ownedPct).toFixed(0)}%</span>
+          <span className="text-indigo-600">Moi {ownedPct.toFixed(0)} %</span>
+          <span className="text-amber-500">Parents {(100 - ownedPct).toFixed(0)} %</span>
         </div>
         <div className="w-full h-4 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden flex">
           <div className="h-full bg-indigo-600" style={{ width: `${ownedPct}%` }} />
@@ -58,13 +58,13 @@ export const ParentalShare: React.FC<ParentalShareProps> = ({ accounts }) => {
 
       <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm min-w-[34rem]">
+          <table className="w-full text-left text-sm md:min-w-[34rem]">
             <thead className="bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700">
               <tr>
                 <th className="px-6 py-3 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Compte</th>
                 <th className="px-6 py-3 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase text-right">Moi</th>
                 <th className="px-6 py-3 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase text-right">Parents</th>
-                <th className="px-6 py-3 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase w-1/3">Répartition</th>
+                <th className="hidden md:table-cell px-6 py-3 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase w-1/3">Répartition</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -72,10 +72,10 @@ export const ParentalShare: React.FC<ParentalShareProps> = ({ accounts }) => {
                 const pct = r.total > 0 ? (r.owned / r.total) * 100 : 0;
                 return (
                   <tr key={r.id} className="hover:bg-slate-50 dark:hover:bg-slate-800">
-                    <td className="px-6 py-3"><div className="font-bold text-slate-800 dark:text-slate-100">{r.name}</div><div className="text-[11px] uppercase text-slate-500 dark:text-slate-400 font-bold">{r.type}</div></td>
-                    <td className="px-6 py-3 text-right"><div className="font-mono text-indigo-600">{fmt(r.owned)}</div><AccountTotal account={{ ownedAmount: r.owned, parentalCapital: r.parental }} /></td>
-                    <td className="px-6 py-3 text-right font-mono text-amber-500">{fmt(r.parental)}</td>
-                    <td className="px-6 py-3">
+                    <td className="px-3 md:px-6 py-3"><div className="font-bold text-slate-800 dark:text-slate-100">{r.name}</div><div className="text-[11px] uppercase text-slate-500 dark:text-slate-400 font-bold">{r.type}</div></td>
+                    <td className="px-3 md:px-6 py-3 text-right align-top"><div className="font-mono text-indigo-600 whitespace-nowrap">{fmt(r.owned)}</div><AccountTotal account={{ ownedAmount: r.owned, parentalCapital: r.parental }} /></td>
+                    <td className="px-3 md:px-6 py-3 text-right font-mono text-amber-500 align-top whitespace-nowrap">{fmt(r.parental)}</td>
+                    <td className="hidden md:table-cell px-6 py-3">
                       <div className="w-full h-2.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden flex">
                         <div className="h-full bg-indigo-600" style={{ width: `${pct}%` }} />
                         <div className="h-full bg-amber-400" style={{ width: `${100 - pct}%` }} />

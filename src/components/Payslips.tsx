@@ -11,7 +11,7 @@ import { openDrivePicker, downloadFileAsBase64 } from '../services/googleDriveSe
 import { extractPayslipData, GeminiError } from '../services/geminiService';
 import { parseFrenchNumber } from '../lib/numbers';
 import { FileText, Upload, Sparkles, Trash2, ExternalLink, AlertTriangle, Check, X, Loader2, KeyRound, TrendingUp, Wand2 } from 'lucide-react';
-import { formatEUR } from '../lib/format';
+import { formatEUR, formatPeriod } from '../lib/format';
 
 interface PayslipsProps {
   payslips: PayslipRecord[];
@@ -319,7 +319,7 @@ export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, 
                 <XAxis dataKey="label" tick={{ fontSize: 11 }} />
                 <YAxis tickFormatter={(v) => formatEUR(v, 0)} tick={{ fontSize: 11 }} />
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <RechartsTooltip formatter={(v: number, name: string) => [fmt(v), name === 'net' ? 'Net' : 'Brut']} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                <RechartsTooltip formatter={(v: number, name: string) => [fmt(v), name === 'net' ? 'Net' : 'Brut']} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', background: '#0f172a', color: '#f1f5f9' }} labelStyle={{ color: '#f1f5f9', fontWeight: 700 }} labelFormatter={(l: string) => formatPeriod(String(l))} />
                 <Legend formatter={(v) => (v === 'net' ? 'Net' : 'Brut')} wrapperStyle={{ fontSize: 12 }} />
                 <Area type="monotone" dataKey="net" stroke="#10b981" fill="url(#gNet)" strokeWidth={2} />
               </AreaChart>
@@ -349,13 +349,13 @@ export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, 
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {payslips.map(p => {
+                {[...payslips].sort((a, b) => (b.extracted.period || '').localeCompare(a.extracted.period || '')).map(p => {
                   const isActive = p.id === activePayslipId;
                   return (
                   <tr key={p.id} className={`hover:bg-slate-50 dark:hover:bg-slate-800 ${isActive ? 'bg-amber-50/60 dark:bg-amber-950/20' : ''}`}>
                     <td className="px-6 py-3">
                       <div className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
-                        {p.extracted.period || '—'}
+                        {p.extracted.period ? formatPeriod(p.extracted.period) : '—'}
                         {isActive && <span className="text-[11px] font-black uppercase bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300 px-1.5 py-0.5 rounded">Référence du Pilotage</span>}
                       </div>
                       <div className="text-[11px] uppercase text-slate-500 dark:text-slate-400 font-bold">{p.extracted.employer || p.fileName}</div>

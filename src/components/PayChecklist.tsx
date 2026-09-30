@@ -59,13 +59,15 @@ export const PayChecklist: React.FC<PayChecklistProps> = ({
     return v !== null && v >= 0 ? v : null;
   };
 
-  const check = (l: PayChecklistLine) => {
+  // `alreadyRecorded` : le versement a déjà été saisi ailleurs (Actualiser, ajout rapide…) ;
+  // on le marque fait, avec son vrai montant, sans l'enregistrer une seconde fois.
+  const check = (l: PayChecklistLine, alreadyRecorded = false) => {
     const amount = draftAmount(l);
     if (amount === null) return;
     const base: PayChecklistData = frozen ?? { month, lines: liveLines, done: {} };
     let movementId: string | undefined;
-    if (l.kind === 'saving' && l.accountId && amount > 0) movementId = onRecordDeposit(l.accountId, amount);
-    onChange({ ...base, done: { ...base.done, [l.key]: { amount, movementId } } });
+    if (!alreadyRecorded && l.kind === 'saving' && l.accountId && amount > 0) movementId = onRecordDeposit(l.accountId, amount);
+    onChange({ ...base, done: { ...base.done, [l.key]: { amount, movementId, alreadyRecorded: alreadyRecorded || undefined } } });
   };
 
   const uncheck = (l: PayChecklistLine) => {
@@ -97,8 +99,11 @@ export const PayChecklist: React.FC<PayChecklistProps> = ({
           <p className="text-[11px] text-slate-500 dark:text-slate-400">
             {l.detail && <>{l.detail} · </>}
             {isDone
-              ? (varied ? `fait : ${formatEUR(entry.amount)} (prévu ${formatEUR(l.amount)})` : (l.kind === 'saving' ? 'versement enregistré' : 'fait'))
+              ? `${entry.alreadyRecorded ? 'déjà enregistré' : l.kind === 'saving' ? 'versement enregistré' : 'fait'}${varied ? ` : ${formatEUR(entry.amount)} (prévu ${formatEUR(l.amount)})` : ''}`
               : (l.kind === 'saving' ? 'cocher enregistre le versement sur le compte' : 'à faire')}
+            {!isDone && l.kind === 'saving' && !invalid && (
+              <button type="button" onClick={() => check(l, true)} className="ml-2 font-bold text-indigo-600 dark:text-indigo-300 hover:underline">Déjà enregistré ?</button>
+            )}
           </p>
         </div>
         {isDone ? (

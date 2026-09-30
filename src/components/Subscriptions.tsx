@@ -9,10 +9,11 @@ import { Subscription, SubscriptionFrequency } from '../types';
 import { CalendarClock, Plus, Trash2, AlertCircle, Pause, Play, Pencil, X, BellRing } from 'lucide-react';
 import { parseFrenchNumber } from '../lib/numbers';
 import { formatISODay, localTodayISO, daysBetween } from '../lib/dates';
-import { nextSubscriptionDate, subscriptionMonthlyCost, subscriptionLeadDays, SUBSCRIPTION_BIG_AMOUNT } from '../lib/finance';
+import { nextSubscriptionDate, subscriptionMonthlyCost, subscriptionLeadDays, SUBSCRIPTION_BIG_AMOUNT, isMonthlyCharge } from '../lib/finance';
 import { isBackendEnabled } from '../services/backendService';
 import { formatEUR } from '../lib/format';
 import { useUndoableRemove } from './Toast';
+import { frenchDay } from '../lib/format';
 
 interface SubscriptionsProps {
   subscriptions: Subscription[];
@@ -48,7 +49,10 @@ export const Subscriptions: React.FC<SubscriptionsProps> = ({ subscriptions, onU
     [subscriptions]);
 
   const active = subscriptions.filter(s => s.active);
-  const monthly = active.reduce((sum, s) => sum + subscriptionMonthlyCost(s), 0);
+  // Même règle que le Pilotage : seuls les mensuels (et hebdomadaires) pèsent chaque mois ;
+  // les autres sont payés quand ils tombent.
+  const monthly = active.filter(isMonthlyCharge).reduce((sum, s) => sum + subscriptionMonthlyCost(s), 0);
+  const occasionalPerYear = active.filter(s => !isMonthlyCharge(s)).reduce((sum, s) => sum + subscriptionMonthlyCost(s) * 12, 0);
   // Comptes déjà saisis, proposés à la saisie pour éviter « BP » / « Banque Pop » / « bp ».
   const knownAccounts = Array.from(new Set(subscriptions.map(s => s.debitAccount).filter(Boolean)));
 
@@ -106,12 +110,20 @@ export const Subscriptions: React.FC<SubscriptionsProps> = ({ subscriptions, onU
         {active.length > 0 && (
           <div className="flex flex-wrap gap-6 mt-4">
             <div>
-              <p className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Par mois</p>
-              <p className="text-xl font-black text-slate-800 dark:text-slate-100">{fmt(monthly)}</p>
+              <p className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Mensuels</p>
+              <p className="text-xl font-black text-slate-800 dark:text-slate-100">{fmt(monthly)}<span className="text-sm font-bold text-slate-500 dark:text-slate-400"> /mois</span></p>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">comptés dans les charges fixes du Pilotage</p>
             </div>
+            {occasionalPerYear > 0 && (
+              <div>
+                <p className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Annuels et autres</p>
+                <p className="text-xl font-black text-slate-800 dark:text-slate-100">{fmt(occasionalPerYear)}<span className="text-sm font-bold text-slate-500 dark:text-slate-400"> /an</span></p>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">payés à l'échéance, rappel avant</p>
+              </div>
+            )}
             <div>
-              <p className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Par an</p>
-              <p className="text-xl font-black text-slate-800 dark:text-slate-100">{fmt(monthly * 12)}</p>
+              <p className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Total sur un an</p>
+              <p className="text-xl font-black text-slate-800 dark:text-slate-100">{fmt(monthly * 12 + occasionalPerYear)}</p>
             </div>
           </div>
         )}
@@ -129,7 +141,7 @@ export const Subscriptions: React.FC<SubscriptionsProps> = ({ subscriptions, onU
                   {FREQUENCY_LABEL[s.frequency]}
                   {s.debitAccount && <> · {s.debitAccount}</>}
                   {s.active
-                    ? <> · prochain le {next.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })} ({when(inDays)}) · rappel {subscriptionLeadDays(s.amount) === 1 ? 'la veille' : '7 jours avant'}</>
+                    ? <> · prochain le {frenchDay(next)} ({when(inDays)}) · rappel {subscriptionLeadDays(s.amount) === 1 ? 'la veille' : '7 jours avant'}</>
                     : ' · en pause'}
                 </p>
               </div>

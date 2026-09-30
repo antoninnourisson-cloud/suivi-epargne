@@ -38,3 +38,11 @@ export const formatPeriod = (period: string): string => {
   if (!m) return period;
   return new Date(Number(m[1]), Number(m[2]) - 1, 1).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
 };
+
+/** « 1er octobre », « 4 octobre » : l'ordinal du premier du mois, comme en français courant. */
+export const frenchDay = (d: Date, withWeekday = false): string => {
+  const month = d.toLocaleDateString('fr-FR', { month: 'long' });
+  const day = d.getDate() === 1 ? '1er' : String(d.getDate());
+  const weekday = withWeekday ? `${d.toLocaleDateString('fr-FR', { weekday: 'long' })} ` : '';
+  return `${weekday}${day} ${month}`;
+};

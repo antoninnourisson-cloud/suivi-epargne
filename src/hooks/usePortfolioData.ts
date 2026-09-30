@@ -2,7 +2,7 @@
 // FILE: src/hooks/usePortfolioData.ts
 // ================================================
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { tracksDeposits, depositsAfterCashFlow, totalFixedCharges } from '../lib/finance';
+import { tracksDeposits, depositsAfterCashFlow, totalFixedCharges, normalizeAccounts, dedupeMonthlySnapshots } from '../lib/finance';
 import {
   GlobalAppData, SavingsAccount, Expense, PortfolioSnapshot, ExpenseSnapshot,
   FiscalConfig, WorkBenefits, AccountMovement, SavingsGoal, PayslipRecord, RecurringMovement, Subscription, Donation, PayChecklist
@@ -224,10 +224,10 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
       const data: GlobalAppData = await readConfigFile(fileId);
       
       if (data) {
-        setAccounts((data.accounts || []).map(acc => ({ ...acc, movements: acc.movements || [] })));
+        setAccounts(normalizeAccounts(data.accounts || []));
         setExpenses(data.expenses || []);
-        setHistory(data.history || []);
-        setExpensesHistory(data.expensesHistory || []);
+        setHistory(dedupeMonthlySnapshots(data.history || []));
+        setExpensesHistory(dedupeMonthlySnapshots(data.expensesHistory || []));
         setGoals(data.goals || []);
         setPayslips(data.payslips || []);
         setRecurringMovements(data.recurringMovements || []);
@@ -345,10 +345,10 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
 
   // Applique un objet de données (import / rechargement) à l'état.
   const applyData = useCallback((data: GlobalAppData) => {
-    setAccounts((data.accounts || []).map(acc => ({ ...acc, movements: acc.movements || [] })));
+    setAccounts(normalizeAccounts(data.accounts || []));
     setExpenses(data.expenses || []);
-    setHistory(data.history || []);
-    setExpensesHistory(data.expensesHistory || []);
+    setHistory(dedupeMonthlySnapshots(data.history || []));
+    setExpensesHistory(dedupeMonthlySnapshots(data.expensesHistory || []));
     setGoals(data.goals || []);
     setPayslips(data.payslips || []);
     setRecurringMovements(data.recurringMovements || []);

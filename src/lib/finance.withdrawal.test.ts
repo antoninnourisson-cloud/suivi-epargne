@@ -14,6 +14,8 @@ import {
   computeUnlockCost,
   findFiscalReview,
   applyTaxScale,
+  normalizeAccounts,
+  dedupeMonthlySnapshots,
 } from './finance';
 import { DEFAULT_FISCAL_CONFIG as CFG, TAX_SCALES, LATEST_TAX_SCALE } from '../constants';
 import { AccountType, SavingsAccount, Subscription } from '../types';
@@ -184,5 +186,19 @@ describe('barème et vérification annuelle', () => {
     expect(findFiscalReview(CFG, new Date(2027, 1, 1)).annualCheckDue).toBe(true);
     expect(findFiscalReview({ ...CFG, paramsReviewedYear: 2027 }, new Date(2027, 1, 1)).annualCheckDue).toBe(false);
     expect(findFiscalReview(CFG, NOW).annualCheckDue).toBe(false);
+  });
+});
+
+describe('nettoyage au chargement', () => {
+  it('retire les espaces superflus des noms et établissements', () => {
+    const [a] = normalizeAccounts([acc({ name: ' LEP  - BPVF ', institution: 'BPVF ' })]);
+    expect(a.name).toBe('LEP - BPVF');
+    expect(a.institution).toBe('BPVF');
+  });
+  it("garde un point d'historique par mois, le plus récent", () => {
+    const h = dedupeMonthlySnapshots([
+      { date: '2026-01-03', v: 1 }, { date: '2026-01-28', v: 2 }, { date: '2026-02-10', v: 3 }, { date: '2026-01-15', v: 4 },
+    ]);
+    expect(h.map(x => x.v)).toEqual([2, 3]);
   });
 });

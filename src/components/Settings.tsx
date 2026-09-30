@@ -186,7 +186,7 @@ export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parent
                 />
                 <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-2 flex items-start gap-1">
                     <span className="text-indigo-600 font-bold">Note :</span>
-                    Un email récapitulatif sera envoyé automatiquement depuis VOTRE compte Gmail à cette adresse uniquement lorsqu'un mouvement est détecté sur un Livret A ou un LEP.
+                    Un email récapitulatif sera envoyé automatiquement depuis votre compte Gmail à cette adresse uniquement lorsqu'un mouvement est détecté sur un Livret A ou un LEP.
                 </p>
             </div>
         </div>
@@ -229,7 +229,7 @@ export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parent
         {/* SECTION SÉCURITÉ (réglages locaux à cet appareil, non synchronisés) */}
         <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 lg:col-span-2 space-y-4">
             <h3 className="font-bold text-slate-800 dark:text-slate-100 mb-2 border-b border-slate-200 dark:border-slate-700 pb-2 flex items-center gap-2"><Fingerprint className="w-4 h-4 text-indigo-600"/> Sécurité</h3>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400 -mt-2">Verrouille l'accès à cet appareil (réglage propre à ce navigateur, jamais synchronisé sur Drive). Les deux méthodes peuvent être actives en même temps. Protège contre un accès occasionnel — pas une garantie cryptographique absolue sur un site sans serveur.</p>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 -mt-2">Verrouillez l'accès sur cet appareil (réglage propre à ce navigateur, jamais synchronisé sur Drive). Les deux méthodes peuvent être actives en même temps. Protège contre un accès occasionnel — pas une garantie cryptographique absolue sur un site sans serveur.</p>
 
             {!lockAvailable ? (
                 <p className="text-sm text-slate-500 dark:text-slate-400">Face ID / empreinte / Windows Hello non disponible sur cet appareil ou ce navigateur — seul le code PIN est proposé.</p>

@@ -158,7 +158,7 @@ export interface PayChecklist {
   month: string;            // 'YYYY-MM' : le plan est figé pour ce mois-là
   lines: PayChecklistLine[];
   // Virements faits : montant réel (peut différer du prévu) et mouvement enregistré.
-  done: Record<string, { amount: number; movementId?: string }>;
+  done: Record<string, { amount: number; movementId?: string; alreadyRecorded?: boolean }>;
 }
 
 export interface PayslipRecord {

@@ -1273,3 +1273,23 @@ export const applyTaxScale = (cfg: FiscalConfig, scale: TaxScale, asOfDate: Date
     { year: identifyTaxScale(cfg.taxBrackets)?.year ?? cfg.taxScaleYear, replacedOn: formatISODay(asOfDate), brackets: cfg.taxBrackets },
   ],
 });
+
+// ---------------------------------------------------------------------------
+// Nettoyage des données au chargement
+// ---------------------------------------------------------------------------
+
+const cleanLabel = (s: string | undefined) => (s || '').trim().replace(/\s+/g, ' ');
+
+/** Noms et établissements sans espaces superflus (« BPVF » et « BPVF  » faisaient deux banques). */
+export const normalizeAccounts = <T extends { name: string; institution: string; movements?: AccountMovement[] }>(accounts: T[]): T[] =>
+  accounts.map(a => ({ ...a, name: cleanLabel(a.name), institution: cleanLabel(a.institution), movements: a.movements || [] }));
+
+/**
+ * Un seul point par mois (le plus récent) : d'anciennes versions en enregistraient
+ * plusieurs, d'où des mois répétés dans l'historique.
+ */
+export const dedupeMonthlySnapshots = <T extends { date: string }>(snapshots: T[]): T[] => {
+  const byMonth = new Map<string, T>();
+  for (const s of [...snapshots].sort((a, b) => a.date.localeCompare(b.date))) byMonth.set(s.date.slice(0, 7), s);
+  return [...byMonth.values()];
+};

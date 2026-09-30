@@ -22,6 +22,8 @@ import { localTodayISO } from './lib/dates';
 import { formatEUR, formatSignedEUR } from './lib/format';
 import { MovementSearch } from './components/MovementSearch';
 import { AccountTotal } from './components/AccountTotal';
+// Importé ici (et pas dans l'écran, chargé à la demande) pour capter l'invitation d'installation dès le démarrage.
+import './services/installPrompt';
 import {
   LayoutDashboard, Wallet, Trash2, Edit2, ShieldCheck,
   ArrowRightLeft, RefreshCcw, PlusCircle, Cloud, LogOut,
@@ -683,9 +685,6 @@ const App: React.FC = () => {
       </header>
 
       <main onScroll={handleMainScroll} className="flex-1 p-4 md:p-8 overflow-y-auto relative h-screen pb-40 md:pb-24">
-        <div className="absolute top-4 right-4 hidden sm:flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-800 px-3 py-1 rounded-full border border-slate-200 dark:border-slate-700 shadow-sm font-mono">
-            <Cloud className="w-3 h-3 text-indigo-400"/> Drive: suivi_epargne.json
-        </div>
 
         <div className="max-w-7xl mx-auto pb-20">
             {/* --- BANNIÈRES DE SYNCHRONISATION --- */}

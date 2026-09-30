@@ -22,6 +22,7 @@ import {
 } from '../../src/lib/finance';
 import { LATEST_TAX_SCALE } from '../../src/constants';
 import { formatISODay } from '../../src/lib/dates';
+import { frenchDay } from '../../src/lib/format';
 import { DEFAULT_FISCAL_CONFIG } from '../../src/constants';
 import type { PushMessage } from './webpush';
 
@@ -161,7 +162,7 @@ export const computeReminders = (data: GlobalAppData, now: Date, appUrl: string)
     new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(n);
   for (const { subscription: sub, dueDate, daysUntil } of findDueSubscriptions(data.subscriptions || [], now)) {
     const [y, m, d] = dueDate.split('-').map(Number);
-    const day = new Date(y, m - 1, d).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+    const day = frenchDay(new Date(y, m - 1, d), true);
     out.push({
       key: `sub:${sub.id}:${dueDate}`,
       message: {
