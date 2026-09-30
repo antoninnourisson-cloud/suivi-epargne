@@ -78,11 +78,11 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
   const applyAdjust = (id: string) => {
     const a = adjustFor(id);
     const amount = safeNumber(a.amount, 0);
-    if (amount <= 0) { setAdjustErrors(prev => ({ ...prev, [id]: 'Saisis un montant supérieur à 0.' })); return; }
+    if (amount <= 0) { setAdjustErrors(prev => ({ ...prev, [id]: 'Saisissez un montant supérieur à 0.' })); return; }
     const current = safeNumber(updates[id][a.target], 0);
     const next = Math.round((current + a.sign * amount) * 100) / 100;
     if (next < 0) {
-      setAdjustErrors(prev => ({ ...prev, [id]: `Impossible : ${a.target === 'owned' ? 'ta part' : 'la part des parents'} deviendrait négative (${formatEUR(next)}).` }));
+      setAdjustErrors(prev => ({ ...prev, [id]: `Impossible : ${a.target === 'owned' ? 'votre part' : 'la part des parents'} deviendrait négative (${formatEUR(next)}).` }));
       return;
     }
     const account = accounts.find(acc => acc.id === id);
@@ -275,7 +275,7 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
                     />
                     <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
                       {depositsDraft === null ? 'Montant non reconnu.'
-                        : depositsDraft === undefined ? 'Renseigne-les une fois : ensuite, les versements cochés ci-dessus les mettent à jour, et le reste de l’écart compte comme gain ou perte de valeur.'
+                        : depositsDraft === undefined ? 'Renseignez-les une fois : ensuite, les versements cochés ci-dessus les mettent à jour, et le reste de l’écart compte comme gain ou perte de valeur.'
                         : <>Plus-value latente : <b>{formatEUR(newTotal - depositsDraft, 0)}</b></>}
                     </p>
                   </div>

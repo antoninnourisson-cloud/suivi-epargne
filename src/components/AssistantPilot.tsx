@@ -289,7 +289,7 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
               <div className="mb-4 flex items-center justify-between gap-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-xl p-3">
                 <div className="flex items-center gap-2 text-amber-800 dark:text-amber-300 text-xs font-bold">
                   <FileCheck2 className="w-4 h-4 flex-shrink-0" />
-                  Chiffres exacts de ta fiche de {activePayslip.extracted.period || 'paie'} ({activePayslip.extracted.employer || activePayslip.fileName}) — pas de calcul, valeurs verbatim.
+                  Chiffres exacts de votre fiche de {activePayslip.extracted.period || 'paie'} ({activePayslip.extracted.employer || activePayslip.fileName}) — pas de calcul, valeurs verbatim.
                 </div>
                 <button onClick={onClearActivePayslip} className="flex items-center gap-1 text-xs font-bold text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900 px-3 py-1.5 rounded-lg flex-shrink-0"><Wand2 className="w-3.5 h-3.5" /> Repasser en estimation</button>
               </div>
@@ -390,7 +390,7 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
                   {expenses.length === 0 && <p className="text-xs text-slate-500 dark:text-slate-400 italic p-2">Aucune charge saisie.</p>}
               </div>
               {expenses.some(e => duplicateNames.has(e.id)) && (
-                <p className="mt-2 text-[11px] font-bold text-amber-600 flex items-start gap-1"><Info className="w-3 h-3 flex-shrink-0 mt-0.5" /> {expenses.filter(e => duplicateNames.has(e.id)).map(e => e.name).join(', ')} : aussi dans tes abonnements, donc compté deux fois. Supprime la charge saisie.</p>
+                <p className="mt-2 text-[11px] font-bold text-amber-600 flex items-start gap-1"><Info className="w-3 h-3 flex-shrink-0 mt-0.5" /> {expenses.filter(e => duplicateNames.has(e.id)).map(e => e.name).join(', ')} : aussi dans vos abonnements, donc compté deux fois. Supprimez la charge saisie.</p>
               )}
               <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-700">
                 <div className="flex items-center justify-between mb-2">
@@ -484,7 +484,7 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
                      )}
                    </div>
                    <p className="text-xs text-slate-500 dark:text-slate-400">
-                     Une notification ce jour-là avec la répartition ci-dessus, recalculée sur tes soldes du moment. Sans montant saisi, c'est la capacité d'épargne calculée qui est utilisée. Les notifications doivent être activées sur l'appareil (Paramètres).
+                     Une notification ce jour-là avec la répartition ci-dessus, recalculée sur vos soldes du moment. Sans montant saisi, c'est la capacité d'épargne calculée qui est utilisée. Les notifications doivent être activées sur l'appareil (Paramètres).
                    </p>
                  </div>
                )}

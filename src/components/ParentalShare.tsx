@@ -29,7 +29,7 @@ export const ParentalShare: React.FC<ParentalShareProps> = ({ accounts }) => {
     <div className="space-y-6 animate-fade-in pb-20">
       <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
         <h2 className="text-2xl font-black text-slate-800 dark:text-slate-100 flex items-center gap-2 mb-1"><Users className="w-6 h-6 text-indigo-600" /> Part parentale</h2>
-        <p className="text-sm text-slate-500 dark:text-slate-400">Distingue ton capital réel de l'argent géré pour tes parents.</p>
+        <p className="text-sm text-slate-500 dark:text-slate-400">Distinguez votre capital réel de l'argent géré pour vos parents.</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

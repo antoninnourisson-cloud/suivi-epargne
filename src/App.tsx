@@ -252,7 +252,7 @@ const App: React.FC = () => {
           } catch (e: any) {
             if (e instanceof TypeError) {
               // Serveur injoignable : on garde la session, l'utilisateur pourra réessayer.
-              addToast({ message: 'Serveur injoignable — vérifie ta connexion puis recharge.', kind: 'error' });
+              addToast({ message: 'Serveur injoignable — vérifiez votre connexion puis rechargez.', kind: 'error' });
             } else {
               console.log('Session serveur invalide, reconnexion requise.', e);
             }
@@ -518,7 +518,7 @@ const App: React.FC = () => {
       onConfirm: () => {
         data.setGrossAnnual(estimate);
         data.setActivePayslipId(p.id);
-        addToast({ message: 'Pilotage basé sur ta fiche de paie réelle', kind: 'success' });
+        addToast({ message: 'Pilotage basé sur votre fiche de paie réelle', kind: 'success' });
       },
     });
   };
@@ -589,7 +589,7 @@ const App: React.FC = () => {
           {apiError ? (
             <div className="text-left bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-xl p-4">
               <p className="text-sm font-black text-rose-700 dark:text-rose-300 mb-2 flex items-center gap-2"><AlertTriangle className="w-4 h-4" /> Impossible de charger les services Google</p>
-              <p className="text-xs text-rose-600 dark:text-rose-400 mb-3">Vérifie ta connexion (ou un bloqueur de scripts) puis réessaie.</p>
+              <p className="text-xs text-rose-600 dark:text-rose-400 mb-3">Vérifiez votre connexion (ou un bloqueur de scripts) puis réessayez.</p>
               <button onClick={() => window.location.reload()} className="w-full py-2.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-sm font-black">Recharger l'application</button>
             </div>
           ) : !isApiLoaded ? <div className="flex justify-center gap-2 text-indigo-600 font-bold"><Loader2 className="animate-spin"/> Chargement API...</div> :

@@ -19,12 +19,12 @@ Un **petit serveur optionnel** (Cloudflare Worker, dossier [`worker/`](worker/))
 ## Fonctionnalités
 
 ### Tableau de bord
-- Épargne nette, répartie entre disponible, contrainte fiscale (AV/PEA récents) et bloqué (PEE, PER…).
+- Épargne nette, répartie entre disponible, contrainte fiscale (AV/PEA récents, avec l'impôt en plus d'un retrait anticipé et la date où il devient gratuit) et bloqué (PEE, PER…).
 - Évolution empilée par compte, et répartition par établissement.
 - **Placé ce mois-ci** : jauge des versements du mois face au plan d'épargne.
 - **Taux d'épargne** : part de la paie mise de côté, mois par mois sur un an.
 - **Projection** à 6 et 12 mois d'après le rythme réel des 90 derniers jours, avec alerte si ce rythme ralentit ou accélère fortement.
-- Alertes :
+- **À faire** : les alertes regroupées dans une carte repliable :
   - plafonds des livrets ;
   - **révision des taux réglementés** (1er février / 1er août) ;
   - **éligibilité au LEP** ;
@@ -35,6 +35,7 @@ Un **petit serveur optionnel** (Cloudflare Worker, dossier [`worker/`](worker/))
 
 ### Comptes et mouvements
 - Distinction entre **part propre** et **capital des parents** sur chaque compte. Le capital parental est intouchable, ses intérêts reviennent à l'utilisateur.
+- **Recherche** dans les mouvements de tous les comptes (libellé, montant, date).
 - Étiquettes, historique des mouvements, annulation d'une suppression, virements internes liés.
 - **Ajout rapide** : bouton flottant et raccourci sur l'icône de l'app installée.
 - **Actualiser solde** : saisie du nouveau solde, ou ajustement « + / − x € sur ma part / celle des parents ».
@@ -48,7 +49,7 @@ Un **petit serveur optionnel** (Cloudflare Worker, dossier [`worker/`](worker/))
   - abattement de 10 % plafonné ;
   - Navigo, mutuelle, titres-restaurant.
 - **Mode exact** : les chiffres réels d'une fiche de paie remplacent la formule.
-- **Ta paie, virement par virement** : charges fixes saisies (un virement sortant = une ligne), abonnements mensuels (automatiques), épargne projets, argent plaisir, puis l'épargne répartie entre les comptes.
+- **Votre paie, virement par virement**, à cocher au fil des virements (montant réel modifiable, versements d'épargne enregistrés en un clic) : charges fixes saisies (un virement sortant = une ligne), abonnements mensuels (automatiques), épargne projets, argent plaisir, puis l'épargne répartie entre les comptes.
 - Capacité d'épargne, stratégie de placement selon les taux et plafonds, remplissage des livrets, durée de survie.
 - **Rappel du jour de paie** (notification) : toute la répartition, jusqu'à « 400 € sur le LEP, 250 € sur le Livret A », recalculée sur les soldes du moment.
 - **Horloge fiscale** : maturité des PEA, PEE et Assurance Vie.

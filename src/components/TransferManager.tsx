@@ -43,9 +43,9 @@ export const TransferManager: React.FC<TransferManagerProps> = ({ accounts, onUp
     e.preventDefault();
     setFormError(null);
 
-    if (!depositAccountId) { setFormError('Choisis un compte de destination.'); return; }
+    if (!depositAccountId) { setFormError('Choisissez un compte de destination.'); return; }
     const amount = safeNumber(depositAmount, 0);
-    if (amount <= 0) { setFormError('Saisis un montant supérieur à 0.'); return; }
+    if (amount <= 0) { setFormError('Saisissez un montant supérieur à 0.'); return; }
 
     const targetAcc = accounts.find(a => a.id === depositAccountId);
     if (!targetAcc) { setFormError('Ce compte est introuvable.'); return; }
@@ -66,11 +66,11 @@ export const TransferManager: React.FC<TransferManagerProps> = ({ accounts, onUp
     e.preventDefault();
     setFormError(null);
 
-    if (!sourceAccountId || !destAccountId) { setFormError('Choisis les comptes source et destination.'); return; }
+    if (!sourceAccountId || !destAccountId) { setFormError('Choisissez les comptes source et destination.'); return; }
     if (sourceAccountId === destAccountId) { setFormError('Source et destination doivent être différentes.'); return; }
 
     const amount = safeNumber(transferAmount, 0);
-    if (amount <= 0) { setFormError('Saisis un montant supérieur à 0.'); return; }
+    if (amount <= 0) { setFormError('Saisissez un montant supérieur à 0.'); return; }
 
     const sourceAcc = accounts.find(a => a.id === sourceAccountId);
     if (!sourceAcc) { setFormError('Le compte source est introuvable.'); return; }
@@ -93,7 +93,7 @@ export const TransferManager: React.FC<TransferManagerProps> = ({ accounts, onUp
         <Wallet className="w-12 h-12 text-slate-300 dark:text-slate-600 mx-auto mb-3" />
         <h2 className="text-xl font-bold text-slate-600 dark:text-slate-300">Aucun compte pour l'instant</h2>
         <p className="text-sm text-slate-500 dark:text-slate-400 mt-2 max-w-xs mx-auto">
-          Ajoute au moins un compte depuis l'écran « Mes Comptes » pour pouvoir enregistrer des dépôts et des virements.
+          Ajoutez au moins un compte depuis l'écran « Mes Comptes » pour pouvoir enregistrer des dépôts et des virements.
         </p>
       </div>
     );

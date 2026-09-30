@@ -161,7 +161,7 @@ export const AccountForm: React.FC<AccountFormProps> = ({ onSave, initialData, o
                 {parsedDeposits !== null && parsedDeposits !== undefined && totalAmount > 0 && (
                   <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">Plus-value latente : <b>{formatEUR(totalAmount - parsedDeposits, 0)}</b>{type === AccountType.PEA && <> · reste {formatEUR(Math.max(0, PEA_DEPOSIT_CEILING - parsedDeposits))} de versements possibles</>}</p>
                 )}
-                {parsedDeposits === undefined && <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">Ce que tu as versé, hors gains (voir ton relevé). Sert au calcul exact de l'impôt en cas de retrait.</p>}
+                {parsedDeposits === undefined && <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">Ce que vous avez versé, hors gains (voir votre relevé). Sert au calcul exact de l'impôt en cas de retrait.</p>}
               </div>
             )}
           </div>

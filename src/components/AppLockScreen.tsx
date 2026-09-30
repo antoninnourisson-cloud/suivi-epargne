@@ -84,7 +84,7 @@ export const AppLockScreen: React.FC<AppLockScreenProps> = ({ onUnlock }) => {
           <Fingerprint className="w-8 h-8 text-white" />
         </div>
         <h1 className="text-2xl font-black text-slate-900 dark:text-slate-100 mb-2">Suivi Épargne verrouillé</h1>
-        <p className="text-slate-500 dark:text-slate-400 mb-6">Vérifie ton identité pour accéder à tes données.</p>
+        <p className="text-slate-500 dark:text-slate-400 mb-6">Vérifiez votre identité pour accéder à vos données.</p>
 
         {biometricOn && (
           <>
@@ -120,7 +120,7 @@ export const AppLockScreen: React.FC<AppLockScreenProps> = ({ onUnlock }) => {
             </div>
             {pinError && (
               <p className="mb-3 text-xs font-bold text-rose-600 dark:text-rose-400">
-                {cooldown > 0 ? `Code incorrect. Réessaie dans ${cooldown} s.` : 'Code incorrect.'}
+                {cooldown > 0 ? `Code incorrect. Réessayez dans ${cooldown} s.` : 'Code incorrect.'}
               </p>
             )}
             <div className="grid grid-cols-3 gap-2 max-w-[220px] mx-auto">
@@ -138,8 +138,8 @@ export const AppLockScreen: React.FC<AppLockScreenProps> = ({ onUnlock }) => {
           {confirmingReset ? (
             <div className="text-left bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 rounded-xl p-4">
               <p className="text-xs font-bold text-amber-800 dark:text-amber-300 mb-3">
-                Ceci désactive le verrou (biométrie + PIN) sur cet appareil. Tes données restent
-                intactes et protégées sur ton Drive — tu pourras réactiver un verrou à tout moment
+                Ceci désactive le verrou (biométrie + PIN) sur cet appareil. Vos données restent
+                intactes et protégées sur votre Drive — vous pourrez réactiver un verrou à tout moment
                 depuis Paramètres.
               </p>
               <div className="flex gap-2">

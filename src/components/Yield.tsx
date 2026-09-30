@@ -155,7 +155,7 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig }) => {
     <div className="space-y-6 animate-fade-in pb-20">
       <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
         <h2 className="text-2xl font-black text-slate-800 dark:text-slate-100 flex items-center gap-2 mb-1"><Coins className="w-6 h-6 text-indigo-600" /> Rendement réel</h2>
-        <p className="text-sm text-slate-500 dark:text-slate-400">« Acquis » = réellement gagné depuis le 1er janvier (règle des quinzaines pour les livrets). « Rythme » = ce que rapporteraient tes soldes actuels sur douze mois.</p>
+        <p className="text-sm text-slate-500 dark:text-slate-400">« Acquis » = réellement gagné depuis le 1er janvier (règle des quinzaines pour les livrets). « Rythme » = ce que rapporteraient vos soldes actuels sur douze mois.</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -178,7 +178,7 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig }) => {
           <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
           <div className="text-sm text-amber-800 dark:text-amber-300">
             <p className="font-black mb-1">Manque à gagner détecté</p>
-            <p>Tu as <b>{fmt(missed.idleCash)}</b> sur compte courant. En plaçant <b>{fmt(missed.placeable)}</b> sur tes livrets non pleins (jusqu'à {missed.bestRate}%), tu générerais environ <b>{fmt(missed.extra)}/an</b> d'intérêts supplémentaires.</p>
+            <p>Vous avez <b>{fmt(missed.idleCash)}</b> sur compte courant. En plaçant <b>{fmt(missed.placeable)}</b> sur vos livrets non pleins (jusqu'à {missed.bestRate}%), vous généreriez environ <b>{fmt(missed.extra)}/an</b> d'intérêts supplémentaires.</p>
           </div>
         </div>
       )}
@@ -210,7 +210,7 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig }) => {
                   <td className="px-6 py-3 text-right font-mono text-slate-500 dark:text-slate-400">{fmt(r.annual)}</td>
                 </tr>
               ))}
-              {rows.length === 0 && <tr><td colSpan={5} className="px-6 py-8 text-center text-slate-500 dark:text-slate-400 italic">Aucun compte rémunéré (renseigne un taux d'intérêt sur tes comptes).</td></tr>}
+              {rows.length === 0 && <tr><td colSpan={5} className="px-6 py-8 text-center text-slate-500 dark:text-slate-400 italic">Aucun compte rémunéré (renseignez un taux d'intérêt sur vos comptes).</td></tr>}
             </tbody>
           </table>
         </div>
@@ -274,8 +274,8 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig }) => {
         <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
           <div className="p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800">
             <div>
-              <h3 className="font-black text-slate-800 dark:text-slate-100 flex items-center gap-2"><Landmark className="w-5 h-5 text-indigo-600" /> Si tu retirais tes gains de {currentYear}</h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1"><strong>Rien à déclarer tant que tu ne retires rien</strong> : le PEA et l'Assurance Vie ne sont imposés qu'au moment d'un retrait (les prélèvements sociaux du fonds euros sont déjà retenus chaque année par l'assureur). Ce tableau estime le net que tu toucherais si tu retirais maintenant les gains acquis cette année.</p>
+              <h3 className="font-black text-slate-800 dark:text-slate-100 flex items-center gap-2"><Landmark className="w-5 h-5 text-indigo-600" /> Si vous retiriez vos gains de {currentYear}</h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1"><strong>Rien à déclarer tant que vous ne retirez rien</strong> : le PEA et l'Assurance Vie ne sont imposés qu'au moment d'un retrait (les prélèvements sociaux du fonds euros sont déjà retenus chaque année par l'assureur). Ce tableau estime le net que vous toucheriez si vous retiriez maintenant les gains acquis cette année.</p>
             </div>
             <button onClick={exportFiscalCsv} className="flex items-center gap-2 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 px-4 py-2 rounded-xl font-bold text-sm flex-shrink-0"><FileDown className="w-4 h-4" /> Exporter (CSV)</button>
           </div>

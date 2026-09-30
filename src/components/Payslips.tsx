@@ -142,9 +142,9 @@ export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, 
       console.error('Analyse Gemini échouée', analysis.error);
       const code = analysis.error instanceof GeminiError ? analysis.error.code : undefined;
       const error = code === 'OVERLOADED'
-        ? "Gemini est très sollicité en ce moment (plusieurs tentatives et modèles essayés automatiquement). Réessaie dans quelques minutes, ou saisis les montants à la main."
+        ? "Gemini est très sollicité en ce moment (plusieurs tentatives et modèles essayés automatiquement). Réessayez dans quelques minutes, ou saisissez les montants à la main."
         : code === 'AUTH'
-          ? "Gemini refuse la clé API : vérifie-la dans les Paramètres."
+          ? "Gemini refuse la clé API : vérifiez-la dans les Paramètres."
           : "L'extraction automatique a échoué. Vous pouvez saisir les montants manuellement ci-dessous.";
       setDraft(d => d && ({ ...d, status: 'reviewing', error, errorDetail: describeError(analysis.error, analysis.blocked), retryable: code !== 'AUTH' }));
       return;
@@ -190,7 +190,7 @@ export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, 
       <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col sm:flex-row justify-between gap-4 sm:items-center">
         <div>
           <h2 className="text-2xl font-black text-slate-800 dark:text-slate-100 flex items-center gap-2"><FileText className="w-6 h-6 text-indigo-600" /> Fiches de paie</h2>
-          <p className="text-sm text-slate-500 dark:text-slate-400">Importe une fiche déjà présente sur ton Drive ; l'IA en extrait les montants clés.</p>
+          <p className="text-sm text-slate-500 dark:text-slate-400">Importez une fiche déjà présente sur votre Drive ; l'IA en extrait les montants clés.</p>
         </div>
         {!draft && (
           <button
@@ -210,10 +210,10 @@ export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, 
           <div className="text-sm text-amber-800 dark:text-amber-300">
             <p className="font-black mb-1">Configuration requise</p>
             <p>
-              {!pickerApiKey && !geminiApiKey && "Renseigne une clé API Picker et une clé API Gemini dans "}
-              {!pickerApiKey && geminiApiKey && "Renseigne une clé API Google Picker dans "}
-              {pickerApiKey && !geminiApiKey && "Renseigne une clé API Gemini dans "}
-              <span className="font-bold">Paramètres → Fiches de paie</span> pour importer et analyser tes fiches.
+              {!pickerApiKey && !geminiApiKey && "Renseignez une clé API Picker et une clé API Gemini dans "}
+              {!pickerApiKey && geminiApiKey && "Renseignez une clé API Google Picker dans "}
+              {pickerApiKey && !geminiApiKey && "Renseignez une clé API Gemini dans "}
+              <span className="font-bold">Paramètres → Fiches de paie</span> pour importer et analyser vos fiches.
             </p>
           </div>
         </div>
@@ -274,7 +274,7 @@ export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, 
                   </span>
                 </p>
               )}
-              <p className="text-[11px] text-slate-500 dark:text-slate-400 -mt-1">Vérifie et corrige les valeurs avant d'enregistrer — l'extraction automatique peut se tromper.</p>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 -mt-1">Vérifiez et corrigez les valeurs avant d'enregistrer — l'extraction automatique peut se tromper.</p>
               {/* key={status} : les champs numériques sont non contrôlés (defaultValue, parsés au
                   blur pour accepter la virgule française) — le remontage à l'arrivée des données
                   extraites recharge leurs valeurs initiales. */}

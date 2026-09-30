@@ -51,10 +51,10 @@ export const Donations: React.FC<DonationsProps> = ({ donations, onUpdate, picke
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     const organization = draft.organization.trim();
-    if (!organization) { setError("Indique l'association."); return; }
+    if (!organization) { setError("Indiquez l'association."); return; }
     const amount = parseFrenchNumber(draft.amount);
-    if (amount === null || amount <= 0) { setError('Saisis un montant supérieur à 0.'); return; }
-    if (!draft.date) { setError('Indique la date du don.'); return; }
+    if (amount === null || amount <= 0) { setError('Saisissez un montant supérieur à 0.'); return; }
+    if (!draft.date) { setError('Indiquez la date du don.'); return; }
     const entry: Omit<Donation, 'id'> = {
       date: draft.date, amount, organization, rate: draft.rate,
       receiptReceived: draft.receiptReceived || !!draft.receiptFileId,
@@ -85,7 +85,7 @@ export const Donations: React.FC<DonationsProps> = ({ donations, onUpdate, picke
   const toggleReceipt = (id: string) => onUpdate(donations.map(d => d.id === id ? { ...d, receiptReceived: !d.receiptReceived } : d));
 
   const attachReceipt = async () => {
-    if (!pickerApiKey) { setError('Renseigne la clé API Google Picker dans les Paramètres pour joindre un reçu.'); return; }
+    if (!pickerApiKey) { setError('Renseignez la clé API Google Picker dans les Paramètres pour joindre un reçu.'); return; }
     setPickerBusy(true);
     try {
       const picked = await openDrivePicker(pickerApiKey);
@@ -118,7 +118,7 @@ export const Donations: React.FC<DonationsProps> = ({ donations, onUpdate, picke
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h2 className="text-2xl font-black text-slate-800 dark:text-slate-100 flex items-center gap-2 mb-1"><HandHeart className="w-6 h-6 text-indigo-600" /> Dons</h2>
-            <p className="text-sm text-slate-500 dark:text-slate-400">Note tes dons au fil de l'année : au printemps, tout est prêt pour la déclaration. Rappel début avril.</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400">Notez vos dons au fil de l'année : au printemps, tout est prêt pour la déclaration. Rappel début avril.</p>
           </div>
           <select value={year} onChange={e => setYear(Number(e.target.value))} aria-label="Année" className="p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold text-slate-700 dark:text-slate-200">
             {years.map(y => <option key={y} value={y}>{y}</option>)}
@@ -150,7 +150,7 @@ export const Donations: React.FC<DonationsProps> = ({ donations, onUpdate, picke
         )}
         <p className="mt-3 text-[11px] text-slate-500 dark:text-slate-400 flex items-start gap-1">
           <Info className="w-3 h-3 flex-shrink-0 mt-0.5" />
-          Estimation : 75 % jusqu'à {fmt(DONATION_75_CEILING)} de dons aux organismes d'aide aux personnes en difficulté (l'excédent passe à 66 %), 66 % pour les autres, dans la limite de 20 % du revenu imposable. Les cases et plafonds peuvent changer chaque année : vérifie sur impots.gouv.
+          Estimation : 75 % jusqu'à {fmt(DONATION_75_CEILING)} de dons aux organismes d'aide aux personnes en difficulté (l'excédent passe à 66 %), 66 % pour les autres, dans la limite de 20 % du revenu imposable. Les cases et plafonds peuvent changer chaque année : vérifiez sur impots.gouv.
         </p>
         {rows.length > 0 && (
           <button onClick={exportCsv} className="mt-4 flex items-center gap-2 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 px-4 py-2 rounded-xl font-bold text-sm"><FileDown className="w-4 h-4" /> Exporter {year} (CSV)</button>

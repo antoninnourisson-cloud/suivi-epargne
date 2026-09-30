@@ -131,7 +131,7 @@ export const History: React.FC<HistoryProps> = ({ history, expensesHistory }) =>
       {tab === 'charges' && (
         expensesSorted.length < 2 ? (
           <div className="text-center py-16 text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700">
-            L'historique des charges se construit au fil des mois, à mesure que tu ajustes tes dépenses fixes.
+            L'historique des charges se construit au fil des mois, à mesure que vous ajustez vos dépenses fixes.
           </div>
         ) : (
           <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm h-96">

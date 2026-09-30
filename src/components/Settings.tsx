@@ -70,7 +70,7 @@ export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parent
       await enableLock();
       setBiometricOn(true);
     } catch {
-      setLockError("Activation annulée ou échouée. Réessaie, ou vérifie que Face ID / l'empreinte est configuré sur cet appareil.");
+      setLockError("Activation annulée ou échouée. Réessayez, ou vérifiez que Face ID / l'empreinte est configuré sur cet appareil.");
     }
   };
 
@@ -150,12 +150,12 @@ export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parent
           {pendingImport && (
             <div className="mt-4 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-xl p-4">
               <p className="text-xs font-black text-rose-800 dark:text-rose-300 flex items-center gap-2 mb-2">
-                <AlertTriangle className="w-4 h-4 flex-shrink-0" /> Remplacer toutes tes données ?
+                <AlertTriangle className="w-4 h-4 flex-shrink-0" /> Remplacer toutes vos données ?
               </p>
               <p className="text-[11px] text-rose-700 dark:text-rose-300 mb-3 leading-relaxed">
-                « {pendingImport.name} » va écraser <strong>l'intégralité</strong> de tes comptes, mouvements,
+                « {pendingImport.name} » va écraser <strong>l'intégralité</strong> de vos comptes, mouvements,
                 objectifs, fiches de paie et réglages actuels, puis être synchronisé sur Drive. Cette action
-                est irréversible — pense à faire un export avant si tu as un doute.
+                est irréversible — pensez à faire un export avant en cas de doute.
               </p>
               <div className="flex gap-2">
                 <button onClick={confirmImport} className="flex-1 py-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-black">Remplacer mes données</button>
@@ -358,7 +358,7 @@ export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parent
               </div>
             </div>
             <p className="text-[11px] text-slate-500 dark:text-slate-400 -mt-2">
-              Sert à t'alerter si ton revenu approche du plafond d'éligibilité au LEP. Le montant est révisé chaque année ; le vrai critère reste le RFR de ton avis d'imposition.
+              Sert à vous alerter si votre revenu approche du plafond d'éligibilité au LEP. Le montant est révisé chaque année ; le vrai critère reste le RFR de votre avis d'imposition.
             </p>
           </div>
         </div>

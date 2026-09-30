@@ -150,11 +150,11 @@ const handleAuthStart = async (req: Request, env: Env, url: URL): Promise<Respon
 const handleAuthCallback = async (req: Request, env: Env, url: URL): Promise<Response> => {
   const state = url.searchParams.get('state');
   const stored = state ? await env.STORE.get<{ returnUrl: string }>(`state:${state}`, 'json') : null;
-  if (!state || !stored) return htmlPage(env, 'Connexion expirée', 'Cette tentative de connexion a expiré ou a déjà été utilisée. Relance la connexion depuis l’app.');
+  if (!state || !stored) return htmlPage(env, 'Connexion expirée', 'Cette tentative de connexion a expiré ou a déjà été utilisée. Relancez la connexion depuis l’app.');
   await env.STORE.delete(`state:${state}`);
 
   if (url.searchParams.get('error')) {
-    return htmlPage(env, 'Connexion annulée', 'La connexion Google a été annulée. Tu peux réessayer depuis l’app.');
+    return htmlPage(env, 'Connexion annulée', 'La connexion Google a été annulée. Vous pouvez réessayer depuis l’app.');
   }
   const code = url.searchParams.get('code');
   if (!code) return htmlPage(env, 'Connexion impossible', 'Réponse de Google incomplète.');
@@ -164,24 +164,24 @@ const handleAuthCallback = async (req: Request, env: Env, url: URL): Promise<Res
     tokens = await exchangeCode(code, env.GOOGLE_CLIENT_ID, env.GOOGLE_CLIENT_SECRET, `${url.origin}/auth/callback`);
   } catch (e) {
     console.error('code exchange failed', e);
-    return htmlPage(env, 'Connexion impossible', 'Google a refusé l’échange du code. Vérifie la configuration du client OAuth (URI de redirection, secret).', 502);
+    return htmlPage(env, 'Connexion impossible', 'Google a refusé l’échange du code. Vérifiez la configuration du client OAuth (URI de redirection, secret).', 502);
   }
 
   if (!tokens.id_token) return htmlPage(env, 'Connexion impossible', 'Identité Google manquante.', 502);
   const identity = decodeIdToken(tokens.id_token);
   if (!identity.email_verified || !isEmailAllowed(identity.email, env)) {
     if (tokens.refresh_token) await revokeToken(tokens.refresh_token);
-    return htmlPage(env, 'Compte non autorisé', 'Ce serveur est réservé à son propriétaire. Connecte-toi avec le compte Google configuré.', 403);
+    return htmlPage(env, 'Compte non autorisé', 'Ce serveur est réservé à son propriétaire. Connectez-vous avec le compte Google configuré.', 403);
   }
   // Consentement granulaire : l'utilisateur peut décocher Drive. Sans lui l'app est inutilisable.
   if (!(tokens.scope || '').includes('drive.file')) {
-    return htmlPage(env, 'Autorisation Drive manquante', 'L’accès à Google Drive est indispensable : relance la connexion en cochant toutes les autorisations.');
+    return htmlPage(env, 'Autorisation Drive manquante', 'L’accès à Google Drive est indispensable : relancez la connexion en cochant toutes les autorisations.');
   }
 
   const existing = await env.STORE.get<UserRecord>(`user:${identity.sub}`, 'json');
   const refreshToken = tokens.refresh_token;
   if (!refreshToken && !existing) {
-    return htmlPage(env, 'Connexion incomplète', 'Google n’a pas fourni de jeton de longue durée. Relance la connexion.', 502);
+    return htmlPage(env, 'Connexion incomplète', 'Google n’a pas fourni de jeton de longue durée. Relancez la connexion.', 502);
   }
   if (refreshToken) {
     await env.STORE.put(`user:${identity.sub}`, JSON.stringify({

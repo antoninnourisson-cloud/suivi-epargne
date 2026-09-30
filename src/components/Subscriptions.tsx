@@ -57,10 +57,10 @@ export const Subscriptions: React.FC<SubscriptionsProps> = ({ subscriptions, onU
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     const name = form.name.trim();
-    if (!name) { setError('Donne un nom à l\'abonnement.'); return; }
+    if (!name) { setError('Donnez un nom à l\'abonnement.'); return; }
     const amount = parseFrenchNumber(form.amount);
-    if (amount === null || amount <= 0) { setError('Saisis un montant supérieur à 0.'); return; }
-    if (!form.anchorDate) { setError('Indique la date d\'un prélèvement.'); return; }
+    if (amount === null || amount <= 0) { setError('Saisissez un montant supérieur à 0.'); return; }
+    if (!form.anchorDate) { setError('Indiquez la date d\'un prélèvement.'); return; }
     const entry: Omit<Subscription, 'id' | 'active'> = {
       name, amount, debitAccount: form.debitAccount.trim(), frequency: form.frequency, anchorDate: form.anchorDate,
     };
@@ -100,7 +100,7 @@ export const Subscriptions: React.FC<SubscriptionsProps> = ({ subscriptions, onU
           <span>
             Rappel la veille du prélèvement, ou une semaine avant à partir de {fmt(SUBSCRIPTION_BIG_AMOUNT)}.
             {isBackendEnabled() ? ' Les notifications doivent être activées sur l\'appareil (Paramètres).' : ' Les rappels nécessitent le serveur de notifications.'}
-            {' '}Tes soldes ne sont jamais modifiés.
+            {' '}Vos soldes ne sont jamais modifiés.
           </span>
         </p>
         {active.length > 0 && (

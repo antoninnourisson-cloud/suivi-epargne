@@ -58,7 +58,7 @@ export const computeReminders = (data: GlobalAppData, now: Date, appUrl: string)
       key: `recurring:${r.id}:${monthKey}`,
       message: {
         title: `Échéance : ${r.label}`,
-        body: `${r.type === 'IN' ? '+' : '-'}${eur(r.amount)} sur ${account?.name ?? 'ton compte'} — à enregistrer dans l'app.`,
+        body: `${r.type === 'IN' ? '+' : '-'}${eur(r.amount)} sur ${account?.name ?? 'votre compte'} — à enregistrer dans l'app.`,
         url: link('dashboard'),
         tag: `recurring-${r.id}`,
       },
@@ -72,7 +72,7 @@ export const computeReminders = (data: GlobalAppData, now: Date, appUrl: string)
       key: `rates:${stale.revision.key}`,
       message: {
         title: 'Taux réglementés révisés',
-        body: `Révision du ${stale.revision.label} : pense à mettre à jour ${stale.accounts.map(a => a.name).join(', ')}.`,
+        body: `Révision du ${stale.revision.label} : pensez à mettre à jour ${stale.accounts.map(a => a.name).join(', ')}.`,
         url: link('accounts'),
         tag: 'rate-revision',
       },
@@ -87,7 +87,7 @@ export const computeReminders = (data: GlobalAppData, now: Date, appUrl: string)
         key: `parental:${now.getFullYear()}`,
         message: {
           title: 'Intérêts de fin d’année',
-          body: `Les intérêts acquis cette année sur la part de tes parents représentent environ ${eur(totalAnnualParental)}.`,
+          body: `Les intérêts acquis cette année sur la part de vos parents représentent environ ${eur(totalAnnualParental)}.`,
           url: link('parental'),
           tag: 'parental-interest',
         },
@@ -113,7 +113,7 @@ export const computeReminders = (data: GlobalAppData, now: Date, appUrl: string)
         key: `stale:${latest}`,
         message: {
           title: 'Soldes à actualiser',
-          body: `Aucune mise à jour de tes comptes depuis ${days} jours.`,
+          body: `Aucune mise à jour de vos comptes depuis ${days} jours.`,
           url: link('update'),
           tag: 'stale-balances',
         },
@@ -191,7 +191,7 @@ export const computeReminders = (data: GlobalAppData, now: Date, appUrl: string)
     const month = MONTH_NAMES[prevEnd.getMonth()];
     const pay = computeMonthlyPay(data);
     const parts = [
-      `${saved >= 0 ? '+' : ''}${eur(saved)} placés${plan > 0 ? ` (objectif ${eur(plan)})` : ''}${pay > 0 ? `, soit ${Math.round((saved / pay) * 100)} % de ta paie` : ''}`,
+      `${saved >= 0 ? '+' : ''}${eur(saved)} placés${plan > 0 ? ` (objectif ${eur(plan)})` : ''}${pay > 0 ? `, soit ${Math.round((saved / pay) * 100)} % de votre paie` : ''}`,
       `épargne ${eur(ownedEnd)} (${pct >= 0 ? '+' : ''}${pct.toLocaleString('fr-FR', { maximumFractionDigits: 1 })} %)`,
       ...(interest >= 1 ? [`≈ ${eur(interest)} d'intérêts acquis`] : []),
     ];
@@ -215,8 +215,8 @@ export const computeReminders = (data: GlobalAppData, now: Date, appUrl: string)
       out.push({
         key: `annual-statement:${now.getFullYear()}`,
         message: {
-          title: 'Relevés annuels de tes placements',
-          body: `Reporte la valeur au 31/12 et les versements de ${waiting.map(a => a.name).join(', ')} : les plus-values restent justes.`,
+          title: 'Relevés annuels de vos placements',
+          body: `Reportez la valeur au 31/12 et les versements de ${waiting.map(a => a.name).join(', ')} : les plus-values restent justes.`,
           url: link('update'),
           tag: 'annual-statement',
         },

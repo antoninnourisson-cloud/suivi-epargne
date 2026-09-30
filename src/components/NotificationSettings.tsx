@@ -29,10 +29,10 @@ export const NotificationSettings: React.FC = () => {
       setMessage({
         kind: 'error',
         text: code === 'PERMISSION_DENIED'
-          ? 'Autorisation refusée. Tu peux la réactiver dans les réglages du navigateur pour ce site.'
+          ? 'Autorisation refusée. Vous pouvez la réactiver dans les réglages du navigateur pour ce site.'
           : code === 'SESSION_EXPIRED'
-            ? 'Session expirée : reconnecte-toi puis réessaie.'
-            : 'L’opération a échoué. Vérifie ta connexion et réessaie.',
+            ? 'Session expirée : reconnectez-vous puis réessayez.'
+            : 'L’opération a échoué. Vérifiez votre connexion et réessayez.',
       });
     } finally {
       setBusy(false);
@@ -68,7 +68,7 @@ export const NotificationSettings: React.FC = () => {
       {state === 'denied' && (
         <p className="text-xs font-bold text-amber-700 dark:text-amber-300 flex items-start gap-2">
           <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-          Les notifications sont bloquées pour ce site. Réautorise-les dans les réglages du navigateur (icône à gauche de l’adresse), puis reviens ici.
+          Les notifications sont bloquées pour ce site. Réautorisez-les dans les réglages du navigateur (icône à gauche de l’adresse), puis revenez ici.
         </p>
       )}
 

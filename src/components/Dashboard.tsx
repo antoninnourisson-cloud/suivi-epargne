@@ -416,7 +416,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
       {daysSinceLastUpdate !== null && daysSinceLastUpdate >= 21 && (
         <div className="flex items-center gap-3 p-3 rounded-xl border bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-sm font-bold">
           <Clock className="w-4 h-4 flex-shrink-0" />
-          Aucune actualisation de solde depuis {daysSinceLastUpdate} jours — pense à mettre tes comptes à jour.
+          Aucune actualisation de solde depuis {daysSinceLastUpdate} jours — pensez à mettre vos comptes à jour.
         </div>
       )}
 
@@ -436,10 +436,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
           <ShieldAlert className="w-4 h-4 flex-shrink-0 mt-0.5" />
           <div>
             {lepStatus.status === 'exceeded'
-              ? <>Ton revenu estimé ({fmtEUR(lepStatus.estimatedRfr)}) dépasse le plafond LEP ({fmtEUR(lepStatus.ceiling)}) : ton éligibilité pourrait ne pas être reconduite au prochain contrôle de ta banque.</>
-              : <>Ton revenu estimé ({fmtEUR(lepStatus.estimatedRfr)}) approche du plafond LEP ({fmtEUR(lepStatus.ceiling)}) — il reste {lepStatus.marginPct.toLocaleString('fr-FR', { maximumFractionDigits: lepStatus.marginPct < 1 ? 1 : 0 })} % de marge.</>}
+              ? <>Votre revenu estimé ({fmtEUR(lepStatus.estimatedRfr)}) dépasse le plafond LEP ({fmtEUR(lepStatus.ceiling)}) : votre éligibilité pourrait ne pas être reconduite au prochain contrôle de votre banque.</>
+              : <>Votre revenu estimé ({fmtEUR(lepStatus.estimatedRfr)}) approche du plafond LEP ({fmtEUR(lepStatus.ceiling)}) — il reste {lepStatus.marginPct.toLocaleString('fr-FR', { maximumFractionDigits: lepStatus.marginPct < 1 ? 1 : 0 })} % de marge.</>}
             <span className="block font-normal text-[11px] mt-1 opacity-80">
-              Estimation à partir de ton net imposable. Le vrai critère est le Revenu Fiscal de Référence du foyer, sur ton avis d'imposition — à vérifier là-bas avant toute décision.
+              Estimation à partir de votre net imposable. Le vrai critère est le Revenu Fiscal de Référence du foyer, sur votre avis d'imposition — à vérifier là-bas avant toute décision.
             </span>
           </div>
         </div>
@@ -449,7 +449,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
         <div className="flex items-start gap-3 p-3 rounded-xl border bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-900 text-amber-800 dark:text-amber-300 text-sm font-bold">
           <Percent className="w-4 h-4 flex-shrink-0 mt-0.5" />
           <div className="flex-1 min-w-0">
-            Les taux réglementés ont été révisés au {staleRates.revision.label}. Tu n'as pas encore mis à jour :{' '}
+            Les taux réglementés ont été révisés au {staleRates.revision.label}. Vous n'avez pas encore mis à jour :{' '}
             {staleRates.accounts.map(a => a.name).join(', ')} — un taux périmé fausse le rendement, la projection et la stratégie de placement.
           </div>
           <button onClick={dismissRateReminder} className="text-xs font-bold underline flex-shrink-0 hover:opacity-70">
@@ -461,7 +461,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
       {parentalYearEndReminder !== null && (
         <div className="flex items-center gap-3 p-3 rounded-xl border bg-indigo-50 dark:bg-indigo-950/40 border-indigo-200 dark:border-indigo-900 text-indigo-800 dark:text-indigo-300 text-sm font-bold">
           <PiggyBank className="w-4 h-4 flex-shrink-0" />
-          Rappel de fin d'année : les intérêts générés cette année par la part de tes parents représentent environ {fmtEUR(parentalYearEndReminder)} — normalement à toi d'après votre accord (le capital, lui, reste intouchable).
+          Rappel de fin d'année : les intérêts générés cette année par la part de vos parents représentent environ {fmtEUR(parentalYearEndReminder)} — normalement à vous d'après votre accord (le capital, lui, reste intouchable).
         </div>
       )}
 
@@ -484,7 +484,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
               <div key={a.id} className={`flex items-center gap-3 p-3 rounded-xl border text-sm font-bold ${full ? 'bg-rose-50 border-rose-200 text-rose-700 dark:bg-rose-950/40 dark:border-rose-800 dark:text-rose-300' : 'bg-amber-50 border-amber-200 text-amber-800 dark:bg-amber-950/40 dark:border-amber-800 dark:text-amber-300'}`}>
                 <AlertTriangle className="w-4 h-4 flex-shrink-0" />
                 {full
-                  ? <span>{a.name} ({a.type}) est au plafond ({formatEUR(a.ceiling)}). Redirige tes prochains versements ailleurs.</span>
+                  ? <span>{a.name} ({a.type}) est au plafond ({formatEUR(a.ceiling)}). Redirigez vos prochains versements ailleurs.</span>
                   : <span>{a.name} ({a.type}) est rempli à {a.pct.toFixed(0)}% — il reste {formatEUR(a.remaining, 0)} avant le plafond.</span>}
               </div>
             );
@@ -532,9 +532,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
             )}
             <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-2">
               {!hasPlan ? '' : done ? 'Objectif du mois atteint. '
-                : monthSaved < 0 ? `Tu as plus retiré que versé ce mois-ci (${fmtEUR(monthSaved)}). `
+                : monthSaved < 0 ? `Vous avez plus retiré que versé ce mois-ci (${fmtEUR(monthSaved)}). `
                 : `Reste ${fmtEUR(plan - monthSaved)} à placer, ${daysLeft} jour${daysLeft > 1 ? 's' : ''} avant la fin du mois. `}
-              Versements moins retraits sur tes comptes d'épargne, hors variations de valeur.
+              Versements moins retraits sur vos comptes d'épargne, hors variations de valeur.
             </p>
             {monthlyPay > 0 && (
               <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-700">
@@ -557,7 +557,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
                     );
                   })}
                 </div>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">Part de ta paie actuelle ({fmtEUR(monthlyPay)}) mise de côté chaque mois. Mois en cours en clair, retraits nets en rouge.</p>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">Part de votre paie actuelle ({fmtEUR(monthlyPay)}) mise de côté chaque mois. Mois en cours en clair, retraits nets en rouge.</p>
               </div>
             )}
           </div>
@@ -592,7 +592,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
                 ? <TrendingDown className="w-4 h-4 flex-shrink-0 mt-0.5" />
                 : <TrendingUp className="w-4 h-4 flex-shrink-0 mt-0.5" />}
               <span>
-                Ton rythme d'épargne a {projection.drift.changeRatio < 0 ? 'ralenti' : 'accéléré'} de {Math.abs(Math.round(projection.drift.changeRatio * 100))}%
+                Votre rythme d'épargne a {projection.drift.changeRatio < 0 ? 'ralenti' : 'accéléré'} de {Math.abs(Math.round(projection.drift.changeRatio * 100))}%
                 par rapport au trimestre précédent ({fmtEUR(projection.drift.previousMonthlyRate)}/mois → {fmtEUR(projection.monthlyRate)}/mois).
               </span>
             </div>

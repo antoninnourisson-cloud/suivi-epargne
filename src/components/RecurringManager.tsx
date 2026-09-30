@@ -30,9 +30,9 @@ export const RecurringManager: React.FC<RecurringManagerProps> = ({ accounts, re
   const add = (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    if (!accountId) { setError('Choisis un compte.'); return; }
+    if (!accountId) { setError('Choisissez un compte.'); return; }
     const value = safeNumber(amount, 0);
-    if (value <= 0) { setError('Saisis un montant supérieur à 0.'); return; }
+    if (value <= 0) { setError('Saisissez un montant supérieur à 0.'); return; }
     const dayOfMonth = Math.round(safeNumber(day, 0));
     if (dayOfMonth < 1 || dayOfMonth > 31) { setError('Le jour doit être compris entre 1 et 31.'); return; }
     const next: RecurringMovement = {
@@ -58,7 +58,7 @@ export const RecurringManager: React.FC<RecurringManagerProps> = ({ accounts, re
     <div className="space-y-6">
       <p className="text-xs text-slate-500 dark:text-slate-400 flex items-start gap-2">
         <Repeat className="w-4 h-4 flex-shrink-0 mt-px text-indigo-500" />
-        À l'échéance, le tableau de bord te proposera d'enregistrer le mouvement en un clic. Rien n'est jamais ajouté sans ta confirmation.
+        À l'échéance, le tableau de bord vous proposera d'enregistrer le mouvement en un clic. Rien n'est jamais ajouté sans votre confirmation.
       </p>
 
       {recurringMovements.length > 0 && (
