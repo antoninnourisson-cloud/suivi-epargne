@@ -527,9 +527,11 @@ const App: React.FC = () => {
     addToast({ message: 'Retour à l\'estimation théorique', kind: 'success' });
   };
 
-  const handleQuickAdd = (accountId: string, amount: number, type: 'IN' | 'OUT', label: string, date: string) => {
+  // Renvoie l'id du mouvement créé (la liste des virements de paie en a besoin pour
+  // pouvoir l'annuler).
+  const handleQuickAdd = (accountId: string, amount: number, type: 'IN' | 'OUT', label: string, date: string): string | undefined => {
     const account = data.accounts.find(a => a.id === accountId);
-    if (!account) return;
+    if (!account) return undefined;
     const delta = type === 'IN' ? amount : -amount;
     const newOwned = round2(account.ownedAmount + delta);
     const newTotal = round2(newOwned + account.parentalCapital);
@@ -543,6 +545,26 @@ const App: React.FC = () => {
       : a));
 
     addToast({ message: `${label} — ${account.name}`, kind: 'success' });
+    return movement.id;
+  };
+
+  // Annule un versement enregistré depuis la liste des virements de paie : retire le
+  // mouvement et rétablit solde et versements cumulés.
+  const handleCancelPayDeposit = (accountId: string, movementId: string) => {
+    data.setAccounts(prev => prev.map(a => {
+      if (a.id !== accountId) return a;
+      const m = (a.movements || []).find(x => x.id === movementId);
+      if (!m) return a;
+      const delta = m.type === 'IN' ? -m.amount : m.amount;
+      const owned = round2(a.ownedAmount + delta);
+      return {
+        ...a,
+        ownedAmount: owned,
+        totalAmount: round2(owned + a.parentalCapital),
+        totalDeposits: a.totalDeposits !== undefined ? Math.max(0, round2(a.totalDeposits + delta)) : undefined,
+        movements: (a.movements || []).filter(x => x.id !== movementId),
+      };
+    }));
   };
 
   // --- RENDU ---
@@ -711,6 +733,10 @@ const App: React.FC = () => {
                 onClearActivePayslip={handleClearActivePayslip}
                 subscriptions={data.subscriptions}
                 onOpenSubscriptions={() => setView('subscriptions')}
+                payChecklist={data.payChecklist}
+                onPayChecklistChange={data.setPayChecklist}
+                onRecordPayDeposit={(accountId, amount) => handleQuickAdd(accountId, amount, 'IN', 'Virement de paie', localTodayISO())}
+                onCancelPayDeposit={handleCancelPayDeposit}
                 paydayDay={data.paydayDay}
                 setPaydayDay={data.setPaydayDay}
                 paydayAmount={data.paydayAmount}

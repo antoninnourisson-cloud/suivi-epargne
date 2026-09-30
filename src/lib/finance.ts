@@ -785,6 +785,7 @@ export const computeMonthlySavingsCapacity = (data: GlobalAppData): number => {
 };
 
 export interface PlacementStep {
+  accountId?: string;     // absent pour la suggestion « Ouvrir un PEA/AV »
   accountName: string;
   type: AccountType;
   rate?: number;
@@ -833,7 +834,7 @@ export const computePlacementStrategy = (
     const availableSpace = Math.max(0, ceiling - acc.totalAmount);
     if (availableSpace > 0) {
       const amountAllocated = Math.min(remainingMoney, availableSpace);
-      steps.push({ accountName: acc.name, type: acc.type, rate: acc.interestRate, fillAmount: amountAllocated, isFullAfter: amountAllocated >= availableSpace, isLiquid: true });
+      steps.push({ accountId: acc.id, accountName: acc.name, type: acc.type, rate: acc.interestRate, fillAmount: amountAllocated, isFullAfter: amountAllocated >= availableSpace, isLiquid: true });
       remainingMoney -= amountAllocated;
     }
   }
@@ -841,7 +842,7 @@ export const computePlacementStrategy = (
   if (remainingMoney > 0) {
     if (userOtherAccounts.length > 0) {
       const o = userOtherAccounts[0];
-      steps.push({ accountName: o.name, type: o.type, rate: o.interestRate, fillAmount: remainingMoney, isFullAfter: false, isLiquid: false });
+      steps.push({ accountId: o.id, accountName: o.name, type: o.type, rate: o.interestRate, fillAmount: remainingMoney, isFullAfter: false, isLiquid: false });
     } else {
       steps.push({ accountName: 'Ouvrir un PEA/AV', type: AccountType.AUTRE, rate: 0, fillAmount: remainingMoney, isFullAfter: false, isLiquid: false, alert: true });
     }

@@ -1,6 +1,7 @@
 // src/components/AssistantPilot.tsx
 import React, { useState, useMemo } from 'react';
-import { SavingsAccount, Expense, AccountType, FiscalConfig, WorkBenefits, PayslipRecord, Subscription } from '../types';
+import { SavingsAccount, Expense, AccountType, FiscalConfig, WorkBenefits, PayslipRecord, Subscription, PayChecklist as PayChecklistData } from '../types';
+import { PayChecklist } from './PayChecklist';
 import { computeIncome, computeMaturityCountdown, computePlacementStrategy, payslipSuperNet, subscriptionsAsExpenses, computePayTransfers } from '../lib/finance';
 import { parseISODate } from '../lib/dates';
 import { parseFrenchNumber, safeNumber } from '../lib/numbers';
@@ -37,6 +38,10 @@ interface AssistantPilotProps {
   onClearActivePayslip: () => void;
   subscriptions: Subscription[];
   onOpenSubscriptions: () => void;
+  payChecklist?: PayChecklistData;
+  onPayChecklistChange: (next: PayChecklistData | undefined) => void;
+  onRecordPayDeposit: (accountId: string, amount: number) => string | undefined;
+  onCancelPayDeposit: (accountId: string, movementId: string) => void;
   paydayDay?: number;
   setPaydayDay: (day: number | undefined) => void;
   paydayAmount?: number;
@@ -48,7 +53,7 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
   grossAnnual, setGrossAnnual, leisureBudget, setLeisureBudget, projectSavings, setProjectSavings,
   navigoBase, setNavigoBase, navigoRate, setNavigoRate, taxRateManual, setTaxRateManual,
   extraMonthlyIncome, setExtraMonthlyIncome, fiscalConfig, workBenefits, activePayslip, onClearActivePayslip,
-  subscriptions, onOpenSubscriptions, paydayDay, setPaydayDay, paydayAmount, setPaydayAmount
+  subscriptions, onOpenSubscriptions, payChecklist, onPayChecklistChange, onRecordPayDeposit, onCancelPayDeposit, paydayDay, setPaydayDay, paydayAmount, setPaydayAmount
 }) => {
   const [showDetails, setShowDetails] = useState(false);
   const removeWithUndo = useUndoableRemove();
@@ -435,29 +440,17 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm lg:col-span-2">
-               <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-1 flex items-center gap-2"><Wallet className="w-5 h-5 text-indigo-600" /> Ta paie, virement par virement</h3>
-               <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">Sur {formatEUR(effectiveSuperNetForCalc)} de paie. Ajoute une charge fixe par virement sortant (ex. « Revolut commun »), sans détailler ce qu'elle paie.</p>
-               <div className="space-y-2">
-                 {payTransfers.map((t, idx) => (
-                   <div key={t.label + idx} className="flex items-center justify-between text-sm p-2 rounded-lg bg-slate-50 dark:bg-slate-900">
-                     <span className="font-bold text-slate-700 dark:text-slate-200 min-w-0 truncate">{t.label}</span>
-                     <span className="font-mono font-bold text-slate-700 dark:text-slate-200 flex-shrink-0">{formatEUR(t.amount)}</span>
-                   </div>
-                 ))}
-                 <div className="flex items-center justify-between text-sm p-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900">
-                   <span className="font-black text-emerald-700 dark:text-emerald-300">Épargne{strategy.length > 0 && <span className="font-bold text-emerald-600/80 dark:text-emerald-400/80"> : {strategy.map(st => `${formatEUR(st.fillAmount)} ${st.alert ? 'à ouvrir (PEA/AV)' : st.accountName}`).join(', ')}</span>}</span>
-                   <span className="font-mono font-black text-emerald-700 dark:text-emerald-300 flex-shrink-0">{formatEUR(budgetData.totalToInvest)}</span>
-                 </div>
-               </div>
-               {budgetData.finalCapacity < 0 && (
-                 <p className="mt-3 text-xs font-bold text-rose-600 flex items-center gap-1"><Info className="w-3.5 h-3.5" /> Il manque {formatEUR(-budgetData.finalCapacity)} : les virements dépassent la paie.</p>
-               )}
-            </div>
-
-            <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
-               <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-2"><Target className="w-5 h-5 text-indigo-600" /> Placement ({Math.round(budgetData.totalToInvest).toLocaleString('fr-FR')} €)</h3>
-               <div className="space-y-3">{strategy.length > 0 ? strategy.map((step, idx) => (<div key={step.accountName + idx} className="flex items-center justify-between p-4 rounded-xl border-l-4 bg-indigo-50 border-indigo-600"><div className="flex items-center gap-4"><div className="w-6 h-6 rounded-full flex center items-center justify-center bg-indigo-600 text-white font-bold text-xs">{idx + 1}</div><div><p className="font-bold text-slate-800 dark:text-slate-100">{step.accountName}</p><p className="text-xs text-slate-500 dark:text-slate-400">{step.type} • Taux {step.rate}%</p></div></div><p className="text-xl font-black text-indigo-600">+ {formatEUR(step.fillAmount)}</p></div>)) : <p className="text-sm text-slate-500 dark:text-slate-400 italic">Rien à placer.</p>}</div>
+            <PayChecklist
+              superNet={effectiveSuperNetForCalc}
+              transfers={payTransfers}
+              steps={strategy}
+              totalToInvest={budgetData.totalToInvest}
+              shortfall={budgetData.finalCapacity < 0 ? -budgetData.finalCapacity : 0}
+              checklist={payChecklist}
+              onChange={onPayChecklistChange}
+              onRecordDeposit={onRecordPayDeposit}
+              onCancelDeposit={onCancelPayDeposit}
+            >
                {isBackendEnabled() && (
                  <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-700 space-y-3">
                    <p className="text-sm font-bold text-slate-700 dark:text-slate-200 flex items-center gap-2"><BellRing className="w-4 h-4 text-indigo-600" /> Rappel le jour de paie</p>
@@ -495,7 +488,7 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
                    </p>
                  </div>
                )}
-            </div>
+            </PayChecklist>
 
             <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-6">
                <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-2 flex items-center gap-2"><BarChart3 className="w-5 h-5 text-indigo-600" /> Remplissage Livrets</h3>

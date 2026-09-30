@@ -145,6 +145,22 @@ export interface Donation {
   note?: string;
 }
 
+// Virements de la paie du mois, cochés un par un (voir PayChecklist).
+export interface PayChecklistLine {
+  key: string;              // 't:<libellé>' (virement sortant) ou 's:<compte>' (épargne)
+  label: string;
+  amount: number;           // montant prévu
+  kind: 'transfer' | 'saving';
+  accountId?: string;       // épargne : compte de l'app crédité
+  detail?: string;
+}
+export interface PayChecklist {
+  month: string;            // 'YYYY-MM' : le plan est figé pour ce mois-là
+  lines: PayChecklistLine[];
+  // Virements faits : montant réel (peut différer du prévu) et mouvement enregistré.
+  done: Record<string, { amount: number; movementId?: string }>;
+}
+
 export interface PayslipRecord {
   id: string;
   // Fichier resté à sa place sur le Drive de l'utilisateur (sélectionné via Google
@@ -242,6 +258,7 @@ export interface GlobalAppData {
   recurringMovements?: RecurringMovement[];
   subscriptions?: Subscription[];
   donations?: Donation[];
+  payChecklist?: PayChecklist;
   // Fiche de paie actuellement utilisée comme référence exacte dans le Pilotage Budgétaire
   // (bascule le détail charges/impôt sur les vrais chiffres au lieu de la formule
   // théorique). `undefined` = mode estimation (comportement historique, pour simuler des
