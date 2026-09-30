@@ -8,6 +8,8 @@ import { Save, AlertTriangle, Settings as SettingsIcon, Plus, Trash2, Mail, Down
 import { isLockAvailable, isBiometricEnabled, isPinEnabled, enableLock, disableBiometric, enablePin, disablePin } from '../services/appLockService';
 import { safeNumber } from '../lib/numbers';
 import { NotificationSettings } from './NotificationSettings';
+import { formatEUR } from '../lib/format';
+import { NumberInput } from './NumberInput';
 
 interface SettingsProps {
   config: FiscalConfig;
@@ -291,9 +293,9 @@ export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parent
                    </label>
                    {localBenefits.navigo.active && (
                        <div className="space-y-2">
-                           <div><label className="text-[9px] font-bold text-slate-400 dark:text-slate-500">Prix Base Mensuel (€)</label><input type="number" value={localBenefits.navigo.basePrice} onChange={e => updateBenefit('navigo', 'basePrice', safeNumber(e.target.value, 0))} className="w-full p-2 rounded border border-indigo-200 dark:border-indigo-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100"/></div>
-                           <div><label className="text-[9px] font-bold text-slate-400 dark:text-slate-500">Remboursement (%)</label><input type="number" value={localBenefits.navigo.refundRate} onChange={e => updateBenefit('navigo', 'refundRate', safeNumber(e.target.value, 0))} className="w-full p-2 rounded border border-indigo-200 dark:border-indigo-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100"/></div>
-                           <p className="text-[9px] text-emerald-600 dark:text-emerald-400 text-right mt-1">+{(localBenefits.navigo.basePrice * localBenefits.navigo.refundRate / 100).toFixed(2)}€/mois (Gain)</p>
+                           <div><label className="text-[9px] font-bold text-slate-400 dark:text-slate-500">Prix Base Mensuel (€)</label><NumberInput value={localBenefits.navigo.basePrice} onChange={v => updateBenefit('navigo', 'basePrice', v)} className="w-full p-2 rounded border border-indigo-200 dark:border-indigo-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100" /></div>
+                           <div><label className="text-[9px] font-bold text-slate-400 dark:text-slate-500">Remboursement (%)</label><NumberInput value={localBenefits.navigo.refundRate} onChange={v => updateBenefit('navigo', 'refundRate', v)} className="w-full p-2 rounded border border-indigo-200 dark:border-indigo-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100" /></div>
+                           <p className="text-[9px] text-emerald-600 dark:text-emerald-400 text-right mt-1">+{formatEUR(localBenefits.navigo.basePrice * localBenefits.navigo.refundRate / 100, 2)}/mois (gain)</p>
                        </div>
                    )}
                </div>
@@ -306,9 +308,9 @@ export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parent
                    </label>
                    {localBenefits.mutuelle.active && (
                        <div className="space-y-2">
-                           <div><label className="text-[9px] font-bold text-slate-400 dark:text-slate-500">Coût Contrat Total (€)</label><input type="number" value={localBenefits.mutuelle.totalCost} onChange={e => updateBenefit('mutuelle', 'totalCost', safeNumber(e.target.value, 0))} className="w-full p-2 rounded border border-rose-200 dark:border-rose-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100"/></div>
-                           <div><label className="text-[9px] font-bold text-slate-400 dark:text-slate-500">Prise en charge Boite (%)</label><input type="number" value={localBenefits.mutuelle.employerRate} onChange={e => updateBenefit('mutuelle', 'employerRate', safeNumber(e.target.value, 0))} className="w-full p-2 rounded border border-rose-200 dark:border-rose-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100"/></div>
-                           <p className="text-[9px] text-rose-600 dark:text-rose-400 text-right mt-1">-{(localBenefits.mutuelle.totalCost * (1 - localBenefits.mutuelle.employerRate/100)).toFixed(2)}€/mois (Coût)</p>
+                           <div><label className="text-[9px] font-bold text-slate-400 dark:text-slate-500">Coût Contrat Total (€)</label><NumberInput value={localBenefits.mutuelle.totalCost} onChange={v => updateBenefit('mutuelle', 'totalCost', v)} className="w-full p-2 rounded border border-rose-200 dark:border-rose-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100" /></div>
+                           <div><label className="text-[9px] font-bold text-slate-400 dark:text-slate-500">Prise en charge Boite (%)</label><NumberInput value={localBenefits.mutuelle.employerRate} onChange={v => updateBenefit('mutuelle', 'employerRate', v)} className="w-full p-2 rounded border border-rose-200 dark:border-rose-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100" /></div>
+                           <p className="text-[9px] text-rose-600 dark:text-rose-400 text-right mt-1">−{formatEUR(localBenefits.mutuelle.totalCost * (1 - localBenefits.mutuelle.employerRate/100), 2)}/mois (coût)</p>
                        </div>
                    )}
                </div>
@@ -322,11 +324,11 @@ export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parent
                    {localBenefits.mealVouchers.active && (
                        <div className="space-y-2">
                            <div className="grid grid-cols-2 gap-2">
-                               <div><label className="text-[9px] font-bold text-slate-400 dark:text-slate-500">Valeur (€)</label><input type="number" value={localBenefits.mealVouchers.faceValue} onChange={e => updateBenefit('mealVouchers', 'faceValue', safeNumber(e.target.value, 0))} className="w-full p-2 rounded border border-emerald-200 dark:border-emerald-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100"/></div>
-                               <div><label className="text-[9px] font-bold text-slate-400 dark:text-slate-500">Jours/Mois</label><input type="number" value={localBenefits.mealVouchers.daysPerMonth} onChange={e => updateBenefit('mealVouchers', 'daysPerMonth', safeNumber(e.target.value, 0))} className="w-full p-2 rounded border border-emerald-200 dark:border-emerald-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100"/></div>
+                               <div><label className="text-[9px] font-bold text-slate-400 dark:text-slate-500">Valeur (€)</label><NumberInput value={localBenefits.mealVouchers.faceValue} onChange={v => updateBenefit('mealVouchers', 'faceValue', v)} className="w-full p-2 rounded border border-emerald-200 dark:border-emerald-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100" /></div>
+                               <div><label className="text-[9px] font-bold text-slate-400 dark:text-slate-500">Jours/Mois</label><NumberInput value={localBenefits.mealVouchers.daysPerMonth} onChange={v => updateBenefit('mealVouchers', 'daysPerMonth', v)} className="w-full p-2 rounded border border-emerald-200 dark:border-emerald-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100" /></div>
                            </div>
-                           <div><label className="text-[9px] font-bold text-slate-400 dark:text-slate-500">Prise en charge Boite (%)</label><input type="number" value={localBenefits.mealVouchers.employerRate} onChange={e => updateBenefit('mealVouchers', 'employerRate', safeNumber(e.target.value, 0))} className="w-full p-2 rounded border border-emerald-200 dark:border-emerald-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100"/></div>
-                           <p className="text-[9px] text-emerald-600 dark:text-emerald-400 text-right mt-1">-{(localBenefits.mealVouchers.faceValue * localBenefits.mealVouchers.daysPerMonth * (1 - localBenefits.mealVouchers.employerRate/100)).toFixed(2)}€/mois (Coût)</p>
+                           <div><label className="text-[9px] font-bold text-slate-400 dark:text-slate-500">Prise en charge Boite (%)</label><NumberInput value={localBenefits.mealVouchers.employerRate} onChange={v => updateBenefit('mealVouchers', 'employerRate', v)} className="w-full p-2 rounded border border-emerald-200 dark:border-emerald-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100" /></div>
+                           <p className="text-[9px] text-emerald-600 dark:text-emerald-400 text-right mt-1">−{formatEUR(localBenefits.mealVouchers.faceValue * localBenefits.mealVouchers.daysPerMonth * (1 - localBenefits.mealVouchers.employerRate/100), 2)}/mois (coût)</p>
                        </div>
                    )}
                </div>
@@ -339,20 +341,20 @@ export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parent
           <div className="space-y-4">
             <div>
               <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Charges Salariales (Ex: 0.2232)</label>
-              <input type="number" step="0.0001" value={localFiscal.salaryChargesRate} onChange={e => handleFiscalChange('salaryChargesRate', safeNumber(e.target.value, 0))} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded font-bold" />
+              <NumberInput value={localFiscal.salaryChargesRate} onChange={v => handleFiscalChange('salaryChargesRate', v)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded font-bold" />
             </div>
             <div>
               <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Abattement Forfaitaire Impôt (Ex: 0.10)</label>
-              <input type="number" step="0.01" value={localFiscal.standardAllowance} onChange={e => handleFiscalChange('standardAllowance', safeNumber(e.target.value, 0))} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded font-bold" />
+              <NumberInput value={localFiscal.standardAllowance} onChange={v => handleFiscalChange('standardAllowance', v)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded font-bold" />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Plafond RFR LEP (1 part)</label>
-                <input type="number" value={localFiscal.lepIncomeCeiling ?? ''} onChange={e => handleFiscalChange('lepIncomeCeiling', safeNumber(e.target.value, 0))} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded font-bold" />
+                <NumberInput value={localFiscal.lepIncomeCeiling ?? 0} onChange={v => handleFiscalChange('lepIncomeCeiling', v)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded font-bold" />
               </div>
               <div>
                 <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Parts fiscales</label>
-                <input type="number" step="0.5" value={localFiscal.lepHouseholdParts ?? 1} onChange={e => handleFiscalChange('lepHouseholdParts', safeNumber(e.target.value, 1))} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded font-bold" />
+                <NumberInput value={localFiscal.lepHouseholdParts ?? 1} onChange={v => handleFiscalChange('lepHouseholdParts', v)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded font-bold" />
               </div>
             </div>
             <p className="text-[10px] text-slate-400 dark:text-slate-500 -mt-2">
@@ -364,8 +366,8 @@ export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parent
         <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700">
           <h3 className="font-bold text-slate-800 dark:text-slate-100 mb-4 border-b border-slate-200 dark:border-slate-700 pb-2">📈 Plafonds Livrets (€)</h3>
           <div className="grid grid-cols-2 gap-4">
-              <div><label className="text-[10px] text-indigo-600 dark:text-indigo-300 font-black uppercase">Livret A</label><input type="number" value={localFiscal.ceilings.livretA} onChange={e => handleCeilingChange('livretA', safeNumber(e.target.value, 0))} className="w-full p-2 bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900 rounded font-bold text-slate-800 dark:text-slate-100" /></div>
-              <div><label className="text-[10px] text-rose-600 dark:text-rose-300 font-black uppercase">LEP</label><input type="number" value={localFiscal.ceilings.lep} onChange={e => handleCeilingChange('lep', safeNumber(e.target.value, 0))} className="w-full p-2 bg-rose-50 dark:bg-rose-950/40 border border-rose-100 dark:border-rose-900 rounded font-bold text-slate-800 dark:text-slate-100" /></div>
+              <div><label className="text-[10px] text-indigo-600 dark:text-indigo-300 font-black uppercase">Livret A</label><NumberInput value={localFiscal.ceilings.livretA} onChange={v => handleCeilingChange('livretA', v)} className="w-full p-2 bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900 rounded font-bold text-slate-800 dark:text-slate-100" /></div>
+              <div><label className="text-[10px] text-rose-600 dark:text-rose-300 font-black uppercase">LEP</label><NumberInput value={localFiscal.ceilings.lep} onChange={v => handleCeilingChange('lep', v)} className="w-full p-2 bg-rose-50 dark:bg-rose-950/40 border border-rose-100 dark:border-rose-900 rounded font-bold text-slate-800 dark:text-slate-100" /></div>
           </div>
         </div>
 
@@ -380,11 +382,11 @@ export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parent
                 <div key={index} className="flex items-center gap-4">
                     <div className="flex-1">
                         <label className="text-[8px] uppercase font-bold text-slate-400 dark:text-slate-500">Limite Sup (€)</label>
-                        <input type="number" value={bracket.limit === Infinity ? 999999999 : bracket.limit} onChange={e => updateBracket(index, 'limit', safeNumber(e.target.value, 0))} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded text-sm text-slate-800 dark:text-slate-100" />
+                        <NumberInput value={bracket.limit === Infinity ? 999999999 : bracket.limit} onChange={v => updateBracket(index, 'limit', v)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded text-sm text-slate-800 dark:text-slate-100" />
                     </div>
                     <div className="w-32">
                         <label className="text-[8px] uppercase font-bold text-slate-400 dark:text-slate-500">Taux (0.11)</label>
-                        <input type="number" step="0.01" value={bracket.rate} onChange={e => updateBracket(index, 'rate', safeNumber(e.target.value, 0))} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded text-sm font-bold text-indigo-600 dark:text-indigo-300" />
+                        <NumberInput value={bracket.rate} onChange={v => updateBracket(index, 'rate', v)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded text-sm font-bold text-indigo-600 dark:text-indigo-300" />
                     </div>
                     <button onClick={() => removeBracket(index)} className="mt-4 p-2 text-slate-300 hover:text-rose-500"><Trash2 className="w-4 h-4" /></button>
                 </div>

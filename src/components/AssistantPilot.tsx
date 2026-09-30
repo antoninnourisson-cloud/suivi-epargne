@@ -7,6 +7,7 @@ import { parseFrenchNumber, safeNumber } from '../lib/numbers';
 import { NumberInput } from './NumberInput';
 import { isBackendEnabled } from '../services/backendService';
 import { Calculator, TrendingUp, Target, Lock, Unlock, Info, Plus, Trash2, Hourglass, Coins, BarChart3, X, Check, FileCheck2, Wand2, BellRing, Wallet } from 'lucide-react';
+import { formatEUR } from '../lib/format';
 
 interface AssistantPilotProps {
   accounts: SavingsAccount[];
@@ -118,7 +119,7 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
 
   // Formatage tolérant à l'absence (extraction partielle) : jamais de "0 €" trompeur pour
   // une donnée que la fiche ne fournissait simplement pas.
-  const showEUR = (v: number | undefined) => v === undefined ? '—' : `${v.toLocaleString('fr-FR', { maximumFractionDigits: 2 })} €`;
+  const showEUR = (v: number | undefined) => v === undefined ? '—' : formatEUR(v);
 
   // À AFFICHER : reste honnêtement indéfini ("—") en mode réel si la fiche n'a pas encore
   // été (ré)extraite avec les champs impôt/net payé — jamais de repli silencieux sur la
@@ -365,7 +366,7 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
                             {e.paymentMethod && <span className="ml-2 text-[10px] font-bold uppercase text-slate-400 dark:text-slate-500">{e.paymentMethod}</span>}
                           </span>
                           <div className="flex items-center gap-1 flex-shrink-0">
-                              <span className="font-mono font-bold">{e.amount}€</span>
+                              <span className="font-mono font-bold">{formatEUR(e.amount)}</span>
                               {/* Visible en permanence sur tactile (pas de hover sur mobile : sans le
                                   préfixe `md:`, l'icône restait invisible et la dépense indélétable). */}
                               <button
@@ -397,7 +398,7 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
                           {c.name}
                           {c.paymentMethod && <span className="ml-2 text-[10px] font-bold uppercase text-slate-400 dark:text-slate-500">{c.paymentMethod}</span>}
                         </span>
-                        <span className="font-mono font-bold flex-shrink-0">{c.amount.toLocaleString('fr-FR', { maximumFractionDigits: 2 })}€</span>
+                        <span className="font-mono font-bold flex-shrink-0">{formatEUR(c.amount)}</span>
                       </div>
                     ))}
                   </div>
@@ -406,7 +407,7 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
                 )}
                 <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">Seuls les abonnements mensuels (et hebdomadaires) comptent ici. Les annuels, semestriels et trimestriels ne font que déclencher un rappel avant le prélèvement.</p>
               </div>
-              <div className="mt-4 pt-4 border-t flex justify-between font-black text-rose-600"><span>TOTAL CHARGES</span><span>{Math.round(budgetData.totalFixed).toLocaleString('fr-FR')} €</span></div>
+              <div className="mt-4 pt-4 border-t flex justify-between font-black text-rose-600"><span>TOTAL CHARGES</span><span>{formatEUR(budgetData.totalFixed)}</span></div>
             </div>
 
             <div className="lg:col-span-2 space-y-6">
@@ -434,27 +435,27 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm lg:col-span-2">
                <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-1 flex items-center gap-2"><Wallet className="w-5 h-5 text-indigo-600" /> Ta paie, virement par virement</h3>
-               <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">Sur {Math.round(effectiveSuperNetForCalc).toLocaleString('fr-FR')} € de paie. Ajoute une charge fixe par virement sortant (ex. « Revolut commun »), sans détailler ce qu'elle paie.</p>
+               <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">Sur {formatEUR(effectiveSuperNetForCalc)} de paie. Ajoute une charge fixe par virement sortant (ex. « Revolut commun »), sans détailler ce qu'elle paie.</p>
                <div className="space-y-2">
                  {payTransfers.map((t, idx) => (
                    <div key={t.label + idx} className="flex items-center justify-between text-sm p-2 rounded-lg bg-slate-50 dark:bg-slate-900">
                      <span className="font-bold text-slate-700 dark:text-slate-200 min-w-0 truncate">{t.label}</span>
-                     <span className="font-mono font-bold text-slate-700 dark:text-slate-200 flex-shrink-0">{Math.round(t.amount).toLocaleString('fr-FR')} €</span>
+                     <span className="font-mono font-bold text-slate-700 dark:text-slate-200 flex-shrink-0">{formatEUR(t.amount)}</span>
                    </div>
                  ))}
                  <div className="flex items-center justify-between text-sm p-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900">
-                   <span className="font-black text-emerald-700 dark:text-emerald-300">Épargne{strategy.length > 0 && <span className="font-bold text-emerald-600/80 dark:text-emerald-400/80"> : {strategy.map(st => `${Math.round(st.fillAmount).toLocaleString('fr-FR')} € ${st.alert ? 'à ouvrir (PEA/AV)' : st.accountName}`).join(', ')}</span>}</span>
-                   <span className="font-mono font-black text-emerald-700 dark:text-emerald-300 flex-shrink-0">{Math.round(budgetData.totalToInvest).toLocaleString('fr-FR')} €</span>
+                   <span className="font-black text-emerald-700 dark:text-emerald-300">Épargne{strategy.length > 0 && <span className="font-bold text-emerald-600/80 dark:text-emerald-400/80"> : {strategy.map(st => `${formatEUR(st.fillAmount)} ${st.alert ? 'à ouvrir (PEA/AV)' : st.accountName}`).join(', ')}</span>}</span>
+                   <span className="font-mono font-black text-emerald-700 dark:text-emerald-300 flex-shrink-0">{formatEUR(budgetData.totalToInvest)}</span>
                  </div>
                </div>
                {budgetData.finalCapacity < 0 && (
-                 <p className="mt-3 text-xs font-bold text-rose-600 flex items-center gap-1"><Info className="w-3.5 h-3.5" /> Il manque {Math.round(-budgetData.finalCapacity).toLocaleString('fr-FR')} € : les virements dépassent la paie.</p>
+                 <p className="mt-3 text-xs font-bold text-rose-600 flex items-center gap-1"><Info className="w-3.5 h-3.5" /> Il manque {formatEUR(-budgetData.finalCapacity)} : les virements dépassent la paie.</p>
                )}
             </div>
 
             <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
                <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-2"><Target className="w-5 h-5 text-indigo-600" /> Placement ({Math.round(budgetData.totalToInvest).toLocaleString('fr-FR')} €)</h3>
-               <div className="space-y-3">{strategy.length > 0 ? strategy.map((step, idx) => (<div key={step.accountName + idx} className="flex items-center justify-between p-4 rounded-xl border-l-4 bg-indigo-50 border-indigo-600"><div className="flex items-center gap-4"><div className="w-6 h-6 rounded-full flex center items-center justify-center bg-indigo-600 text-white font-bold text-xs">{idx + 1}</div><div><p className="font-bold text-slate-800 dark:text-slate-100">{step.accountName}</p><p className="text-xs text-slate-500 dark:text-slate-400">{step.type} • Taux {step.rate}%</p></div></div><p className="text-xl font-black text-indigo-600">+ {Math.round(step.fillAmount).toLocaleString('fr-FR')} €</p></div>)) : <p className="text-sm text-slate-400 dark:text-slate-500 italic">Rien à placer.</p>}</div>
+               <div className="space-y-3">{strategy.length > 0 ? strategy.map((step, idx) => (<div key={step.accountName + idx} className="flex items-center justify-between p-4 rounded-xl border-l-4 bg-indigo-50 border-indigo-600"><div className="flex items-center gap-4"><div className="w-6 h-6 rounded-full flex center items-center justify-center bg-indigo-600 text-white font-bold text-xs">{idx + 1}</div><div><p className="font-bold text-slate-800 dark:text-slate-100">{step.accountName}</p><p className="text-xs text-slate-500 dark:text-slate-400">{step.type} • Taux {step.rate}%</p></div></div><p className="text-xl font-black text-indigo-600">+ {formatEUR(step.fillAmount)}</p></div>)) : <p className="text-sm text-slate-400 dark:text-slate-500 italic">Rien à placer.</p>}</div>
                {isBackendEnabled() && (
                  <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-700 space-y-3">
                    <p className="text-sm font-bold text-slate-700 dark:text-slate-200 flex items-center gap-2"><BellRing className="w-4 h-4 text-indigo-600" /> Rappel le jour de paie</p>
@@ -474,7 +475,7 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
                            type="text"
                            inputMode="decimal"
                            value={paydayAmountDraft}
-                           placeholder={`${Math.round(Math.max(0, budgetData.theoreticalCapacity)).toLocaleString('fr-FR')} (calculé)`}
+                           placeholder={`${formatEUR(Math.max(0, budgetData.theoreticalCapacity), 0)} (calculé)`}
                            onChange={(e) => {
                              setPaydayAmountDraft(e.target.value);
                              const v = e.target.value.trim() === '' ? undefined : parseFrenchNumber(e.target.value);
@@ -496,14 +497,14 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
 
             <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-6">
                <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-2 flex items-center gap-2"><BarChart3 className="w-5 h-5 text-indigo-600" /> Remplissage Livrets</h3>
-               {bookletStats.map(b => (<div key={b.id} className="space-y-2"><div className="flex justify-between text-sm font-bold text-slate-700 dark:text-slate-200"><span>{b?.name}</span><span>{Math.round(b?.totalPct || 0)}%</span></div><div className="w-full h-3 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden flex"><div className="h-full bg-amber-400" style={{ width: `${b?.parentPct}%` }} title={`Parents: ${b?.parentAmount}€`}></div><div className="h-full bg-indigo-600" style={{ width: `${b?.ownedPct}%` }} title={`Moi: ${b?.ownedAmount}€`}></div></div><div className="flex justify-between text-[10px] text-slate-400 dark:text-slate-500 font-bold"><span className="text-amber-500">Parents {b?.parentAmount}€</span><span className="text-indigo-600">Moi {b?.ownedAmount}€</span><span>Max {b?.ceiling}€</span></div></div>))}
+               {bookletStats.map(b => (<div key={b.id} className="space-y-2"><div className="flex justify-between text-sm font-bold text-slate-700 dark:text-slate-200"><span>{b?.name}</span><span>{Math.round(b?.totalPct || 0)}%</span></div><div className="w-full h-3 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden flex"><div className="h-full bg-amber-400" style={{ width: `${b?.parentPct}%` }} title={`Parents : ${formatEUR(b?.parentAmount || 0)}`}></div><div className="h-full bg-indigo-600" style={{ width: `${b?.ownedPct}%` }} title={`Moi : ${formatEUR(b?.ownedAmount || 0)}`}></div></div><div className="flex justify-between text-[10px] text-slate-400 dark:text-slate-500 font-bold"><span className="text-amber-500">Parents {formatEUR(b?.parentAmount || 0)}</span><span className="text-indigo-600">Moi {formatEUR(b?.ownedAmount || 0)}</span><span>Max {formatEUR(b?.ceiling || 0)}</span></div></div>))}
             </div>
           </div>
 
           <div className={`p-8 rounded-3xl border-2 shadow-sm text-center transition-colors ${survival.bg} ${survival.border}`}>
             <h3 className="text-sm font-black uppercase tracking-widest opacity-60 mb-4 flex justify-center items-center gap-2"><Hourglass className="w-4 h-4" /> Durée de Survie</h3>
             <div className={`text-6xl font-black ${survival.color} mb-2`}>{survival.infinite ? '∞' : <>{survival.years > 0 && <span>{survival.years}a </span>}{survival.months}m {survival.days}j</>}</div>
-            <p className={`font-bold ${survival.color} opacity-80`}>{survival.infinite ? 'Aucune charge fixe renseignée' : `Avec ${survival.monthlyBurn.toLocaleString('fr-FR')} € de charges fixes / mois`}</p>
+            <p className={`font-bold ${survival.color} opacity-80`}>{survival.infinite ? 'Aucune charge fixe renseignée' : `Avec ${formatEUR(survival.monthlyBurn)} de charges fixes / mois`}</p>
           </div>
         </>
       )}

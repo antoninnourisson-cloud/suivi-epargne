@@ -8,6 +8,7 @@ import React, { useState } from 'react';
 import { SavingsAccount, RecurringMovement } from '../types';
 import { Repeat, Plus, Trash2, AlertCircle, Pause, Play } from 'lucide-react';
 import { safeNumber } from '../lib/numbers';
+import { formatEUR } from '../lib/format';
 
 interface RecurringManagerProps {
   accounts: SavingsAccount[];
@@ -15,7 +16,7 @@ interface RecurringManagerProps {
   onUpdate: (next: RecurringMovement[]) => void;
 }
 
-const fmt = (n: number) => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 2 }).format(n);
+const fmt = (n: number) => formatEUR(n);
 
 export const RecurringManager: React.FC<RecurringManagerProps> = ({ accounts, recurringMovements, onUpdate }) => {
   const [accountId, setAccountId] = useState('');

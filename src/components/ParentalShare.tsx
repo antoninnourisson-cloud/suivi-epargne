@@ -1,12 +1,13 @@
 import React, { useMemo } from 'react';
 import { SavingsAccount } from '../types';
 import { Users, User } from 'lucide-react';
+import { formatEUR } from '../lib/format';
 
 interface ParentalShareProps {
   accounts: SavingsAccount[];
 }
 
-const fmt = (n: number) => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(n);
+const fmt = (n: number) => formatEUR(n, 0);
 
 export const ParentalShare: React.FC<ParentalShareProps> = ({ accounts }) => {
   const { totalOwned, totalParental, rows } = useMemo(() => {

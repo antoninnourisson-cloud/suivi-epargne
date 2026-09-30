@@ -11,6 +11,7 @@ import { parseFrenchNumber } from '../lib/numbers';
 import { localTodayISO, parseISODate } from '../lib/dates';
 import { computeDonationSummary, DONATION_75_CEILING } from '../lib/finance';
 import { openDrivePicker } from '../services/googleDriveService';
+import { formatEUR } from '../lib/format';
 
 interface DonationsProps {
   donations: Donation[];
@@ -18,7 +19,7 @@ interface DonationsProps {
   pickerApiKey?: string;
 }
 
-const fmt = (n: number) => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 2 }).format(n);
+const fmt = (n: number) => formatEUR(n);
 const driveUrl = (id: string) => `https://drive.google.com/file/d/${encodeURIComponent(id)}/view`;
 
 type Draft = { date: string; amount: string; organization: string; rate: 66 | 75; receiptReceived: boolean; receiptFileId?: string; receiptFileName?: string; note: string };

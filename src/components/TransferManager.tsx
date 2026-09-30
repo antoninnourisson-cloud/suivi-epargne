@@ -8,6 +8,7 @@ import { useSaveFeedback } from '../hooks/useSaveFeedback';
 import { safeNumber } from '../lib/numbers';
 import { localTodayISO } from '../lib/dates';
 import { depositsAfterCashFlow } from '../lib/finance';
+import { formatEUR } from '../lib/format';
 
 interface TransferManagerProps {
   accounts: SavingsAccount[];
@@ -75,7 +76,7 @@ export const TransferManager: React.FC<TransferManagerProps> = ({ accounts, onUp
     if (!sourceAcc) { setFormError('Le compte source est introuvable.'); return; }
 
     if (sourceAcc.totalAmount < amount) {
-      setFormError(`Fonds insuffisants : ${sourceAcc.name} ne contient que ${sourceAcc.totalAmount.toLocaleString('fr-FR', { maximumFractionDigits: 2 })} €.`);
+      setFormError(`Fonds insuffisants : ${sourceAcc.name} ne contient que ${formatEUR(sourceAcc.totalAmount)}.`);
       return;
     }
 

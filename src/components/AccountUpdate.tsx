@@ -7,6 +7,7 @@ import { useSaveFeedback } from '../hooks/useSaveFeedback';
 import { safeNumber, parseFrenchNumber } from '../lib/numbers';
 import { tracksDeposits, depositsAfterWithdrawal } from '../lib/finance';
 import { localTodayISO } from '../lib/dates';
+import { formatEUR, formatSignedEUR } from '../lib/format';
 
 interface AccountUpdateProps {
   accounts: SavingsAccount[];
@@ -81,7 +82,7 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
     const current = safeNumber(updates[id][a.target], 0);
     const next = Math.round((current + a.sign * amount) * 100) / 100;
     if (next < 0) {
-      setAdjustErrors(prev => ({ ...prev, [id]: `Impossible : ${a.target === 'owned' ? 'ta part' : 'la part des parents'} deviendrait négative (${next.toLocaleString('fr-FR')} €).` }));
+      setAdjustErrors(prev => ({ ...prev, [id]: `Impossible : ${a.target === 'owned' ? 'ta part' : 'la part des parents'} deviendrait négative (${formatEUR(next)}).` }));
       return;
     }
     const account = accounts.find(acc => acc.id === id);
@@ -175,7 +176,7 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
                 </div>
                 <div className="text-right">
                   <div className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase mb-1">Total Actuel</div>
-                  <div className="text-xl font-black text-slate-800 dark:text-slate-100 font-mono">{newTotal.toFixed(2)}€</div>
+                  <div className="text-xl font-black text-slate-800 dark:text-slate-100 font-mono">{formatEUR(newTotal, 2)}</div>
                 </div>
               </div>
 
@@ -194,7 +195,7 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
                   />
                   {diffOwned !== 0 && (
                     <div className={`text-[10px] mt-1 font-bold ${diffOwned > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                      {diffOwned > 0 ? '+' : ''}{diffOwned.toFixed(2)}€
+                      {formatSignedEUR(diffOwned, 2)}
                     </div>
                   )}
                 </div>
@@ -213,7 +214,7 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
                   />
                   {diffParental !== 0 && (
                     <div className={`text-[10px] mt-1 font-bold ${diffParental > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                      {diffParental > 0 ? '+' : ''}{diffParental.toFixed(2)}€
+                      {formatSignedEUR(diffParental, 2)}
                     </div>
                   )}
                 </div>
@@ -275,7 +276,7 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
                     <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">
                       {depositsDraft === null ? 'Montant non reconnu.'
                         : depositsDraft === undefined ? 'Renseigne-les une fois : ensuite, les versements cochés ci-dessus les mettent à jour, et le reste de l’écart compte comme gain ou perte de valeur.'
-                        : <>Plus-value latente : <b>{(newTotal - depositsDraft).toLocaleString('fr-FR', { maximumFractionDigits: 0 })} €</b></>}
+                        : <>Plus-value latente : <b>{formatEUR(newTotal - depositsDraft, 0)}</b></>}
                     </p>
                   </div>
                 )}

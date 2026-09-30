@@ -8,6 +8,7 @@ import { Euro, Lock, Wallet, Filter, Unlock, Save, AlertTriangle, Trash2, Clock,
 import { computeAccruedParentalInterest, computeRecentSavingsRate, computeAccountBalanceAtDate, findStaleRegulatedRates, computeLepEligibility, computeIncome, findDueRecurring, computeMonthSavedAmount, computeSavingsRateHistory } from '../lib/finance';
 import { parseISODate, formatISODay, daysBetween, localTodayISO } from '../lib/dates';
 import { Button } from './Button';
+import { formatEUR } from '../lib/format';
 
 interface DashboardProps {
   accounts: SavingsAccount[];
@@ -258,7 +259,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
     return { monthlyRate, totalNow, in6: totalNow + monthlyRate * 6, in12: totalNow + monthlyRate * 12, drift };
   }, [accounts]);
 
-  const fmtEUR = (v: number) => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v);
+  const fmtEUR = (v: number) => formatEUR(v, 0);
 
   // --- RAPPEL DE RÉVISION DES TAUX RÉGLEMENTÉS (1er février / 1er août) ---
   // Masquable par révision (clé locale) : si le taux n'a en fait pas bougé, l'utilisateur
@@ -361,7 +362,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
         <div>
           <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">{title}</p>
           <h3 className="text-2xl font-bold text-slate-800 dark:text-slate-100 mt-1">
-            {new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(amount)}
+            {formatEUR(amount, 2)}
           </h3>
           {subtext && <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1 uppercase font-bold tracking-wide">{subtext}</p>}
         </div>
@@ -465,8 +466,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
               <div key={a.id} className={`flex items-center gap-3 p-3 rounded-xl border text-sm font-bold ${full ? 'bg-rose-50 border-rose-200 text-rose-700 dark:bg-rose-950/40 dark:border-rose-800 dark:text-rose-300' : 'bg-amber-50 border-amber-200 text-amber-800 dark:bg-amber-950/40 dark:border-amber-800 dark:text-amber-300'}`}>
                 <AlertTriangle className="w-4 h-4 flex-shrink-0" />
                 {full
-                  ? <span>{a.name} ({a.type}) est au plafond ({a.ceiling.toLocaleString()} €). Redirige tes prochains versements ailleurs.</span>
-                  : <span>{a.name} ({a.type}) est rempli à {a.pct.toFixed(0)}% — il reste {Math.round(a.remaining).toLocaleString()} € avant le plafond.</span>}
+                  ? <span>{a.name} ({a.type}) est au plafond ({formatEUR(a.ceiling)}). Redirige tes prochains versements ailleurs.</span>
+                  : <span>{a.name} ({a.type}) est rempli à {a.pct.toFixed(0)}% — il reste {formatEUR(a.remaining, 0)} avant le plafond.</span>}
               </div>
             );
           })}
@@ -600,8 +601,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
               itemStyle={{ fontSize: '12px', padding: 0 }}
               formatter={(value: number, name: string) => {
                 const accName = accounts.find(a => a.id === name)?.name || name;
-                if (name === 'total') return [new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(value), "TOTAL"];
-                return [new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(value), accName];
+                if (name === 'total') return [formatEUR(value, 2), "TOTAL"];
+                return [formatEUR(value, 2), accName];
               }}
               labelStyle={{ color: '#64748b', marginBottom: '0.5rem', fontWeight: 'bold' }}
             />
@@ -628,7 +629,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
           <BarChart data={dataByInstitution} layout="vertical">
             <XAxis type="number" hide />
             <YAxis dataKey="name" type="category" width={150} tick={{fontSize: 11, fontWeight: 500}} />
-            <RechartsTooltip formatter={(v: number) => `${v.toLocaleString()}€`} cursor={{fill: 'transparent'}} />
+            <RechartsTooltip formatter={(v: number) => formatEUR(v)} cursor={{fill: 'transparent'}} />
             <Bar dataKey="value" fill="#6366f1" radius={[0, 4, 4, 0]} barSize={24} />
           </BarChart>
         </ResponsiveContainer>

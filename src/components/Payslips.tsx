@@ -11,6 +11,7 @@ import { openDrivePicker, downloadFileAsBase64 } from '../services/googleDriveSe
 import { extractPayslipData, GeminiError } from '../services/geminiService';
 import { parseFrenchNumber } from '../lib/numbers';
 import { FileText, Upload, Sparkles, Trash2, ExternalLink, AlertTriangle, Check, X, Loader2, KeyRound, TrendingUp, Wand2 } from 'lucide-react';
+import { formatEUR } from '../lib/format';
 
 interface PayslipsProps {
   payslips: PayslipRecord[];
@@ -29,7 +30,7 @@ interface PayslipsProps {
 }
 
 const fmt = (n: number | undefined) =>
-  n === undefined ? '—' : new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 2 }).format(n);
+  n === undefined ? '—' : formatEUR(n);
 
 // Fiche en cours d'import, avant d'être définitivement enregistrée dans `payslips`.
 interface DraftPayslip {
@@ -316,7 +317,7 @@ export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, 
                   <linearGradient id="gNet" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#10b981" stopOpacity={0.6} /><stop offset="95%" stopColor="#10b981" stopOpacity={0.05} /></linearGradient>
                 </defs>
                 <XAxis dataKey="label" tick={{ fontSize: 11 }} />
-                <YAxis tickFormatter={(v) => `${v}€`} tick={{ fontSize: 11 }} />
+                <YAxis tickFormatter={(v) => formatEUR(v, 0)} tick={{ fontSize: 11 }} />
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                 <RechartsTooltip formatter={(v: number, name: string) => [fmt(v), name === 'net' ? 'Net' : 'Brut']} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
                 <Legend formatter={(v) => (v === 'net' ? 'Net' : 'Brut')} wrapperStyle={{ fontSize: 12 }} />

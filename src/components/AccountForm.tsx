@@ -9,6 +9,7 @@ import { localTodayISO } from '../lib/dates';
 import { parseFrenchNumber } from '../lib/numbers';
 import { tracksDeposits, PEA_DEPOSIT_CEILING } from '../lib/finance';
 import { PlusCircle, Save, Users, Calculator, ShieldCheck, Tag, X, History } from 'lucide-react';
+import { formatEUR } from '../lib/format';
 
 interface AccountFormProps {
   onSave: (account: SavingsAccount) => void;
@@ -85,7 +86,8 @@ export const AccountForm: React.FC<AccountFormProps> = ({ onSave, initialData, o
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const newRate = parseFloat(interestRate) || 0;
+    // parseFrenchNumber et non parseFloat : « 2,4 » donnait 2 %.
+    const newRate = parseFrenchNumber(interestRate) ?? 0;
 
     // Historise l'ancien taux s'il a changé, pour affiner le calcul de rendement dans le temps.
     let rateHistory = initialData?.rateHistory || [];
@@ -145,7 +147,7 @@ export const AccountForm: React.FC<AccountFormProps> = ({ onSave, initialData, o
           <div className="md:col-span-2 grid grid-cols-2 md:grid-cols-3 gap-4 bg-slate-50 dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-700">
             <div>
               <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase mb-1 flex items-center gap-1">Taux Actuel (%)</label>
-              <input type="number" step="0.01" value={interestRate} onChange={e => setInterestRate(e.target.value)} className="w-full p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-bold" />
+              <input type="text" inputMode="decimal" value={interestRate} onChange={e => setInterestRate(e.target.value)} className="w-full p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-bold" />
               {initialData?.rateHistory && initialData.rateHistory.length > 0 && (
                 <p className="text-[9px] text-slate-400 dark:text-slate-500 mt-1 flex items-center gap-1"><History className="w-3 h-3" /> {initialData.rateHistory.length} changement(s) historisé(s)</p>
               )}
@@ -157,7 +159,7 @@ export const AccountForm: React.FC<AccountFormProps> = ({ onSave, initialData, o
                 <input type="text" inputMode="decimal" value={totalDeposits} onChange={e => setTotalDeposits(e.target.value)} placeholder="Inconnu" className="w-full p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-bold" />
                 {parsedDeposits === null && <p className="text-[10px] text-rose-600 mt-1">Montant non reconnu : il ne sera pas enregistré.</p>}
                 {parsedDeposits !== null && parsedDeposits !== undefined && totalAmount > 0 && (
-                  <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1">Plus-value latente : <b>{(totalAmount - parsedDeposits).toLocaleString('fr-FR', { maximumFractionDigits: 0 })} €</b>{type === AccountType.PEA && <> · reste {Math.max(0, PEA_DEPOSIT_CEILING - parsedDeposits).toLocaleString('fr-FR')} € de versements possibles</>}</p>
+                  <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1">Plus-value latente : <b>{formatEUR(totalAmount - parsedDeposits, 0)}</b>{type === AccountType.PEA && <> · reste {formatEUR(Math.max(0, PEA_DEPOSIT_CEILING - parsedDeposits))} de versements possibles</>}</p>
                 )}
                 {parsedDeposits === undefined && <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">Ce que tu as versé, hors gains (voir ton relevé). Sert au calcul exact de l'impôt en cas de retrait.</p>}
               </div>

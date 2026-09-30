@@ -19,6 +19,7 @@ import { disablePush } from './services/pushService';
 import { isLockEnabled } from './services/appLockService';
 import { computeMaturityCountdown, depositsAfterCashFlow, computeMonthlySavingsCapacity, subscriptionsAsExpenses, computeMonthlyPay } from './lib/finance';
 import { localTodayISO } from './lib/dates';
+import { formatEUR, formatSignedEUR } from './lib/format';
 import {
   LayoutDashboard, Wallet, Trash2, Edit2, ShieldCheck,
   ArrowRightLeft, RefreshCcw, PlusCircle, Cloud, LogOut,
@@ -124,7 +125,7 @@ const App: React.FC = () => {
       id: '__grouped_small__',
       date: small[0].date,
       amount: Math.abs(total),
-      label: `${small.length} mouvements < 1€ (total ${total >= 0 ? '+' : '-'}${Math.abs(total).toFixed(2)}€)`,
+      label: `${small.length} mouvements < 1 € (total ${formatSignedEUR(total, 2)})`,
       type: total >= 0 ? 'IN' : 'OUT',
       grouped: true,
     };
@@ -801,13 +802,13 @@ const App: React.FC = () => {
                                       <div className="mt-1 text-[10px] font-bold text-indigo-500 dark:text-indigo-400 flex items-center gap-1">
                                         <Clock className="w-3 h-3 flex-shrink-0" />
                                         Passe en {label} dans {maturity.monthsRemaining} mois
-                                        {maturity.annualTaxSaving > 1 && ` (≈ ${Math.round(maturity.annualTaxSaving)} € d'impôt en moins par année de gains, au retrait)`}
+                                        {maturity.annualTaxSaving > 1 && ` (≈ ${formatEUR(maturity.annualTaxSaving, 0)} d'impôt en moins par année de gains, au retrait)`}
                                       </div>
                                     );
                                   })()}
                                 </td>
-                                <td className="px-6 py-4 text-right font-black text-indigo-600 text-lg">{acc.ownedAmount.toLocaleString()} €</td>
-                                <td className="px-6 py-4 text-right font-bold text-amber-500">{acc.parentalCapital.toLocaleString()} €</td>
+                                <td className="px-6 py-4 text-right font-black text-indigo-600 text-lg">{formatEUR(acc.ownedAmount)}</td>
+                                <td className="px-6 py-4 text-right font-bold text-amber-500">{formatEUR(acc.parentalCapital)}</td>
                                 <td className="px-6 py-4 text-right flex justify-end gap-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                                    <button onClick={(e) => { e.stopPropagation(); setEditingAccount(acc); setShowForm(true); }} className="p-2 text-indigo-600 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/40 rounded-lg hover:bg-indigo-100 dark:hover:bg-indigo-900"><Edit2 className="w-4 h-4"/></button>
                                    <button onClick={(e) => { e.stopPropagation(); handleDeleteAccount(acc); }} className="p-2 text-rose-600 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/40 rounded-lg hover:bg-rose-100 dark:hover:bg-rose-900"><Trash2 className="w-4 h-4"/></button>
@@ -828,7 +829,7 @@ const App: React.FC = () => {
                                            {!m.grouped && <button onClick={()=>handleRenameMovement(acc.id, m.id, m.label)} aria-label={`Renommer « ${m.label} »`} className="p-2 -m-1 opacity-60 hover:opacity-100"><Edit2 className="w-4 h-4 text-slate-500 dark:text-slate-400"/></button>}
                                        </div>
                                        <div className="flex items-center gap-3">
-                                           <span className={`font-mono text-sm ${m.type==='IN'?'text-emerald-600 font-bold':'text-rose-600 font-bold'}`}>{m.type==='IN'?'+':'-'}{m.amount.toLocaleString()}€</span>
+                                           <span className={`font-mono text-sm ${m.type==='IN'?'text-emerald-600 font-bold':'text-rose-600 font-bold'}`}>{m.type==='IN'?'+':'−'}{formatEUR(m.amount)}</span>
                                            {!m.grouped && <button onClick={()=>handleDeleteMovement(acc.id, m.id)} aria-label={`Supprimer « ${m.label} »`} className="p-2.5 -m-1 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded text-slate-400 dark:text-slate-500 hover:text-rose-500"><Trash2 className="w-4 h-4"/></button>}
                                        </div>
                                      </div>

@@ -11,13 +11,14 @@ import { parseFrenchNumber } from '../lib/numbers';
 import { formatISODay, localTodayISO, daysBetween } from '../lib/dates';
 import { nextSubscriptionDate, subscriptionMonthlyCost, subscriptionLeadDays, SUBSCRIPTION_BIG_AMOUNT } from '../lib/finance';
 import { isBackendEnabled } from '../services/backendService';
+import { formatEUR } from '../lib/format';
 
 interface SubscriptionsProps {
   subscriptions: Subscription[];
   onUpdate: (next: Subscription[]) => void;
 }
 
-const fmt = (n: number) => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 2 }).format(n);
+const fmt = (n: number) => formatEUR(n);
 
 const FREQUENCY_LABEL: Record<SubscriptionFrequency, string> = {
   weekly: 'Hebdomadaire',

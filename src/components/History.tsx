@@ -3,13 +3,14 @@ import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tool
 import { PortfolioSnapshot, ExpenseSnapshot } from '../types';
 import { parseISODate } from '../lib/dates';
 import { LineChart as LineChartIcon, ArrowUpRight, ArrowDownRight, Minus, Wallet, Receipt } from 'lucide-react';
+import { formatEUR } from '../lib/format';
 
 interface HistoryProps {
   history: PortfolioSnapshot[];
   expensesHistory: ExpenseSnapshot[];
 }
 
-const fmt = (n: number) => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(n);
+const fmt = (n: number) => formatEUR(n, 0);
 const monthLabel = (iso: string) => {
   const d = parseISODate(iso); // parse LOCAL : new Date('YYYY-MM-DD') est minuit UTC et decale le mois affiche
   return d.toLocaleDateString('fr-FR', { month: 'short', year: '2-digit' });
@@ -140,7 +141,7 @@ export const History: React.FC<HistoryProps> = ({ history, expensesHistory }) =>
                   <linearGradient id="gCharges" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#ef4444" stopOpacity={0.5} /><stop offset="95%" stopColor="#ef4444" stopOpacity={0.05} /></linearGradient>
                 </defs>
                 <XAxis dataKey="label" tick={{ fontSize: 11 }} />
-                <YAxis tickFormatter={(v) => `${v}€`} tick={{ fontSize: 11 }} />
+                <YAxis tickFormatter={(v) => formatEUR(v, 0)} tick={{ fontSize: 11 }} />
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                 <RechartsTooltip formatter={(v: number) => [fmt(v), 'Charges fixes']} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
                 <Area type="monotone" dataKey="total" stroke="#ef4444" fill="url(#gCharges)" strokeWidth={2} />

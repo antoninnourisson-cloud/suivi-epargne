@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { SavingsAccount, AccountType, FiscalConfig } from '../types';
 import { computeWeightedAnnualRate, computeCapitalGainsTax, computeParentalInterest, computeAccruedInterest, CapitalTaxRegime, computeWithdrawalTax, tracksDeposits, PEA_DEPOSIT_CEILING } from '../lib/finance';
 import { Coins, TrendingUp, AlertCircle, PiggyBank, FileDown, Landmark, Info } from 'lucide-react';
+import { formatEUR } from '../lib/format';
 
 const REGIME_LABEL: Record<CapitalTaxRegime, string> = {
   PFU: 'PFU 30%',
@@ -15,7 +16,7 @@ interface YieldProps {
   fiscalConfig: FiscalConfig;
 }
 
-const fmt = (n: number) => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 2 }).format(n);
+const fmt = (n: number) => formatEUR(n);
 const REGULATED = [AccountType.LIVRET_A, AccountType.LDDS, AccountType.LEP];
 
 export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig }) => {
