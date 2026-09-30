@@ -771,7 +771,7 @@ const App: React.FC = () => {
                                       <div className="mt-1 text-[10px] font-bold text-indigo-500 dark:text-indigo-400 flex items-center gap-1">
                                         <Clock className="w-3 h-3 flex-shrink-0" />
                                         Passe en {label} dans {maturity.monthsRemaining} mois
-                                        {maturity.annualTaxSaving > 1 && ` (≈ +${Math.round(maturity.annualTaxSaving)} €/an)`}
+                                        {maturity.annualTaxSaving > 1 && ` (≈ ${Math.round(maturity.annualTaxSaving)} € d'impôt en moins par année de gains, au retrait)`}
                                       </div>
                                     );
                                   })()}

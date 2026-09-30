@@ -154,9 +154,13 @@ export const computeSavingsCapacity = (
 
 // --- FISCALITÉ DU CAPITAL (PFU / prélèvements sociaux) ---
 // `socialChargesCapital` (17,2 %) existait dans FiscalConfig depuis le début mais n'était
-// utilisé par aucun calcul : l'export fiscal de Rendement listait des intérêts BRUTS. Ce qui
-// suit modélise le régime le plus courant par type de compte — volontairement simplifié, pas
-// une simulation fiscale complète (voir les limites documentées sur chaque cas).
+// utilisé par aucun calcul. Ce qui suit modélise le régime le plus courant par type de compte
+// — volontairement simplifié, pas une simulation fiscale complète (voir les limites
+// documentées sur chaque cas).
+//
+// ATTENTION au sens du résultat : PEA et Assurance Vie sont à fiscalité DIFFÉRÉE — l'impôt
+// n'est dû qu'au retrait, pas chaque année. Ce calcul donne donc le net qu'on toucherait EN
+// RETIRANT les gains, jamais un montant « à déclarer » pour l'année.
 const PFU_INCOME_TAX_RATE = 0.128; // part "impôt" du Prélèvement Forfaitaire Unique à 30 % (12,8 % IR + 17,2 % social)
 // Taux réduit d'IR sur les gains d'Assurance Vie après 8 ans (art. 125-0 A du CGI), HORS
 // abattement annuel de 4 600 €/9 200 € : celui-ci porte sur l'ensemble des contrats d'une
@@ -257,9 +261,9 @@ export interface MaturityCountdown {
   monthsRemaining: number; // toujours >= 1 tant que le compte n'est pas mature
   regimeBefore: CapitalTaxRegime;
   regimeAfter: CapitalTaxRegime;
-  // Économie d'IR annuelle estimée une fois mature, sur les intérêts ACTUELS (taux × solde
-  // du jour) — évoluera si le solde ou le taux changent d'ici la maturité. 0 si le compte
-  // ne produit pas encore d'intérêt connu.
+  // Impôt en moins, AU MOMENT D'UN RETRAIT, sur une année de gains (taux × solde du jour)
+  // une fois le compte mature — ce n'est pas une économie versée chaque année, la fiscalité
+  // étant différée. 0 si le compte ne produit pas encore d'intérêt connu.
   annualTaxSaving: number;
 }
 
@@ -386,8 +390,8 @@ export const computeEffectiveSuperNet = (
 // Jusqu'ici, tout se calculait `taux × solde du jour`. C'est honnête pour un RYTHME annuel
 // ("voilà ce que rapportent mes comptes en l'état"), mais faux dès qu'on annonce une ANNÉE
 // précise : 5 000 € déposés en novembre se voyaient créditer une année pleine d'intérêts.
-// Deux endroits annoncent une année et étaient donc surévalués : l'export fiscal ("Intérêts
-// estimés 2026", destiné à la déclaration) et le rappel de décembre sur les intérêts
+// Deux endroits annoncent une année et étaient donc surévalués : les gains nets si retrait
+// ("Intérêts 2026") et le rappel de décembre sur les intérêts
 // parentaux. D'où ce calcul, qui suit le mouvement réel de l'argent.
 
 /** Livrets réglementés : seuls comptes soumis à la règle des quinzaines. */
@@ -636,7 +640,7 @@ export const computeParentalInterest = (
 /**
  * Variante de `computeParentalInterest` basée sur les intérêts RÉELLEMENT ACQUIS
  * (computeAccruedInterest) et non sur le rythme annualisé. À utiliser partout où l'on
- * annonce « cette année » : rappel de fin d'année, export fiscal.
+ * annonce « cette année » : rappel de fin d'année, gains nets si retrait.
  *
  * La répartition moi/parents se fait au prorata du capital détenu à ce jour — les
  * mouvements ne distinguent pas la part parentale de la part propre, donc affiner

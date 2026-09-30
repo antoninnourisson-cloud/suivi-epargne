@@ -52,7 +52,7 @@ Un **petit serveur optionnel** (Cloudflare Worker, dossier [`worker/`](worker/))
 - **Intérêts réellement acquis** selon la règle des quinzaines des livrets réglementés, à côté du rythme annualisé.
 - Taux pondérés dans le temps, et part des intérêts offerte par les parents.
 - Manque à gagner du cash dormant.
-- **Export fiscal** au net estimé : PFU, exonération d'IR du PEA/PEE après maturité, taux réduit de l'AV après 8 ans.
+- **Gains nets si retrait** (PEA, Assurance Vie…) : PFU, exonération d'IR du PEA/PEE après maturité, taux réduit de l'AV après 8 ans. Ces comptes sont à fiscalité différée, il n'y a rien à déclarer tant qu'on ne retire rien.
 - Compte à rebours avant la maturité fiscale de chaque compte.
 
 ### Autres écrans

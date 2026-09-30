@@ -4,8 +4,8 @@
 
 - **Fiches de paie par IA** : import via Google Picker, extraction Gemini (sortie structurée, nouvelles tentatives et modèles de repli en cas de saturation), relecture obligatoire, graphique du net, mode « chiffres exacts » dans le Pilotage.
 - **Verrou de l'appareil** : biométrie (WebAuthn) ou PIN (PBKDF2), réactivé à chaque passage en arrière-plan, avec une porte de sortie en cas de code oublié.
-- **Fiscalité du capital** : PFU, exonérations après maturité, compte à rebours de maturité par compte.
-- **Intérêts réellement acquis** (règle des quinzaines) pour l'export fiscal et le rappel parental.
+- **Fiscalité du capital** : net des gains en cas de retrait (PFU, exonérations après maturité), compte à rebours de maturité par compte.
+- **Intérêts réellement acquis** (règle des quinzaines) pour les gains nets si retrait et le rappel parental.
 - **Projection et dérive du rythme d'épargne** ; rythme réel confronté à la théorie dans Objectifs.
 - **Alertes** : révision des taux réglementés, éligibilité LEP, intérêts parentaux de décembre.
 - **Mouvements récurrents** proposés à l'échéance, et **ajustement « + / − x € »** dans Actualiser solde.

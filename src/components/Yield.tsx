@@ -84,7 +84,13 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig }) => {
     return { idleCash, placeable, extra, bestRate: livrets[0]?.rate || 0 };
   }, [accounts, fiscalConfig]);
 
-  // --- EXPORT FISCAL (comptes imposables, pour la déclaration d'impôts) ---
+  // --- GAINS NETS SI RETRAIT (comptes à fiscalité différée) ---
+  // PEA et Assurance Vie ne sont PAS imposés chaque année : l'impôt n'intervient qu'au
+  // retrait (seuls les prélèvements sociaux du fonds euros sont retenus annuellement, par
+  // l'assureur lui-même). Il n'y a donc en général rien à déclarer sur ces lignes. Cette
+  // section répond à une autre question : « combien toucherais-je net si je retirais
+  // maintenant les gains de l'année ». Elle était présentée à tort comme une aide à la
+  // déclaration.
   // Le net après prélèvements est une SIMPLIFICATION (voir les commentaires de
   // computeCapitalGainsTax) — utile pour se projeter, pas pour remplir une déclaration.
   const taxableRows = useMemo(() =>
@@ -95,7 +101,7 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig }) => {
         const rate = a.interestRate || 0;
         // Intérêts RÉELLEMENT acquis sur l'année (règle des quinzaines pour les livrets,
         // prorata journalier sinon) et non `taux × solde du jour` : cette colonne annonce
-        // une année précise et sert à la déclaration — un dépôt de novembre s'y voyait
+        // une année précise — un dépôt de novembre s'y voyait
         // créditer douze mois d'intérêts.
         const estimatedAnnualInterest = computeAccruedInterest(a, currentYear);
         const tax = computeCapitalGainsTax(a, estimatedAnnualInterest, fiscalConfig);
@@ -116,7 +122,7 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig }) => {
   const hasUnmodeled = taxableRows.some(r => r.tax.regime === 'NON_MODELISE');
 
   const exportFiscalCsv = () => {
-    let csv = `Compte,Type,Établissement,Solde,Taux (%),Intérêts bruts acquis ${currentYear},Prélèvements sociaux,Impôt sur le revenu,Net estimé,Régime,Date ouverture\n`;
+    let csv = `Compte,Type,Établissement,Solde,Taux (%),Intérêts bruts acquis ${currentYear},Prélèvements sociaux,Impôt sur le revenu,Net si retiré,Régime,Date ouverture\n`;
     taxableRows.forEach(r => {
       csv += `"${r.name}","${r.type}","${r.institution}",${r.base},${r.rate},${r.estimatedAnnualInterest.toFixed(2)},${r.tax.socialCharges.toFixed(2)},${r.tax.incomeTax.toFixed(2)},${r.tax.netInterest.toFixed(2)},${REGIME_LABEL[r.tax.regime]},${r.openingDate}\n`;
     });
@@ -124,7 +130,7 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig }) => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `export-fiscal-${currentYear}.csv`;
+    a.download = `gains-nets-si-retrait-${currentYear}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -198,8 +204,8 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig }) => {
         <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
           <div className="p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800">
             <div>
-              <h3 className="font-black text-slate-800 dark:text-slate-100 flex items-center gap-2"><Landmark className="w-5 h-5 text-indigo-600" /> Export fiscal {currentYear}</h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Comptes imposables (Assurance Vie, PEA...) — utile pour ta déclaration d'impôts.</p>
+              <h3 className="font-black text-slate-800 dark:text-slate-100 flex items-center gap-2"><Landmark className="w-5 h-5 text-indigo-600" /> Si tu retirais tes gains de {currentYear}</h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1"><strong>Rien à déclarer tant que tu ne retires rien</strong> : le PEA et l'Assurance Vie ne sont imposés qu'au moment d'un retrait (les prélèvements sociaux du fonds euros sont déjà retenus chaque année par l'assureur). Ce tableau estime le net que tu toucherais si tu retirais maintenant les gains acquis cette année.</p>
             </div>
             <button onClick={exportFiscalCsv} className="flex items-center gap-2 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 px-4 py-2 rounded-xl font-bold text-sm flex-shrink-0"><FileDown className="w-4 h-4" /> Exporter (CSV)</button>
           </div>
@@ -210,13 +216,13 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig }) => {
               <p className="text-lg font-black text-slate-500 dark:text-slate-400 line-through decoration-slate-300 dark:decoration-slate-600">{fmt(totalGrossTaxable)}</p>
             </div>
             <div>
-              <p className="text-[10px] font-black text-emerald-600 uppercase">Net après prélèvements</p>
+              <p className="text-[10px] font-black text-emerald-600 uppercase">Net si retiré maintenant</p>
               <p className="text-lg font-black text-emerald-600">{fmt(totalNetTaxable)}</p>
             </div>
           </div>
           <p className="px-6 pb-2 pt-1 text-[10px] text-slate-400 dark:text-slate-500 flex items-start gap-1">
             <Info className="w-3 h-3 flex-shrink-0 mt-0.5" />
-            Estimation simplifiée (PFU 30% ou régime réduit selon l'ancienneté du compte) — pas une simulation fiscale complète.
+            Estimation simplifiée : PFU 30 % ou régime réduit selon l'ancienneté du compte. Lors d'un vrai rachat d'Assurance Vie, l'impôt ne porte que sur la part de gains contenue dans le montant retiré, avec un abattement annuel de 4 600 € après 8 ans : le vrai net est souvent meilleur.
             {hasUnmodeled && ' Certains comptes (Immobilier, PER...) ont un régime trop spécifique pour être calculé ici : ils sont exclus du total net.'}
           </p>
 
@@ -227,7 +233,7 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig }) => {
                   <th className="px-6 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Compte</th>
                   <th className="px-6 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase text-right">Solde</th>
                   <th className="px-6 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase text-right">Brut acquis {currentYear}</th>
-                  <th className="px-6 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase text-right">Net estimé</th>
+                  <th className="px-6 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase text-right">Net si retiré</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
