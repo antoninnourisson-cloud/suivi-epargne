@@ -9,7 +9,10 @@ import {
   findDueRecurring,
   findStaleRegulatedRates,
   computeAccruedParentalInterest,
+  computeMonthlySavingsCapacity,
+  computePlacementStrategy,
 } from '../../src/lib/finance';
+import { DEFAULT_FISCAL_CONFIG } from '../../src/constants';
 import type { PushMessage } from './webpush';
 
 export interface Reminder {
@@ -23,6 +26,9 @@ const eur = (n: number) =>
   new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(n);
 
 const STALE_UPDATE_DAYS = 30;
+// Le rappel de paie reste valable quelques jours : un cron manqué (panne, déploiement)
+// ne doit pas faire sauter le mois. La clé mensuelle garantit un seul envoi.
+const PAYDAY_WINDOW_DAYS = 3;
 
 export const computeReminders = (data: GlobalAppData, now: Date, appUrl: string): Reminder[] => {
   const accounts = data.accounts || [];
@@ -96,6 +102,31 @@ export const computeReminders = (data: GlobalAppData, now: Date, appUrl: string)
           tag: 'stale-balances',
         },
       });
+    }
+  }
+
+  // 5. Jour de paie : le plan de placement du Pilotage, pour savoir quoi virer où.
+  const payday = data.config?.paydayDay;
+  if (payday && payday >= 1 && payday <= 31) {
+    const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+    const effectiveDay = Math.min(payday, daysInMonth); // le 31 devient le 30 ou le 28
+    const today = now.getDate();
+    if (today >= effectiveDay && today < effectiveDay + PAYDAY_WINDOW_DAYS) {
+      const amount = data.config.paydayAmount ?? computeMonthlySavingsCapacity(data);
+      const steps = amount > 0
+        ? computePlacementStrategy(amount, accounts, data.fiscalConfig || DEFAULT_FISCAL_CONFIG)
+        : [];
+      if (steps.length > 0) {
+        out.push({
+          key: `payday:${monthKey}`,
+          message: {
+            title: `Salaire versé : ${eur(amount)} à placer`,
+            body: steps.map(s => `${eur(s.fillAmount)} ${s.alert ? '→ ouvrir un PEA/AV' : `sur ${s.accountName}`}`).join(', ') + '.',
+            url: appUrl,
+            tag: 'payday',
+          },
+        });
+      }
     }
   }
 

@@ -674,6 +674,10 @@ const App: React.FC = () => {
                 workBenefits={data.workBenefits}
                 activePayslip={activePayslipRecord}
                 onClearActivePayslip={handleClearActivePayslip}
+                paydayDay={data.paydayDay}
+                setPaydayDay={data.setPaydayDay}
+                paydayAmount={data.paydayAmount}
+                setPaydayAmount={data.setPaydayAmount}
             />}
 
             {view === 'transfers' && <TransferManager accounts={data.accounts} onUpdateAccountsComplex={data.updateAccountsWithMovements} onLinkedTransfer={data.executeLinkedTransfer} lastSavedAt={data.lastSavedAt} recurringMovements={data.recurringMovements} onUpdateRecurring={data.setRecurringMovements} />}

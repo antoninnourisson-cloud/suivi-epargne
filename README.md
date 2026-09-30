@@ -46,6 +46,7 @@ Un **petit serveur optionnel** (Cloudflare Worker, dossier [`worker/`](worker/))
   - Navigo, mutuelle, titres-restaurant.
 - **Mode exact** : les chiffres réels d'une fiche de paie remplacent la formule.
 - Charges fixes, capacité d'épargne, stratégie de placement selon les taux et plafonds, remplissage des livrets, durée de survie.
+- **Rappel du jour de paie** (notification) : « 400 € sur le LEP, 250 € sur le Livret A », recalculé sur les soldes du moment.
 - **Horloge fiscale** : maturité des PEA, PEE et Assurance Vie.
 
 ### Rendement et fiscalité

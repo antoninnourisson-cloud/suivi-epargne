@@ -9,7 +9,7 @@
 - **Projection et dérive du rythme d'épargne** ; rythme réel confronté à la théorie dans Objectifs.
 - **Alertes** : révision des taux réglementés, éligibilité LEP, intérêts parentaux de décembre.
 - **Mouvements récurrents** proposés à l'échéance, et **ajustement « + / − x € »** dans Actualiser solde.
-- **Serveur Cloudflare** : session Google persistante et notifications push.
+- **Serveur Cloudflare** : session Google persistante et notifications push, dont le rappel du jour de paie avec le plan de placement.
 
 ## Pistes non démarrées
 

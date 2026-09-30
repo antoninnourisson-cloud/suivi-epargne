@@ -3,8 +3,8 @@
 // Logique fiscale centralisée (calcul du "super net", impôt par tranches).
 // Fonctions pures, testables, réutilisées par le Pilotage et le Dashboard.
 // ================================================
-import { FiscalConfig, TaxBracket, WorkBenefits, RateChange, AccountType, AccountMovement, RecurringMovement } from '../types';
-import { DEFAULT_STANDARD_ALLOWANCE_CAP } from '../constants';
+import { FiscalConfig, TaxBracket, WorkBenefits, RateChange, AccountType, AccountMovement, RecurringMovement, SavingsAccount, GlobalAppData, PayslipExtractedData } from '../types';
+import { DEFAULT_STANDARD_ALLOWANCE_CAP, DEFAULT_FISCAL_CONFIG, DEFAULT_WORK_BENEFITS } from '../constants';
 import { MS_PER_DAY, formatISODay, parseISODate, daysBetween } from './dates';
 
 export interface IncomeInput {
@@ -757,4 +757,105 @@ export const findDueRecurring = (
       if (alreadyDone) return [];
       return [{ recurring: r, dueDate: formatISODay(new Date(y, m, day)) }];
     });
+};
+
+// ---------------------------------------------------------------------------
+// Capacité d'épargne et plan de placement (Pilotage)
+// ---------------------------------------------------------------------------
+// Sortis du composant pour que le serveur (rappel du jour de paie) calcule EXACTEMENT le
+// même plan que l'écran Pilotage.
+
+/** « Super net » réel d'une fiche de paie : net payé, sinon net avant impôt − impôt prélevé. */
+export const payslipSuperNet = (e: PayslipExtractedData): number | undefined =>
+  e.netPaid ?? (e.netAmount !== undefined && e.incomeTaxWithheld !== undefined
+    ? e.netAmount - e.incomeTaxWithheld
+    : undefined);
+
+/**
+ * Capacité d'épargne mensuelle théorique : super net − charges fixes − loisirs − projets.
+ * Le super net vient de la fiche de paie de référence si elle en donne un, sinon de la
+ * formule (même règle que le Pilotage).
+ */
+export const computeMonthlySavingsCapacity = (data: GlobalAppData): number => {
+  const c = data.config || ({} as GlobalAppData['config']);
+  const formula = computeIncome(
+    {
+      grossAnnual: c.grossAnnual ?? 0,
+      extraMonthlyIncome: c.extraMonthlyIncome ?? 0,
+      navigoBase: c.navigoBase ?? 90.80,
+      navigoRate: c.navigoRate ?? 67.24,
+      taxRateManual: c.taxRateManual ?? 0,
+    },
+    data.fiscalConfig || DEFAULT_FISCAL_CONFIG,
+    data.workBenefits || DEFAULT_WORK_BENEFITS
+  ).superNet;
+  const payslip = (data.payslips || []).find(p => p.id === data.activePayslipId);
+  const superNet = (payslip && payslipSuperNet(payslip.extracted)) ?? formula;
+  const totalFixed = (data.expenses || []).reduce((sum, e) => sum + e.amount, 0);
+  return superNet - totalFixed - (c.leisureBudget ?? 0) - (c.projectSavings ?? 0);
+};
+
+export interface PlacementStep {
+  accountName: string;
+  type: AccountType;
+  rate?: number;
+  fillAmount: number;
+  isFullAfter: boolean;
+  isLiquid: boolean;
+  alert?: boolean; // aucun compte de repli : suggestion d'en ouvrir un
+}
+
+/**
+ * Répartit `totalToInvest` : livrets réglementés d'abord (meilleur taux, puis LEP > Livret A
+ * > LDDS) jusqu'à leur plafond, le reste sur le premier autre placement (ou suggestion
+ * d'ouvrir un PEA/AV).
+ */
+export const computePlacementStrategy = (
+  totalToInvest: number,
+  accounts: SavingsAccount[],
+  fiscalConfig: FiscalConfig
+): PlacementStep[] => {
+  let remainingMoney = totalToInvest;
+  const steps: PlacementStep[] = [];
+  const liquidTypes = [AccountType.LEP, AccountType.LIVRET_A, AccountType.LDDS];
+  const userLiquidAccounts = accounts.filter(a => liquidTypes.includes(a.type));
+  const userOtherAccounts = accounts.filter(a => !liquidTypes.includes(a.type) && ![AccountType.COMPTE_COURANT, AccountType.IMMOBILIER].includes(a.type));
+
+  const priority: Partial<Record<AccountType, number>> = { [AccountType.LEP]: 3, [AccountType.LIVRET_A]: 2, [AccountType.LDDS]: 1 };
+  const sortAccounts = (a: SavingsAccount, b: SavingsAccount) => {
+    const rateA = a.interestRate || 0;
+    const rateB = b.interestRate || 0;
+    if (rateA !== rateB) return rateB - rateA;
+    return (priority[b.type] || 0) - (priority[a.type] || 0);
+  };
+  userLiquidAccounts.sort(sortAccounts);
+  userOtherAccounts.sort(sortAccounts);
+
+  // Plafond du compte s'il est renseigné, sinon celui de la config (même règle que
+  // le remplissage des livrets et les alertes du Dashboard).
+  const defaults: Partial<Record<AccountType, number>> = {
+    [AccountType.LEP]: fiscalConfig.ceilings.lep,
+    [AccountType.LIVRET_A]: fiscalConfig.ceilings.livretA,
+    [AccountType.LDDS]: fiscalConfig.ceilings.ldds,
+  };
+  for (const acc of userLiquidAccounts) {
+    if (remainingMoney <= 0) break;
+    const ceiling = (acc.ceiling && acc.ceiling > 0) ? acc.ceiling : (defaults[acc.type] || 0);
+    const availableSpace = Math.max(0, ceiling - acc.totalAmount);
+    if (availableSpace > 0) {
+      const amountAllocated = Math.min(remainingMoney, availableSpace);
+      steps.push({ accountName: acc.name, type: acc.type, rate: acc.interestRate, fillAmount: amountAllocated, isFullAfter: amountAllocated >= availableSpace, isLiquid: true });
+      remainingMoney -= amountAllocated;
+    }
+  }
+
+  if (remainingMoney > 0) {
+    if (userOtherAccounts.length > 0) {
+      const o = userOtherAccounts[0];
+      steps.push({ accountName: o.name, type: o.type, rate: o.interestRate, fillAmount: remainingMoney, isFullAfter: false, isLiquid: false });
+    } else {
+      steps.push({ accountName: 'Ouvrir un PEA/AV', type: AccountType.AUTRE, rate: 0, fillAmount: remainingMoney, isFullAfter: false, isLiquid: false, alert: true });
+    }
+  }
+  return steps;
 };

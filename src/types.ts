@@ -195,6 +195,10 @@ export interface GlobalAppData {
     // qu'à l'API du fournisseur concerné (Google Picker / Gemini) depuis le navigateur.
     geminiApiKey?: string;
     pickerApiKey?: string;
+    // Rappel push le jour de paie avec le plan de placement du Pilotage. Absent = désactivé.
+    paydayDay?: number; // 1-31 (ramené au dernier jour des mois plus courts)
+    // Montant à placer chaque mois. Absent = capacité d'épargne calculée par le Pilotage.
+    paydayAmount?: number;
   };
   goals?: SavingsGoal[];
   lastView?: string;

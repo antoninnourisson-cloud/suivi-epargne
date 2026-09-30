@@ -49,4 +49,42 @@ describe('computeReminders', () => {
     const r = computeReminders(base({ accounts: [old] }), new Date(2026, 8, 28, 9), APP);
     expect(r.map(x => x.key)).toContain('stale:2026-07-01');
   });
+
+  describe('jour de paie', () => {
+    const lep = { ...livret, id: 'lep', name: 'LEP', type: AccountType.LEP, totalAmount: 9600, ownedAmount: 9600, interestRate: 3.5 };
+    const livA = { ...livret, totalAmount: 1000, ownedAmount: 1000, interestRate: 2.4 };
+    const withPayday = (paydayDay: number, paydayAmount?: number) => base({
+      accounts: [lep, livA],
+      config: { ...base().config, paydayDay, paydayAmount },
+    });
+
+    it('annonce le plan de placement le jour de paie (LEP plein en premier)', () => {
+      const r = computeReminders(withPayday(28, 650), new Date(2026, 8, 28, 9), APP)
+        .filter(x => x.key.startsWith('payday'));
+      expect(r).toHaveLength(1);
+      expect(r[0].key).toBe('payday:2026-09');
+      // Plafond LEP par défaut 10 000 € : 400 € de place, le reste sur le Livret A.
+      expect(r[0].message.body).toMatch(/400.*LEP.*250.*Livret A/);
+    });
+
+    it('reste valable 3 jours puis se tait', () => {
+      const keys = (d: Date) => computeReminders(withPayday(25, 100), d, APP).map(x => x.key);
+      expect(keys(new Date(2026, 8, 24, 9))).not.toContain('payday:2026-09');
+      expect(keys(new Date(2026, 8, 27, 9))).toContain('payday:2026-09');
+      expect(keys(new Date(2026, 8, 28, 9))).not.toContain('payday:2026-09');
+    });
+
+    it('ramène le 31 au dernier jour des mois courts', () => {
+      const r = computeReminders(withPayday(31, 100), new Date(2026, 8, 30, 9), APP);
+      expect(r.map(x => x.key)).toContain('payday:2026-09');
+    });
+
+    it("sans montant saisi, prend la capacité calculée du Pilotage et se tait si elle est nulle", () => {
+      const data = withPayday(28);
+      expect(computeReminders(data, new Date(2026, 8, 28, 9), APP).map(x => x.key)).not.toContain('payday:2026-09');
+      data.config.grossAnnual = 45000;
+      const r = computeReminders(data, new Date(2026, 8, 28, 9), APP).find(x => x.key === 'payday:2026-09');
+      expect(r?.message.title).toMatch(/à placer/);
+    });
+  });
 });

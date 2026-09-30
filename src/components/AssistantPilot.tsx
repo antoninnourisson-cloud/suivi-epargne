@@ -1,11 +1,12 @@
 // src/components/AssistantPilot.tsx
 import React, { useState, useMemo } from 'react';
 import { SavingsAccount, Expense, AccountType, FiscalConfig, WorkBenefits, PayslipRecord } from '../types';
-import { computeIncome, computeMaturityCountdown } from '../lib/finance';
+import { computeIncome, computeMaturityCountdown, computePlacementStrategy, payslipSuperNet } from '../lib/finance';
 import { parseISODate } from '../lib/dates';
 import { parseFrenchNumber, safeNumber } from '../lib/numbers';
 import { NumberInput } from './NumberInput';
-import { Calculator, TrendingUp, Target, Lock, Unlock, Info, Plus, Trash2, Hourglass, Coins, BarChart3, X, Check, FileCheck2, Wand2 } from 'lucide-react';
+import { isBackendEnabled } from '../services/backendService';
+import { Calculator, TrendingUp, Target, Lock, Unlock, Info, Plus, Trash2, Hourglass, Coins, BarChart3, X, Check, FileCheck2, Wand2, BellRing } from 'lucide-react';
 
 interface AssistantPilotProps {
   accounts: SavingsAccount[];
@@ -32,13 +33,18 @@ interface AssistantPilotProps {
   // de paie, verbatim, à la place de la formule théorique (computeIncome).
   activePayslip?: PayslipRecord;
   onClearActivePayslip: () => void;
+  paydayDay?: number;
+  setPaydayDay: (day: number | undefined) => void;
+  paydayAmount?: number;
+  setPaydayAmount: (amount: number | undefined) => void;
 }
 
 export const AssistantPilot: React.FC<AssistantPilotProps> = ({
   accounts, expenses, onUpdateExpenses,
   grossAnnual, setGrossAnnual, leisureBudget, setLeisureBudget, projectSavings, setProjectSavings,
   navigoBase, setNavigoBase, navigoRate, setNavigoRate, taxRateManual, setTaxRateManual,
-  extraMonthlyIncome, setExtraMonthlyIncome, fiscalConfig, workBenefits, activePayslip, onClearActivePayslip
+  extraMonthlyIncome, setExtraMonthlyIncome, fiscalConfig, workBenefits, activePayslip, onClearActivePayslip,
+  paydayDay, setPaydayDay, paydayAmount, setPaydayAmount
 }) => {
   const [showDetails, setShowDetails] = useState(false);
   const [externalSavings, setExternalSavings] = useState<number>(0);
@@ -49,6 +55,9 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
   const [isAddingExpense, setIsAddingExpense] = useState(false);
   const [newExpenseName, setNewExpenseName] = useState('');
   const [newExpenseAmount, setNewExpenseAmount] = useState('');
+  // Brouillon du montant du rappel de paie : on ne persiste qu'une saisie interprétable
+  // (vide = capacité calculée), sans réécrire le champ pendant la frappe.
+  const [paydayAmountDraft, setPaydayAmountDraft] = useState(paydayAmount !== undefined ? String(paydayAmount) : '');
 
   const autoValues = useMemo(
     () =>
@@ -69,9 +78,7 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
   const display = useMemo(() => {
     if (activePayslip) {
       const e = activePayslip.extracted;
-      const effectiveSuperNetReal = e.netPaid ?? (e.netAmount !== undefined && e.incomeTaxWithheld !== undefined
-        ? e.netAmount - e.incomeTaxWithheld
-        : undefined);
+      const effectiveSuperNetReal = payslipSuperNet(e);
       return {
         isReal: true,
         grossMonth: e.grossAmount,
@@ -151,52 +158,10 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
     return { totalFixed, theoreticalCapacity, finalCapacity, totalToInvest };
   }, [effectiveSuperNetForCalc, expenses, leisureBudget, projectSavings, manualSavingsCapacity, externalSavings]);
 
-  const strategy = useMemo(() => {
-    let remainingMoney = budgetData.totalToInvest;
-    const steps: any[] = [];
-    const liquidTypes = [AccountType.LEP, AccountType.LIVRET_A, AccountType.LDDS];
-    const userLiquidAccounts = accounts.filter(a => liquidTypes.includes(a.type));
-    const userOtherAccounts = accounts.filter(a => !liquidTypes.includes(a.type) && ![AccountType.COMPTE_COURANT, AccountType.IMMOBILIER].includes(a.type));
-
-    const sortAccounts = (a: SavingsAccount, b: SavingsAccount) => {
-      const rateA = a.interestRate || 0;
-      const rateB = b.interestRate || 0;
-      if (rateA !== rateB) return rateB - rateA;
-      const priority = { [AccountType.LEP]: 3, [AccountType.LIVRET_A]: 2, [AccountType.LDDS]: 1 };
-      return (priority[b.type] || 0) - (priority[a.type] || 0);
-    };
-
-    userLiquidAccounts.sort(sortAccounts);
-    userOtherAccounts.sort(sortAccounts);
-
-    userLiquidAccounts.forEach(acc => {
-      if (remainingMoney <= 0) return;
-      // Plafond du compte s'il est renseigné, sinon celui de la config (même règle que
-      // bookletStats et les alertes du Dashboard).
-      const defaults: Partial<Record<AccountType, number>> = {
-        [AccountType.LEP]: fiscalConfig.ceilings.lep,
-        [AccountType.LIVRET_A]: fiscalConfig.ceilings.livretA,
-        [AccountType.LDDS]: fiscalConfig.ceilings.ldds,
-      };
-      const ceiling = (acc.ceiling && acc.ceiling > 0) ? acc.ceiling : (defaults[acc.type] || 0);
-
-      const availableSpace = Math.max(0, ceiling - acc.totalAmount);
-      if (availableSpace > 0) {
-        const amountAllocated = Math.min(remainingMoney, availableSpace);
-        steps.push({ accountName: acc.name, type: acc.type, rate: acc.interestRate, fillAmount: amountAllocated, isFullAfter: amountAllocated >= availableSpace, isLiquid: true });
-        remainingMoney -= amountAllocated;
-      }
-    });
-
-    if (remainingMoney > 0) {
-      if (userOtherAccounts.length > 0) {
-        steps.push({ accountName: userOtherAccounts[0].name, type: userOtherAccounts[0].type, rate: userOtherAccounts[0].interestRate, fillAmount: remainingMoney, isFullAfter: false, isLiquid: false });
-      } else {
-        steps.push({ accountName: "Ouvrir un PEA/AV", type: AccountType.AUTRE, rate: 0, fillAmount: remainingMoney, isFullAfter: false, isLiquid: false, alert: true });
-      }
-    }
-    return steps;
-  }, [budgetData.totalToInvest, accounts, fiscalConfig]);
+  const strategy = useMemo(
+    () => computePlacementStrategy(budgetData.totalToInvest, accounts, fiscalConfig),
+    [budgetData.totalToInvest, accounts, fiscalConfig]
+  );
 
   const bookletStats = useMemo(() => {
     const defaults: Partial<Record<AccountType, number>> = {
@@ -426,6 +391,43 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
             <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
                <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-2"><Target className="w-5 h-5 text-indigo-600" /> Placement ({Math.round(budgetData.totalToInvest).toLocaleString('fr-FR')} €)</h3>
                <div className="space-y-3">{strategy.length > 0 ? strategy.map((step, idx) => (<div key={step.accountName + idx} className="flex items-center justify-between p-4 rounded-xl border-l-4 bg-indigo-50 border-indigo-600"><div className="flex items-center gap-4"><div className="w-6 h-6 rounded-full flex center items-center justify-center bg-indigo-600 text-white font-bold text-xs">{idx + 1}</div><div><p className="font-bold text-slate-800 dark:text-slate-100">{step.accountName}</p><p className="text-xs text-slate-500 dark:text-slate-400">{step.type} • Taux {step.rate}%</p></div></div><p className="text-xl font-black text-indigo-600">+ {Math.round(step.fillAmount).toLocaleString('fr-FR')} €</p></div>)) : <p className="text-sm text-slate-400 dark:text-slate-500 italic">Rien à placer.</p>}</div>
+               {isBackendEnabled() && (
+                 <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-700 space-y-3">
+                   <p className="text-sm font-bold text-slate-700 dark:text-slate-200 flex items-center gap-2"><BellRing className="w-4 h-4 text-indigo-600" /> Rappel le jour de paie</p>
+                   <div className="flex flex-wrap items-center gap-3">
+                     <select
+                       value={paydayDay ?? ''}
+                       onChange={(e) => setPaydayDay(e.target.value ? Number(e.target.value) : undefined)}
+                       className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-lg p-2 text-sm font-bold text-slate-700 dark:text-slate-200"
+                     >
+                       <option value="">Désactivé</option>
+                       {Array.from({ length: 31 }, (_, i) => i + 1).map(d => <option key={d} value={d}>Le {d} du mois</option>)}
+                     </select>
+                     {paydayDay !== undefined && (
+                       <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+                         Montant
+                         <input
+                           type="text"
+                           inputMode="decimal"
+                           value={paydayAmountDraft}
+                           placeholder={`${Math.round(Math.max(0, budgetData.theoreticalCapacity)).toLocaleString('fr-FR')} (calculé)`}
+                           onChange={(e) => {
+                             setPaydayAmountDraft(e.target.value);
+                             const v = e.target.value.trim() === '' ? undefined : parseFrenchNumber(e.target.value);
+                             if (v === undefined) setPaydayAmount(undefined);
+                             else if (v !== null && v >= 0) setPaydayAmount(v);
+                           }}
+                           className="w-32 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-lg p-2 font-bold text-slate-700 dark:text-slate-200"
+                         />
+                         €
+                       </label>
+                     )}
+                   </div>
+                   <p className="text-xs text-slate-500 dark:text-slate-400">
+                     Une notification ce jour-là avec la répartition ci-dessus, recalculée sur tes soldes du moment. Sans montant saisi, c'est la capacité d'épargne calculée qui est utilisée. Les notifications doivent être activées sur l'appareil (Paramètres).
+                   </p>
+                 </div>
+               )}
             </div>
 
             <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-6">

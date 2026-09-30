@@ -59,6 +59,8 @@ const canonicalize = (data: GlobalAppData | null | undefined): string => {
       parentsEmail: c.parentsEmail ?? null,
       geminiApiKey: c.geminiApiKey ?? null,
       pickerApiKey: c.pickerApiKey ?? null,
+      paydayDay: c.paydayDay ?? null,
+      paydayAmount: c.paydayAmount ?? null,
     },
   });
 };
@@ -121,6 +123,10 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
   const [parentsEmail, setParentsEmail] = useState<string>('');
   const [geminiApiKey, setGeminiApiKey] = useState<string>('');
   const [pickerApiKey, setPickerApiKey] = useState<string>('');
+  // Rappel du jour de paie (notification push) : undefined = désactivé. Le montant est
+  // facultatif — absent, le serveur prend la capacité d'épargne calculée du Pilotage.
+  const [paydayDay, setPaydayDay] = useState<number | undefined>(undefined);
+  const [paydayAmount, setPaydayAmount] = useState<number | undefined>(undefined);
 
   const [lastView, setLastViewState] = useState<string>(
     () => localStorage.getItem('last_view') || 'dashboard'
@@ -246,6 +252,8 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
           setParentsEmail(data.config.parentsEmail ?? '');
           setGeminiApiKey(data.config.geminiApiKey ?? '');
           setPickerApiKey(data.config.pickerApiKey ?? '');
+          setPaydayDay(data.config.paydayDay ?? undefined);
+          setPaydayAmount(data.config.paydayAmount ?? undefined);
         }
         if (data.lastView) setLastView(data.lastView);
 
@@ -313,12 +321,14 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
     activePayslipId,
     config: {
       grossAnnual, leisureBudget, projectSavings, navigoBase, navigoRate,
-      taxRateManual, extraMonthlyIncome, parentsEmail, geminiApiKey, pickerApiKey
+      taxRateManual, extraMonthlyIncome, parentsEmail, geminiApiKey, pickerApiKey,
+      paydayDay, paydayAmount,
     },
     lastView: lastViewRef.current,
   }), [accounts, expenses, history, expensesHistory, fiscalConfig, workBenefits, grossAnnual,
        leisureBudget, projectSavings, navigoBase, navigoRate, taxRateManual,
-       extraMonthlyIncome, parentsEmail, goals, payslips, recurringMovements, activePayslipId, geminiApiKey, pickerApiKey]);
+       extraMonthlyIncome, parentsEmail, goals, payslips, recurringMovements, activePayslipId, geminiApiKey, pickerApiKey,
+       paydayDay, paydayAmount]);
 
   // Applique un objet de données (import / rechargement) à l'état.
   const applyData = useCallback((data: GlobalAppData) => {
@@ -343,6 +353,8 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
       setParentsEmail(data.config.parentsEmail ?? '');
       setGeminiApiKey(data.config.geminiApiKey ?? '');
       setPickerApiKey(data.config.pickerApiKey ?? '');
+      setPaydayDay(data.config.paydayDay ?? undefined);
+      setPaydayAmount(data.config.paydayAmount ?? undefined);
     }
   }, []);
 
@@ -580,6 +592,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
     accounts, expenses, history, expensesHistory, fiscalConfig, workBenefits, 
     grossAnnual, leisureBudget, projectSavings, navigoBase, navigoRate, 
     taxRateManual, extraMonthlyIncome, parentsEmail, geminiApiKey, pickerApiKey,
+    paydayDay, paydayAmount,
     isAuthenticated, driveFileId, isLoadingData,
     buildData, syncConflict, sessionExpired, goals, payslips, recurringMovements, activePayslipId, isOffline, runExclusive
   ]);
@@ -817,6 +830,8 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
     parentsEmail, setParentsEmail,
     geminiApiKey, setGeminiApiKey,
     pickerApiKey, setPickerApiKey,
+    paydayDay, setPaydayDay,
+    paydayAmount, setPaydayAmount,
     lastView, setLastView,
     
     // Status
