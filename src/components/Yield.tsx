@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { SavingsAccount, AccountType, FiscalConfig } from '../types';
-import { computeWeightedAnnualRate, computeCapitalGainsTax, computeParentalInterest, computeAccruedInterest, CapitalTaxRegime } from '../lib/finance';
+import { computeWeightedAnnualRate, computeCapitalGainsTax, computeParentalInterest, computeAccruedInterest, CapitalTaxRegime, computeWithdrawalTax, tracksDeposits, PEA_DEPOSIT_CEILING } from '../lib/finance';
 import { Coins, TrendingUp, AlertCircle, PiggyBank, FileDown, Landmark, Info } from 'lucide-react';
 
 const REGIME_LABEL: Record<CapitalTaxRegime, string> = {
@@ -121,6 +121,21 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig }) => {
   const totalNetTaxable = taxableRows.reduce((s, r) => s + (r.tax.regime === 'NON_MODELISE' ? 0 : r.tax.netInterest), 0);
   const hasUnmodeled = taxableRows.some(r => r.tax.regime === 'NON_MODELISE');
 
+  // --- PLUS-VALUES LATENTES (placements dont on connaît les versements cumulés) ---
+  // Impôt si l'on retirait TOUT le compte aujourd'hui : c'est la plus-value entière qui est
+  // imposée (versements rendus sans impôt), selon l'ancienneté du compte.
+  const trackedAccounts = accounts.filter(a => tracksDeposits(a.type) && a.totalAmount > 0);
+  const latentRows = useMemo(() =>
+    trackedAccounts
+      .filter(a => a.totalDeposits !== undefined)
+      .map(a => {
+        const tax = computeWithdrawalTax(a, a.totalAmount, fiscalConfig);
+        return { account: a, gain: a.totalAmount - (a.totalDeposits || 0), tax };
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [accounts, fiscalConfig]);
+  const missingDeposits = trackedAccounts.filter(a => a.totalDeposits === undefined);
+
   const exportFiscalCsv = () => {
     let csv = `Compte,Type,Établissement,Solde,Taux (%),Intérêts bruts acquis ${currentYear},Prélèvements sociaux,Impôt sur le revenu,Net si retiré,Régime,Date ouverture\n`;
     taxableRows.forEach(r => {
@@ -199,6 +214,60 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig }) => {
           </table>
         </div>
       </div>
+
+      {(latentRows.length > 0 || missingDeposits.length > 0) && (
+        <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
+          <div className="p-6 border-b border-slate-100 dark:border-slate-800">
+            <h3 className="font-black text-slate-800 dark:text-slate-100 flex items-center gap-2"><TrendingUp className="w-5 h-5 text-indigo-600" /> Plus-values latentes</h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Valeur − versements cumulés. En cas de retrait, seule cette part est imposée ; « Si tout retiré » donne ce qu'il resterait de la plus-value en vidant le compte aujourd'hui.</p>
+          </div>
+          {latentRows.length > 0 && (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm min-w-[34rem]">
+                <thead className="bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700">
+                  <tr>
+                    <th className="px-6 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Compte</th>
+                    <th className="px-6 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase text-right">Versé</th>
+                    <th className="px-6 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase text-right">Plus-value</th>
+                    <th className="px-6 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase text-right">Si tout retiré</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {latentRows.map(({ account: a, gain, tax }) => (
+                    <tr key={a.id}>
+                      <td className="px-6 py-3">
+                        <div className="font-bold text-slate-800 dark:text-slate-100">{a.name}</div>
+                        <div className="text-[10px] uppercase text-slate-400 dark:text-slate-500 font-bold">{a.type} · valeur {fmt(a.totalAmount)}</div>
+                        {a.type === AccountType.PEA && (
+                          <div className={`text-[10px] font-bold ${(a.totalDeposits || 0) >= PEA_DEPOSIT_CEILING * 0.9 ? 'text-amber-600' : 'text-slate-400 dark:text-slate-500'}`}>
+                            Plafond de versements : {fmt(Math.max(0, PEA_DEPOSIT_CEILING - (a.totalDeposits || 0)))} restants
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-6 py-3 text-right font-mono text-slate-600 dark:text-slate-300">{fmt(a.totalDeposits || 0)}</td>
+                      <td className={`px-6 py-3 text-right font-mono font-bold ${gain >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>{gain >= 0 ? '+' : ''}{fmt(gain)}</td>
+                      <td className="px-6 py-3 text-right">
+                        {tax.known ? (
+                          <>
+                            <div className="font-black text-emerald-600">{fmt(gain - tax.socialCharges - tax.incomeTax)}</div>
+                            <div className="text-[10px] font-bold text-slate-400 dark:text-slate-500">impôt {fmt(tax.socialCharges + tax.incomeTax)}{tax.closesPea ? ' · clôture le PEA' : ''}</div>
+                          </>
+                        ) : <div className="text-slate-400">—</div>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {missingDeposits.length > 0 && (
+            <p className="px-6 py-4 text-xs text-slate-500 dark:text-slate-400 flex items-start gap-1.5">
+              <Info className="w-3.5 h-3.5 flex-shrink-0 mt-px" />
+              Versements cumulés à renseigner (fiche du compte ou Actualiser solde) : {missingDeposits.map(a => a.name).join(', ')}.
+            </p>
+          )}
+        </div>
+      )}
 
       {taxableRows.length > 0 && (
         <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">

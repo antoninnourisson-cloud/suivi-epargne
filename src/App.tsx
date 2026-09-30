@@ -17,16 +17,17 @@ import {
 import { isBackendEnabled, hasBackendSession } from './services/backendService';
 import { disablePush } from './services/pushService';
 import { isLockEnabled } from './services/appLockService';
-import { computeMaturityCountdown } from './lib/finance';
+import { computeMaturityCountdown, depositsAfterCashFlow, computeMonthlySavingsCapacity } from './lib/finance';
 import { localTodayISO } from './lib/dates';
 import {
   LayoutDashboard, Wallet, Trash2, Edit2, ShieldCheck,
   ArrowRightLeft, RefreshCcw, PlusCircle, Cloud, LogOut,
   Loader2, Settings as SettingsIcon, AlertTriangle, RotateCw,
-  Target, Coins, LineChart, Users, Calculator, Sun, Moon, Zap, Tag, Save, WifiOff, FileText, Clock
+  Target, Coins, LineChart, Users, Calculator, Sun, Moon, Zap, Tag, Save, WifiOff, FileText, Clock, CalendarClock
 } from 'lucide-react';
 
 // Code-splitting : les vues lourdes (recharts, etc.) sont chargées à la demande.
+const Subscriptions = lazy(() => import('./components/Subscriptions').then(m => ({ default: m.Subscriptions })));
 const Dashboard = lazy(() => import('./components/Dashboard').then(m => ({ default: m.Dashboard })));
 const AccountUpdate = lazy(() => import('./components/AccountUpdate').then(m => ({ default: m.AccountUpdate })));
 const AssistantPilot = lazy(() => import('./components/AssistantPilot').then(m => ({ default: m.AssistantPilot })));
@@ -56,7 +57,7 @@ const NavButton = ({ active, onClick, icon: Icon, label, highlight }: any) => (
     </button>
 );
 
-type View = 'dashboard' | 'accounts' | 'transfers' | 'pilot' | 'update' | 'settings' | 'goals' | 'yield' | 'history' | 'parental' | 'simulator' | 'payslips';
+type View = 'dashboard' | 'accounts' | 'transfers' | 'pilot' | 'update' | 'settings' | 'goals' | 'yield' | 'history' | 'parental' | 'simulator' | 'payslips' | 'subscriptions';
 
 const App: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -163,10 +164,16 @@ const App: React.FC = () => {
     navigoRate: data.navigoRate, taxRateManual: data.taxRateManual,
   }), [data.grossAnnual, data.navigoBase, data.navigoRate, data.taxRateManual]);
 
+  // Objectif du mois pour la jauge « Placé ce mois-ci » : même montant que le rappel de paie.
+  const monthPlan = useMemo(
+    () => data.paydayAmount ?? computeMonthlySavingsCapacity(data.buildData()),
+    [data.paydayAmount, data.buildData]
+  );
+
   // Sync view from data (au premier chargement)
   useEffect(() => {
       if (data.lastView && view === 'dashboard') {
-          const validViews: View[] = ['dashboard', 'accounts', 'transfers', 'pilot', 'update', 'settings', 'goals', 'yield', 'history', 'parental', 'simulator', 'payslips'];
+          const validViews: View[] = ['dashboard', 'accounts', 'transfers', 'pilot', 'update', 'settings', 'goals', 'yield', 'history', 'parental', 'simulator', 'payslips', 'subscriptions'];
           if (validViews.includes(data.lastView as View)) {
               setView(data.lastView as View);
           }
@@ -505,7 +512,7 @@ const App: React.FC = () => {
     data.notifyParentsIfNeeded([{ account: { ...account, ownedAmount: newOwned, totalAmount: newTotal }, date }]);
 
     data.setAccounts(prev => prev.map(a => a.id === accountId
-      ? { ...a, ownedAmount: newOwned, totalAmount: newTotal, movements: [...(a.movements || []), movement] }
+      ? { ...a, ownedAmount: newOwned, totalAmount: newTotal, totalDeposits: depositsAfterCashFlow(a, delta), movements: [...(a.movements || []), movement] }
       : a));
 
     addToast({ message: `${label} — ${account.name}`, kind: 'success' });
@@ -576,6 +583,7 @@ const App: React.FC = () => {
           <NavButton active={view === 'accounts'} onClick={() => setView('accounts')} icon={Wallet} label="Mes Comptes" />
           <NavButton active={view === 'transfers'} onClick={() => setView('transfers')} icon={ArrowRightLeft} label="Virements" />
           <NavButton active={view === 'payslips'} onClick={() => setView('payslips')} icon={FileText} label="Fiches de paie" />
+          <NavButton active={view === 'subscriptions'} onClick={() => setView('subscriptions')} icon={CalendarClock} label="Abonnements" />
 
           <div className="my-4 border-t border-slate-800 mx-4"></div>
           <NavButton active={view === 'settings'} onClick={() => setView('settings')} icon={SettingsIcon} label="Paramètres" />
@@ -650,7 +658,7 @@ const App: React.FC = () => {
             )}
 
             <Suspense fallback={<ViewLoader />}>
-            {view === 'dashboard' && <Dashboard accounts={data.accounts} history={data.history} expenses={data.expenses} fiscalConfig={data.fiscalConfig} workBenefits={data.workBenefits} onDeleteAccount={handleDeleteAccount} config={dashboardConfig} recurringMovements={data.recurringMovements} onRecordRecurring={(r, date) => handleQuickAdd(r.accountId, r.amount, r.type, r.label, date)} />}
+            {view === 'dashboard' && <Dashboard accounts={data.accounts} history={data.history} expenses={data.expenses} fiscalConfig={data.fiscalConfig} workBenefits={data.workBenefits} onDeleteAccount={handleDeleteAccount} config={dashboardConfig} monthPlan={monthPlan} recurringMovements={data.recurringMovements} onRecordRecurring={(r, date) => handleQuickAdd(r.accountId, r.amount, r.type, r.label, date)} />}
 
             {view === 'pilot' && <AssistantPilot
                 accounts={data.accounts}
@@ -696,7 +704,8 @@ const App: React.FC = () => {
             {view === 'yield' && <Yield accounts={data.accounts} fiscalConfig={data.fiscalConfig} />}
             {view === 'history' && <History history={data.history} expensesHistory={data.expensesHistory} />}
             {view === 'parental' && <ParentalShare accounts={data.accounts} />}
-            {view === 'simulator' && <WithdrawalSimulator accounts={data.accounts} expenses={data.expenses} goals={data.goals} />}
+            {view === 'simulator' && <WithdrawalSimulator accounts={data.accounts} expenses={data.expenses} goals={data.goals} fiscalConfig={data.fiscalConfig} />}
+            {view === 'subscriptions' && <Subscriptions subscriptions={data.subscriptions} onUpdate={data.setSubscriptions} />}
             {view === 'payslips' && <Payslips payslips={data.payslips} onUpdatePayslips={data.setPayslips} geminiApiKey={data.geminiApiKey} pickerApiKey={data.pickerApiKey} onApplyToPilotage={handleApplyPayslipToPilotage} activePayslipId={data.activePayslipId} onClearActivePayslip={handleClearActivePayslip} />}
 
             {view === 'settings' && (
@@ -856,6 +865,7 @@ const App: React.FC = () => {
           { key: 'parental', label: 'Part Parentale', icon: Users },
           { key: 'simulator', label: 'Simulateur', icon: Calculator },
           { key: 'payslips', label: 'Fiches de paie', icon: FileText },
+          { key: 'subscriptions', label: 'Abonnements', icon: CalendarClock },
           { key: 'settings', label: 'Paramètres', icon: SettingsIcon },
         ]}
       />

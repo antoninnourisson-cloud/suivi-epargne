@@ -10,12 +10,12 @@
 - **Alertes** : révision des taux réglementés, éligibilité LEP, intérêts parentaux de décembre.
 - **Mouvements récurrents** proposés à l'échéance, et **ajustement « + / − x € »** dans Actualiser solde.
 - **Serveur Cloudflare** : session Google persistante et notifications push, dont le rappel du jour de paie avec le plan de placement.
+- **Versements cumulés** (PEA, AV…) : plus-values latentes, impôt exact d'un retrait, plafond PEA ; « Placé ce mois-ci » ; meilleur compte à ponctionner ; abonnements avec rappels.
 
 ## Pistes non démarrées
 
 - **Préférences de notification par type** (couper par exemple le rappel « soldes non actualisés » en gardant les échéances). Aujourd'hui, c'est tout ou rien par appareil.
 - **Déploiement automatique du Worker** depuis GitHub Actions. Il faut ajouter un jeton d'API Cloudflare aux secrets du dépôt ; aujourd'hui, `npm run deploy` se lance à la main.
-- **Plafond de versements PEA** (150 000 €). Il faut une nouvelle donnée, le cumul des versements, distinct de la valorisation.
 - **Pré-remplissage des avantages salariaux depuis une fiche de paie**. Mis de côté : `WorkBenefits` attend des taux et des prix de base, alors que la fiche ne donne que des montants déjà calculés.
 
 ## Notes techniques à ne pas perdre

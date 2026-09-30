@@ -23,6 +23,9 @@ export interface AccountMovement {
   label: string;
   type: 'IN' | 'OUT';
   linkId?: string; 
+  // 'valuation' : variation de valeur d'un placement (cours, gains) et non un versement ou
+  // un retrait d'argent. Exclu du « placé ce mois-ci ». Absent = argent réellement bougé.
+  kind?: 'valuation';
 }
 
 export interface RateChange {
@@ -46,6 +49,10 @@ export interface SavingsAccount {
   isTaxable?: boolean;
   rateHistory?: RateChange[];
   tags?: string[];
+  // Versements cumulés (PEA, Assurance Vie, Crypto…), distincts de la valeur du compte :
+  // la différence est la plus-value latente, seule part imposée lors d'un retrait.
+  // Absent = inconnu (l'app ne devine pas).
+  totalDeposits?: number;
 }
 
 export interface PortfolioSnapshot {
@@ -106,6 +113,20 @@ export interface RecurringMovement {
   type: 'IN' | 'OUT';
   label: string;
   dayOfMonth: number; // 1-31 ; ramené au dernier jour pour les mois plus courts
+  active: boolean;
+}
+
+export type SubscriptionFrequency = 'weekly' | 'monthly' | 'quarterly' | 'semiannual' | 'yearly';
+
+// Abonnement prélevé sur un compte (courant en général) : ne touche jamais aux soldes de
+// l'app, sert uniquement aux rappels avant prélèvement.
+export interface Subscription {
+  id: string;
+  name: string;
+  amount: number;
+  debitAccount: string; // texte libre : « Compte joint BP », « Carte Boursorama »…
+  frequency: SubscriptionFrequency;
+  anchorDate: string; // 'YYYY-MM-DD' d'un prélèvement connu : les suivants en découlent
   active: boolean;
 }
 
@@ -204,6 +225,7 @@ export interface GlobalAppData {
   lastView?: string;
   payslips?: PayslipRecord[];
   recurringMovements?: RecurringMovement[];
+  subscriptions?: Subscription[];
   // Fiche de paie actuellement utilisée comme référence exacte dans le Pilotage Budgétaire
   // (bascule le détail charges/impôt sur les vrais chiffres au lieu de la formule
   // théorique). `undefined` = mode estimation (comportement historique, pour simuler des

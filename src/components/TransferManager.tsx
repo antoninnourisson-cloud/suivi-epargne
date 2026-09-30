@@ -7,10 +7,11 @@ import { RecurringManager } from './RecurringManager';
 import { useSaveFeedback } from '../hooks/useSaveFeedback';
 import { safeNumber } from '../lib/numbers';
 import { localTodayISO } from '../lib/dates';
+import { depositsAfterCashFlow } from '../lib/finance';
 
 interface TransferManagerProps {
   accounts: SavingsAccount[];
-  onUpdateAccountsComplex: (updates: { account: SavingsAccount, date: string }[]) => void;
+  onUpdateAccountsComplex: (updates: { account: SavingsAccount, date: string, cashFlow?: number }[]) => void;
   onLinkedTransfer: (sourceId: string, destId: string, amount: number, date: string) => void;
   // Horodatage de la dernière écriture Drive CONFIRMÉE (voir useSaveFeedback).
   lastSavedAt?: Date | null;
@@ -51,11 +52,12 @@ export const TransferManager: React.FC<TransferManagerProps> = ({ accounts, onUp
     const updatedAcc: SavingsAccount = {
       ...targetAcc,
       totalAmount: targetAcc.totalAmount + amount,
-      ownedAmount: targetAcc.ownedAmount + amount
+      ownedAmount: targetAcc.ownedAmount + amount,
+      totalDeposits: depositsAfterCashFlow(targetAcc, amount),
     };
 
     markPending();
-    onUpdateAccountsComplex([{ account: updatedAcc, date: opDate }]);
+    onUpdateAccountsComplex([{ account: updatedAcc, date: opDate, cashFlow: amount }]);
     setDepositAmount('');
   };
 

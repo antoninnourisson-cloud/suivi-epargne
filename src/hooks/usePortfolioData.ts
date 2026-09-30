@@ -2,9 +2,10 @@
 // FILE: src/hooks/usePortfolioData.ts
 // ================================================
 import { useState, useCallback, useRef, useEffect } from 'react';
+import { tracksDeposits, depositsAfterCashFlow } from '../lib/finance';
 import {
   GlobalAppData, SavingsAccount, Expense, PortfolioSnapshot, ExpenseSnapshot,
-  FiscalConfig, WorkBenefits, AccountMovement, SavingsGoal, PayslipRecord, RecurringMovement
+  FiscalConfig, WorkBenefits, AccountMovement, SavingsGoal, PayslipRecord, RecurringMovement, Subscription
 } from '../types';
 import { 
   DEFAULT_FISCAL_CONFIG, DEFAULT_WORK_BENEFITS 
@@ -45,6 +46,7 @@ const canonicalize = (data: GlobalAppData | null | undefined): string => {
     goals: data.goals || [],
     payslips: data.payslips || [],
     recurringMovements: data.recurringMovements || [],
+    subscriptions: data.subscriptions || [],
     activePayslipId: data.activePayslipId ?? null,
     fiscalConfig: data.fiscalConfig || null,
     workBenefits: data.workBenefits || null,
@@ -106,6 +108,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
   const [goals, setGoals] = useState<SavingsGoal[]>([]);
   const [payslips, setPayslips] = useState<PayslipRecord[]>([]);
   const [recurringMovements, setRecurringMovements] = useState<RecurringMovement[]>([]);
+  const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   // Fiche de paie servant de référence exacte au Pilotage Budgétaire (undefined = mode
   // estimation théorique, comportement historique).
   const [activePayslipId, setActivePayslipId] = useState<string | undefined>(undefined);
@@ -224,6 +227,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
         setGoals(data.goals || []);
         setPayslips(data.payslips || []);
         setRecurringMovements(data.recurringMovements || []);
+        setSubscriptions(data.subscriptions || []);
         setActivePayslipId(data.activePayslipId || undefined);
         setFiscalConfig(data.fiscalConfig || DEFAULT_FISCAL_CONFIG);
         
@@ -318,6 +322,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
     goals,
     payslips,
     recurringMovements,
+    subscriptions,
     activePayslipId,
     config: {
       grossAnnual, leisureBudget, projectSavings, navigoBase, navigoRate,
@@ -327,7 +332,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
     lastView: lastViewRef.current,
   }), [accounts, expenses, history, expensesHistory, fiscalConfig, workBenefits, grossAnnual,
        leisureBudget, projectSavings, navigoBase, navigoRate, taxRateManual,
-       extraMonthlyIncome, parentsEmail, goals, payslips, recurringMovements, activePayslipId, geminiApiKey, pickerApiKey,
+       extraMonthlyIncome, parentsEmail, goals, payslips, recurringMovements, subscriptions, activePayslipId, geminiApiKey, pickerApiKey,
        paydayDay, paydayAmount]);
 
   // Applique un objet de données (import / rechargement) à l'état.
@@ -339,6 +344,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
     setGoals(data.goals || []);
     setPayslips(data.payslips || []);
     setRecurringMovements(data.recurringMovements || []);
+    setSubscriptions(data.subscriptions || []);
     setActivePayslipId(data.activePayslipId || undefined);
     if (data.fiscalConfig) setFiscalConfig(data.fiscalConfig);
     if (data.workBenefits) setWorkBenefits(data.workBenefits);
@@ -594,7 +600,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
     taxRateManual, extraMonthlyIncome, parentsEmail, geminiApiKey, pickerApiKey,
     paydayDay, paydayAmount,
     isAuthenticated, driveFileId, isLoadingData,
-    buildData, syncConflict, sessionExpired, goals, payslips, recurringMovements, activePayslipId, isOffline, runExclusive
+    buildData, syncConflict, sessionExpired, goals, payslips, recurringMovements, subscriptions, activePayslipId, isOffline, runExclusive
   ]);
 
   // Réveil périodique pour que les snapshots ci-dessous s'ouvrent sur le nouveau mois même
@@ -719,33 +725,36 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
   };
 
   // --- LOGIQUE METIER COMPLEXE (Mouvements & Email Détaillé) ---
-  const updateAccountsWithMovements = (updates: { account: SavingsAccount, date: string }[]) => {
+  // `cashFlow` : argent réellement versé (+) ou retiré (−) sur un compte qui suit ses
+  // versements cumulés (PEA, AV…). Le reste de l'écart de solde est une variation de valeur,
+  // enregistrée à part (`kind: 'valuation'`) pour ne pas passer pour de l'épargne.
+  const updateAccountsWithMovements = (updates: { account: SavingsAccount, date: string, cashFlow?: number }[]) => {
     notifyParentsIfNeeded(updates);
 
-    // Mise à jour de l'état
     setAccounts(prev => {
       const newAccounts = [...prev];
       updates.forEach(upd => {
         const idx = newAccounts.findIndex(a => a.id === upd.account.id);
-        if (idx >= 0) {
-          const oldAcc = newAccounts[idx];
-          const diff = upd.account.ownedAmount - oldAcc.ownedAmount;
-          if (Math.abs(diff) > 0.001) {
-            const movement: AccountMovement = {
-              id: crypto.randomUUID(),
-              date: upd.date,
-              amount: Math.abs(diff),
-              label: diff > 0 ? "Actualisation (+)" : "Actualisation (-)",
-              type: diff > 0 ? 'IN' : 'OUT'
-            };
-            newAccounts[idx] = { 
-                ...upd.account, 
-                movements: [...(oldAcc.movements || []), movement] 
-            };
-          } else {
-            newAccounts[idx] = upd.account;
-          }
+        if (idx < 0) return;
+        const oldAcc = newAccounts[idx];
+        const diff = upd.account.ownedAmount - oldAcc.ownedAmount;
+        const movements: AccountMovement[] = [];
+        const push = (amount: number, label: string, kind?: 'valuation') => {
+          if (Math.abs(amount) <= 0.001) return;
+          movements.push({
+            id: crypto.randomUUID(), date: upd.date, amount: Math.round(Math.abs(amount) * 100) / 100,
+            label: `${label} (${amount > 0 ? '+' : '-'})`, type: amount > 0 ? 'IN' : 'OUT',
+            ...(kind ? { kind } : {}),
+          });
+        };
+        if (upd.account.totalDeposits !== undefined && tracksDeposits(upd.account.type)) {
+          const cash = upd.cashFlow ?? 0;
+          push(cash, cash > 0 ? 'Versement' : 'Retrait');
+          push(diff - cash, 'Valorisation', 'valuation');
+        } else {
+          push(diff, 'Actualisation');
         }
+        newAccounts[idx] = { ...upd.account, movements: [...(oldAcc.movements || []), ...movements] };
       });
       return newAccounts;
     });
@@ -768,6 +777,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
           ...source, 
           ownedAmount: source.ownedAmount - amount, 
           totalAmount: source.totalAmount - amount, 
+          totalDeposits: depositsAfterCashFlow(source, -amount),
           movements: [...(source.movements || []), moveOut] 
       };
       
@@ -776,6 +786,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
           ...dest, 
           ownedAmount: dest.ownedAmount + amount, 
           totalAmount: dest.totalAmount + amount, 
+          totalDeposits: depositsAfterCashFlow(dest, amount),
           movements: [...(dest.movements || []), moveIn] 
       };
       
@@ -797,6 +808,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
       setGoals([]);
       setPayslips([]);
       setRecurringMovements([]);
+      setSubscriptions([]);
       setActivePayslipId(undefined);
       setDriveFileId(null);
       // Purge des sauvegardes locales à la déconnexion : sans ça, se reconnecter avec un
@@ -817,6 +829,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
     goals, setGoals,
     payslips, setPayslips,
     recurringMovements, setRecurringMovements,
+    subscriptions, setSubscriptions,
     activePayslipId, setActivePayslipId,
     fiscalConfig, setFiscalConfig,
     workBenefits, setWorkBenefits,
@@ -832,6 +845,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
     pickerApiKey, setPickerApiKey,
     paydayDay, setPaydayDay,
     paydayAmount, setPaydayAmount,
+    buildData,
     lastView, setLastView,
     
     // Status

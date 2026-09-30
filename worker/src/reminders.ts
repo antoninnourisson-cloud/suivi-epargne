@@ -11,6 +11,7 @@ import {
   computeAccruedParentalInterest,
   computeMonthlySavingsCapacity,
   computePlacementStrategy,
+  findDueSubscriptions,
 } from '../../src/lib/finance';
 import { DEFAULT_FISCAL_CONFIG } from '../../src/constants';
 import type { PushMessage } from './webpush';
@@ -128,6 +129,24 @@ export const computeReminders = (data: GlobalAppData, now: Date, appUrl: string)
         });
       }
     }
+  }
+
+  // 6. Abonnements : la veille sous 100 €, une semaine avant au-delà. Une clé par
+  //    prélèvement : le rappel « 7 jours avant » n'est pas répété les jours suivants.
+  const eur2 = (n: number) =>
+    new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(n);
+  for (const { subscription: sub, dueDate, daysUntil } of findDueSubscriptions(data.subscriptions || [], now)) {
+    const [y, m, d] = dueDate.split('-').map(Number);
+    const day = new Date(y, m - 1, d).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+    out.push({
+      key: `sub:${sub.id}:${dueDate}`,
+      message: {
+        title: `Prélèvement ${daysUntil === 1 ? 'demain' : `dans ${daysUntil} jours`} : ${sub.name}`,
+        body: `${eur2(sub.amount)}${sub.debitAccount ? ` sur ${sub.debitAccount}` : ''}, ${day}.`,
+        url: appUrl,
+        tag: `sub-${sub.id}`,
+      },
+    });
   }
 
   return out;

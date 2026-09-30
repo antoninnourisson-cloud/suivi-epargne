@@ -6,6 +6,8 @@ import { AccountType, SavingsAccount, FiscalConfig } from '../types';
 import { Button } from './Button';
 import { NumberInput } from './NumberInput';
 import { localTodayISO } from '../lib/dates';
+import { parseFrenchNumber } from '../lib/numbers';
+import { tracksDeposits, PEA_DEPOSIT_CEILING } from '../lib/finance';
 import { PlusCircle, Save, Users, Calculator, ShieldCheck, Tag, X, History } from 'lucide-react';
 
 interface AccountFormProps {
@@ -28,6 +30,10 @@ export const AccountForm: React.FC<AccountFormProps> = ({ onSave, initialData, o
   const [ceiling, setCeiling] = useState<number>(initialData?.ceiling || 0);
   const [tags, setTags] = useState<string[]>(initialData?.tags || []);
   const [tagInput, setTagInput] = useState('');
+  // Texte et non nombre : vide = versements inconnus (différent de 0 €).
+  const [totalDeposits, setTotalDeposits] = useState(initialData?.totalDeposits !== undefined ? String(initialData.totalDeposits) : '');
+  const showDeposits = tracksDeposits(type);
+  const parsedDeposits = totalDeposits.trim() === '' ? undefined : parseFrenchNumber(totalDeposits);
 
   const isTaxableType = [AccountType.ASSURANCE_VIE, AccountType.PEA, AccountType.PEE, AccountType.CRYPTO, AccountType.IMMOBILIER].includes(type);
 
@@ -103,6 +109,7 @@ export const AccountForm: React.FC<AccountFormProps> = ({ onSave, initialData, o
       isTaxable: isTaxableType,
       rateHistory: rateHistory.length > 0 ? rateHistory : undefined,
       tags: tags.length > 0 ? tags : undefined,
+      totalDeposits: showDeposits && parsedDeposits !== null && parsedDeposits !== undefined && parsedDeposits >= 0 ? parsedDeposits : undefined,
     });
   };
 
@@ -144,6 +151,17 @@ export const AccountForm: React.FC<AccountFormProps> = ({ onSave, initialData, o
               )}
             </div>
             {!isTaxableType && <div><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase mb-1">Plafond (€)</label><NumberInput value={ceiling} onChange={setCeiling} className="w-full p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-bold" min={0} /></div>}
+            {showDeposits && (
+              <div className="col-span-2">
+                <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase mb-1 block">Versements cumulés (€)</label>
+                <input type="text" inputMode="decimal" value={totalDeposits} onChange={e => setTotalDeposits(e.target.value)} placeholder="Inconnu" className="w-full p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-bold" />
+                {parsedDeposits === null && <p className="text-[10px] text-rose-600 mt-1">Montant non reconnu : il ne sera pas enregistré.</p>}
+                {parsedDeposits !== null && parsedDeposits !== undefined && totalAmount > 0 && (
+                  <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1">Plus-value latente : <b>{(totalAmount - parsedDeposits).toLocaleString('fr-FR', { maximumFractionDigits: 0 })} €</b>{type === AccountType.PEA && <> · reste {Math.max(0, PEA_DEPOSIT_CEILING - parsedDeposits).toLocaleString('fr-FR')} € de versements possibles</>}</p>
+                )}
+                {parsedDeposits === undefined && <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">Ce que tu as versé, hors gains (voir ton relevé). Sert au calcul exact de l'impôt en cas de retrait.</p>}
+              </div>
+            )}
           </div>
 
           <div><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase mb-1">Date d'ouverture</label><input type="date" value={openingDate} onChange={e => setOpeningDate(e.target.value)} className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl font-bold" /></div>

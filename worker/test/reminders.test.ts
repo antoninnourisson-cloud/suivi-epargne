@@ -87,4 +87,22 @@ describe('computeReminders', () => {
       expect(r?.message.title).toMatch(/à placer/);
     });
   });
+
+  describe('abonnements', () => {
+    const subs = [
+      { id: 'n', name: 'Netflix', amount: 13.49, debitAccount: 'Compte BP', frequency: 'monthly' as const, anchorDate: '2026-09-05', active: true },
+      { id: 'a', name: 'Assurance auto', amount: 420, debitAccount: '', frequency: 'yearly' as const, anchorDate: '2025-10-05', active: true },
+    ];
+    const at = (d: Date) => computeReminders(base({ subscriptions: subs }), d, APP).filter(r => r.key.startsWith('sub:'));
+
+    it('prévient une semaine avant pour 100 € et plus, la veille sinon', () => {
+      const week = at(new Date(2026, 8, 28, 9));
+      expect(week.map(r => r.key)).toEqual(['sub:a:2026-10-05']);
+      expect(week[0].message.title).toBe('Prélèvement dans 7 jours : Assurance auto');
+      const eve = at(new Date(2026, 9, 4, 9));
+      expect(eve.map(r => r.key)).toEqual(['sub:n:2026-10-05', 'sub:a:2026-10-05']);
+      expect(eve[0].message.body).toContain('Compte BP');
+      expect(eve[0].message.title).toBe('Prélèvement demain : Netflix');
+    });
+  });
 });

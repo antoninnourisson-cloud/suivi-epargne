@@ -3,7 +3,7 @@
 // Logique fiscale centralisée (calcul du "super net", impôt par tranches).
 // Fonctions pures, testables, réutilisées par le Pilotage et le Dashboard.
 // ================================================
-import { FiscalConfig, TaxBracket, WorkBenefits, RateChange, AccountType, AccountMovement, RecurringMovement, SavingsAccount, GlobalAppData, PayslipExtractedData } from '../types';
+import { FiscalConfig, TaxBracket, WorkBenefits, RateChange, AccountType, AccountMovement, RecurringMovement, SavingsAccount, GlobalAppData, PayslipExtractedData, Subscription } from '../types';
 import { DEFAULT_STANDARD_ALLOWANCE_CAP, DEFAULT_FISCAL_CONFIG, DEFAULT_WORK_BENEFITS } from '../constants';
 import { MS_PER_DAY, formatISODay, parseISODate, daysBetween } from './dates';
 
@@ -858,4 +858,244 @@ export const computePlacementStrategy = (
     }
   }
   return steps;
+};
+
+// ---------------------------------------------------------------------------
+// Versements cumulés et fiscalité d'un retrait
+// ---------------------------------------------------------------------------
+
+/** Comptes dont la valeur bouge avec les marchés : on y suit les versements cumulés. */
+export const DEPOSIT_TRACKED_TYPES = [AccountType.PEA, AccountType.ASSURANCE_VIE, AccountType.PEE, AccountType.PER, AccountType.CRYPTO];
+export const tracksDeposits = (type: AccountType) => DEPOSIT_TRACKED_TYPES.includes(type);
+
+/** Plafond légal des VERSEMENTS sur un PEA (la valorisation peut le dépasser). */
+export const PEA_DEPOSIT_CEILING = 150_000;
+/** Abattement annuel sur les gains d'Assurance Vie de plus de 8 ans (personne seule). */
+export const AV_ANNUAL_ALLOWANCE = 4_600;
+
+/**
+ * Versements cumulés après un retrait de `amount` : un retrait emporte versements et gains
+ * au prorata de leur poids dans la valeur (règle fiscale des rachats partiels).
+ */
+export const depositsAfterWithdrawal = (totalDeposits: number, value: number, amount: number): number =>
+  value <= 0 ? totalDeposits : Math.max(0, totalDeposits * (1 - Math.min(1, amount / value)));
+
+export interface WithdrawalTax {
+  known: boolean;        // false : versements cumulés inconnus, ou fiscalité non modélisée
+  gainPart: number;      // part de gains contenue dans le montant retiré
+  socialCharges: number;
+  incomeTax: number;
+  net: number;           // ce qui arrive réellement sur le compte courant
+  closesPea: boolean;    // retrait d'un PEA de moins de 5 ans : le plan est clôturé
+}
+
+/**
+ * Impôt dû sur un retrait de `amount`. Seule la part de gains est imposée :
+ * gains retirés = montant × (valeur − versements) / valeur.
+ * - PEA / PEE : 17,2 % de prélèvements sociaux, IR exonéré après la maturité légale ;
+ * - Assurance Vie : IR à 7,5 % après 8 ans, sur la part de gains au-delà de l'abattement
+ *   annuel (4 600 €, supposé non entamé cette année) ; PFU avant 8 ans. Sur un fonds euros,
+ *   les prélèvements sociaux sont en réalité déjà retenus chaque année : on les compte ici
+ *   quand même (cas prudent, et exact pour les unités de compte) ;
+ * - Crypto : PFU 30 % sur la part de plus-value ;
+ * - autres (PER, immobilier…) : non modélisé.
+ */
+export const computeWithdrawalTax = (
+  account: { type: AccountType; openingDate?: string; totalAmount: number; totalDeposits?: number },
+  amount: number,
+  fiscalConfig: FiscalConfig,
+  asOfDate: Date = new Date()
+): WithdrawalTax => {
+  const ageYears = account.openingDate
+    ? (asOfDate.getTime() - parseISODate(account.openingDate).getTime()) / (MS_PER_DAY * 365.25)
+    : 0;
+  const closesPea = account.type === AccountType.PEA && ageYears < fiscalConfig.legalMaturity.pea;
+  const unknown: WithdrawalTax = { known: false, gainPart: 0, socialCharges: 0, incomeTax: 0, net: amount, closesPea };
+  const modeled = [AccountType.PEA, AccountType.PEE, AccountType.ASSURANCE_VIE, AccountType.CRYPTO].includes(account.type);
+  if (!modeled || account.totalDeposits === undefined || account.totalAmount <= 0) return unknown;
+
+  const gainRatio = Math.max(0, (account.totalAmount - account.totalDeposits) / account.totalAmount);
+  const gainPart = Math.min(amount, account.totalAmount) * gainRatio;
+  const socialCharges = gainPart * fiscalConfig.socialChargesCapital;
+  let incomeTax: number;
+  switch (account.type) {
+    case AccountType.PEA:
+      incomeTax = closesPea ? gainPart * PFU_INCOME_TAX_RATE : 0; break;
+    case AccountType.PEE:
+      incomeTax = ageYears >= fiscalConfig.legalMaturity.pee ? 0 : gainPart * PFU_INCOME_TAX_RATE; break;
+    case AccountType.ASSURANCE_VIE:
+      incomeTax = ageYears >= fiscalConfig.legalMaturity.assuranceVie
+        ? Math.max(0, gainPart - AV_ANNUAL_ALLOWANCE) * AV_REDUCED_INCOME_TAX_RATE
+        : gainPart * PFU_INCOME_TAX_RATE;
+      break;
+    default:
+      incomeTax = gainPart * PFU_INCOME_TAX_RATE;
+  }
+  return { known: true, gainPart, socialCharges, incomeTax, net: amount - socialCharges - incomeTax, closesPea };
+};
+
+// ---------------------------------------------------------------------------
+// Où retirer au moindre coût
+// ---------------------------------------------------------------------------
+
+export interface WithdrawalOption {
+  account: SavingsAccount;
+  immediateCost: number;    // impôt, ou quinzaine d'intérêts sacrifiée
+  yearlyForgone: number;    // intérêts perdus sur un an (montant × taux)
+  totalCost: number;        // les deux : critère de classement
+  tax?: WithdrawalTax;
+  taxUnknown: boolean;      // placement dont on ignore les versements : coût sous-estimé
+  // Livret réglementé retiré en cours de quinzaine : attendre la prochaine borne garde
+  // les intérêts de la quinzaine en cours.
+  waitTip?: { date: string; gain: number };
+}
+
+const NOT_WITHDRAWABLE = [AccountType.PEE, AccountType.PER, AccountType.IMMOBILIER];
+
+/**
+ * Comptes pouvant couvrir seuls `amount` (sur la part propre, jamais le capital parental),
+ * du moins coûteux au plus coûteux. Exclus : épargne bloquée (PEE, PER, immobilier, contrat
+ * à terme).
+ */
+export const computeWithdrawalOptions = (
+  accounts: SavingsAccount[],
+  amount: number,
+  fiscalConfig: FiscalConfig,
+  asOfDate: Date = new Date()
+): WithdrawalOption[] => {
+  if (amount <= 0) return [];
+  const day = asOfDate.getDate();
+  return accounts
+    .filter(a => a.ownedAmount >= amount && !a.contractEndDate && !NOT_WITHDRAWABLE.includes(a.type))
+    .map(account => {
+      const rate = (account.interestRate || 0) / 100;
+      const yearlyForgone = amount * rate;
+      let immediateCost = 0;
+      let tax: WithdrawalTax | undefined;
+      let taxUnknown = false;
+      let waitTip: WithdrawalOption['waitTip'];
+      if (REGULATED_TYPES.includes(account.type)) {
+        // Un retrait ne rapporte plus rien depuis le début de la quinzaine en cours : la
+        // quinzaine entière est perdue, sauf à retirer pile le 1er ou le 16.
+        if (day !== 1 && day !== 16) {
+          immediateCost = amount * rate / 24;
+          const next = day < 16
+            ? new Date(asOfDate.getFullYear(), asOfDate.getMonth(), 16)
+            : new Date(asOfDate.getFullYear(), asOfDate.getMonth() + 1, 1);
+          if (immediateCost >= 0.5) waitTip = { date: formatISODay(next), gain: immediateCost };
+        }
+      } else if (tracksDeposits(account.type)) {
+        tax = computeWithdrawalTax(account, amount, fiscalConfig, asOfDate);
+        taxUnknown = !tax.known;
+        immediateCost = tax.socialCharges + tax.incomeTax;
+      }
+      return { account, immediateCost, yearlyForgone, totalCost: immediateCost + yearlyForgone, tax, taxUnknown, waitTip };
+    })
+    .sort((a, b) =>
+      // Un PEA clôturé par le retrait passe en dernier : on perd l'enveloppe, pas seulement de l'argent.
+      Number(!!a.tax?.closesPea) - Number(!!b.tax?.closesPea) || a.totalCost - b.totalCost
+    );
+};
+
+// ---------------------------------------------------------------------------
+// Placé ce mois-ci
+// ---------------------------------------------------------------------------
+
+/**
+ * Argent réellement mis de côté ce mois-ci (part propre) : versements − retraits sur les
+ * comptes d'épargne. Les virements entre deux comptes d'épargne s'annulent d'eux-mêmes ;
+ * les variations de valeur des placements (`kind: 'valuation'`) ne comptent pas.
+ */
+export const computeMonthSavedAmount = (
+  accounts: { type: AccountType; movements?: AccountMovement[] }[],
+  asOfDate: Date = new Date()
+): number => {
+  const monthKey = `${asOfDate.getFullYear()}-${String(asOfDate.getMonth() + 1).padStart(2, '0')}`;
+  const todayKey = formatISODay(asOfDate);
+  let total = 0;
+  for (const a of accounts) {
+    if (a.type === AccountType.COMPTE_COURANT || a.type === AccountType.IMMOBILIER) continue;
+    for (const m of a.movements || []) {
+      if (m.kind === 'valuation' || !m.date.startsWith(monthKey) || m.date > todayKey) continue;
+      total += m.type === 'IN' ? m.amount : -m.amount;
+    }
+  }
+  return total;
+};
+
+// ---------------------------------------------------------------------------
+// Abonnements
+// ---------------------------------------------------------------------------
+
+const FREQUENCY_MONTHS: Record<Exclude<Subscription['frequency'], 'weekly'>, number> = {
+  monthly: 1, quarterly: 3, semiannual: 6, yearly: 12,
+};
+
+/** Coût mensuel équivalent d'un abonnement. */
+export const subscriptionMonthlyCost = (s: Pick<Subscription, 'amount' | 'frequency'>): number =>
+  s.frequency === 'weekly' ? s.amount * 52 / 12 : s.amount / FREQUENCY_MONTHS[s.frequency];
+
+/**
+ * Prochain prélèvement à partir de `from` (inclus), déduit d'une date de prélèvement
+ * connue. Mensuel le 31 → dernier jour des mois plus courts, sans dériver ensuite.
+ */
+export const nextSubscriptionDate = (s: Pick<Subscription, 'frequency' | 'anchorDate'>, from: Date = new Date()): Date => {
+  const anchor = parseISODate(s.anchorDate);
+  const start = new Date(from.getFullYear(), from.getMonth(), from.getDate());
+  if (anchor >= start) return anchor;
+  if (s.frequency === 'weekly') {
+    const weeks = Math.ceil(daysBetween(anchor, start) / 7);
+    return new Date(anchor.getFullYear(), anchor.getMonth(), anchor.getDate() + weeks * 7);
+  }
+  const step = FREQUENCY_MONTHS[s.frequency];
+  const monthsApart = (start.getFullYear() - anchor.getFullYear()) * 12 + start.getMonth() - anchor.getMonth();
+  for (let k = Math.max(0, Math.floor(monthsApart / step)); ; k++) {
+    const y = anchor.getFullYear(), m = anchor.getMonth() + k * step;
+    const lastDay = new Date(y, m + 1, 0).getDate();
+    const d = new Date(y, m, Math.min(anchor.getDate(), lastDay));
+    if (d >= start) return d;
+  }
+};
+
+/** Seuil à partir duquel on prévient une semaine avant, au lieu de la veille. */
+export const SUBSCRIPTION_BIG_AMOUNT = 100;
+export const subscriptionLeadDays = (amount: number) => amount >= SUBSCRIPTION_BIG_AMOUNT ? 7 : 1;
+
+export interface DueSubscription {
+  subscription: Subscription;
+  dueDate: string;   // 'YYYY-MM-DD'
+  daysUntil: number; // 1..leadDays
+}
+
+/**
+ * Abonnements à annoncer aujourd'hui : prélèvement dans 1 à 7 jours pour les montants
+ * d'au moins 100 €, uniquement la veille sinon.
+ */
+export const findDueSubscriptions = (subs: Subscription[], asOfDate: Date = new Date()): DueSubscription[] => {
+  const today = new Date(asOfDate.getFullYear(), asOfDate.getMonth(), asOfDate.getDate());
+  const tomorrow = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+  return subs
+    .filter(s => s.active && s.amount > 0 && s.anchorDate)
+    .flatMap(s => {
+      const next = nextSubscriptionDate(s, tomorrow);
+      const daysUntil = Math.round(daysBetween(today, next));
+      return daysUntil >= 1 && daysUntil <= subscriptionLeadDays(s.amount)
+        ? [{ subscription: s, dueDate: formatISODay(next), daysUntil }]
+        : [];
+    });
+};
+
+/**
+ * Versements cumulés après un mouvement d'argent réel (versement si `signedAmount` > 0,
+ * retrait sinon). Inchangés (undefined) si le compte ne les suit pas.
+ */
+export const depositsAfterCashFlow = (
+  account: { totalDeposits?: number; totalAmount: number },
+  signedAmount: number
+): number | undefined => {
+  if (account.totalDeposits === undefined) return undefined;
+  const next = signedAmount >= 0
+    ? account.totalDeposits + signedAmount
+    : depositsAfterWithdrawal(account.totalDeposits, account.totalAmount, -signedAmount);
+  return Math.round(next * 100) / 100;
 };

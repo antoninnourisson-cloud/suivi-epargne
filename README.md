@@ -21,6 +21,7 @@ Un **petit serveur optionnel** (Cloudflare Worker, dossier [`worker/`](worker/))
 ### Tableau de bord
 - Épargne nette, répartie entre disponible, contrainte fiscale (AV/PEA récents) et bloqué (PEE, PER…).
 - Évolution empilée par compte, et répartition par établissement.
+- **Placé ce mois-ci** : jauge des versements du mois face au plan d'épargne.
 - **Projection** à 6 et 12 mois d'après le rythme réel des 90 derniers jours, avec alerte si ce rythme ralentit ou accélère fortement.
 - Alertes :
   - plafonds des livrets ;
@@ -37,6 +38,7 @@ Un **petit serveur optionnel** (Cloudflare Worker, dossier [`worker/`](worker/))
 - **Ajout rapide** : bouton flottant et raccourci sur l'icône de l'app installée.
 - **Actualiser solde** : saisie du nouveau solde, ou ajustement « + / − x € sur ma part / celle des parents ».
 - **Mouvements récurrents** mensuels (onglet Virements → Récurrents).
+- **Versements cumulés** sur PEA, Assurance Vie, Crypto… : un versement est distingué d'une variation de valeur.
 
 ### Pilotage budgétaire
 - Calcul du **« super net »** :
@@ -54,12 +56,14 @@ Un **petit serveur optionnel** (Cloudflare Worker, dossier [`worker/`](worker/))
 - Taux pondérés dans le temps, et part des intérêts offerte par les parents.
 - Manque à gagner du cash dormant.
 - **Gains nets si retrait** (PEA, Assurance Vie…) : PFU, exonération d'IR du PEA/PEE après maturité, taux réduit de l'AV après 8 ans. Ces comptes sont à fiscalité différée, il n'y a rien à déclarer tant qu'on ne retire rien.
+- **Plus-values latentes** et impôt si tout était retiré, plafond de versements du PEA.
 - Compte à rebours avant la maturité fiscale de chaque compte.
 
 ### Autres écrans
 - **Objectifs** : capacité théorique confrontée au rythme d'épargne réel.
 - **Historique** mensuel du patrimoine et des charges.
-- **Simulateur de retrait** : impact sur la durée de survie et sur un objectif.
+- **Simulateur de retrait** : compte le moins coûteux à ponctionner (impôt, quinzaine perdue, intérêts sacrifiés), impact sur la durée de survie et sur un objectif.
+- **Abonnements** : rappel la veille du prélèvement, ou une semaine avant à partir de 100 €.
 - **Fiches de paie** :
   - import depuis Drive (Google Picker) ;
   - extraction par Gemini, avec nouvelles tentatives et modèles de repli en cas de saturation ;

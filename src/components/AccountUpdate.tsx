@@ -4,12 +4,13 @@ import { SavingsAccount } from '../types';
 import { Button } from './Button';
 import { Save, AlertCircle, RefreshCw, Calendar, User, Users, CheckCircle } from 'lucide-react';
 import { useSaveFeedback } from '../hooks/useSaveFeedback';
-import { safeNumber } from '../lib/numbers';
+import { safeNumber, parseFrenchNumber } from '../lib/numbers';
+import { tracksDeposits, depositsAfterWithdrawal } from '../lib/finance';
 import { localTodayISO } from '../lib/dates';
 
 interface AccountUpdateProps {
   accounts: SavingsAccount[];
-  onUpdateAccountsComplex: (updates: { account: SavingsAccount, date: string }[]) => void;
+  onUpdateAccountsComplex: (updates: { account: SavingsAccount, date: string, cashFlow?: number }[]) => void;
   onCancel?: () => void; // Ajout prop optionnelle pour cohérence
   // Horodatage de la dernière écriture Drive CONFIRMÉE : sert à n'annoncer le succès que
   // lorsqu'il est réel (voir useSaveFeedback).
@@ -20,13 +21,19 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
   const today = localTodayISO();
   const { status: saveStatus, markPending } = useSaveFeedback(lastSavedAt);
 
-  const [updates, setUpdates] = useState<Record<string, { owned: string, parental: string, date: string }>>(
+  // `deposits` : versements cumulés des placements (PEA, AV…), '' = inconnus.
+  // `cashFlow` : argent réellement versé/retiré via l'ajustement rapide, pour distinguer
+  // un versement d'une simple variation de valeur à l'enregistrement.
+  type Draft = { owned: string, parental: string, date: string, deposits: string, cashFlow: number };
+  const [updates, setUpdates] = useState<Record<string, Draft>>(
     accounts.reduce((acc, account) => ({ 
       ...acc, 
       [account.id]: { 
         owned: account.ownedAmount.toString(), 
         parental: account.parentalCapital.toString(), 
-        date: today 
+        date: today,
+        deposits: account.totalDeposits !== undefined ? String(account.totalDeposits) : '',
+        cashFlow: 0,
       } 
     }), {})
   );
@@ -39,6 +46,12 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
     setUpdates(prev => ({ ...prev, [id]: { ...prev[id], parental: val } }));
   };
 
+  const handleDepositsChange = (id: string, val: string) => {
+    setUpdates(prev => ({ ...prev, [id]: { ...prev[id], deposits: val } }));
+  };
+  const parseDeposits = (val: string): number | undefined | null =>
+    val.trim() === '' ? undefined : parseFrenchNumber(val);
+
   const handleDateChange = (id: string, val: string) => {
     setUpdates(prev => ({ ...prev, [id]: { ...prev[id], date: val } }));
   };
@@ -47,10 +60,12 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
   // Évite de recalculer soi-même le nouveau solde : l'écart est appliqué au montant en
   // cours de saisie (et donc cumulable), puis enregistré avec le reste via « Tout
   // Enregistrer ». Les pastilles d'écart existantes montrent le résultat avant validation.
-  type Adjust = { sign: 1 | -1; amount: string; target: 'owned' | 'parental' };
+  // `isCash` (placements suivis) : l'ajustement est un versement/retrait d'argent, pas un
+  // gain ou une perte de valeur — il met alors à jour les versements cumulés.
+  type Adjust = { sign: 1 | -1; amount: string; target: 'owned' | 'parental'; isCash: boolean };
   const [adjusts, setAdjusts] = useState<Record<string, Adjust>>({});
   const [adjustErrors, setAdjustErrors] = useState<Record<string, string | null>>({});
-  const DEFAULT_ADJUST: Adjust = { sign: 1, amount: '', target: 'owned' };
+  const DEFAULT_ADJUST: Adjust = { sign: 1, amount: '', target: 'owned', isCash: true };
   const adjustFor = (id: string): Adjust => adjusts[id] ?? DEFAULT_ADJUST;
   const patchAdjust = (id: string, patch: Partial<Adjust>) => {
     // Fusion sur l'état le plus RÉCENT (`prev`), pas sur celui du rendu courant : deux
@@ -69,7 +84,22 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
       setAdjustErrors(prev => ({ ...prev, [id]: `Impossible : ${a.target === 'owned' ? 'ta part' : 'la part des parents'} deviendrait négative (${next.toLocaleString('fr-FR')} €).` }));
       return;
     }
-    setUpdates(prev => ({ ...prev, [id]: { ...prev[id], [a.target]: String(next) } }));
+    const account = accounts.find(acc => acc.id === id);
+    const draft = updates[id];
+    const deposits = parseDeposits(draft.deposits);
+    const tracksCash = !!account && tracksDeposits(account.type) && typeof deposits === 'number' && a.isCash && a.target === 'owned';
+    const valueBefore = safeNumber(draft.owned, 0) + safeNumber(draft.parental, 0);
+    setUpdates(prev => ({
+      ...prev,
+      [id]: {
+        ...prev[id],
+        [a.target]: String(next),
+        ...(tracksCash ? {
+          cashFlow: prev[id].cashFlow + a.sign * amount,
+          deposits: String(Math.round((a.sign > 0 ? deposits + amount : depositsAfterWithdrawal(deposits, valueBefore, amount)) * 100) / 100),
+        } : {}),
+      },
+    }));
     patchAdjust(id, { amount: '' });
   };
 
@@ -78,13 +108,18 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
       const u = updates[account.id];
       const newOwned = safeNumber(u.owned, 0);
       const newParental = safeNumber(u.parental, 0);
+      const deposits = parseDeposits(u.deposits);
       const updatedAccount: SavingsAccount = {
         ...account,
         ownedAmount: newOwned,
         parentalCapital: newParental,
-        totalAmount: newOwned + newParental
+        totalAmount: newOwned + newParental,
+        // Saisie illisible : on garde la valeur connue plutôt que de l'effacer.
+        totalDeposits: tracksDeposits(account.type)
+          ? (deposits === null ? account.totalDeposits : deposits !== undefined && deposits >= 0 ? deposits : undefined)
+          : account.totalDeposits,
       };
-      return { account: updatedAccount, date: u.date };
+      return { account: updatedAccount, date: u.date, cashFlow: u.cashFlow || undefined };
     });
 
     markPending();
@@ -127,7 +162,9 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
           const newTotal = safeNumber(u.owned, 0) + safeNumber(u.parental, 0);
           const diffOwned = Math.round((safeNumber(u.owned, 0) - account.ownedAmount) * 100) / 100;
           const diffParental = Math.round((safeNumber(u.parental, 0) - account.parentalCapital) * 100) / 100;
-          const isChanged = diffOwned !== 0 || diffParental !== 0 || u.date !== today;
+          const depositsDraft = parseDeposits(u.deposits);
+          const depositsChanged = tracksDeposits(account.type) && depositsDraft !== null && depositsDraft !== account.totalDeposits;
+          const isChanged = diffOwned !== 0 || diffParental !== 0 || u.date !== today || depositsChanged;
 
           return (
             <div key={account.id} className={`bg-white dark:bg-slate-800 p-6 rounded-2xl border transition-all ${isChanged ? 'border-indigo-400 shadow-lg ring-1 ring-indigo-400/10' : 'border-slate-200 dark:border-slate-700 shadow-sm'}`}>
@@ -209,6 +246,12 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
                           <button type="button" onClick={() => patchAdjust(account.id, { target: 'owned' })} aria-pressed={a.target === 'owned'} className={seg(a.target === 'owned', 'bg-indigo-600 text-white')}>Ma part</button>
                           <button type="button" onClick={() => patchAdjust(account.id, { target: 'parental' })} aria-pressed={a.target === 'parental'} className={seg(a.target === 'parental', 'bg-amber-500 text-white')}>Parents</button>
                         </div>
+                        {tracksDeposits(account.type) && typeof depositsDraft === 'number' && a.target === 'owned' && (
+                          <label className="flex items-center gap-1.5 text-xs font-bold text-slate-500 dark:text-slate-400">
+                            <input type="checkbox" checked={a.isCash} onChange={e => patchAdjust(account.id, { isCash: e.target.checked })} />
+                            {a.sign > 0 ? 'Versement' : 'Retrait'} d'argent
+                          </label>
+                        )}
                         <button type="button" onClick={() => applyAdjust(account.id)} className="px-3 py-2 rounded-lg bg-slate-800 dark:bg-slate-100 text-white dark:text-slate-900 text-xs font-black hover:opacity-90">Appliquer</button>
                       </div>
                       {adjustErrors[account.id] && (
@@ -217,6 +260,25 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
                     </div>
                   );
                 })()}
+
+                {tracksDeposits(account.type) && (
+                  <div className="md:col-span-2 bg-slate-50 dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
+                    <label className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase block mb-1">Versements cumulés (€)</label>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={u.deposits}
+                      onChange={(e) => handleDepositsChange(account.id, e.target.value)}
+                      placeholder="Inconnu"
+                      className="w-full bg-transparent font-bold text-slate-700 dark:text-slate-200 outline-none text-sm"
+                    />
+                    <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">
+                      {depositsDraft === null ? 'Montant non reconnu.'
+                        : depositsDraft === undefined ? 'Renseigne-les une fois : ensuite, les versements cochés ci-dessus les mettent à jour, et le reste de l’écart compte comme gain ou perte de valeur.'
+                        : <>Plus-value latente : <b>{(newTotal - depositsDraft).toLocaleString('fr-FR', { maximumFractionDigits: 0 })} €</b></>}
+                    </p>
+                  </div>
+                )}
 
                 {/* Date Input */}
                 <div className="md:col-span-2 bg-slate-50 dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-700 flex items-center gap-4">

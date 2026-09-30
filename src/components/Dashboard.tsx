@@ -5,7 +5,7 @@ import {
 } from 'recharts';
 import { SavingsAccount, PortfolioSnapshot, AccountType, Expense, FiscalConfig, WorkBenefits, RecurringMovement } from '../types';
 import { Euro, Lock, Wallet, Filter, Unlock, Save, AlertTriangle, Trash2, Clock, TrendingUp, TrendingDown, PiggyBank, Percent, ShieldAlert, Repeat } from 'lucide-react';
-import { computeAccruedParentalInterest, computeRecentSavingsRate, computeAccountBalanceAtDate, findStaleRegulatedRates, computeLepEligibility, computeIncome, findDueRecurring } from '../lib/finance';
+import { computeAccruedParentalInterest, computeRecentSavingsRate, computeAccountBalanceAtDate, findStaleRegulatedRates, computeLepEligibility, computeIncome, findDueRecurring, computeMonthSavedAmount } from '../lib/finance';
 import { parseISODate, formatISODay, daysBetween, localTodayISO } from '../lib/dates';
 import { Button } from './Button';
 
@@ -21,6 +21,8 @@ interface DashboardProps {
   // Enregistre l'échéance proposée (passe par le même chemin que l'ajout rapide : notif
   // parents, arrondis, toast).
   onRecordRecurring?: (r: RecurringMovement, date: string) => void;
+  // Objectif d'épargne du mois : montant du rappel de paie, sinon capacité du Pilotage.
+  monthPlan?: number;
   config: {
     grossAnnual: number;
     navigoBase: number;
@@ -29,7 +31,7 @@ interface DashboardProps {
   };
 }
 
-export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expenses, fiscalConfig, workBenefits, onDeleteAccount, config, recurringMovements = [], onRecordRecurring }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expenses, fiscalConfig, workBenefits, onDeleteAccount, config, recurringMovements = [], onRecordRecurring, monthPlan }) => {
   const [dateRange, setDateRange] = useState(() => {
     try {
         const stored = localStorage.getItem('dashboard_date_range');
@@ -222,6 +224,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
   // la période affichée). `computeRecentSavingsRate`/`computeAccountBalanceAtDate` sont
   // partagées avec Objectifs, pour que les deux écrans ne puissent jamais raconter deux
   // rythmes différents.
+  const monthSaved = useMemo(() => computeMonthSavedAmount(accounts), [accounts]);
+
   const projection = useMemo(() => {
     const now = new Date();
     const monthlyRate = computeRecentSavingsRate(accounts, 90, now);
@@ -467,6 +471,30 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
         <StatCard title="Contrainte Fiscale" amount={availabilityStats.taxLocked} icon={Euro} color="bg-amber-500" subtext="AV/PEA récents" />
         <StatCard title="Bloqué" amount={availabilityStats.hardLocked} icon={Lock} color="bg-slate-800" subtext="Retraite/PEE" />
       </div>
+
+      {monthPlan !== undefined && monthPlan > 0 && (() => {
+        const now = new Date();
+        const daysLeft = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate() - now.getDate();
+        const pct = Math.max(0, Math.min(100, (monthSaved / monthPlan) * 100));
+        const done = monthSaved >= monthPlan;
+        return (
+          <div className="bg-white dark:bg-slate-800 p-5 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
+            <div className="flex items-baseline justify-between gap-3 mb-2">
+              <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2"><PiggyBank className="w-4 h-4 text-indigo-600" /> Placé ce mois-ci</h3>
+              <p className="text-sm font-black text-slate-700 dark:text-slate-200">{fmtEUR(Math.max(0, monthSaved))} <span className="text-slate-400 dark:text-slate-500 font-bold">/ {fmtEUR(monthPlan)}</span></p>
+            </div>
+            <div className="h-2.5 rounded-full bg-slate-100 dark:bg-slate-700 overflow-hidden">
+              <div className={`h-full rounded-full ${done ? 'bg-emerald-500' : 'bg-indigo-600'}`} style={{ width: `${pct}%` }} />
+            </div>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-2">
+              {done ? 'Objectif du mois atteint.'
+                : monthSaved < 0 ? `Tu as plus retiré que versé ce mois-ci (${fmtEUR(monthSaved)}).`
+                : `Reste ${fmtEUR(monthPlan - monthSaved)} à placer, ${daysLeft} jour${daysLeft > 1 ? 's' : ''} avant la fin du mois.`}
+              {' '}Versements moins retraits sur tes comptes d'épargne, hors variations de valeur.
+            </p>
+          </div>
+        );
+      })()}
 
       {projection && (
         <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">

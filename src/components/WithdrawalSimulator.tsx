@@ -1,12 +1,15 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { SavingsAccount, AccountType, Expense, SavingsGoal } from '../types';
-import { Calculator, Hourglass, Target, ArrowRight, Info } from 'lucide-react';
+import { SavingsAccount, AccountType, Expense, SavingsGoal, FiscalConfig } from '../types';
+import { computeWithdrawalOptions } from '../lib/finance';
+import { parseISODate } from '../lib/dates';
+import { Calculator, Hourglass, Target, ArrowRight, Info, Trophy, AlertTriangle } from 'lucide-react';
 import { safeNumber } from '../lib/numbers';
 
 interface SimulatorProps {
   accounts: SavingsAccount[];
   expenses: Expense[];
   goals: SavingsGoal[];
+  fiscalConfig: FiscalConfig;
 }
 
 const fmt = (n: number) => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(n);
@@ -14,7 +17,7 @@ const LIQUID_EXCLUDED = [AccountType.IMMOBILIER, AccountType.PER, AccountType.PE
 
 const isLiquid = (a: SavingsAccount) => !a.contractEndDate && !LIQUID_EXCLUDED.includes(a.type);
 
-export const WithdrawalSimulator: React.FC<SimulatorProps> = ({ accounts, expenses, goals }) => {
+export const WithdrawalSimulator: React.FC<SimulatorProps> = ({ accounts, expenses, goals, fiscalConfig }) => {
   const eligibleAccounts = useMemo(() => accounts.filter(a => a.ownedAmount > 0), [accounts]);
   const [accountId, setAccountId] = useState(eligibleAccounts[0]?.id || '');
   const [amount, setAmount] = useState('');
@@ -47,6 +50,14 @@ export const WithdrawalSimulator: React.FC<SimulatorProps> = ({ accounts, expens
   // car le capital des parents présent sur le compte n'est pas mobilisable.
   const isCapped = requestedAmount > available;
   const parentalCapital = account?.parentalCapital || 0;
+
+  // Classement de TOUS les comptes capables de fournir le montant demandé, indépendamment
+  // du compte choisi plus haut : c'est la question « d'où le sortir ? ».
+  const options = useMemo(
+    () => computeWithdrawalOptions(accounts, requestedAmount, fiscalConfig),
+    [accounts, requestedAmount, fiscalConfig]
+  );
+  const fmtDay = (iso: string) => parseISODate(iso).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' });
 
   const totalFixed = useMemo(() => expenses.reduce((s, e) => s + e.amount, 0), [expenses]);
 
@@ -105,6 +116,42 @@ export const WithdrawalSimulator: React.FC<SimulatorProps> = ({ accounts, expens
           )}
         </div>
       </div>
+
+      {requestedAmount > 0 && (
+        <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
+          <h3 className="font-black text-slate-800 dark:text-slate-100 mb-1 flex items-center gap-2"><Trophy className="w-5 h-5 text-indigo-600" /> Où retirer {fmt(requestedAmount)} au moindre coût</h3>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">Coût = impôt ou quinzaine d'intérêts perdue tout de suite, plus les intérêts auxquels tu renonces sur un an. Seule ta part compte ; l'épargne bloquée (PEE, PER, immobilier) est exclue.</p>
+          {options.length === 0 ? (
+            <p className="text-sm text-slate-400 dark:text-slate-500 italic">Aucun compte ne couvre ce montant à lui seul.</p>
+          ) : (
+            <div className="space-y-2">
+              {options.map((o, idx) => (
+                <div key={o.account.id} className={`p-3 rounded-xl border ${idx === 0 ? 'border-emerald-300 bg-emerald-50 dark:bg-emerald-950/30 dark:border-emerald-800' : 'border-slate-200 dark:border-slate-700'}`}>
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="font-bold text-slate-800 dark:text-slate-100">{idx + 1}. {o.account.name}</p>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                        {o.immediateCost > 0.5 && <>{o.tax ? `Impôt ${fmt(o.immediateCost)}` : `Quinzaine perdue ${fmt(o.immediateCost)}`} · </>}
+                        {o.yearlyForgone > 0.5 ? `${fmt(o.yearlyForgone)} d'intérêts en moins par an` : 'Ne rapporte rien'}
+                      </p>
+                    </div>
+                    <p className={`text-lg font-black ${idx === 0 ? 'text-emerald-600' : 'text-slate-600 dark:text-slate-300'}`}>{o.totalCost < 0.5 ? '0 €' : `≈ ${fmt(o.totalCost)}`}</p>
+                  </div>
+                  {o.waitTip && (
+                    <p className="mt-1 text-[11px] font-bold text-indigo-600 dark:text-indigo-300">Astuce : attends le {fmtDay(o.waitTip.date)} pour garder la quinzaine en cours (+{fmt(o.waitTip.gain)}).</p>
+                  )}
+                  {o.taxUnknown && (
+                    <p className="mt-1 text-[11px] font-bold text-amber-600 flex items-center gap-1"><Info className="w-3 h-3" /> Impôt non calculé : renseigne les versements cumulés de ce compte.</p>
+                  )}
+                  {o.tax?.closesPea && (
+                    <p className="mt-1 text-[11px] font-bold text-rose-600 flex items-center gap-1"><AlertTriangle className="w-3 h-3" /> PEA de moins de 5 ans : un retrait le clôture.</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {withdrawAmount > 0 && (
         <>
