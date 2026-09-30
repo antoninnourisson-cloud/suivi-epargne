@@ -33,38 +33,38 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ open, accounts, on
       <div className="bg-white dark:bg-slate-800 rounded-t-3xl sm:rounded-3xl shadow-2xl max-w-sm w-full p-6" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 flex items-center gap-2"><Zap className="w-5 h-5 text-indigo-600" /> Ajout rapide</h3>
-          <button onClick={onClose} aria-label="Fermer" className="p-2.5 -m-1.5 text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-200"><X className="w-5 h-5" /></button>
+          <button onClick={onClose} aria-label="Fermer" className="p-2.5 -m-1.5 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"><X className="w-5 h-5" /></button>
         </div>
 
         <div className="space-y-4">
           <div>
-            <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Compte</label>
+            <label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Compte</label>
             <select value={accountId} onChange={e => setAccountId(e.target.value)} className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl font-bold text-slate-800 dark:text-slate-100">
               {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
             </select>
           </div>
 
           <div className="flex gap-2">
-            <button onClick={() => setType('IN')} className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-bold text-sm border-2 transition-colors ${type === 'IN' ? 'bg-emerald-50 border-emerald-400 text-emerald-700' : 'border-slate-200 dark:border-slate-700 text-slate-400 dark:text-slate-500'}`}>
+            <button onClick={() => setType('IN')} className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-bold text-sm border-2 transition-colors ${type === 'IN' ? 'bg-emerald-50 border-emerald-400 text-emerald-700' : 'border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400'}`}>
               <ArrowUpCircle className="w-4 h-4" /> Dépôt
             </button>
-            <button onClick={() => setType('OUT')} className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-bold text-sm border-2 transition-colors ${type === 'OUT' ? 'bg-rose-50 border-rose-400 text-rose-700' : 'border-slate-200 dark:border-slate-700 text-slate-400 dark:text-slate-500'}`}>
+            <button onClick={() => setType('OUT')} className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-bold text-sm border-2 transition-colors ${type === 'OUT' ? 'bg-rose-50 border-rose-400 text-rose-700' : 'border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400'}`}>
               <ArrowDownCircle className="w-4 h-4" /> Retrait
             </button>
           </div>
 
           <div>
-            <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Montant (€)</label>
+            <label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Montant (€)</label>
             <NumberInput value={amount} onChange={setAmount} className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl font-black text-2xl text-slate-800 dark:text-slate-100" min={0} />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Libellé (optionnel)</label>
+              <label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Libellé (optionnel)</label>
               <input value={label} onChange={e => setLabel(e.target.value)} placeholder="Ex : Virement" className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl font-bold text-slate-800 dark:text-slate-100 text-sm" />
             </div>
             <div>
-              <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Date</label>
+              <label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Date</label>
               <input type="date" value={date} onChange={e => setDate(e.target.value)} className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl font-bold text-slate-800 dark:text-slate-100 text-sm" />
             </div>
           </div>

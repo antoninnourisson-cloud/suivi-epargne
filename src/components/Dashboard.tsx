@@ -364,7 +364,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
           <h3 className="text-2xl font-bold text-slate-800 dark:text-slate-100 mt-1">
             {formatEUR(amount, 2)}
           </h3>
-          {subtext && <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1 uppercase font-bold tracking-wide">{subtext}</p>}
+          {subtext && <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 uppercase font-bold tracking-wide">{subtext}</p>}
         </div>
         <div className={`p-3 rounded-lg ${color}`}>
           <Icon className="w-6 h-6 text-white" />
@@ -390,7 +390,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
         </div>
         <div className="flex items-center gap-2">
           <input type="date" value={dateRange.start} onChange={(e) => setDateRange((prev: any) => ({ ...prev, start: e.target.value }))} className="bg-slate-50 dark:bg-slate-900 text-sm border p-2 rounded-lg" />
-          <span className="text-slate-400 dark:text-slate-500 text-sm">à</span>
+          <span className="text-slate-500 dark:text-slate-400 text-sm">à</span>
           <input type="date" value={dateRange.end} onChange={(e) => setDateRange((prev: any) => ({ ...prev, end: e.target.value }))} className="bg-slate-50 dark:bg-slate-900 text-sm border p-2 rounded-lg" />
         </div>
       </div>
@@ -451,7 +451,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
         <div className="space-y-2">
           {inactiveEmptyAccounts.map(a => (
             <div key={a.id} className="flex items-center justify-between gap-3 p-3 rounded-xl border bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-sm">
-              <span className="text-slate-600 dark:text-slate-300 font-bold flex items-center gap-2"><Trash2 className="w-4 h-4 text-slate-400 dark:text-slate-500" /> {a.name} est à 0€ et inactif — le supprimer ?</span>
+              <span className="text-slate-600 dark:text-slate-300 font-bold flex items-center gap-2"><Trash2 className="w-4 h-4 text-slate-500 dark:text-slate-400" /> {a.name} est à 0€ et inactif — le supprimer ?</span>
               <button onClick={() => onDeleteAccount(a)} className="text-xs font-bold text-rose-600 hover:bg-rose-50 px-3 py-1.5 rounded-lg flex-shrink-0">Supprimer</button>
             </div>
           ))}
@@ -494,7 +494,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
           <div className="bg-white dark:bg-slate-800 p-5 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
             <div className="flex items-baseline justify-between gap-3 mb-2">
               <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2"><PiggyBank className="w-4 h-4 text-indigo-600" /> Placé ce mois-ci</h3>
-              <p className="text-sm font-black text-slate-700 dark:text-slate-200">{fmtEUR(Math.max(0, monthSaved))}{hasPlan && <span className="text-slate-400 dark:text-slate-500 font-bold"> / {fmtEUR(plan)}</span>}</p>
+              <p className="text-sm font-black text-slate-700 dark:text-slate-200">{fmtEUR(Math.max(0, monthSaved))}{hasPlan && <span className="text-slate-500 dark:text-slate-400 font-bold"> / {fmtEUR(plan)}</span>}</p>
             </div>
             {hasPlan && (
               <div className="h-2.5 rounded-full bg-slate-100 dark:bg-slate-700 overflow-hidden">
@@ -523,12 +523,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
                     return (
                       <div key={m.month} className="flex-1 flex flex-col items-center justify-end h-full gap-1" title={`${m.month} : ${Math.round(m.rate)} % (${fmtEUR(m.saved)})`}>
                         <div className={`w-full rounded-sm ${m.rate < 0 ? 'bg-rose-400' : current ? 'bg-indigo-300 dark:bg-indigo-700' : 'bg-indigo-600'}`} style={{ height: `${h}%` }} />
-                        <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500">{MONTH_INITIALS[Number(m.month.slice(5)) - 1]}</span>
+                        <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">{MONTH_INITIALS[Number(m.month.slice(5)) - 1]}</span>
                       </div>
                     );
                   })}
                 </div>
-                <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">Part de ta paie actuelle ({fmtEUR(monthlyPay)}) mise de côté chaque mois. Mois en cours en clair, retraits nets en rouge.</p>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">Part de ta paie actuelle ({fmtEUR(monthlyPay)}) mise de côté chaque mois. Mois en cours en clair, retraits nets en rouge.</p>
               </div>
             )}
           </div>
@@ -541,18 +541,18 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
             <div className="p-2 rounded-lg bg-indigo-600"><TrendingUp className="w-4 h-4 text-white" /></div>
             <div>
               <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100">Projection de trajectoire</h3>
-              <p className="text-[11px] text-slate-400 dark:text-slate-500">
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">
                 Extrapolation du rythme réel des 90 derniers jours ({projection.monthlyRate >= 0 ? '+' : ''}{fmtEUR(projection.monthlyRate)}/mois) — une estimation, pas une garantie.
               </p>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="p-4 rounded-lg bg-slate-50 dark:bg-slate-900">
-              <p className="text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500 tracking-wide">Dans 6 mois</p>
+              <p className="text-[11px] uppercase font-bold text-slate-500 dark:text-slate-400 tracking-wide">Dans 6 mois</p>
               <p className="text-xl font-black text-slate-800 dark:text-slate-100 mt-1">{fmtEUR(projection.in6)}</p>
             </div>
             <div className="p-4 rounded-lg bg-slate-50 dark:bg-slate-900">
-              <p className="text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500 tracking-wide">Dans 12 mois</p>
+              <p className="text-[11px] uppercase font-bold text-slate-500 dark:text-slate-400 tracking-wide">Dans 12 mois</p>
               <p className="text-xl font-black text-slate-800 dark:text-slate-100 mt-1">{fmtEUR(projection.in12)}</p>
             </div>
           </div>

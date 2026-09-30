@@ -122,7 +122,7 @@ export const AccountForm: React.FC<AccountFormProps> = ({ onSave, initialData, o
       {!initialData && (
         <button type="button" onClick={setRevolutMode} className="w-full bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 p-5 rounded-3xl flex items-center gap-4 hover:border-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 transition-all text-left">
           <div className="bg-indigo-600 p-3 rounded-2xl"><ShieldCheck className="w-6 h-6 text-white" /></div>
-          <div><p className="text-sm font-black text-slate-800 dark:text-slate-100">Ajouter mon compte Revolut</p><p className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase">(Loisirs & Projets Court Terme)</p></div>
+          <div><p className="text-sm font-black text-slate-800 dark:text-slate-100">Ajouter mon compte Revolut</p><p className="text-[11px] text-slate-500 dark:text-slate-400 font-bold uppercase">(Loisirs & Projets Court Terme)</p></div>
         </button>
       )}
 
@@ -132,45 +132,45 @@ export const AccountForm: React.FC<AccountFormProps> = ({ onSave, initialData, o
           Configuration du compte
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase block mb-1">Type</label><select value={type} onChange={(e) => setType(e.target.value as AccountType)} className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl font-bold">{Object.values(AccountType).map(t => <option key={t} value={t}>{t}</option>)}</select></div>
-          <div><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase block mb-1">Banque</label><input type="text" value={institution} onChange={e => setInstitution(e.target.value)} className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl font-bold" required /></div>
+          <div><label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase block mb-1">Type</label><select value={type} onChange={(e) => setType(e.target.value as AccountType)} className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl font-bold">{Object.values(AccountType).map(t => <option key={t} value={t}>{t}</option>)}</select></div>
+          <div><label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase block mb-1">Banque</label><input type="text" value={institution} onChange={e => setInstitution(e.target.value)} className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl font-bold" required /></div>
 
           <div className="md:col-span-2 bg-indigo-50 dark:bg-indigo-950/40 p-5 rounded-2xl border border-indigo-100 dark:border-indigo-900">
-            <label className="flex items-center gap-2 text-[10px] font-black text-indigo-700 dark:text-indigo-300 uppercase mb-4"><Calculator className="w-4 h-4" /> Répartition du Capital</label>
+            <label className="flex items-center gap-2 text-[11px] font-black text-indigo-700 dark:text-indigo-300 uppercase mb-4"><Calculator className="w-4 h-4" /> Répartition du Capital</label>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-indigo-100 dark:border-indigo-900"><label className="text-[10px] font-black text-indigo-700 dark:text-indigo-300 block mb-1">Solde Total (€)</label><NumberInput value={totalAmount} onChange={handleTotalChange} className={moneyInputClass} min={0} /></div>
-              <div className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-amber-100 dark:border-amber-900"><label className="text-[10px] font-black text-amber-700 dark:text-amber-300 block mb-1"><Users className="w-3 h-3" /> Part Parents (€)</label><NumberInput value={parentalCapital} onChange={handleParentalChange} className={`${moneyInputClass} text-amber-700 dark:text-amber-300`} min={0} /></div>
-              <div className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-emerald-100 dark:border-emerald-900"><label className="text-[10px] font-black text-emerald-700 dark:text-emerald-300 block mb-1">Ma Part Nette (€)</label><NumberInput value={ownedAmount} onChange={handleOwnedChange} className={`${moneyInputClass} text-emerald-800 dark:text-emerald-300`} min={0} /></div>
+              <div className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-indigo-100 dark:border-indigo-900"><label className="text-[11px] font-black text-indigo-700 dark:text-indigo-300 block mb-1">Solde Total (€)</label><NumberInput value={totalAmount} onChange={handleTotalChange} className={moneyInputClass} min={0} /></div>
+              <div className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-amber-100 dark:border-amber-900"><label className="text-[11px] font-black text-amber-700 dark:text-amber-300 block mb-1"><Users className="w-3 h-3" /> Part Parents (€)</label><NumberInput value={parentalCapital} onChange={handleParentalChange} className={`${moneyInputClass} text-amber-700 dark:text-amber-300`} min={0} /></div>
+              <div className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-emerald-100 dark:border-emerald-900"><label className="text-[11px] font-black text-emerald-700 dark:text-emerald-300 block mb-1">Ma Part Nette (€)</label><NumberInput value={ownedAmount} onChange={handleOwnedChange} className={`${moneyInputClass} text-emerald-800 dark:text-emerald-300`} min={0} /></div>
             </div>
           </div>
 
           <div className="md:col-span-2 grid grid-cols-2 md:grid-cols-3 gap-4 bg-slate-50 dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-700">
             <div>
-              <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase mb-1 flex items-center gap-1">Taux Actuel (%)</label>
+              <label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase mb-1 flex items-center gap-1">Taux Actuel (%)</label>
               <input type="text" inputMode="decimal" value={interestRate} onChange={e => setInterestRate(e.target.value)} className="w-full p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-bold" />
               {initialData?.rateHistory && initialData.rateHistory.length > 0 && (
-                <p className="text-[9px] text-slate-400 dark:text-slate-500 mt-1 flex items-center gap-1"><History className="w-3 h-3" /> {initialData.rateHistory.length} changement(s) historisé(s)</p>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 flex items-center gap-1"><History className="w-3 h-3" /> {initialData.rateHistory.length} changement(s) historisé(s)</p>
               )}
             </div>
-            {!isTaxableType && <div><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase mb-1">Plafond (€)</label><NumberInput value={ceiling} onChange={setCeiling} className="w-full p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-bold" min={0} /></div>}
+            {!isTaxableType && <div><label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase mb-1">Plafond (€)</label><NumberInput value={ceiling} onChange={setCeiling} className="w-full p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-bold" min={0} /></div>}
             {showDeposits && (
               <div className="col-span-2">
-                <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase mb-1 block">Versements cumulés (€)</label>
+                <label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase mb-1 block">Versements cumulés (€)</label>
                 <input type="text" inputMode="decimal" value={totalDeposits} onChange={e => setTotalDeposits(e.target.value)} placeholder="Inconnu" className="w-full p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-bold" />
-                {parsedDeposits === null && <p className="text-[10px] text-rose-600 mt-1">Montant non reconnu : il ne sera pas enregistré.</p>}
+                {parsedDeposits === null && <p className="text-[11px] text-rose-600 mt-1">Montant non reconnu : il ne sera pas enregistré.</p>}
                 {parsedDeposits !== null && parsedDeposits !== undefined && totalAmount > 0 && (
-                  <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1">Plus-value latente : <b>{formatEUR(totalAmount - parsedDeposits, 0)}</b>{type === AccountType.PEA && <> · reste {formatEUR(Math.max(0, PEA_DEPOSIT_CEILING - parsedDeposits))} de versements possibles</>}</p>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">Plus-value latente : <b>{formatEUR(totalAmount - parsedDeposits, 0)}</b>{type === AccountType.PEA && <> · reste {formatEUR(Math.max(0, PEA_DEPOSIT_CEILING - parsedDeposits))} de versements possibles</>}</p>
                 )}
-                {parsedDeposits === undefined && <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">Ce que tu as versé, hors gains (voir ton relevé). Sert au calcul exact de l'impôt en cas de retrait.</p>}
+                {parsedDeposits === undefined && <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">Ce que tu as versé, hors gains (voir ton relevé). Sert au calcul exact de l'impôt en cas de retrait.</p>}
               </div>
             )}
           </div>
 
-          <div><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase mb-1">Date d'ouverture</label><input type="date" value={openingDate} onChange={e => setOpeningDate(e.target.value)} className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl font-bold" /></div>
-          {type === AccountType.PEE && <div><label className="text-[10px] font-black text-amber-800 dark:text-amber-300 mb-1 uppercase">Fin contrat</label><input type="date" value={contractEndDate} onChange={e => setContractEndDate(e.target.value)} className="w-full p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-xl font-bold text-slate-800 dark:text-slate-100" /></div>}
+          <div><label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase mb-1">Date d'ouverture</label><input type="date" value={openingDate} onChange={e => setOpeningDate(e.target.value)} className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl font-bold" /></div>
+          {type === AccountType.PEE && <div><label className="text-[11px] font-black text-amber-800 dark:text-amber-300 mb-1 uppercase">Fin contrat</label><input type="date" value={contractEndDate} onChange={e => setContractEndDate(e.target.value)} className="w-full p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-xl font-bold text-slate-800 dark:text-slate-100" /></div>}
 
           <div className="md:col-span-2">
-            <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase mb-1 flex items-center gap-1"><Tag className="w-3 h-3" /> Étiquettes (libres)</label>
+            <label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase mb-1 flex items-center gap-1"><Tag className="w-3 h-3" /> Étiquettes (libres)</label>
             <div className="flex flex-wrap gap-2 mb-2">
               {tags.map(t => (
                 <span key={t} className="inline-flex items-center gap-1 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 text-xs font-bold px-2.5 py-1 rounded-full">

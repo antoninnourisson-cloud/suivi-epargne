@@ -12,10 +12,11 @@ import { localTodayISO, parseISODate } from '../lib/dates';
 import { computeDonationSummary, DONATION_75_CEILING } from '../lib/finance';
 import { openDrivePicker } from '../services/googleDriveService';
 import { formatEUR } from '../lib/format';
+import { useUndoableRemove } from './Toast';
 
 interface DonationsProps {
   donations: Donation[];
-  onUpdate: (next: Donation[]) => void;
+  onUpdate: React.Dispatch<React.SetStateAction<Donation[]>>;
   pickerApiKey?: string;
 }
 
@@ -74,7 +75,13 @@ export const Donations: React.FC<DonationsProps> = ({ donations, onUpdate, picke
     setError(null);
   };
   const cancelEdit = () => { setEditingId(null); setDraft(emptyDraft()); setError(null); };
-  const remove = (id: string) => { onUpdate(donations.filter(d => d.id !== id)); if (editingId === id) cancelEdit(); };
+  const removeWithUndo = useUndoableRemove();
+  const remove = (id: string) => {
+    const don = donations.find(d => d.id === id);
+    if (!don) return;
+    removeWithUndo(donations, don, onUpdate, `Don à ${don.organization} supprimé`);
+    if (editingId === id) cancelEdit();
+  };
   const toggleReceipt = (id: string) => onUpdate(donations.map(d => d.id === id ? { ...d, receiptReceived: !d.receiptReceived } : d));
 
   const attachReceipt = async () => {
@@ -120,28 +127,28 @@ export const Donations: React.FC<DonationsProps> = ({ donations, onUpdate, picke
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-5">
           <div>
-            <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Total {year}</p>
+            <p className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Total {year}</p>
             <p className="text-xl font-black text-slate-800 dark:text-slate-100">{fmt(summary.total)}</p>
           </div>
           <div>
-            <p className="text-[10px] font-black text-emerald-600 uppercase">Réduction estimée</p>
+            <p className="text-[11px] font-black text-emerald-600 uppercase">Réduction estimée</p>
             <p className="text-xl font-black text-emerald-600">{fmt(summary.reduction)}</p>
           </div>
           <div>
-            <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">À déclarer à 75 %</p>
+            <p className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">À déclarer à 75 %</p>
             <p className="text-lg font-black text-slate-700 dark:text-slate-200">{fmt(summary.total75)}</p>
-            <p className="text-[10px] text-slate-400 dark:text-slate-500">case 7UD</p>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400">case 7UD</p>
           </div>
           <div>
-            <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">À déclarer à 66 %</p>
+            <p className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">À déclarer à 66 %</p>
             <p className="text-lg font-black text-slate-700 dark:text-slate-200">{fmt(summary.total66)}</p>
-            <p className="text-[10px] text-slate-400 dark:text-slate-500">case 7UF</p>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400">case 7UF</p>
           </div>
         </div>
         {summary.missingReceipts.length > 0 && (
           <p className="mt-4 text-xs font-bold text-amber-600 flex items-start gap-1.5"><AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-px" /> Reçu fiscal manquant : {summary.missingReceipts.map(d => d.organization).join(', ')}. Il n'est pas à envoyer, mais à garder en cas de contrôle.</p>
         )}
-        <p className="mt-3 text-[10px] text-slate-400 dark:text-slate-500 flex items-start gap-1">
+        <p className="mt-3 text-[11px] text-slate-500 dark:text-slate-400 flex items-start gap-1">
           <Info className="w-3 h-3 flex-shrink-0 mt-0.5" />
           Estimation : 75 % jusqu'à {fmt(DONATION_75_CEILING)} de dons aux organismes d'aide aux personnes en difficulté (l'excédent passe à 66 %), 66 % pour les autres, dans la limite de 20 % du revenu imposable. Les cases et plafonds peuvent changer chaque année : vérifie sur impots.gouv.
         </p>
@@ -155,8 +162,8 @@ export const Donations: React.FC<DonationsProps> = ({ donations, onUpdate, picke
           {rows.map(d => (
             <li key={d.id} className="flex items-center gap-3 p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
               <div className="flex-1 min-w-0">
-                <p className="font-bold text-slate-800 dark:text-slate-100 text-sm truncate">{d.organization} · {fmt(d.amount)} <span className="text-[10px] font-black text-slate-400 dark:text-slate-500">{d.rate} %</span></p>
-                <p className="text-[11px] text-slate-400 dark:text-slate-500 font-bold flex flex-wrap items-center gap-x-2">
+                <p className="font-bold text-slate-800 dark:text-slate-100 text-sm truncate">{d.organization} · {fmt(d.amount)} <span className="text-[11px] font-black text-slate-500 dark:text-slate-400">{d.rate} %</span></p>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 font-bold flex flex-wrap items-center gap-x-2">
                   <span>{parseISODate(d.date).toLocaleDateString('fr-FR')}</span>
                   {d.receiptFileId
                     ? <a href={driveUrl(d.receiptFileId)} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline inline-flex items-center gap-0.5"><Paperclip className="w-3 h-3" /> {d.receiptFileName || 'reçu'} <ExternalLink className="w-3 h-3" /></a>
@@ -175,7 +182,7 @@ export const Donations: React.FC<DonationsProps> = ({ donations, onUpdate, picke
 
       <form onSubmit={submit} className="space-y-3 bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
         <div className="flex items-center justify-between">
-          <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">{editingId ? 'Modifier le don' : 'Nouveau don'}</p>
+          <p className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">{editingId ? 'Modifier le don' : 'Nouveau don'}</p>
           {editingId && <button type="button" onClick={cancelEdit} className="text-xs font-bold text-slate-400 hover:text-slate-600 flex items-center gap-1"><X className="w-3 h-3" /> Annuler</button>}
         </div>
         <input type="text" list="donation-orgs" value={draft.organization} onChange={e => set({ organization: e.target.value })} placeholder="Association (ex : Restos du cœur)" className={inputClass} />

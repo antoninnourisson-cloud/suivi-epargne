@@ -17,7 +17,7 @@ interface TransferManagerProps {
   // Horodatage de la dernière écriture Drive CONFIRMÉE (voir useSaveFeedback).
   lastSavedAt?: Date | null;
   recurringMovements: RecurringMovement[];
-  onUpdateRecurring: (next: RecurringMovement[]) => void;
+  onUpdateRecurring: React.Dispatch<React.SetStateAction<RecurringMovement[]>>;
 }
 
 export const TransferManager: React.FC<TransferManagerProps> = ({ accounts, onUpdateAccountsComplex, onLinkedTransfer, lastSavedAt, recurringMovements, onUpdateRecurring }) => {
@@ -92,7 +92,7 @@ export const TransferManager: React.FC<TransferManagerProps> = ({ accounts, onUp
       <div className="text-center py-20 bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
         <Wallet className="w-12 h-12 text-slate-300 dark:text-slate-600 mx-auto mb-3" />
         <h2 className="text-xl font-bold text-slate-600 dark:text-slate-300">Aucun compte pour l'instant</h2>
-        <p className="text-sm text-slate-400 dark:text-slate-500 mt-2 max-w-xs mx-auto">
+        <p className="text-sm text-slate-500 dark:text-slate-400 mt-2 max-w-xs mx-auto">
           Ajoute au moins un compte depuis l'écran « Mes Comptes » pour pouvoir enregistrer des dépôts et des virements.
         </p>
       </div>
@@ -115,9 +115,9 @@ export const TransferManager: React.FC<TransferManagerProps> = ({ accounts, onUp
 
       <div className="p-6 max-w-lg mx-auto space-y-6">
         {activeTab !== 'recurring' && <div className="bg-slate-50 dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-700 flex items-center gap-4">
-          <Calendar className="w-5 h-5 text-slate-400 dark:text-slate-500" />
+          <Calendar className="w-5 h-5 text-slate-500 dark:text-slate-400" />
           <div className="flex-1">
-            <label className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase block">Date de l'opération</label>
+            <label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase block">Date de l'opération</label>
             <input type="date" value={opDate} onChange={e => setOpDate(e.target.value)} className="w-full bg-transparent font-bold text-slate-700 dark:text-slate-200 outline-none" />
           </div>
         </div>}

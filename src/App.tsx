@@ -7,7 +7,7 @@ import { usePortfolioData } from './hooks/usePortfolioData';
 import { useTheme } from './hooks/useTheme';
 import { AccountForm } from './components/AccountForm';
 import { Dialog, DialogState, emptyDialog } from './components/Dialog';
-import { useToasts, ToastContainer } from './components/Toast';
+import { useToasts, ToastContainer, ToastContext } from './components/Toast';
 import { QuickAddModal } from './components/QuickAddModal';
 import { BottomNav } from './components/BottomNav';
 import { AppLockScreen } from './components/AppLockScreen';
@@ -48,7 +48,7 @@ const NavButton = ({ active, onClick, icon: Icon, label, highlight }: any) => (
     <button
       onClick={onClick}
       className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-bold transition-all rounded-xl mb-1
-        ${active ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/20' : 'text-slate-400 dark:text-slate-500 hover:bg-slate-800 hover:text-white'}
+        ${active ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/20' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-800 hover:text-white'}
         ${highlight ? 'text-indigo-400' : ''}
       `}
     >
@@ -580,11 +580,12 @@ const App: React.FC = () => {
   if (data.isLoadingData) return <div className="min-h-screen flex justify-center items-center flex-col gap-4"><Loader2 className="animate-spin w-10 h-10 text-indigo-600"/><p className="text-slate-500 dark:text-slate-400 font-bold">Chargement du portfolio...</p></div>;
 
   return (
+    <ToastContext.Provider value={addToast}>
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900 flex flex-col md:flex-row font-sans text-slate-900 dark:text-slate-100">
       <aside className="hidden md:flex bg-slate-900 text-white w-full md:w-64 flex-shrink-0 flex-col border-r border-slate-800">
         <div className="p-6 border-b border-slate-800">
           <h1 className="text-xl font-bold flex items-center gap-2"><div className="w-8 h-8 bg-indigo-600 rounded flex center justify-center items-center"><RefreshCcw className="w-4 h-4 text-white"/></div> Assistant Épargne</h1>
-          <div className="mt-2 text-[10px] uppercase text-slate-400 dark:text-slate-500 font-bold tracking-wider flex items-center justify-between gap-2">
+          <div className="mt-2 text-[11px] uppercase text-slate-500 dark:text-slate-400 font-bold tracking-wider flex items-center justify-between gap-2">
             <div className="flex items-center gap-2" title={data.lastSavedAt ? `Dernière écriture confirmée sur Drive : ${data.lastSavedAt.toLocaleTimeString('fr-FR')}` : undefined}>
               <div className={`w-2 h-2 rounded-full flex-shrink-0 ${data.isOffline ? 'bg-slate-400' : data.isSaving ? 'bg-amber-500 animate-pulse' : data.syncError || data.syncConflict ? 'bg-rose-500' : 'bg-emerald-500'}`}></div>
               {data.isOffline ? 'Hors ligne' : data.isSaving ? 'Sauvegarde...' : data.syncError ? 'Erreur sync' : data.syncConflict ? 'Conflit' : data.lastSavedAt ? `Sur Drive à ${data.lastSavedAt.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}` : 'Synchronisé'}
@@ -598,13 +599,13 @@ const App: React.FC = () => {
           <NavButton active={view === 'dashboard'} onClick={() => setView('dashboard')} icon={LayoutDashboard} label="Dashboard" />
           <NavButton active={view === 'update'} onClick={() => setView('update')} icon={RefreshCcw} label="Actualiser Solde" highlight />
 
-          <div className="pt-6 pb-2 text-[10px] font-black text-slate-600 dark:text-slate-300 uppercase px-4 tracking-widest">Analyses</div>
+          <div className="pt-6 pb-2 text-[11px] font-black text-slate-600 dark:text-slate-300 uppercase px-4 tracking-widest">Analyses</div>
           <NavButton active={view === 'pilot'} onClick={() => setView('pilot')} icon={ShieldCheck} label="Pilotage" />
           <NavButton active={view === 'yield'} onClick={() => setView('yield')} icon={Coins} label="Rendement" />
           <NavButton active={view === 'history'} onClick={() => setView('history')} icon={LineChart} label="Historique" />
           <NavButton active={view === 'parental'} onClick={() => setView('parental')} icon={Users} label="Part Parentale" />
 
-          <div className="pt-6 pb-2 text-[10px] font-black text-slate-600 dark:text-slate-300 uppercase px-4 tracking-widest">Gestion</div>
+          <div className="pt-6 pb-2 text-[11px] font-black text-slate-600 dark:text-slate-300 uppercase px-4 tracking-widest">Gestion</div>
           <NavButton active={view === 'accounts'} onClick={() => setView('accounts')} icon={Wallet} label="Mes Comptes" />
           <NavButton active={view === 'transfers'} onClick={() => setView('transfers')} icon={ArrowRightLeft} label="Virements" />
           <NavButton active={view === 'payslips'} onClick={() => setView('payslips')} icon={FileText} label="Fiches de paie" />
@@ -625,7 +626,7 @@ const App: React.FC = () => {
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1.5" title={data.lastSavedAt ? `Dernière écriture confirmée sur Drive : ${data.lastSavedAt.toLocaleTimeString('fr-FR')}` : undefined}>
             <div className={`w-2 h-2 rounded-full flex-shrink-0 ${data.isOffline ? 'bg-slate-400' : data.isSaving ? 'bg-amber-500 animate-pulse' : data.syncError || data.syncConflict ? 'bg-rose-500' : 'bg-emerald-500'}`}></div>
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">
+            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">
               {data.isOffline ? 'Hors ligne' : data.isSaving ? 'Sauvegarde...' : data.syncError ? 'Erreur' : data.syncConflict ? 'Conflit' : data.lastSavedAt ? data.lastSavedAt.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : 'Sync'}
             </span>
           </div>
@@ -635,7 +636,7 @@ const App: React.FC = () => {
       </header>
 
       <main className="flex-1 p-4 md:p-8 overflow-y-auto relative h-screen pb-24 md:pb-8">
-        <div className="absolute top-4 right-4 hidden sm:flex items-center gap-2 text-[10px] text-slate-400 dark:text-slate-500 bg-white dark:bg-slate-800 px-3 py-1 rounded-full border border-slate-200 dark:border-slate-700 shadow-sm font-mono">
+        <div className="absolute top-4 right-4 hidden sm:flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-800 px-3 py-1 rounded-full border border-slate-200 dark:border-slate-700 shadow-sm font-mono">
             <Cloud className="w-3 h-3 text-indigo-400"/> Drive: suivi_epargne.json
         </div>
 
@@ -777,7 +778,7 @@ const App: React.FC = () => {
                     <div className="overflow-x-auto">
                       <table className="w-full text-left min-w-[34rem]">
                         <thead className="bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700">
-                          <tr><th className="px-6 py-4 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider">Compte</th><th className="px-6 py-4 text-[10px] text-right text-slate-400 dark:text-slate-500 uppercase tracking-wider">Mien</th><th className="px-6 py-4 text-[10px] text-right text-slate-400 dark:text-slate-500 uppercase tracking-wider">Parents</th><th className="px-6 py-4 text-right"></th></tr>
+                          <tr><th className="px-6 py-4 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider">Compte</th><th className="px-6 py-4 text-[11px] text-right text-slate-500 dark:text-slate-400 uppercase tracking-wider">Mien</th><th className="px-6 py-4 text-[11px] text-right text-slate-500 dark:text-slate-400 uppercase tracking-wider">Parents</th><th className="px-6 py-4 text-right"></th></tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                           {filteredAccounts.map(acc => (
@@ -785,10 +786,10 @@ const App: React.FC = () => {
                               <tr onClick={() => setEditingAccount(editingAccount?.id === acc.id ? undefined : acc)} className="hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer group transition-colors">
                                 <td className="px-6 py-4">
                                   <div className="font-bold text-slate-800 dark:text-slate-100">{acc.name}</div>
-                                  <div className="text-[10px] uppercase text-slate-400 dark:text-slate-500 font-bold">{acc.institution}</div>
+                                  <div className="text-[11px] uppercase text-slate-500 dark:text-slate-400 font-bold">{acc.institution}</div>
                                   {acc.tags && acc.tags.length > 0 && (
                                     <div className="flex flex-wrap gap-1 mt-1">
-                                      {acc.tags.map(t => <span key={t} className="text-[9px] bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-300 px-1.5 py-0.5 rounded-full font-bold normal-case">{t}</span>)}
+                                      {acc.tags.map(t => <span key={t} className="text-[11px] bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-300 px-1.5 py-0.5 rounded-full font-bold normal-case">{t}</span>)}
                                     </div>
                                   )}
                                   {(() => {
@@ -799,7 +800,7 @@ const App: React.FC = () => {
                                     if (!maturity) return null;
                                     const label = maturity.regimeAfter === 'EXONERE_IR' ? "exonération d'IR" : 'taux réduit (7,5%)';
                                     return (
-                                      <div className="mt-1 text-[10px] font-bold text-indigo-500 dark:text-indigo-400 flex items-center gap-1">
+                                      <div className="mt-1 text-[11px] font-bold text-indigo-500 dark:text-indigo-400 flex items-center gap-1">
                                         <Clock className="w-3 h-3 flex-shrink-0" />
                                         Passe en {label} dans {maturity.monthsRemaining} mois
                                         {maturity.annualTaxSaving > 1 && ` (≈ ${formatEUR(maturity.annualTaxSaving, 0)} d'impôt en moins par année de gains, au retrait)`}
@@ -816,7 +817,7 @@ const App: React.FC = () => {
                               </tr>
                               {editingAccount?.id === acc.id && !showForm && (
                                  <tr className="bg-slate-50 dark:bg-slate-900 animate-in slide-in-from-top-2"><td colSpan={4} className="p-4"><div className="space-y-2 p-2">
-                                   <label className="flex items-center gap-2 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase mb-1 cursor-pointer">
+                                   <label className="flex items-center gap-2 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase mb-1 cursor-pointer">
                                      <input type="checkbox" checked={groupSmallMovements} onChange={e => setGroupSmallMovements(e.target.checked)} className="accent-indigo-600" />
                                      Regrouper les mouvements &lt; 1€
                                    </label>
@@ -824,17 +825,17 @@ const App: React.FC = () => {
                                    {buildDisplayMovements(acc.movements).map(m => (
                                      <div key={m.id} className={`flex justify-between items-center p-3 rounded-xl text-xs border shadow-sm ${m.grouped ? 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 italic' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700'}`}>
                                        <div className="flex items-center gap-3">
-                                           <span className="text-slate-400 dark:text-slate-500 font-mono bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded">{m.date}</span>
+                                           <span className="text-slate-500 dark:text-slate-400 font-mono bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded">{m.date}</span>
                                            <span className="font-bold text-slate-700 dark:text-slate-200">{m.label}</span>
                                            {!m.grouped && <button onClick={()=>handleRenameMovement(acc.id, m.id, m.label)} aria-label={`Renommer « ${m.label} »`} className="p-2 -m-1 opacity-60 hover:opacity-100"><Edit2 className="w-4 h-4 text-slate-500 dark:text-slate-400"/></button>}
                                        </div>
                                        <div className="flex items-center gap-3">
                                            <span className={`font-mono text-sm ${m.type==='IN'?'text-emerald-600 font-bold':'text-rose-600 font-bold'}`}>{m.type==='IN'?'+':'−'}{formatEUR(m.amount)}</span>
-                                           {!m.grouped && <button onClick={()=>handleDeleteMovement(acc.id, m.id)} aria-label={`Supprimer « ${m.label} »`} className="p-2.5 -m-1 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded text-slate-400 dark:text-slate-500 hover:text-rose-500"><Trash2 className="w-4 h-4"/></button>}
+                                           {!m.grouped && <button onClick={()=>handleDeleteMovement(acc.id, m.id)} aria-label={`Supprimer « ${m.label} »`} className="p-2.5 -m-1 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded text-slate-500 dark:text-slate-400 hover:text-rose-500"><Trash2 className="w-4 h-4"/></button>}
                                        </div>
                                      </div>
                                    ))}
-                                   {(!acc.movements || acc.movements.length===0) && <div className="text-center text-slate-400 dark:text-slate-500 italic py-4">Aucun mouvement historique.</div>}
+                                   {(!acc.movements || acc.movements.length===0) && <div className="text-center text-slate-500 dark:text-slate-400 italic py-4">Aucun mouvement historique.</div>}
                                    </div>
                                  </div></td></tr>
                                )}
@@ -876,7 +877,7 @@ const App: React.FC = () => {
         moreOpen={moreNavOpen}
         setMoreOpen={setMoreNavOpen}
         moreItems={[
-          { key: 'update', label: 'Actualiser', icon: RefreshCcw },
+          { key: 'transfers', label: 'Virements', icon: ArrowRightLeft },
           { key: 'yield', label: 'Rendement', icon: Coins },
           { key: 'history', label: 'Historique', icon: LineChart },
           { key: 'parental', label: 'Part Parentale', icon: Users },
@@ -891,6 +892,7 @@ const App: React.FC = () => {
 
       <Dialog state={dialog} onClose={closeDialog} />
     </div>
+    </ToastContext.Provider>
   );
 }
 

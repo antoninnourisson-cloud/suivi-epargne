@@ -172,10 +172,10 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
               <div className="flex justify-between items-start mb-6">
                 <div>
                   <h4 className="font-black text-slate-900 dark:text-slate-100 text-lg leading-tight">{account.name}</h4>
-                  <p className="text-xs text-slate-400 dark:text-slate-500 uppercase font-bold tracking-wider">{account.institution}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 uppercase font-bold tracking-wider">{account.institution}</p>
                 </div>
                 <div className="text-right">
-                  <div className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase mb-1">Total Actuel</div>
+                  <div className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase mb-1">Total Actuel</div>
                   <div className="text-xl font-black text-slate-800 dark:text-slate-100 font-mono">{formatEUR(newTotal, 2)}</div>
                 </div>
               </div>
@@ -183,7 +183,7 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* Part Personnelle */}
                 <div className="bg-indigo-50 dark:bg-indigo-950/40 p-3 rounded-xl border border-indigo-100 dark:border-indigo-900">
-                  <label className="text-[10px] font-black text-indigo-700 dark:text-indigo-300 uppercase tracking-widest flex items-center gap-1 mb-2">
+                  <label className="text-[11px] font-black text-indigo-700 dark:text-indigo-300 uppercase tracking-widest flex items-center gap-1 mb-2">
                     <User className="w-3 h-3" /> Ma Part (€)
                   </label>
                   <input
@@ -194,7 +194,7 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
                     className="w-full bg-transparent text-lg font-black text-indigo-900 dark:text-indigo-200 outline-none"
                   />
                   {diffOwned !== 0 && (
-                    <div className={`text-[10px] mt-1 font-bold ${diffOwned > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                    <div className={`text-[11px] mt-1 font-bold ${diffOwned > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
                       {formatSignedEUR(diffOwned, 2)}
                     </div>
                   )}
@@ -202,7 +202,7 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
 
                 {/* Part Parents */}
                 <div className="bg-amber-50 dark:bg-amber-950/40 p-3 rounded-xl border border-amber-100 dark:border-amber-900">
-                  <label className="text-[10px] font-black text-amber-700 dark:text-amber-300 uppercase tracking-widest flex items-center gap-1 mb-2">
+                  <label className="text-[11px] font-black text-amber-700 dark:text-amber-300 uppercase tracking-widest flex items-center gap-1 mb-2">
                     <Users className="w-3 h-3" /> Part Parents (€)
                   </label>
                   <input
@@ -213,7 +213,7 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
                     className="w-full bg-transparent text-lg font-black text-amber-900 dark:text-amber-200 outline-none"
                   />
                   {diffParental !== 0 && (
-                    <div className={`text-[10px] mt-1 font-bold ${diffParental > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                    <div className={`text-[11px] mt-1 font-bold ${diffParental > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
                       {formatSignedEUR(diffParental, 2)}
                     </div>
                   )}
@@ -223,10 +223,10 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
                 {(() => {
                   const a = adjustFor(account.id);
                   const seg = (active: boolean, activeClass: string) =>
-                    `px-3 py-2 text-xs font-black transition-colors ${active ? activeClass : 'bg-white dark:bg-slate-800 text-slate-400 dark:text-slate-500 hover:text-slate-600'}`;
+                    `px-3 py-2 text-xs font-black transition-colors ${active ? activeClass : 'bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:text-slate-600'}`;
                   return (
                     <div className="md:col-span-2 p-3 rounded-xl border border-dashed border-slate-300 dark:border-slate-600">
-                      <label className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase block mb-2">Ajuster d'un montant</label>
+                      <label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase block mb-2">Ajuster d'un montant</label>
                       <div className="flex flex-wrap items-center gap-2">
                         <div className="flex rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700" role="group" aria-label="Sens">
                           <button type="button" onClick={() => patchAdjust(account.id, { sign: 1 })} aria-pressed={a.sign === 1} className={seg(a.sign === 1, 'bg-emerald-600 text-white')}>+</button>
@@ -242,7 +242,7 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
                           aria-label="Montant de l'ajustement"
                           className="w-24 p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold text-slate-800 dark:text-slate-100 text-sm"
                         />
-                        <span className="text-xs font-bold text-slate-400 dark:text-slate-500">€ sur</span>
+                        <span className="text-xs font-bold text-slate-500 dark:text-slate-400">€ sur</span>
                         <div className="flex rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700" role="group" aria-label="Part concernée">
                           <button type="button" onClick={() => patchAdjust(account.id, { target: 'owned' })} aria-pressed={a.target === 'owned'} className={seg(a.target === 'owned', 'bg-indigo-600 text-white')}>Ma part</button>
                           <button type="button" onClick={() => patchAdjust(account.id, { target: 'parental' })} aria-pressed={a.target === 'parental'} className={seg(a.target === 'parental', 'bg-amber-500 text-white')}>Parents</button>
@@ -264,7 +264,7 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
 
                 {tracksDeposits(account.type) && (
                   <div className="md:col-span-2 bg-slate-50 dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
-                    <label className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase block mb-1">Versements cumulés (€)</label>
+                    <label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase block mb-1">Versements cumulés (€)</label>
                     <input
                       type="text"
                       inputMode="decimal"
@@ -273,7 +273,7 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
                       placeholder="Inconnu"
                       className="w-full bg-transparent font-bold text-slate-700 dark:text-slate-200 outline-none text-sm"
                     />
-                    <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
                       {depositsDraft === null ? 'Montant non reconnu.'
                         : depositsDraft === undefined ? 'Renseigne-les une fois : ensuite, les versements cochés ci-dessus les mettent à jour, et le reste de l’écart compte comme gain ou perte de valeur.'
                         : <>Plus-value latente : <b>{formatEUR(newTotal - depositsDraft, 0)}</b></>}
@@ -284,10 +284,10 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
                 {/* Date Input */}
                 <div className="md:col-span-2 bg-slate-50 dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-700 flex items-center gap-4">
                   <div className="bg-white dark:bg-slate-800 p-2 rounded-lg border border-slate-200 dark:border-slate-700">
-                    <Calendar className="w-4 h-4 text-slate-400 dark:text-slate-500" />
+                    <Calendar className="w-4 h-4 text-slate-500 dark:text-slate-400" />
                   </div>
                   <div className="flex-1">
-                    <label className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase block">Date du relevé</label>
+                    <label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase block">Date du relevé</label>
                     <input 
                       type="date"
                       value={u.date}

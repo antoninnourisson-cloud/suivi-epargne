@@ -50,7 +50,7 @@ export const NotificationSettings: React.FC = () => {
       <h3 className="font-bold text-slate-800 dark:text-slate-100 mb-2 border-b border-slate-200 dark:border-slate-700 pb-2 flex items-center gap-2">
         <Bell className="w-4 h-4 text-indigo-600" /> Notifications
       </h3>
-      <p className="text-[11px] text-slate-400 dark:text-slate-500 -mt-2">
+      <p className="text-[11px] text-slate-500 dark:text-slate-400 -mt-2">
         Reçois les rappels même app fermée : échéances récurrentes, révision des taux réglementés, intérêts parentaux de décembre, soldes non actualisés depuis un mois. Vérification une fois par jour ; chaque rappel n’est envoyé qu’une fois. Réglage propre à cet appareil.
       </p>
 

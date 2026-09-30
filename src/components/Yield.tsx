@@ -160,14 +160,14 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig }) => {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="bg-slate-900 text-white p-6 rounded-2xl">
-          <p className="text-slate-400 dark:text-slate-500 text-xs font-bold uppercase mb-1 flex items-center gap-2"><TrendingUp className="w-4 h-4" /> Intérêts annuels qui me reviennent</p>
+          <p className="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase mb-1 flex items-center gap-2"><TrendingUp className="w-4 h-4" /> Intérêts annuels qui me reviennent</p>
           <p className="text-4xl font-black text-emerald-400">{fmt(totalAnnual)}</p>
-          <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">soit ≈ {fmt(totalAnnual / 12)}/mois — capital parental inclus</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">soit ≈ {fmt(totalAnnual / 12)}/mois — capital parental inclus</p>
         </div>
         <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-6 rounded-2xl">
-          <p className="text-slate-400 dark:text-slate-500 text-xs font-bold uppercase mb-1 flex items-center gap-2"><PiggyBank className="w-4 h-4" /> Dont offerts par mes parents</p>
+          <p className="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase mb-1 flex items-center gap-2"><PiggyBank className="w-4 h-4" /> Dont offerts par mes parents</p>
           <p className="text-4xl font-black text-indigo-600">{fmt(totalAnnualParental)}</p>
-          <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
             Intérêts générés par leur capital, qu'ils m'offrent en fin d'année. Le reste ({fmt(totalAnnualOwned)}) vient de ma part propre.
           </p>
         </div>
@@ -188,21 +188,21 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig }) => {
           <table className="w-full text-left text-sm min-w-[34rem]">
             <thead className="bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700">
               <tr>
-                <th className="px-6 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Compte</th>
-                <th className="px-6 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase text-right">Taux</th>
-                <th className="px-6 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase text-right">Solde</th>
-                <th className="px-6 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase text-right">Acquis {currentYear}</th>
-                <th className="px-6 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase text-right">Rythme / an</th>
+                <th className="px-6 py-3 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Compte</th>
+                <th className="px-6 py-3 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase text-right">Taux</th>
+                <th className="px-6 py-3 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase text-right">Solde</th>
+                <th className="px-6 py-3 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase text-right">Acquis {currentYear}</th>
+                <th className="px-6 py-3 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase text-right">Rythme / an</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {rows.map(r => (
                 <tr key={r.id} className="hover:bg-slate-50 dark:hover:bg-slate-800">
-                  <td className="px-6 py-3"><div className="font-bold text-slate-800 dark:text-slate-100">{r.name}</div><div className="text-[10px] uppercase text-slate-400 dark:text-slate-500 font-bold">{r.type}</div></td>
+                  <td className="px-6 py-3"><div className="font-bold text-slate-800 dark:text-slate-100">{r.name}</div><div className="text-[11px] uppercase text-slate-500 dark:text-slate-400 font-bold">{r.type}</div></td>
                   <td className="px-6 py-3 text-right font-mono text-slate-600 dark:text-slate-300">
                     {r.rate}%
                     {r.hasRateHistory && Math.abs(r.weightedRate - r.rate) > 0.01 && (
-                      <span className="block text-[10px] text-indigo-400 font-bold normal-case" title="Moyenne pondérée dans le temps suite à un changement de taux">≈{r.weightedRate.toFixed(2)}% pondéré</span>
+                      <span className="block text-[11px] text-indigo-400 font-bold normal-case" title="Moyenne pondérée dans le temps suite à un changement de taux">≈{r.weightedRate.toFixed(2)}% pondéré</span>
                     )}
                   </td>
                   <td className="px-6 py-3 text-right font-mono text-slate-600 dark:text-slate-300">{fmt(r.base)}</td>
@@ -210,7 +210,7 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig }) => {
                   <td className="px-6 py-3 text-right font-mono text-slate-500 dark:text-slate-400">{fmt(r.annual)}</td>
                 </tr>
               ))}
-              {rows.length === 0 && <tr><td colSpan={5} className="px-6 py-8 text-center text-slate-400 dark:text-slate-500 italic">Aucun compte rémunéré (renseigne un taux d'intérêt sur tes comptes).</td></tr>}
+              {rows.length === 0 && <tr><td colSpan={5} className="px-6 py-8 text-center text-slate-500 dark:text-slate-400 italic">Aucun compte rémunéré (renseigne un taux d'intérêt sur tes comptes).</td></tr>}
             </tbody>
           </table>
         </div>
@@ -227,10 +227,10 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig }) => {
               <table className="w-full text-left text-sm min-w-[34rem]">
                 <thead className="bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700">
                   <tr>
-                    <th className="px-6 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Compte</th>
-                    <th className="px-6 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase text-right">Versé</th>
-                    <th className="px-6 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase text-right">Plus-value</th>
-                    <th className="px-6 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase text-right">Si tout retiré</th>
+                    <th className="px-6 py-3 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Compte</th>
+                    <th className="px-6 py-3 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase text-right">Versé</th>
+                    <th className="px-6 py-3 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase text-right">Plus-value</th>
+                    <th className="px-6 py-3 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase text-right">Si tout retiré</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -238,9 +238,9 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig }) => {
                     <tr key={a.id}>
                       <td className="px-6 py-3">
                         <div className="font-bold text-slate-800 dark:text-slate-100">{a.name}</div>
-                        <div className="text-[10px] uppercase text-slate-400 dark:text-slate-500 font-bold">{a.type} · valeur {fmt(a.totalAmount)}</div>
+                        <div className="text-[11px] uppercase text-slate-500 dark:text-slate-400 font-bold">{a.type} · valeur {fmt(a.totalAmount)}</div>
                         {a.type === AccountType.PEA && (
-                          <div className={`text-[10px] font-bold ${(a.totalDeposits || 0) >= PEA_DEPOSIT_CEILING * 0.9 ? 'text-amber-600' : 'text-slate-400 dark:text-slate-500'}`}>
+                          <div className={`text-[11px] font-bold ${(a.totalDeposits || 0) >= PEA_DEPOSIT_CEILING * 0.9 ? 'text-amber-600' : 'text-slate-500 dark:text-slate-400'}`}>
                             Plafond de versements : {fmt(Math.max(0, PEA_DEPOSIT_CEILING - (a.totalDeposits || 0)))} restants
                           </div>
                         )}
@@ -251,7 +251,7 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig }) => {
                         {tax.known ? (
                           <>
                             <div className="font-black text-emerald-600">{fmt(gain - tax.socialCharges - tax.incomeTax)}</div>
-                            <div className="text-[10px] font-bold text-slate-400 dark:text-slate-500">impôt {fmt(tax.socialCharges + tax.incomeTax)}{tax.closesPea ? ' · clôture le PEA' : ''}</div>
+                            <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400">impôt {fmt(tax.socialCharges + tax.incomeTax)}{tax.closesPea ? ' · clôture le PEA' : ''}</div>
                           </>
                         ) : <div className="text-slate-400">—</div>}
                       </td>
@@ -282,15 +282,15 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig }) => {
 
           <div className="px-6 pt-4 flex flex-wrap gap-4">
             <div>
-              <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Brut acquis {currentYear}</p>
+              <p className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Brut acquis {currentYear}</p>
               <p className="text-lg font-black text-slate-500 dark:text-slate-400 line-through decoration-slate-300 dark:decoration-slate-600">{fmt(totalGrossTaxable)}</p>
             </div>
             <div>
-              <p className="text-[10px] font-black text-emerald-600 uppercase">Net si retiré maintenant</p>
+              <p className="text-[11px] font-black text-emerald-600 uppercase">Net si retiré maintenant</p>
               <p className="text-lg font-black text-emerald-600">{fmt(totalNetTaxable)}</p>
             </div>
           </div>
-          <p className="px-6 pb-2 pt-1 text-[10px] text-slate-400 dark:text-slate-500 flex items-start gap-1">
+          <p className="px-6 pb-2 pt-1 text-[11px] text-slate-500 dark:text-slate-400 flex items-start gap-1">
             <Info className="w-3 h-3 flex-shrink-0 mt-0.5" />
             Estimation simplifiée : PFU 30 % ou régime réduit selon l'ancienneté du compte. Lors d'un vrai rachat d'Assurance Vie, l'impôt ne porte que sur la part de gains contenue dans le montant retiré, avec un abattement annuel de 4 600 € après 8 ans : le vrai net est souvent meilleur.
             {hasUnmodeled && ' Certains comptes (Immobilier, PER...) ont un régime trop spécifique pour être calculé ici : ils sont exclus du total net.'}
@@ -300,21 +300,21 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig }) => {
             <table className="w-full text-left text-sm min-w-[34rem]">
               <thead className="bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700">
                 <tr>
-                  <th className="px-6 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Compte</th>
-                  <th className="px-6 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase text-right">Solde</th>
-                  <th className="px-6 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase text-right">Brut acquis {currentYear}</th>
-                  <th className="px-6 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase text-right">Net si retiré</th>
+                  <th className="px-6 py-3 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Compte</th>
+                  <th className="px-6 py-3 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase text-right">Solde</th>
+                  <th className="px-6 py-3 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase text-right">Brut acquis {currentYear}</th>
+                  <th className="px-6 py-3 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase text-right">Net si retiré</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {taxableRows.map(r => (
                   <tr key={r.id} className="hover:bg-slate-50 dark:hover:bg-slate-800">
-                    <td className="px-6 py-3"><div className="font-bold text-slate-800 dark:text-slate-100">{r.name}</div><div className="text-[10px] uppercase text-slate-400 dark:text-slate-500 font-bold">{r.institution} · {r.type}</div></td>
+                    <td className="px-6 py-3"><div className="font-bold text-slate-800 dark:text-slate-100">{r.name}</div><div className="text-[11px] uppercase text-slate-500 dark:text-slate-400 font-bold">{r.institution} · {r.type}</div></td>
                     <td className="px-6 py-3 text-right font-mono text-slate-600 dark:text-slate-300">{fmt(r.base)}</td>
                     <td className="px-6 py-3 text-right font-mono text-slate-500 dark:text-slate-400">{fmt(r.estimatedAnnualInterest)}</td>
                     <td className="px-6 py-3 text-right">
                       <div className="font-black text-emerald-600">{r.tax.regime === 'NON_MODELISE' ? '—' : fmt(r.tax.netInterest)}</div>
-                      <div className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase">{REGIME_LABEL[r.tax.regime]}</div>
+                      <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase">{REGIME_LABEL[r.tax.regime]}</div>
                     </td>
                   </tr>
                 ))}

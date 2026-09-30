@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { createContext, useCallback, useContext, useState } from 'react';
 import { CheckCircle2, X, AlertCircle } from 'lucide-react';
 
 export interface ToastAction {
@@ -58,4 +58,33 @@ export const ToastContainer: React.FC<{ toasts: ToastItem[]; onDismiss: (id: str
       ))}
     </div>
   );
+};
+
+// Accès aux toasts depuis n'importe quel écran (fourni par App).
+type AddToast = (toast: Omit<ToastItem, 'id'>) => string;
+export const ToastContext = createContext<AddToast | null>(null);
+
+type ListSetter<T> = React.Dispatch<React.SetStateAction<T[]>>;
+
+/**
+ * Suppression annulable : l'élément disparaît tout de suite, un toast « Annuler » le remet
+ * à sa place pendant 6 s. La restauration part de l'état COURANT (mise à jour
+ * fonctionnelle) : une autre modification faite entre-temps n'est pas écrasée.
+ */
+export const useUndoableRemove = () => {
+  const addToast = useContext(ToastContext);
+  return useCallback(<T extends { id: string }>(list: T[], item: T, set: ListSetter<T>, message: string) => {
+    const index = list.findIndex(x => x.id === item.id);
+    set(prev => prev.filter(x => x.id !== item.id));
+    addToast?.({
+      message,
+      kind: 'success',
+      action: {
+        label: 'Annuler',
+        onClick: () => set(prev => prev.some(x => x.id === item.id)
+          ? prev
+          : [...prev.slice(0, Math.max(0, index)), item, ...prev.slice(Math.max(0, index))]),
+      },
+    });
+  }, [addToast]);
 };

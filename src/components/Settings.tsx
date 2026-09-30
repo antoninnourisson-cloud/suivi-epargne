@@ -164,14 +164,14 @@ export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parent
             </div>
           )}
 
-          <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-3">Un export télécharge une copie locale de toutes vos données. L'import remplace les données actuelles puis les resynchronise sur Drive.</p>
+          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-3">Un export télécharge une copie locale de toutes vos données. L'import remplace les données actuelles puis les resynchronise sur Drive.</p>
         </div>
 
         {/* SECTION EMAIL */}
         <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 lg:col-span-2">
             <h3 className="font-bold text-slate-800 dark:text-slate-100 mb-4 border-b border-slate-200 dark:border-slate-700 pb-2 flex items-center gap-2"><Mail className="w-4 h-4 text-indigo-600"/> Notification Parents</h3>
             <div className="bg-slate-50 dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-700">
-                <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase block mb-2">Email destinataire (Alertes Livret A / LEP)</label>
+                <label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase block mb-2">Email destinataire (Alertes Livret A / LEP)</label>
                 <input 
                     type="email" 
                     value={localEmail} 
@@ -179,7 +179,7 @@ export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parent
                     placeholder="parents@exemple.com"
                     className="w-full p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl font-bold text-slate-800 dark:text-slate-100"
                 />
-                <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-2 flex items-start gap-1">
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-2 flex items-start gap-1">
                     <span className="text-indigo-600 font-bold">Note :</span>
                     Un email récapitulatif sera envoyé automatiquement depuis VOTRE compte Gmail à cette adresse uniquement lorsqu'un mouvement est détecté sur un Livret A ou un LEP.
                 </p>
@@ -191,7 +191,7 @@ export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parent
             <h3 className="font-bold text-slate-800 dark:text-slate-100 mb-4 border-b border-slate-200 dark:border-slate-700 pb-2 flex items-center gap-2"><FileText className="w-4 h-4 text-indigo-600"/> Fiches de paie (analyse IA)</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="bg-slate-50 dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-700">
-                    <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase block mb-2 flex items-center gap-1"><KeyRound className="w-3 h-3"/> Clé API Gemini</label>
+                    <label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase block mb-2 flex items-center gap-1"><KeyRound className="w-3 h-3"/> Clé API Gemini</label>
                     <input
                         type="password"
                         autoComplete="off"
@@ -200,10 +200,10 @@ export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parent
                         placeholder="AIza..."
                         className="w-full p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-bold text-slate-800 dark:text-slate-100"
                     />
-                    <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-2">Sert à extraire automatiquement les montants d'une fiche de paie importée. Créée sur <span className="font-bold">Google AI Studio</span>.</p>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-2">Sert à extraire automatiquement les montants d'une fiche de paie importée. Créée sur <span className="font-bold">Google AI Studio</span>.</p>
                 </div>
                 <div className="bg-slate-50 dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-700">
-                    <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase block mb-2 flex items-center gap-1"><KeyRound className="w-3 h-3"/> Clé API Google Picker</label>
+                    <label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase block mb-2 flex items-center gap-1"><KeyRound className="w-3 h-3"/> Clé API Google Picker</label>
                     <input
                         type="password"
                         autoComplete="off"
@@ -212,7 +212,7 @@ export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parent
                         placeholder="AIza..."
                         className="w-full p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-bold text-slate-800 dark:text-slate-100"
                     />
-                    <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-2">Permet de choisir une fiche déjà présente sur votre Drive. Créée dans <span className="font-bold">Google Cloud Console</span>, restreinte à l'API Picker.</p>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-2">Permet de choisir une fiche déjà présente sur votre Drive. Créée dans <span className="font-bold">Google Cloud Console</span>, restreinte à l'API Picker.</p>
                 </div>
             </div>
             <div className="mt-4 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-lg p-3 flex gap-2 items-start">
@@ -224,7 +224,7 @@ export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parent
         {/* SECTION SÉCURITÉ (réglages locaux à cet appareil, non synchronisés) */}
         <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 lg:col-span-2 space-y-4">
             <h3 className="font-bold text-slate-800 dark:text-slate-100 mb-2 border-b border-slate-200 dark:border-slate-700 pb-2 flex items-center gap-2"><Fingerprint className="w-4 h-4 text-indigo-600"/> Sécurité</h3>
-            <p className="text-[11px] text-slate-400 dark:text-slate-500 -mt-2">Verrouille l'accès à cet appareil (réglage propre à ce navigateur, jamais synchronisé sur Drive). Les deux méthodes peuvent être actives en même temps. Protège contre un accès occasionnel — pas une garantie cryptographique absolue sur un site sans serveur.</p>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 -mt-2">Verrouille l'accès à cet appareil (réglage propre à ce navigateur, jamais synchronisé sur Drive). Les deux méthodes peuvent être actives en même temps. Protège contre un accès occasionnel — pas une garantie cryptographique absolue sur un site sans serveur.</p>
 
             {!lockAvailable ? (
                 <p className="text-sm text-slate-500 dark:text-slate-400">Face ID / empreinte / Windows Hello non disponible sur cet appareil ou ce navigateur — seul le code PIN est proposé.</p>
@@ -232,7 +232,7 @@ export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parent
                 <div className="flex items-center justify-between gap-4 bg-slate-50 dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-700">
                     <div>
                         <p className="font-bold text-slate-800 dark:text-slate-100 text-sm">Verrou biométrique</p>
-                        <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1 max-w-md">Face ID / empreinte / Windows Hello à chaque ouverture de l'app.</p>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 max-w-md">Face ID / empreinte / Windows Hello à chaque ouverture de l'app.</p>
                         {lockError && <p className="text-[11px] text-rose-600 dark:text-rose-400 mt-2 font-bold">{lockError}</p>}
                     </div>
                     <button
@@ -248,7 +248,7 @@ export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parent
                 <div className="flex items-center justify-between gap-4">
                     <div>
                         <p className="font-bold text-slate-800 dark:text-slate-100 text-sm flex items-center gap-1.5"><Hash className="w-3.5 h-3.5"/> Code PIN</p>
-                        <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1 max-w-md">4 à 8 chiffres, en repli si la biométrie n'est pas disponible ou par préférence.</p>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 max-w-md">4 à 8 chiffres, en repli si la biométrie n'est pas disponible ou par préférence.</p>
                     </div>
                     <button
                         onClick={togglePin}
@@ -293,9 +293,9 @@ export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parent
                    </label>
                    {localBenefits.navigo.active && (
                        <div className="space-y-2">
-                           <div><label className="text-[9px] font-bold text-slate-400 dark:text-slate-500">Prix Base Mensuel (€)</label><NumberInput value={localBenefits.navigo.basePrice} onChange={v => updateBenefit('navigo', 'basePrice', v)} className="w-full p-2 rounded border border-indigo-200 dark:border-indigo-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100" /></div>
-                           <div><label className="text-[9px] font-bold text-slate-400 dark:text-slate-500">Remboursement (%)</label><NumberInput value={localBenefits.navigo.refundRate} onChange={v => updateBenefit('navigo', 'refundRate', v)} className="w-full p-2 rounded border border-indigo-200 dark:border-indigo-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100" /></div>
-                           <p className="text-[9px] text-emerald-600 dark:text-emerald-400 text-right mt-1">+{formatEUR(localBenefits.navigo.basePrice * localBenefits.navigo.refundRate / 100, 2)}/mois (gain)</p>
+                           <div><label className="text-[11px] font-bold text-slate-500 dark:text-slate-400">Prix Base Mensuel (€)</label><NumberInput value={localBenefits.navigo.basePrice} onChange={v => updateBenefit('navigo', 'basePrice', v)} className="w-full p-2 rounded border border-indigo-200 dark:border-indigo-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100" /></div>
+                           <div><label className="text-[11px] font-bold text-slate-500 dark:text-slate-400">Remboursement (%)</label><NumberInput value={localBenefits.navigo.refundRate} onChange={v => updateBenefit('navigo', 'refundRate', v)} className="w-full p-2 rounded border border-indigo-200 dark:border-indigo-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100" /></div>
+                           <p className="text-[11px] text-emerald-600 dark:text-emerald-400 text-right mt-1">+{formatEUR(localBenefits.navigo.basePrice * localBenefits.navigo.refundRate / 100, 2)}/mois (gain)</p>
                        </div>
                    )}
                </div>
@@ -308,9 +308,9 @@ export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parent
                    </label>
                    {localBenefits.mutuelle.active && (
                        <div className="space-y-2">
-                           <div><label className="text-[9px] font-bold text-slate-400 dark:text-slate-500">Coût Contrat Total (€)</label><NumberInput value={localBenefits.mutuelle.totalCost} onChange={v => updateBenefit('mutuelle', 'totalCost', v)} className="w-full p-2 rounded border border-rose-200 dark:border-rose-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100" /></div>
-                           <div><label className="text-[9px] font-bold text-slate-400 dark:text-slate-500">Prise en charge Boite (%)</label><NumberInput value={localBenefits.mutuelle.employerRate} onChange={v => updateBenefit('mutuelle', 'employerRate', v)} className="w-full p-2 rounded border border-rose-200 dark:border-rose-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100" /></div>
-                           <p className="text-[9px] text-rose-600 dark:text-rose-400 text-right mt-1">−{formatEUR(localBenefits.mutuelle.totalCost * (1 - localBenefits.mutuelle.employerRate/100), 2)}/mois (coût)</p>
+                           <div><label className="text-[11px] font-bold text-slate-500 dark:text-slate-400">Coût Contrat Total (€)</label><NumberInput value={localBenefits.mutuelle.totalCost} onChange={v => updateBenefit('mutuelle', 'totalCost', v)} className="w-full p-2 rounded border border-rose-200 dark:border-rose-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100" /></div>
+                           <div><label className="text-[11px] font-bold text-slate-500 dark:text-slate-400">Prise en charge Boite (%)</label><NumberInput value={localBenefits.mutuelle.employerRate} onChange={v => updateBenefit('mutuelle', 'employerRate', v)} className="w-full p-2 rounded border border-rose-200 dark:border-rose-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100" /></div>
+                           <p className="text-[11px] text-rose-600 dark:text-rose-400 text-right mt-1">−{formatEUR(localBenefits.mutuelle.totalCost * (1 - localBenefits.mutuelle.employerRate/100), 2)}/mois (coût)</p>
                        </div>
                    )}
                </div>
@@ -324,11 +324,11 @@ export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parent
                    {localBenefits.mealVouchers.active && (
                        <div className="space-y-2">
                            <div className="grid grid-cols-2 gap-2">
-                               <div><label className="text-[9px] font-bold text-slate-400 dark:text-slate-500">Valeur (€)</label><NumberInput value={localBenefits.mealVouchers.faceValue} onChange={v => updateBenefit('mealVouchers', 'faceValue', v)} className="w-full p-2 rounded border border-emerald-200 dark:border-emerald-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100" /></div>
-                               <div><label className="text-[9px] font-bold text-slate-400 dark:text-slate-500">Jours/Mois</label><NumberInput value={localBenefits.mealVouchers.daysPerMonth} onChange={v => updateBenefit('mealVouchers', 'daysPerMonth', v)} className="w-full p-2 rounded border border-emerald-200 dark:border-emerald-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100" /></div>
+                               <div><label className="text-[11px] font-bold text-slate-500 dark:text-slate-400">Valeur (€)</label><NumberInput value={localBenefits.mealVouchers.faceValue} onChange={v => updateBenefit('mealVouchers', 'faceValue', v)} className="w-full p-2 rounded border border-emerald-200 dark:border-emerald-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100" /></div>
+                               <div><label className="text-[11px] font-bold text-slate-500 dark:text-slate-400">Jours/Mois</label><NumberInput value={localBenefits.mealVouchers.daysPerMonth} onChange={v => updateBenefit('mealVouchers', 'daysPerMonth', v)} className="w-full p-2 rounded border border-emerald-200 dark:border-emerald-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100" /></div>
                            </div>
-                           <div><label className="text-[9px] font-bold text-slate-400 dark:text-slate-500">Prise en charge Boite (%)</label><NumberInput value={localBenefits.mealVouchers.employerRate} onChange={v => updateBenefit('mealVouchers', 'employerRate', v)} className="w-full p-2 rounded border border-emerald-200 dark:border-emerald-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100" /></div>
-                           <p className="text-[9px] text-emerald-600 dark:text-emerald-400 text-right mt-1">−{formatEUR(localBenefits.mealVouchers.faceValue * localBenefits.mealVouchers.daysPerMonth * (1 - localBenefits.mealVouchers.employerRate/100), 2)}/mois (coût)</p>
+                           <div><label className="text-[11px] font-bold text-slate-500 dark:text-slate-400">Prise en charge Boite (%)</label><NumberInput value={localBenefits.mealVouchers.employerRate} onChange={v => updateBenefit('mealVouchers', 'employerRate', v)} className="w-full p-2 rounded border border-emerald-200 dark:border-emerald-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100" /></div>
+                           <p className="text-[11px] text-emerald-600 dark:text-emerald-400 text-right mt-1">−{formatEUR(localBenefits.mealVouchers.faceValue * localBenefits.mealVouchers.daysPerMonth * (1 - localBenefits.mealVouchers.employerRate/100), 2)}/mois (coût)</p>
                        </div>
                    )}
                </div>
@@ -340,24 +340,24 @@ export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parent
           <h3 className="font-bold text-slate-800 dark:text-slate-100 mb-4 border-b border-slate-200 dark:border-slate-700 pb-2">⚖️ Fiscalité & Social</h3>
           <div className="space-y-4">
             <div>
-              <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Charges Salariales (Ex: 0.2232)</label>
+              <label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Charges Salariales (Ex: 0.2232)</label>
               <NumberInput value={localFiscal.salaryChargesRate} onChange={v => handleFiscalChange('salaryChargesRate', v)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded font-bold" />
             </div>
             <div>
-              <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Abattement Forfaitaire Impôt (Ex: 0.10)</label>
+              <label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Abattement Forfaitaire Impôt (Ex: 0.10)</label>
               <NumberInput value={localFiscal.standardAllowance} onChange={v => handleFiscalChange('standardAllowance', v)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded font-bold" />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Plafond RFR LEP (1 part)</label>
+                <label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Plafond RFR LEP (1 part)</label>
                 <NumberInput value={localFiscal.lepIncomeCeiling ?? 0} onChange={v => handleFiscalChange('lepIncomeCeiling', v)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded font-bold" />
               </div>
               <div>
-                <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Parts fiscales</label>
+                <label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Parts fiscales</label>
                 <NumberInput value={localFiscal.lepHouseholdParts ?? 1} onChange={v => handleFiscalChange('lepHouseholdParts', v)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded font-bold" />
               </div>
             </div>
-            <p className="text-[10px] text-slate-400 dark:text-slate-500 -mt-2">
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 -mt-2">
               Sert à t'alerter si ton revenu approche du plafond d'éligibilité au LEP. Le montant est révisé chaque année ; le vrai critère reste le RFR de ton avis d'imposition.
             </p>
           </div>
@@ -366,8 +366,8 @@ export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parent
         <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700">
           <h3 className="font-bold text-slate-800 dark:text-slate-100 mb-4 border-b border-slate-200 dark:border-slate-700 pb-2">📈 Plafonds Livrets (€)</h3>
           <div className="grid grid-cols-2 gap-4">
-              <div><label className="text-[10px] text-indigo-600 dark:text-indigo-300 font-black uppercase">Livret A</label><NumberInput value={localFiscal.ceilings.livretA} onChange={v => handleCeilingChange('livretA', v)} className="w-full p-2 bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900 rounded font-bold text-slate-800 dark:text-slate-100" /></div>
-              <div><label className="text-[10px] text-rose-600 dark:text-rose-300 font-black uppercase">LEP</label><NumberInput value={localFiscal.ceilings.lep} onChange={v => handleCeilingChange('lep', v)} className="w-full p-2 bg-rose-50 dark:bg-rose-950/40 border border-rose-100 dark:border-rose-900 rounded font-bold text-slate-800 dark:text-slate-100" /></div>
+              <div><label className="text-[11px] text-indigo-600 dark:text-indigo-300 font-black uppercase">Livret A</label><NumberInput value={localFiscal.ceilings.livretA} onChange={v => handleCeilingChange('livretA', v)} className="w-full p-2 bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900 rounded font-bold text-slate-800 dark:text-slate-100" /></div>
+              <div><label className="text-[11px] text-rose-600 dark:text-rose-300 font-black uppercase">LEP</label><NumberInput value={localFiscal.ceilings.lep} onChange={v => handleCeilingChange('lep', v)} className="w-full p-2 bg-rose-50 dark:bg-rose-950/40 border border-rose-100 dark:border-rose-900 rounded font-bold text-slate-800 dark:text-slate-100" /></div>
           </div>
         </div>
 
@@ -381,11 +381,11 @@ export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parent
             {localFiscal.taxBrackets.map((bracket, index) => (
                 <div key={index} className="flex items-center gap-4">
                     <div className="flex-1">
-                        <label className="text-[8px] uppercase font-bold text-slate-400 dark:text-slate-500">Limite Sup (€)</label>
+                        <label className="text-[11px] uppercase font-bold text-slate-500 dark:text-slate-400">Limite Sup (€)</label>
                         <NumberInput value={bracket.limit === Infinity ? 999999999 : bracket.limit} onChange={v => updateBracket(index, 'limit', v)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded text-sm text-slate-800 dark:text-slate-100" />
                     </div>
                     <div className="w-32">
-                        <label className="text-[8px] uppercase font-bold text-slate-400 dark:text-slate-500">Taux (0.11)</label>
+                        <label className="text-[11px] uppercase font-bold text-slate-500 dark:text-slate-400">Taux (0.11)</label>
                         <NumberInput value={bracket.rate} onChange={v => updateBracket(index, 'rate', v)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded text-sm font-bold text-indigo-600 dark:text-indigo-300" />
                     </div>
                     <button onClick={() => removeBracket(index)} className="mt-4 p-2 text-slate-300 hover:text-rose-500"><Trash2 className="w-4 h-4" /></button>

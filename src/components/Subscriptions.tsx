@@ -12,10 +12,11 @@ import { formatISODay, localTodayISO, daysBetween } from '../lib/dates';
 import { nextSubscriptionDate, subscriptionMonthlyCost, subscriptionLeadDays, SUBSCRIPTION_BIG_AMOUNT } from '../lib/finance';
 import { isBackendEnabled } from '../services/backendService';
 import { formatEUR } from '../lib/format';
+import { useUndoableRemove } from './Toast';
 
 interface SubscriptionsProps {
   subscriptions: Subscription[];
-  onUpdate: (next: Subscription[]) => void;
+  onUpdate: React.Dispatch<React.SetStateAction<Subscription[]>>;
 }
 
 const fmt = (n: number) => formatEUR(n);
@@ -79,7 +80,13 @@ export const Subscriptions: React.FC<SubscriptionsProps> = ({ subscriptions, onU
   };
   const cancelEdit = () => { setEditingId(null); setForm(EMPTY); setError(null); };
   const toggle = (id: string) => onUpdate(subscriptions.map(s => s.id === id ? { ...s, active: !s.active } : s));
-  const remove = (id: string) => { onUpdate(subscriptions.filter(s => s.id !== id)); if (editingId === id) cancelEdit(); };
+  const removeWithUndo = useUndoableRemove();
+  const remove = (id: string) => {
+    const sub = subscriptions.find(s => s.id === id);
+    if (!sub) return;
+    removeWithUndo(subscriptions, sub, onUpdate, `Abonnement « ${sub.name} » supprimé`);
+    if (editingId === id) cancelEdit();
+  };
 
   const inputClass = 'w-full p-3 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 border border-slate-300 dark:border-slate-700 rounded-lg font-bold';
   const when = (inDays: number) => inDays === 0 ? "aujourd'hui" : inDays === 1 ? 'demain' : `dans ${inDays} jours`;
@@ -99,11 +106,11 @@ export const Subscriptions: React.FC<SubscriptionsProps> = ({ subscriptions, onU
         {active.length > 0 && (
           <div className="flex flex-wrap gap-6 mt-4">
             <div>
-              <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Par mois</p>
+              <p className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Par mois</p>
               <p className="text-xl font-black text-slate-800 dark:text-slate-100">{fmt(monthly)}</p>
             </div>
             <div>
-              <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Par an</p>
+              <p className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Par an</p>
               <p className="text-xl font-black text-slate-800 dark:text-slate-100">{fmt(monthly * 12)}</p>
             </div>
           </div>
@@ -118,7 +125,7 @@ export const Subscriptions: React.FC<SubscriptionsProps> = ({ subscriptions, onU
                 <p className="font-bold text-slate-800 dark:text-slate-100 text-sm truncate">
                   {s.name} · <span className="text-rose-600">{fmt(s.amount)}</span>
                 </p>
-                <p className="text-[11px] text-slate-400 dark:text-slate-500 font-bold">
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 font-bold">
                   {FREQUENCY_LABEL[s.frequency]}
                   {s.debitAccount && <> · {s.debitAccount}</>}
                   {s.active
@@ -138,7 +145,7 @@ export const Subscriptions: React.FC<SubscriptionsProps> = ({ subscriptions, onU
 
       <form onSubmit={submit} className="space-y-3 bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
         <div className="flex items-center justify-between">
-          <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">{editingId ? 'Modifier l\'abonnement' : 'Nouvel abonnement'}</p>
+          <p className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">{editingId ? 'Modifier l\'abonnement' : 'Nouvel abonnement'}</p>
           {editingId && <button type="button" onClick={cancelEdit} className="text-xs font-bold text-slate-400 hover:text-slate-600 flex items-center gap-1"><X className="w-3 h-3" /> Annuler</button>}
         </div>
         <input type="text" value={form.name} onChange={e => set({ name: e.target.value })} placeholder="Nom (ex : Netflix, assurance auto)" className={inputClass} />
@@ -150,11 +157,11 @@ export const Subscriptions: React.FC<SubscriptionsProps> = ({ subscriptions, onU
         </div>
         <div className="grid grid-cols-2 gap-2">
           <label className="block">
-            <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Date d'un prélèvement</span>
+            <span className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Date d'un prélèvement</span>
             <input type="date" value={form.anchorDate} onChange={e => set({ anchorDate: e.target.value })} className={inputClass} />
           </label>
           <label className="block">
-            <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Compte prélevé</span>
+            <span className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Compte prélevé</span>
             <input type="text" list="subscription-accounts" value={form.debitAccount} onChange={e => set({ debitAccount: e.target.value })} placeholder="Ex : compte courant BP" className={inputClass} />
             <datalist id="subscription-accounts">{knownAccounts.map(a => <option key={a} value={a} />)}</datalist>
           </label>

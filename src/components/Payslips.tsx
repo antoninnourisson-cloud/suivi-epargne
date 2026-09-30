@@ -228,7 +228,7 @@ export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, 
                 <FileText className="w-4 h-4 text-indigo-600 flex-shrink-0" />
                 <span className="font-bold text-slate-800 dark:text-slate-100 truncate">{draft.fileName}</span>
               </div>
-              <button onClick={() => setDraft(null)} className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 rounded-lg flex-shrink-0"><X className="w-4 h-4" /></button>
+              <button onClick={() => setDraft(null)} className="p-1.5 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-lg flex-shrink-0"><X className="w-4 h-4" /></button>
             </div>
           )}
 
@@ -274,22 +274,22 @@ export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, 
                   </span>
                 </p>
               )}
-              <p className="text-[11px] text-slate-400 dark:text-slate-500 -mt-1">Vérifie et corrige les valeurs avant d'enregistrer — l'extraction automatique peut se tromper.</p>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 -mt-1">Vérifie et corrige les valeurs avant d'enregistrer — l'extraction automatique peut se tromper.</p>
               {/* key={status} : les champs numériques sont non contrôlés (defaultValue, parsés au
                   blur pour accepter la virgule française) — le remontage à l'arrivée des données
                   extraites recharge leurs valeurs initiales. */}
               <div key={draft.status} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Employeur</label><input value={draft.fields.employer ?? ''} onChange={e => patchDraftField('employer', e.target.value)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
-                <div><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Période (AAAA-MM)</label><input value={draft.fields.period ?? ''} onChange={e => patchDraftField('period', e.target.value)} placeholder="2026-08" className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
-                <div><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Brut (€)</label><input type="text" inputMode="decimal" defaultValue={draft.fields.grossAmount ?? ''} onBlur={e => patchDraftField('grossAmount', e.target.value)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
-                <div><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Charges salariales (€)</label><input type="text" inputMode="decimal" defaultValue={draft.fields.socialCharges ?? ''} onBlur={e => patchDraftField('socialCharges', e.target.value)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
-                <div><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Net à payer avant impôt (€)</label><input type="text" inputMode="decimal" defaultValue={draft.fields.netAmount ?? ''} onBlur={e => patchDraftField('netAmount', e.target.value)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
-                <div><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Net imposable (€)</label><input type="text" inputMode="decimal" defaultValue={draft.fields.netTaxable ?? ''} onBlur={e => patchDraftField('netTaxable', e.target.value)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
-                <div><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Remb. Navigo (€)</label><input type="text" inputMode="decimal" defaultValue={draft.fields.navigoRefund ?? ''} onBlur={e => patchDraftField('navigoRefund', e.target.value)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
-                <div><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Mutuelle (part salarié, €)</label><input type="text" inputMode="decimal" defaultValue={draft.fields.mutuelleCost ?? ''} onBlur={e => patchDraftField('mutuelleCost', e.target.value)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
-                <div><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Tickets restaurant (€)</label><input type="text" inputMode="decimal" defaultValue={draft.fields.mealVouchers ?? ''} onBlur={e => patchDraftField('mealVouchers', e.target.value)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
-                <div><label className="text-[10px] font-black text-amber-500 uppercase">Impôt prélevé à la source (€)</label><input type="text" inputMode="decimal" defaultValue={draft.fields.incomeTaxWithheld ?? ''} onBlur={e => patchDraftField('incomeTaxWithheld', e.target.value)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-amber-200 dark:border-amber-800 rounded-lg font-bold" /></div>
-                <div><label className="text-[10px] font-black text-emerald-600 uppercase">Net payé (viré en banque, €)</label><input type="text" inputMode="decimal" defaultValue={draft.fields.netPaid ?? ''} onBlur={e => patchDraftField('netPaid', e.target.value)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-emerald-200 dark:border-emerald-800 rounded-lg font-bold" /></div>
+                <div><label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Employeur</label><input value={draft.fields.employer ?? ''} onChange={e => patchDraftField('employer', e.target.value)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
+                <div><label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Période (AAAA-MM)</label><input value={draft.fields.period ?? ''} onChange={e => patchDraftField('period', e.target.value)} placeholder="2026-08" className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
+                <div><label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Brut (€)</label><input type="text" inputMode="decimal" defaultValue={draft.fields.grossAmount ?? ''} onBlur={e => patchDraftField('grossAmount', e.target.value)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
+                <div><label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Charges salariales (€)</label><input type="text" inputMode="decimal" defaultValue={draft.fields.socialCharges ?? ''} onBlur={e => patchDraftField('socialCharges', e.target.value)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
+                <div><label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Net à payer avant impôt (€)</label><input type="text" inputMode="decimal" defaultValue={draft.fields.netAmount ?? ''} onBlur={e => patchDraftField('netAmount', e.target.value)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
+                <div><label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Net imposable (€)</label><input type="text" inputMode="decimal" defaultValue={draft.fields.netTaxable ?? ''} onBlur={e => patchDraftField('netTaxable', e.target.value)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
+                <div><label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Remb. Navigo (€)</label><input type="text" inputMode="decimal" defaultValue={draft.fields.navigoRefund ?? ''} onBlur={e => patchDraftField('navigoRefund', e.target.value)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
+                <div><label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Mutuelle (part salarié, €)</label><input type="text" inputMode="decimal" defaultValue={draft.fields.mutuelleCost ?? ''} onBlur={e => patchDraftField('mutuelleCost', e.target.value)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
+                <div><label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Tickets restaurant (€)</label><input type="text" inputMode="decimal" defaultValue={draft.fields.mealVouchers ?? ''} onBlur={e => patchDraftField('mealVouchers', e.target.value)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
+                <div><label className="text-[11px] font-black text-amber-500 uppercase">Impôt prélevé à la source (€)</label><input type="text" inputMode="decimal" defaultValue={draft.fields.incomeTaxWithheld ?? ''} onBlur={e => patchDraftField('incomeTaxWithheld', e.target.value)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-amber-200 dark:border-amber-800 rounded-lg font-bold" /></div>
+                <div><label className="text-[11px] font-black text-emerald-600 uppercase">Net payé (viré en banque, €)</label><input type="text" inputMode="decimal" defaultValue={draft.fields.netPaid ?? ''} onBlur={e => patchDraftField('netPaid', e.target.value)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-emerald-200 dark:border-emerald-800 rounded-lg font-bold" /></div>
               </div>
               <div className="flex gap-2 justify-end pt-2">
                 <button onClick={() => setDraft(null)} className="px-4 py-2 rounded-xl font-bold text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-1"><X className="w-4 h-4" /> Annuler</button>
@@ -330,7 +330,7 @@ export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, 
 
       {/* --- HISTORIQUE --- */}
       {payslips.length === 0 && !draft && (
-        <div className="text-center py-16 text-slate-400 dark:text-slate-500 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700">
+        <div className="text-center py-16 text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700">
           <FileText className="w-10 h-10 mx-auto mb-3 opacity-40" />
           Aucune fiche de paie importée pour l'instant.
         </div>
@@ -342,9 +342,9 @@ export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, 
             <table className="w-full text-left text-sm min-w-[34rem]">
               <thead className="bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700">
                 <tr>
-                  <th className="px-6 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Période</th>
-                  <th className="px-6 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase text-right">Brut</th>
-                  <th className="px-6 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase text-right">Net payé</th>
+                  <th className="px-6 py-3 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Période</th>
+                  <th className="px-6 py-3 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase text-right">Brut</th>
+                  <th className="px-6 py-3 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase text-right">Net payé</th>
                   <th className="px-6 py-3 text-right"></th>
                 </tr>
               </thead>
@@ -356,9 +356,9 @@ export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, 
                     <td className="px-6 py-3">
                       <div className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
                         {p.extracted.period || '—'}
-                        {isActive && <span className="text-[9px] font-black uppercase bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300 px-1.5 py-0.5 rounded">Référence Pilotage</span>}
+                        {isActive && <span className="text-[11px] font-black uppercase bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300 px-1.5 py-0.5 rounded">Référence Pilotage</span>}
                       </div>
-                      <div className="text-[10px] uppercase text-slate-400 dark:text-slate-500 font-bold">{p.extracted.employer || p.fileName}</div>
+                      <div className="text-[11px] uppercase text-slate-500 dark:text-slate-400 font-bold">{p.extracted.employer || p.fileName}</div>
                     </td>
                     <td className="px-6 py-3 text-right font-mono text-slate-600 dark:text-slate-300">{fmt(p.extracted.grossAmount)}</td>
                     <td className="px-6 py-3 text-right font-black text-emerald-600">{fmt(p.extracted.netPaid ?? p.extracted.netAmount)}</td>

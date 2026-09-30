@@ -9,11 +9,12 @@ import { SavingsAccount, RecurringMovement } from '../types';
 import { Repeat, Plus, Trash2, AlertCircle, Pause, Play } from 'lucide-react';
 import { safeNumber } from '../lib/numbers';
 import { formatEUR } from '../lib/format';
+import { useUndoableRemove } from './Toast';
 
 interface RecurringManagerProps {
   accounts: SavingsAccount[];
   recurringMovements: RecurringMovement[];
-  onUpdate: (next: RecurringMovement[]) => void;
+  onUpdate: React.Dispatch<React.SetStateAction<RecurringMovement[]>>;
 }
 
 const fmt = (n: number) => formatEUR(n);
@@ -44,7 +45,11 @@ export const RecurringManager: React.FC<RecurringManagerProps> = ({ accounts, re
   };
 
   const toggle = (id: string) => onUpdate(recurringMovements.map(r => r.id === id ? { ...r, active: !r.active } : r));
-  const remove = (id: string) => onUpdate(recurringMovements.filter(r => r.id !== id));
+  const removeWithUndo = useUndoableRemove();
+  const remove = (id: string) => {
+    const r = recurringMovements.find(x => x.id === id);
+    if (r) removeWithUndo(recurringMovements, r, onUpdate, `Échéance « ${r.label} » supprimée`);
+  };
 
   const accountName = (id: string) => accounts.find(a => a.id === id)?.name;
   const inputClass = 'w-full p-3 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 border border-slate-300 dark:border-slate-700 rounded-lg font-bold';
@@ -67,7 +72,7 @@ export const RecurringManager: React.FC<RecurringManagerProps> = ({ accounts, re
                     <span className={r.type === 'IN' ? 'text-emerald-600' : 'text-rose-600'}>{r.type === 'IN' ? '+' : '-'}{fmt(r.amount)}</span>
                     {' · '}{r.label}
                   </p>
-                  <p className="text-[11px] text-slate-400 dark:text-slate-500 font-bold">
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 font-bold">
                     le {r.dayOfMonth} du mois · {name ?? <span className="text-rose-500">compte supprimé</span>}
                     {!r.active && ' · en pause'}
                   </p>
@@ -85,7 +90,7 @@ export const RecurringManager: React.FC<RecurringManagerProps> = ({ accounts, re
       )}
 
       <form onSubmit={add} className="space-y-3 border-t border-slate-100 dark:border-slate-800 pt-4">
-        <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Nouvelle échéance</p>
+        <p className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Nouvelle échéance</p>
         <select value={accountId} onChange={e => setAccountId(e.target.value)} className={inputClass}>
           <option value="">Compte</option>
           {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}

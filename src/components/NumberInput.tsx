@@ -52,7 +52,7 @@ export const NumberInput: React.FC<NumberInputProps> = ({ value, onChange, class
         className={className}
       />
       {!focused && suffix && value ? (
-        <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-slate-400 dark:text-slate-500 text-xs font-bold">{suffix}</span>
+        <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-slate-500 dark:text-slate-400 text-xs font-bold">{suffix}</span>
       ) : null}
     </div>
   );
