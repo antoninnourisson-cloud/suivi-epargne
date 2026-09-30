@@ -23,7 +23,7 @@ import {
   LayoutDashboard, Wallet, Trash2, Edit2, ShieldCheck,
   ArrowRightLeft, RefreshCcw, PlusCircle, Cloud, LogOut,
   Loader2, Settings as SettingsIcon, AlertTriangle, RotateCw,
-  Target, Coins, LineChart, Users, Calculator, Sun, Moon, Zap, Tag, Save, WifiOff, FileText, Clock, CalendarClock, HandHeart
+  Coins, LineChart, Users, Sun, Moon, Zap, Tag, Save, WifiOff, FileText, Clock, CalendarClock, HandHeart
 } from 'lucide-react';
 
 // Code-splitting : les vues lourdes (recharts, etc.) sont chargées à la demande.
@@ -34,11 +34,9 @@ const AccountUpdate = lazy(() => import('./components/AccountUpdate').then(m => 
 const AssistantPilot = lazy(() => import('./components/AssistantPilot').then(m => ({ default: m.AssistantPilot })));
 const TransferManager = lazy(() => import('./components/TransferManager').then(m => ({ default: m.TransferManager })));
 const Settings = lazy(() => import('./components/Settings').then(m => ({ default: m.Settings })));
-const Goals = lazy(() => import('./components/Goals').then(m => ({ default: m.Goals })));
 const Yield = lazy(() => import('./components/Yield').then(m => ({ default: m.Yield })));
 const History = lazy(() => import('./components/History').then(m => ({ default: m.History })));
 const ParentalShare = lazy(() => import('./components/ParentalShare').then(m => ({ default: m.ParentalShare })));
-const WithdrawalSimulator = lazy(() => import('./components/WithdrawalSimulator').then(m => ({ default: m.WithdrawalSimulator })));
 const Payslips = lazy(() => import('./components/Payslips').then(m => ({ default: m.Payslips })));
 
 const ViewLoader = () => (
@@ -58,8 +56,8 @@ const NavButton = ({ active, onClick, icon: Icon, label, highlight }: any) => (
     </button>
 );
 
-type View = 'dashboard' | 'accounts' | 'transfers' | 'pilot' | 'update' | 'settings' | 'goals' | 'yield' | 'history' | 'parental' | 'simulator' | 'payslips' | 'subscriptions' | 'donations';
-const VALID_VIEWS: View[] = ['dashboard', 'accounts', 'transfers', 'pilot', 'update', 'settings', 'goals', 'yield', 'history', 'parental', 'simulator', 'payslips', 'subscriptions', 'donations'];
+type View = 'dashboard' | 'accounts' | 'transfers' | 'pilot' | 'update' | 'settings' | 'yield' | 'history' | 'parental' | 'payslips' | 'subscriptions' | 'donations';
+const VALID_VIEWS: View[] = ['dashboard', 'accounts', 'transfers', 'pilot', 'update', 'settings', 'yield', 'history', 'parental', 'payslips', 'subscriptions', 'donations'];
 
 const App: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -146,20 +144,12 @@ const App: React.FC = () => {
     return data.accounts.filter(a => (a.tags || []).includes(activeTagFilter));
   }, [data.accounts, activeTagFilter]);
 
-  // Objet stable : un littéral inline dans le JSX est une nouvelle identité à chaque rendu
-  // d'App, ce qui invalidait systématiquement le useMemo de capacité dans Goals.
-  const incomeCfg = useMemo(() => ({
-    grossAnnual: data.grossAnnual, extraMonthlyIncome: data.extraMonthlyIncome,
-    navigoBase: data.navigoBase, navigoRate: data.navigoRate, taxRateManual: data.taxRateManual,
-    leisureBudget: data.leisureBudget, projectSavings: data.projectSavings,
-  }), [data.grossAnnual, data.extraMonthlyIncome, data.navigoBase, data.navigoRate, data.taxRateManual, data.leisureBudget, data.projectSavings]);
-
   const activePayslipRecord = useMemo(
     () => data.payslips.find(p => p.id === data.activePayslipId),
     [data.payslips, data.activePayslipId]
   );
 
-  // Même raison que `incomeCfg` : un littéral inline invaliderait les useMemo du Dashboard
+  // Objet stable : un littéral inline invaliderait les useMemo du Dashboard
   // à chaque rendu d'App.
   const dashboardConfig = useMemo(() => ({
     grossAnnual: data.grossAnnual, navigoBase: data.navigoBase,
@@ -609,11 +599,9 @@ const App: React.FC = () => {
 
           <div className="pt-6 pb-2 text-[10px] font-black text-slate-600 dark:text-slate-300 uppercase px-4 tracking-widest">Analyses</div>
           <NavButton active={view === 'pilot'} onClick={() => setView('pilot')} icon={ShieldCheck} label="Pilotage" />
-          <NavButton active={view === 'goals'} onClick={() => setView('goals')} icon={Target} label="Objectifs" />
           <NavButton active={view === 'yield'} onClick={() => setView('yield')} icon={Coins} label="Rendement" />
           <NavButton active={view === 'history'} onClick={() => setView('history')} icon={LineChart} label="Historique" />
           <NavButton active={view === 'parental'} onClick={() => setView('parental')} icon={Users} label="Part Parentale" />
-          <NavButton active={view === 'simulator'} onClick={() => setView('simulator')} icon={Calculator} label="Simulateur" />
 
           <div className="pt-6 pb-2 text-[10px] font-black text-slate-600 dark:text-slate-300 uppercase px-4 tracking-widest">Gestion</div>
           <NavButton active={view === 'accounts'} onClick={() => setView('accounts')} icon={Wallet} label="Mes Comptes" />
@@ -730,20 +718,9 @@ const App: React.FC = () => {
             {view === 'transfers' && <TransferManager accounts={data.accounts} onUpdateAccountsComplex={data.updateAccountsWithMovements} onLinkedTransfer={data.executeLinkedTransfer} lastSavedAt={data.lastSavedAt} recurringMovements={data.recurringMovements} onUpdateRecurring={data.setRecurringMovements} />}
             {view === 'update' && <AccountUpdate accounts={data.accounts} onUpdateAccountsComplex={data.updateAccountsWithMovements} lastSavedAt={data.lastSavedAt} />}
 
-            {view === 'goals' && <Goals
-                goals={data.goals}
-                onUpdateGoals={data.setGoals}
-                expenses={allCharges}
-                income={incomeCfg}
-                fiscalConfig={data.fiscalConfig}
-                workBenefits={data.workBenefits}
-                accounts={data.accounts}
-                activePayslip={activePayslipRecord}
-            />}
             {view === 'yield' && <Yield accounts={data.accounts} fiscalConfig={data.fiscalConfig} />}
             {view === 'history' && <History history={data.history} expensesHistory={data.expensesHistory} />}
             {view === 'parental' && <ParentalShare accounts={data.accounts} />}
-            {view === 'simulator' && <WithdrawalSimulator accounts={data.accounts} expenses={allCharges} goals={data.goals} fiscalConfig={data.fiscalConfig} />}
             {view === 'donations' && <Donations donations={data.donations} onUpdate={data.setDonations} pickerApiKey={data.pickerApiKey} />}
             {view === 'subscriptions' && <Subscriptions subscriptions={data.subscriptions} onUpdate={data.setSubscriptions} />}
             {view === 'payslips' && <Payslips payslips={data.payslips} onUpdatePayslips={data.setPayslips} geminiApiKey={data.geminiApiKey} pickerApiKey={data.pickerApiKey} onApplyToPilotage={handleApplyPayslipToPilotage} activePayslipId={data.activePayslipId} onClearActivePayslip={handleClearActivePayslip} />}
@@ -899,11 +876,9 @@ const App: React.FC = () => {
         setMoreOpen={setMoreNavOpen}
         moreItems={[
           { key: 'update', label: 'Actualiser', icon: RefreshCcw },
-          { key: 'goals', label: 'Objectifs', icon: Target },
           { key: 'yield', label: 'Rendement', icon: Coins },
           { key: 'history', label: 'Historique', icon: LineChart },
           { key: 'parental', label: 'Part Parentale', icon: Users },
-          { key: 'simulator', label: 'Simulateur', icon: Calculator },
           { key: 'payslips', label: 'Fiches de paie', icon: FileText },
           { key: 'subscriptions', label: 'Abonnements', icon: CalendarClock },
           { key: 'donations', label: 'Dons', icon: HandHeart },

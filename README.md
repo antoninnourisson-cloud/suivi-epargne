@@ -62,9 +62,7 @@ Un **petit serveur optionnel** (Cloudflare Worker, dossier [`worker/`](worker/))
 - Compte à rebours avant la maturité fiscale de chaque compte.
 
 ### Autres écrans
-- **Objectifs** : capacité théorique confrontée au rythme d'épargne réel.
 - **Historique** mensuel du patrimoine et des charges.
-- **Simulateur de retrait** : compte le moins coûteux à ponctionner (impôt, quinzaine perdue, intérêts sacrifiés), impact sur la durée de survie et sur un objectif.
 - **Dons** aux associations : total par taux (66 % / 75 %), réduction d'impôt estimée, reçus fiscaux joints depuis Drive, rappel à l'ouverture de la déclaration en avril.
 - **Abonnements** : rappel la veille du prélèvement, ou une semaine avant à partir de 100 €. Seuls les mensuels comptent dans les charges fixes.
 - **Fiches de paie** :

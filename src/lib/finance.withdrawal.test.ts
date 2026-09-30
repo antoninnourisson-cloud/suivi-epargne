@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
   computeWithdrawalTax,
-  computeWithdrawalOptions,
   depositsAfterWithdrawal,
   computeMonthSavedAmount,
   nextSubscriptionDate,
@@ -52,34 +51,6 @@ describe('computeWithdrawalTax', () => {
   it('un retrait emporte les versements au prorata', () => {
     expect(depositsAfterWithdrawal(6000, 10000, 1000)).toBeCloseTo(5400);
     expect(depositsAfterWithdrawal(6000, 10000, 20000)).toBe(0);
-  });
-});
-
-describe('computeWithdrawalOptions', () => {
-  it('classe du moins coûteux au plus coûteux, sans le capital parental ni l’épargne bloquée', () => {
-    const accounts = [
-      acc({ name: 'LEP', type: AccountType.LEP, interestRate: 3.5 }),
-      acc({ name: 'Livret A', interestRate: 2.4 }),
-      acc({ name: 'PEE', type: AccountType.PEE }),
-      acc({ name: 'Parents', totalAmount: 10000, ownedAmount: 500, parentalCapital: 9500 }),
-    ];
-    const opts = computeWithdrawalOptions(accounts, 1000, CFG, NOW);
-    expect(opts.map(o => o.account.name)).toEqual(['Livret A', 'LEP']);
-  });
-
-  it('conseille d’attendre la prochaine quinzaine sur un livret', () => {
-    const [o] = computeWithdrawalOptions([acc({ interestRate: 2.4 })], 5000, CFG, new Date(2026, 8, 10));
-    expect(o.waitTip?.date).toBe('2026-09-16');
-    expect(o.waitTip?.gain).toBeCloseTo(5000 * 0.024 / 24);
-    expect(computeWithdrawalOptions([acc({ interestRate: 2.4 })], 5000, CFG, new Date(2026, 8, 16))[0].waitTip).toBeUndefined();
-  });
-
-  it('met en dernier un PEA que le retrait clôturerait', () => {
-    const opts = computeWithdrawalOptions([
-      acc({ name: 'PEA', type: AccountType.PEA, openingDate: '2025-01-01', totalDeposits: 10000 }),
-      acc({ name: 'LEP', type: AccountType.LEP, interestRate: 3.5 }),
-    ], 1000, CFG, NOW);
-    expect(opts.map(o => o.account.name)).toEqual(['LEP', 'PEA']);
   });
 });
 

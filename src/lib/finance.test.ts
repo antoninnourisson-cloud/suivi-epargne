@@ -9,7 +9,7 @@ import {
   computeMaturityCountdown,
   computeAccountBalanceAtDate,
   computeRecentSavingsRate,
-  computeEffectiveSuperNet,
+  payslipSuperNet,
   computeAccruedInterest,
   lastRateRevision,
   findStaleRegulatedRates,
@@ -555,18 +555,15 @@ describe('computeRecentSavingsRate', () => {
   });
 });
 
-describe('computeEffectiveSuperNet', () => {
-  it('retourne le théorique sans fiche active', () => {
-    expect(computeEffectiveSuperNet(2500)).toBe(2500);
-  });
+describe('payslipSuperNet', () => {
   it('préfère le net payé réel de la fiche', () => {
-    expect(computeEffectiveSuperNet(2500, { extracted: { netPaid: 2300 } })).toBe(2300);
+    expect(payslipSuperNet({ netPaid: 2300 })).toBe(2300);
   });
   it('reconstruit net - impôt si netPaid absent', () => {
-    expect(computeEffectiveSuperNet(2500, { extracted: { netAmount: 2600, incomeTaxWithheld: 200 } })).toBe(2400);
+    expect(payslipSuperNet({ netAmount: 2600, incomeTaxWithheld: 200 })).toBe(2400);
   });
-  it('retombe sur le théorique si la fiche est incomplète', () => {
-    expect(computeEffectiveSuperNet(2500, { extracted: { netAmount: 2600 } })).toBe(2500);
+  it('reste indéfini si la fiche est incomplète (la formule prend le relais)', () => {
+    expect(payslipSuperNet({ netAmount: 2600 })).toBeUndefined();
   });
 });
 

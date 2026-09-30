@@ -368,23 +368,6 @@ export const computeWeightedAnnualRate = (
   return totalDays > 0 ? weightedSum / totalDays : currentRate;
 };
 
-/**
- * "Super net" effectif pour les CALCULS (capacité d'épargne...) : le net réel de la fiche
- * de paie de référence quand il est disponible, sinon le net théorique de la formule.
- * Extrait du Pilotage pour que l'écran Objectifs applique EXACTEMENT la même règle — il
- * ignorait la fiche active et affichait une capacité différente pour le même mois.
- */
-export const computeEffectiveSuperNet = (
-  theoreticalSuperNet: number,
-  activePayslip?: { extracted: { netPaid?: number; netAmount?: number; incomeTaxWithheld?: number } }
-): number => {
-  if (!activePayslip) return theoreticalSuperNet;
-  const e = activePayslip.extracted;
-  const real = e.netPaid ?? (e.netAmount !== undefined && e.incomeTaxWithheld !== undefined
-    ? e.netAmount - e.incomeTaxWithheld
-    : undefined);
-  return real ?? theoreticalSuperNet;
-};
 
 // --- INTÉRÊTS RÉELLEMENT ACQUIS SUR UNE ANNÉE ---
 // Jusqu'ici, tout se calculait `taux × solde du jour`. C'est honnête pour un RYTHME annuel
@@ -938,69 +921,6 @@ export const computeWithdrawalTax = (
       incomeTax = gainPart * PFU_INCOME_TAX_RATE;
   }
   return { known: true, gainPart, socialCharges, incomeTax, net: amount - socialCharges - incomeTax, closesPea };
-};
-
-// ---------------------------------------------------------------------------
-// Où retirer au moindre coût
-// ---------------------------------------------------------------------------
-
-export interface WithdrawalOption {
-  account: SavingsAccount;
-  immediateCost: number;    // impôt, ou quinzaine d'intérêts sacrifiée
-  yearlyForgone: number;    // intérêts perdus sur un an (montant × taux)
-  totalCost: number;        // les deux : critère de classement
-  tax?: WithdrawalTax;
-  taxUnknown: boolean;      // placement dont on ignore les versements : coût sous-estimé
-  // Livret réglementé retiré en cours de quinzaine : attendre la prochaine borne garde
-  // les intérêts de la quinzaine en cours.
-  waitTip?: { date: string; gain: number };
-}
-
-const NOT_WITHDRAWABLE = [AccountType.PEE, AccountType.PER, AccountType.IMMOBILIER];
-
-/**
- * Comptes pouvant couvrir seuls `amount` (sur la part propre, jamais le capital parental),
- * du moins coûteux au plus coûteux. Exclus : épargne bloquée (PEE, PER, immobilier, contrat
- * à terme).
- */
-export const computeWithdrawalOptions = (
-  accounts: SavingsAccount[],
-  amount: number,
-  fiscalConfig: FiscalConfig,
-  asOfDate: Date = new Date()
-): WithdrawalOption[] => {
-  if (amount <= 0) return [];
-  const day = asOfDate.getDate();
-  return accounts
-    .filter(a => a.ownedAmount >= amount && !a.contractEndDate && !NOT_WITHDRAWABLE.includes(a.type))
-    .map(account => {
-      const rate = (account.interestRate || 0) / 100;
-      const yearlyForgone = amount * rate;
-      let immediateCost = 0;
-      let tax: WithdrawalTax | undefined;
-      let taxUnknown = false;
-      let waitTip: WithdrawalOption['waitTip'];
-      if (REGULATED_TYPES.includes(account.type)) {
-        // Un retrait ne rapporte plus rien depuis le début de la quinzaine en cours : la
-        // quinzaine entière est perdue, sauf à retirer pile le 1er ou le 16.
-        if (day !== 1 && day !== 16) {
-          immediateCost = amount * rate / 24;
-          const next = day < 16
-            ? new Date(asOfDate.getFullYear(), asOfDate.getMonth(), 16)
-            : new Date(asOfDate.getFullYear(), asOfDate.getMonth() + 1, 1);
-          if (immediateCost >= 0.5) waitTip = { date: formatISODay(next), gain: immediateCost };
-        }
-      } else if (tracksDeposits(account.type)) {
-        tax = computeWithdrawalTax(account, amount, fiscalConfig, asOfDate);
-        taxUnknown = !tax.known;
-        immediateCost = tax.socialCharges + tax.incomeTax;
-      }
-      return { account, immediateCost, yearlyForgone, totalCost: immediateCost + yearlyForgone, tax, taxUnknown, waitTip };
-    })
-    .sort((a, b) =>
-      // Un PEA clôturé par le retrait passe en dernier : on perd l'enveloppe, pas seulement de l'argent.
-      Number(!!a.tax?.closesPea) - Number(!!b.tax?.closesPea) || a.totalCost - b.totalCost
-    );
 };
 
 // ---------------------------------------------------------------------------
