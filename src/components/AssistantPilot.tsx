@@ -1,5 +1,5 @@
 // src/components/AssistantPilot.tsx
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { SavingsAccount, Expense, AccountType, FiscalConfig, WorkBenefits, PayslipRecord, Subscription, PayChecklist as PayChecklistData } from '../types';
 import { PayChecklist } from './PayChecklist';
 import { computeIncome, computeMaturityCountdown, computePlacementStrategy, payslipSuperNet, subscriptionsAsExpenses, computePayTransfers, computeRecentSavingsRate } from '../lib/finance';
@@ -69,6 +69,11 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
   // Brouillon du montant du rappel de paie : on ne persiste qu'une saisie interprétable
   // (vide = capacité calculée), sans réécrire le champ pendant la frappe.
   const [paydayAmountDraft, setPaydayAmountDraft] = useState(paydayAmount !== undefined ? String(paydayAmount) : '');
+  // Le Pilotage peut s'afficher avant la fin du chargement Drive : le champ restait alors
+  // vide alors qu'un montant était enregistré. On le resynchronise quand la valeur arrive.
+  useEffect(() => {
+    setPaydayAmountDraft(prev => (parseFrenchNumber(prev) ?? undefined) === paydayAmount ? prev : (paydayAmount !== undefined ? String(paydayAmount).replace('.', ',') : ''));
+  }, [paydayAmount]);
 
   const autoValues = useMemo(
     () =>
@@ -457,6 +462,7 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
               onChange={onPayChecklistChange}
               onRecordDeposit={onRecordPayDeposit}
               onCancelDeposit={onCancelPayDeposit}
+              paydayDay={paydayDay}
             >
                {isBackendEnabled() && (
                  <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-700 space-y-3">

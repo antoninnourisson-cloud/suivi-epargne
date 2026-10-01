@@ -14,6 +14,7 @@ import {
   findDueSubscriptions,
   computePayTransfers,
   buildPayLines,
+  payPeriodOf,
   computeMonthSavedAmount,
   computeAccountBalanceAtDate,
   computeAccruedInterest,
@@ -159,10 +160,12 @@ export const computeReminders = (data: GlobalAppData, now: Date, appUrl: string)
     }
 
     // 5 bis. Trois jours après la paie : virements encore ni faits ni cochés dans la liste
-    //        du Pilotage. Une seule relance par mois, et rien si tout est coché.
-    const followUpDay = effectiveDay + PAYDAY_FOLLOWUP_DELAY_DAYS;
-    if (today >= followUpDay && today < followUpDay + PAYDAY_WINDOW_DAYS) {
-      const checklist = data.payChecklist && data.payChecklist.month === monthKey ? data.payChecklist : undefined;
+    //        du Pilotage. Une seule relance par paie, et rien si tout est coché. La liste
+    //        suit la paie (du 27 au 26 suivant), pas le mois calendaire.
+    const period = payPeriodOf(payday, now);
+    const sincePayday = Math.round((new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() - period.payDate.getTime()) / 86_400_000);
+    if (sincePayday >= PAYDAY_FOLLOWUP_DELAY_DAYS && sincePayday < PAYDAY_FOLLOWUP_DELAY_DAYS + PAYDAY_WINDOW_DAYS) {
+      const checklist = data.payChecklist && data.payChecklist.month === period.key ? data.payChecklist : undefined;
       let lines = checklist?.lines;
       if (!lines) {
         const amount = data.config.paydayAmount ?? computeMonthlySavingsCapacity(data);
@@ -177,7 +180,7 @@ export const computeReminders = (data: GlobalAppData, now: Date, appUrl: string)
       const pending = lines.filter(l => !checklist?.done[l.key]);
       if (pending.length > 0) {
         out.push({
-          key: `payday-followup:${monthKey}`,
+          key: `payday-followup:${period.key}`,
           message: {
             title: `${pending.length} virement${pending.length > 1 ? 's' : ''} de paie à faire ou à cocher`,
             body: `${pending.map(l => l.label).join(', ')}. Cochez-les dans le Pilotage une fois faits.`,

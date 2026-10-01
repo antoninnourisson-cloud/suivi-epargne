@@ -21,6 +21,7 @@ import {
   computeRestitutionPlan,
   suggestedRestitutionDate,
   accountsAfterRestitution,
+  payPeriodOf,
 } from './finance';
 import { DEFAULT_FISCAL_CONFIG as CFG, TAX_SCALES, LATEST_TAX_SCALE } from '../constants';
 import { AccountType, SavingsAccount, Subscription } from '../types';
@@ -247,5 +248,19 @@ describe('restitution du capital parental', () => {
     expect(after.parentalCapital).toBe(0);
     expect(after.ownedAmount).toBe(1754);
     expect(after.totalAmount).toBe(1754);
+  });
+});
+
+describe('période de paie', () => {
+  it('rattache le début du mois à la paie du mois précédent', () => {
+    expect(payPeriodOf(27, new Date(2026, 9, 1)).key).toBe('2026-09');
+    expect(payPeriodOf(27, new Date(2026, 9, 27)).key).toBe('2026-10');
+    expect(payPeriodOf(27, new Date(2027, 0, 5)).key).toBe('2026-12');
+    expect(payPeriodOf(undefined, new Date(2026, 9, 1)).key).toBe('2026-10');
+  });
+  it('ramène le 31 au dernier jour du mois', () => {
+    const p = payPeriodOf(31, new Date(2026, 8, 30));
+    expect(p.key).toBe('2026-09');
+    expect(p.payDate.getDate()).toBe(30);
   });
 });

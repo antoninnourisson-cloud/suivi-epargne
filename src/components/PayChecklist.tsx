@@ -5,9 +5,9 @@
 // diffère du plan) ; la décocher l'annule. Le plan est figé au premier virement coché :
 // sinon, chaque versement enregistré modifierait les soldes, donc le plan lui-même.
 // ================================================
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { PayChecklist as PayChecklistData, PayChecklistLine } from '../types';
-import { PayTransfer, PlacementStep, buildPayLines } from '../lib/finance';
+import { PayTransfer, PlacementStep, buildPayLines, payPeriodOf } from '../lib/finance';
 import { formatEUR, toInputAmount, formatRate } from '../lib/format';
 import { parseFrenchNumber } from '../lib/numbers';
 import { Wallet, Info, CheckCircle2, RotateCcw, PiggyBank } from 'lucide-react';
@@ -24,16 +24,26 @@ interface PayChecklistProps {
   onRecordDeposit: (accountId: string, amount: number) => string | undefined;
   onCancelDeposit: (accountId: string, movementId: string) => void;
   children?: React.ReactNode; // réglage du rappel du jour de paie
+  paydayDay?: number;          // la liste suit la paie, pas le mois calendaire
 }
 
 const MONTHS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
 const monthKeyOf = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 
 export const PayChecklist: React.FC<PayChecklistProps> = ({
-  superNet, transfers, steps, totalToInvest, shortfall, checklist, onChange, onRecordDeposit, onCancelDeposit, children,
+  superNet, transfers, steps, totalToInvest, shortfall, checklist, onChange, onRecordDeposit, onCancelDeposit, children, paydayDay,
 }) => {
   const now = new Date();
-  const month = monthKeyOf(now);
+  const period = payPeriodOf(paydayDay, now);
+  const month = period.key;
+  const periodLabel = MONTHS[period.payDate.getMonth()];
+
+  // Liste créée avant ce correctif, au 1er du mois calendaire suivant (ex. « octobre »
+  // pour la paie du 27 septembre) : on la rattache à la bonne paie, une seule fois.
+  useEffect(() => {
+    if (checklist && checklist.month > month) onChange({ ...checklist, month });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [checklist?.month, month]);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
 
   const liveLines = buildPayLines(transfers, steps);
@@ -132,7 +142,7 @@ export const PayChecklist: React.FC<PayChecklistProps> = ({
         )}
       </div>
       <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
-        Paie de {MONTHS[now.getMonth()]} : {formatEUR(superNet)}. Cochez chaque virement une fois fait ; si le montant réel diffère, corrigez-le avant de cocher.
+        Paie de {periodLabel} : {formatEUR(superNet)}. Cochez chaque virement une fois fait ; si le montant réel diffère, corrigez-le avant de cocher.
         {' '}Ajoutez une charge fixe par virement sortant (ex. « Revolut commun »), sans détailler ce qu'elle paie.
       </p>
 
@@ -163,7 +173,7 @@ export const PayChecklist: React.FC<PayChecklistProps> = ({
         </button>
       )}
       {frozen && doneCount > 0 && (
-        <p className="mt-3 text-[11px] text-slate-500 dark:text-slate-400">Plan figé pour {MONTHS[now.getMonth()]} depuis le premier virement coché. Il repartira des soldes du moment le mois prochain.</p>
+        <p className="mt-3 text-[11px] text-slate-500 dark:text-slate-400">Plan figé pour la paie de {periodLabel} depuis le premier virement coché. Il repartira des soldes du moment à la prochaine paie.</p>
       )}
 
       {children}

@@ -1410,3 +1410,25 @@ export const computeRestitutionPlan = (accounts: SavingsAccount[], plannedDateIS
 /** Comptes tels qu'ils seront après la restitution (part parentale retirée). */
 export const accountsAfterRestitution = <T extends { ownedAmount: number; parentalCapital: number; totalAmount: number }>(accounts: T[]): T[] =>
   accounts.map(a => ({ ...a, parentalCapital: 0, totalAmount: Math.round(a.ownedAmount * 100) / 100 }));
+
+// ---------------------------------------------------------------------------
+// Période de paie
+// ---------------------------------------------------------------------------
+
+/** Jour de paie effectif d'un mois (le 31 devient le 30 ou le 28). */
+export const effectivePayday = (paydayDay: number, year: number, month: number) =>
+  Math.min(paydayDay, new Date(year, month + 1, 0).getDate());
+
+/**
+ * Mois de la paie en cours : avec une paie le 27, le 1er octobre on gère encore la paie
+ * de septembre (versée le 27 septembre). Sans jour de paie connu : le mois calendaire.
+ */
+export const payPeriodOf = (paydayDay: number | undefined, asOfDate: Date = new Date()): { key: string; payDate: Date } => {
+  let y = asOfDate.getFullYear(), m = asOfDate.getMonth();
+  if (paydayDay && asOfDate.getDate() < effectivePayday(paydayDay, y, m)) {
+    m -= 1;
+    if (m < 0) { m = 11; y -= 1; }
+  }
+  const payDate = new Date(y, m, paydayDay ? effectivePayday(paydayDay, y, m) : 1);
+  return { key: `${y}-${String(m + 1).padStart(2, '0')}`, payDate };
+};
