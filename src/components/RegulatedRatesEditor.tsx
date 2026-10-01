@@ -55,7 +55,7 @@ export const RegulatedRatesEditor: React.FC<Props> = ({ accounts, onApply, onDon
             <label className="block">
               <span className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Nouveau taux (%)</span>
               <input type="text" inputMode="decimal" value={d.rate} onChange={e => { setDrafts(p => ({ ...p, [g.key]: { ...p[g.key], rate: e.target.value } })); setSaved(null); }}
-                className={`block w-24 p-2 bg-white dark:bg-slate-800 border rounded-lg font-bold text-slate-800 dark:text-slate-100 ${parsed === null && d.rate ? 'border-rose-400' : 'border-slate-200 dark:border-slate-700'}`} />
+                className={`block w-24 p-2 bg-white dark:bg-slate-800 border rounded-lg font-bold text-slate-800 dark:text-slate-100${parsed === null && d.rate ? 'border-rose-400' : 'border-slate-200 dark:border-slate-700'}`} />
             </label>
             <label className="block">
               <span className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">À partir du</span>

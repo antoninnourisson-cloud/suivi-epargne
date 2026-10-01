@@ -115,7 +115,7 @@ export const AppLockScreen: React.FC<AppLockScreenProps> = ({ onUnlock }) => {
           <div>
             <div className="flex justify-center gap-2 mb-4">
               {Array.from({ length: Math.max(4, pin.length) }).map((_, i) => (
-                <div key={i} className={`w-3 h-3 rounded-full ${i < pin.length ? (pinError ? 'bg-rose-500' : 'bg-indigo-600') : 'bg-slate-200 dark:bg-slate-700'}`} />
+                <div key={i} className={`w-3 h-3 rounded-full${i < pin.length ? (pinError ? 'bg-rose-500' : 'bg-indigo-600') : 'bg-slate-200 dark:bg-slate-700'}`} />
               ))}
             </div>
             {pinError && (

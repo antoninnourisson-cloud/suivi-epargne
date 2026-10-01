@@ -206,7 +206,7 @@ export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, 
 
       {keysMissing && (
         <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-2xl p-5 flex items-start gap-3">
-          <KeyRound className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+          <KeyRound className="w-5 h-5 text-amber-700 dark:text-amber-400 flex-shrink-0 mt-0.5" />
           <div className="text-sm text-amber-800 dark:text-amber-300">
             <p className="font-black mb-1">Configuration requise</p>
             <p>
@@ -288,8 +288,8 @@ export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, 
                 <div><label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Remb. Navigo (€)</label><input type="text" inputMode="decimal" defaultValue={draft.fields.navigoRefund ?? ''} onBlur={e => patchDraftField('navigoRefund', e.target.value)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
                 <div><label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Mutuelle (part salarié, €)</label><input type="text" inputMode="decimal" defaultValue={draft.fields.mutuelleCost ?? ''} onBlur={e => patchDraftField('mutuelleCost', e.target.value)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
                 <div><label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Tickets restaurant (€)</label><input type="text" inputMode="decimal" defaultValue={draft.fields.mealVouchers ?? ''} onBlur={e => patchDraftField('mealVouchers', e.target.value)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
-                <div><label className="text-[11px] font-black text-amber-500 uppercase">Impôt prélevé à la source (€)</label><input type="text" inputMode="decimal" defaultValue={draft.fields.incomeTaxWithheld ?? ''} onBlur={e => patchDraftField('incomeTaxWithheld', e.target.value)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-amber-200 dark:border-amber-800 rounded-lg font-bold" /></div>
-                <div><label className="text-[11px] font-black text-emerald-600 uppercase">Net payé (viré en banque, €)</label><input type="text" inputMode="decimal" defaultValue={draft.fields.netPaid ?? ''} onBlur={e => patchDraftField('netPaid', e.target.value)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-emerald-200 dark:border-emerald-800 rounded-lg font-bold" /></div>
+                <div><label className="text-[11px] font-black text-amber-700 dark:text-amber-400 uppercase">Impôt prélevé à la source (€)</label><input type="text" inputMode="decimal" defaultValue={draft.fields.incomeTaxWithheld ?? ''} onBlur={e => patchDraftField('incomeTaxWithheld', e.target.value)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-amber-200 dark:border-amber-800 rounded-lg font-bold" /></div>
+                <div><label className="text-[11px] font-black text-emerald-700 dark:text-emerald-400 uppercase">Net payé (viré en banque, €)</label><input type="text" inputMode="decimal" defaultValue={draft.fields.netPaid ?? ''} onBlur={e => patchDraftField('netPaid', e.target.value)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-emerald-200 dark:border-emerald-800 rounded-lg font-bold" /></div>
               </div>
               <div className="flex gap-2 justify-end pt-2">
                 <button onClick={() => setDraft(null)} className="px-4 py-2 rounded-xl font-bold text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-1"><X className="w-4 h-4" /> Annuler</button>
@@ -352,7 +352,7 @@ export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, 
                 {[...payslips].sort((a, b) => (b.extracted.period || '').localeCompare(a.extracted.period || '')).map(p => {
                   const isActive = p.id === activePayslipId;
                   return (
-                  <tr key={p.id} className={`hover:bg-slate-50 dark:hover:bg-slate-800 ${isActive ? 'bg-amber-50/60 dark:bg-amber-950/20' : ''}`}>
+                  <tr key={p.id} className={`hover:bg-slate-50 dark:hover:bg-slate-800${isActive ? 'bg-amber-50/60 dark:bg-amber-950/20' : ''}`}>
                     <td className="px-3 sm:px-6 py-3">
                       <div className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
                         {p.extracted.period ? formatPeriod(p.extracted.period) : '—'}
@@ -361,7 +361,7 @@ export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, 
                       <div className="text-[11px] uppercase text-slate-500 dark:text-slate-400 font-bold">{p.extracted.employer || p.fileName}</div>
                     </td>
                     <td className="hidden sm:table-cell px-6 py-3 text-right font-mono text-slate-600 dark:text-slate-300">{fmt(p.extracted.grossAmount)}</td>
-                    <td className="px-3 sm:px-6 py-3 text-right font-black text-emerald-600">{fmt(p.extracted.netPaid ?? p.extracted.netAmount)}</td>
+                    <td className="px-3 sm:px-6 py-3 text-right font-black text-emerald-700 dark:text-emerald-400">{fmt(p.extracted.netPaid ?? p.extracted.netAmount)}</td>
                     <td className="px-3 sm:px-6 py-3 text-right">
                       <div className="flex justify-end gap-1">
                         {isActive ? (

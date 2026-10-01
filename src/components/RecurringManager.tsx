@@ -57,7 +57,7 @@ export const RecurringManager: React.FC<RecurringManagerProps> = ({ accounts, re
   return (
     <div className="space-y-6">
       <p className="text-xs text-slate-500 dark:text-slate-400 flex items-start gap-2">
-        <Repeat className="w-4 h-4 flex-shrink-0 mt-px text-indigo-500" />
+        <Repeat className="w-4 h-4 flex-shrink-0 mt-px text-indigo-600 dark:text-indigo-400" />
         À l'échéance, le tableau de bord vous proposera d'enregistrer le mouvement en un clic. Rien n'est jamais ajouté sans votre confirmation.
       </p>
 
@@ -66,7 +66,7 @@ export const RecurringManager: React.FC<RecurringManagerProps> = ({ accounts, re
           {recurringMovements.map(r => {
             const name = accountName(r.accountId);
             return (
-              <li key={r.id} className={`flex items-center gap-3 p-3 rounded-xl border ${r.active ? 'border-slate-200 dark:border-slate-700' : 'border-dashed border-slate-300 dark:border-slate-700 opacity-60'}`}>
+              <li key={r.id} className={`flex items-center gap-3 p-3 rounded-xl border${r.active ? 'border-slate-200 dark:border-slate-700' : 'border-dashed border-slate-300 dark:border-slate-700 opacity-60'}`}>
                 <div className="flex-1 min-w-0">
                   <p className="font-bold text-slate-800 dark:text-slate-100 text-sm truncate">
                     <span className={r.type === 'IN' ? 'text-emerald-600' : 'text-rose-600'}>{r.type === 'IN' ? '+' : '-'}{fmt(r.amount)}</span>
@@ -96,8 +96,8 @@ export const RecurringManager: React.FC<RecurringManagerProps> = ({ accounts, re
           {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
         </select>
         <div className="flex gap-2">
-          <button type="button" onClick={() => setType('IN')} className={`flex-1 py-2.5 rounded-lg text-sm font-bold border-2 ${type === 'IN' ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-400 text-emerald-700 dark:text-emerald-300' : 'border-slate-200 dark:border-slate-700 text-slate-400'}`}>Versement</button>
-          <button type="button" onClick={() => setType('OUT')} className={`flex-1 py-2.5 rounded-lg text-sm font-bold border-2 ${type === 'OUT' ? 'bg-rose-50 dark:bg-rose-950/40 border-rose-400 text-rose-700 dark:text-rose-300' : 'border-slate-200 dark:border-slate-700 text-slate-400'}`}>Retrait</button>
+          <button type="button" onClick={() => setType('IN')} className={`flex-1 py-2.5 rounded-lg text-sm font-bold border-2${type === 'IN' ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-400 text-emerald-700 dark:text-emerald-300' : 'border-slate-200 dark:border-slate-700 text-slate-400'}`}>Versement</button>
+          <button type="button" onClick={() => setType('OUT')} className={`flex-1 py-2.5 rounded-lg text-sm font-bold border-2${type === 'OUT' ? 'bg-rose-50 dark:bg-rose-950/40 border-rose-400 text-rose-700 dark:text-rose-300' : 'border-slate-200 dark:border-slate-700 text-slate-400'}`}>Retrait</button>
         </div>
         <div className="grid grid-cols-2 gap-2">
           <input type="text" inputMode="decimal" value={amount} onChange={e => setAmount(e.target.value)} placeholder="Montant (€)" className={inputClass} />

@@ -191,7 +191,7 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig, monthPlan,
 
       {missed.extra > 0.5 && (
         <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-2xl p-5 flex items-start gap-3">
-          <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+          <AlertCircle className="w-5 h-5 text-amber-700 dark:text-amber-400 flex-shrink-0 mt-0.5" />
           <div className="text-sm text-amber-800 dark:text-amber-300">
             <p className="font-black mb-1">Manque à gagner détecté</p>
             <p>Vous avez <b>{fmt(missed.idleCash)}</b> sur compte courant. En plaçant <b>{fmt(missed.placeable)}</b> sur vos livrets non pleins (jusqu'à {formatRate(missed.bestRate)}), vous généreriez environ <b>{fmt(missed.extra)}/an</b> d'intérêts supplémentaires.</p>
@@ -218,13 +218,13 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig, monthPlan,
                   <td className="px-3 sm:px-6 py-3"><div className="font-bold text-slate-800 dark:text-slate-100">{r.name}</div><div className="text-[11px] uppercase text-slate-500 dark:text-slate-400 font-bold">{r.type}</div></td>
                   <td className="px-3 sm:px-6 py-3 text-right font-mono whitespace-nowrap text-slate-600 dark:text-slate-300">
                     {formatRate(r.rate)}
-                    {Math.abs(r.net - r.rate) > 0.005 && <span className="block text-[11px] font-bold text-emerald-600" title="Après prélèvements sociaux (et frais éventuels)">net {formatRate(Math.round(r.net * 100) / 100)}</span>}
+                    {Math.abs(r.net - r.rate) > 0.005 && <span className="block text-[11px] font-bold text-emerald-700 dark:text-emerald-400" title="Après prélèvements sociaux (et frais éventuels)">net {formatRate(Math.round(r.net * 100) / 100)}</span>}
                     {r.hasRateHistory && Math.abs(r.weightedRate - r.rate) > 0.01 && (
-                      <span className="block text-[11px] text-indigo-400 font-bold normal-case" title="Moyenne pondérée dans le temps suite à un changement de taux">≈ {formatRate(Math.round(r.weightedRate * 100) / 100)} pondéré</span>
+                      <span className="block text-[11px] text-indigo-600 dark:text-indigo-400 font-bold normal-case" title="Moyenne pondérée dans le temps suite à un changement de taux">≈ {formatRate(Math.round(r.weightedRate * 100) / 100)} pondéré</span>
                     )}
                   </td>
                   <td className="hidden sm:table-cell px-6 py-3 text-right font-mono text-slate-600 dark:text-slate-300">{fmt(r.base)}</td>
-                  <td className="px-3 sm:px-6 py-3 text-right font-black text-emerald-600">{fmt(r.accrued)}</td>
+                  <td className="px-3 sm:px-6 py-3 text-right font-black text-emerald-700 dark:text-emerald-400">{fmt(r.accrued)}</td>
                   <td className="px-3 sm:px-6 py-3 text-right font-bold text-slate-700 dark:text-slate-200">{fmt(r.expected)}</td>
                   <td className="hidden sm:table-cell px-6 py-3 text-right font-mono text-slate-500 dark:text-slate-400">{fmt(r.annual)}</td>
                 </tr>
@@ -261,17 +261,17 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig, monthPlan,
                         <div className="font-bold text-slate-800 dark:text-slate-100">{a.name}</div>
                         <div className="text-[11px] uppercase text-slate-500 dark:text-slate-400 font-bold">{a.type} · valeur {fmt(a.totalAmount)}</div>
                         {a.type === AccountType.PEA && (
-                          <div className={`text-[11px] font-bold ${(a.totalDeposits || 0) >= PEA_DEPOSIT_CEILING * 0.9 ? 'text-amber-600' : 'text-slate-500 dark:text-slate-400'}`}>
+                          <div className={`text-[11px] font-bold${(a.totalDeposits || 0) >= PEA_DEPOSIT_CEILING * 0.9 ? 'text-amber-600' : 'text-slate-500 dark:text-slate-400'}`}>
                             Plafond de versements : {fmt(Math.max(0, PEA_DEPOSIT_CEILING - (a.totalDeposits || 0)))} restants
                           </div>
                         )}
                       </td>
                       <td className="hidden sm:table-cell px-6 py-3 text-right font-mono text-slate-600 dark:text-slate-300">{fmt(a.totalDeposits || 0)}</td>
-                      <td className={`px-3 sm:px-6 py-3 text-right font-mono font-bold ${gain >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>{gain >= 0 ? '+' : ''}{fmt(gain)}</td>
+                      <td className={`px-3 sm:px-6 py-3 text-right font-mono font-bold${gain >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>{gain >= 0 ? '+' : ''}{fmt(gain)}</td>
                       <td className="px-3 sm:px-6 py-3 text-right">
                         {tax.known ? (
                           <>
-                            <div className="font-black text-emerald-600">{fmt(gain - tax.socialCharges - tax.incomeTax)}</div>
+                            <div className="font-black text-emerald-700 dark:text-emerald-400">{fmt(gain - tax.socialCharges - tax.incomeTax)}</div>
                             <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400">impôt {fmt(tax.socialCharges + tax.incomeTax)}{tax.closesPea ? ' · clôture le PEA' : ''}</div>
                           </>
                         ) : <div className="text-slate-400">—</div>}
@@ -307,8 +307,8 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig, monthPlan,
               <p className="text-lg font-black text-slate-500 dark:text-slate-400 line-through decoration-slate-300 dark:decoration-slate-600">{fmt(totalGrossTaxable)}</p>
             </div>
             <div>
-              <p className="text-[11px] font-black text-emerald-600 uppercase">Net si retiré maintenant</p>
-              <p className="text-lg font-black text-emerald-600">{fmt(totalNetTaxable)}</p>
+              <p className="text-[11px] font-black text-emerald-700 dark:text-emerald-400 uppercase">Net si retiré maintenant</p>
+              <p className="text-lg font-black text-emerald-700 dark:text-emerald-400">{fmt(totalNetTaxable)}</p>
             </div>
           </div>
           <p className="px-6 pb-2 pt-1 text-[11px] text-slate-500 dark:text-slate-400 flex items-start gap-1">
@@ -334,7 +334,7 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig, monthPlan,
                     <td className="hidden sm:table-cell px-6 py-3 text-right font-mono text-slate-600 dark:text-slate-300">{fmt(r.base)}</td>
                     <td className="px-3 sm:px-6 py-3 text-right font-mono text-slate-500 dark:text-slate-400">{fmt(r.estimatedAnnualInterest)}</td>
                     <td className="px-3 sm:px-6 py-3 text-right">
-                      <div className="font-black text-emerald-600">{r.tax.regime === 'NON_MODELISE' ? '—' : fmt(r.tax.netInterest)}</div>
+                      <div className="font-black text-emerald-700 dark:text-emerald-400">{r.tax.regime === 'NON_MODELISE' ? '—' : fmt(r.tax.netInterest)}</div>
                       <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase">{REGIME_LABEL[r.tax.regime]}</div>
                     </td>
                   </tr>

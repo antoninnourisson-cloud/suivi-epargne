@@ -100,7 +100,7 @@ export const Subscriptions: React.FC<SubscriptionsProps> = ({ subscriptions, onU
       <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
         <h2 className="text-2xl font-black text-slate-800 dark:text-slate-100 flex items-center gap-2 mb-1"><CalendarClock className="w-6 h-6 text-indigo-600" /> Abonnements</h2>
         <p className="text-sm text-slate-500 dark:text-slate-400 flex items-start gap-1.5">
-          <BellRing className="w-4 h-4 flex-shrink-0 mt-0.5 text-indigo-500" />
+          <BellRing className="w-4 h-4 flex-shrink-0 mt-0.5 text-indigo-600 dark:text-indigo-400" />
           <span>
             Rappel la veille du prélèvement, ou une semaine avant à partir de {fmt(SUBSCRIPTION_BIG_AMOUNT)}.
             {isBackendEnabled() ? ' Les notifications doivent être activées sur l\'appareil (Paramètres).' : ' Les rappels nécessitent le serveur de notifications.'}
@@ -132,7 +132,7 @@ export const Subscriptions: React.FC<SubscriptionsProps> = ({ subscriptions, onU
       {rows.length > 0 && (
         <ul className="space-y-2">
           {rows.map(({ s, next, inDays }) => (
-            <li key={s.id} className={`flex items-center gap-3 p-3 rounded-xl border bg-white dark:bg-slate-800 ${s.active ? 'border-slate-200 dark:border-slate-700' : 'border-dashed border-slate-300 dark:border-slate-700 opacity-60'}`}>
+            <li key={s.id} className={`flex items-center gap-3 p-3 rounded-xl border bg-white dark:bg-slate-800${s.active ? 'border-slate-200 dark:border-slate-700' : 'border-dashed border-slate-300 dark:border-slate-700 opacity-60'}`}>
               <div className="flex-1 min-w-0">
                 <p className="font-bold text-slate-800 dark:text-slate-100 text-sm truncate">
                   {s.name} · <span className="text-rose-600">{fmt(s.amount)}</span>

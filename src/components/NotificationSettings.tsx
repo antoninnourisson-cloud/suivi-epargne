@@ -101,7 +101,7 @@ export const NotificationSettings: React.FC<{ paydayDay?: number; onOpenPayday?:
       )}
 
       {message && (
-        <p className={`text-xs font-bold flex items-start gap-2 ${message.kind === 'ok' ? 'text-emerald-700 dark:text-emerald-300' : 'text-rose-700 dark:text-rose-300'}`}>
+        <p className={`text-xs font-bold flex items-start gap-2${message.kind === 'ok' ? 'text-emerald-700 dark:text-emerald-300' : 'text-rose-700 dark:text-rose-300'}`}>
           {message.kind === 'ok' ? <CheckCircle className="w-4 h-4 flex-shrink-0" /> : <AlertTriangle className="w-4 h-4 flex-shrink-0" />}
           {message.text}
         </p>

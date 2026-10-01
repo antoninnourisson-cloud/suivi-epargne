@@ -71,3 +71,38 @@ export const restoreBalances = (accounts: SavingsAccount[], snap: BalanceSnapsho
     for (const m of later) restored = applyMovement(restored, m, 1);
     return restored;
   });
+
+// ---------------------------------------------------------------------------
+// Nettoyage : mouvements qui s'annulent
+// ---------------------------------------------------------------------------
+
+export interface CancellingGroup {
+  accountId: string;
+  accountName: string;
+  date: string;
+  movements: AccountMovement[];
+}
+
+/**
+ * Mouvements d'un même compte, le même jour, dont la somme est nulle (ex. « Test +2 € »
+ * puis « Test −2 € ») : sans effet sur les soldes, ils ne font qu'encombrer l'historique.
+ * Exclus : virements internes, part des parents, valorisations, soldes initiaux.
+ */
+export const findCancellingGroups = (accounts: SavingsAccount[]): CancellingGroup[] => {
+  const out: CancellingGroup[] = [];
+  for (const a of accounts) {
+    const byDate = new Map<string, AccountMovement[]>();
+    for (const m of a.movements || []) {
+      if (m.kind || m.linkId || m.tag) continue;
+      byDate.set(m.date, [...(byDate.get(m.date) || []), m]);
+    }
+    for (const [date, list] of byDate) {
+      if (list.length < 2) continue;
+      const net = list.reduce((s, m) => s + (m.type === 'IN' ? m.amount : -m.amount), 0);
+      if (Math.abs(net) < 0.005 && list.some(m => m.type === 'IN') && list.some(m => m.type === 'OUT')) {
+        out.push({ accountId: a.id, accountName: a.name, date, movements: list });
+      }
+    }
+  }
+  return out.sort((x, y) => y.date.localeCompare(x.date));
+};

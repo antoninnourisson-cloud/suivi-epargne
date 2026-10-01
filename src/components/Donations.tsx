@@ -131,8 +131,8 @@ export const Donations: React.FC<DonationsProps> = ({ donations, onUpdate, picke
             <p className="text-xl font-black text-slate-800 dark:text-slate-100">{fmt(summary.total)}</p>
           </div>
           <div>
-            <p className="text-[11px] font-black text-emerald-600 uppercase">Réduction estimée</p>
-            <p className="text-xl font-black text-emerald-600">{fmt(summary.reduction)}</p>
+            <p className="text-[11px] font-black text-emerald-700 dark:text-emerald-400 uppercase">Réduction estimée</p>
+            <p className="text-xl font-black text-emerald-700 dark:text-emerald-400">{fmt(summary.reduction)}</p>
           </div>
           <div>
             <p className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">À déclarer à 75 %</p>
@@ -146,7 +146,7 @@ export const Donations: React.FC<DonationsProps> = ({ donations, onUpdate, picke
           </div>
         </div>
         {summary.missingReceipts.length > 0 && (
-          <p className="mt-4 text-xs font-bold text-amber-600 flex items-start gap-1.5"><AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-px" /> Reçu fiscal manquant : {summary.missingReceipts.map(d => d.organization).join(', ')}. Il n'est pas à envoyer, mais à garder en cas de contrôle.</p>
+          <p className="mt-4 text-xs font-bold text-amber-700 dark:text-amber-400 flex items-start gap-1.5"><AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-px" /> Reçu fiscal manquant : {summary.missingReceipts.map(d => d.organization).join(', ')}. Il n'est pas à envoyer, mais à garder en cas de contrôle.</p>
         )}
         <p className="mt-3 text-[11px] text-slate-500 dark:text-slate-400 flex items-start gap-1">
           <Info className="w-3 h-3 flex-shrink-0 mt-0.5" />
@@ -167,7 +167,7 @@ export const Donations: React.FC<DonationsProps> = ({ donations, onUpdate, picke
                   <span>{parseISODate(d.date).toLocaleDateString('fr-FR')}</span>
                   {d.receiptFileId
                     ? <a href={driveUrl(d.receiptFileId)} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline inline-flex items-center gap-0.5"><Paperclip className="w-3 h-3" /> {d.receiptFileName || 'reçu'} <ExternalLink className="w-3 h-3" /></a>
-                    : <button type="button" onClick={() => toggleReceipt(d.id)} className={`inline-flex items-center gap-0.5 ${d.receiptReceived ? 'text-emerald-600' : 'text-amber-600'}`}>
+                    : <button type="button" onClick={() => toggleReceipt(d.id)} className={`inline-flex items-center gap-0.5${d.receiptReceived ? 'text-emerald-600' : 'text-amber-600'}`}>
                         {d.receiptReceived ? <><CheckCircle2 className="w-3 h-3" /> reçu fiscal reçu</> : <><AlertCircle className="w-3 h-3" /> reçu à recevoir</>}
                       </button>}
                   {d.note && <span className="truncate">{d.note}</span>}

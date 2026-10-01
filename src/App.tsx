@@ -57,12 +57,11 @@ const ViewLoader = () => (
 const NavButton = ({ active, onClick, icon: Icon, label, highlight }: any) => (
     <button
       onClick={onClick}
-      className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-bold transition-all rounded-xl mb-1
-        ${active ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/20' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-800 hover:text-white'}
+      className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-bold transition-all rounded-xl mb-1${active ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/20' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-800 hover:text-white'}
         ${highlight ? 'text-indigo-400' : ''}
       `}
     >
-      <Icon className={`w-5 h-5 ${active ? 'text-white' : highlight ? 'text-indigo-400' : 'text-slate-500 dark:text-slate-400'}`} />
+      <Icon className={`w-5 h-5${active ? 'text-white' : highlight ? 'text-indigo-400' : 'text-slate-500 dark:text-slate-400'}`} />
       {label}
     </button>
 );
@@ -698,7 +697,7 @@ const App: React.FC = () => {
           <h1 className="text-xl font-bold flex items-center gap-2"><div className="w-8 h-8 bg-indigo-600 rounded flex center justify-center items-center"><RefreshCcw className="w-4 h-4 text-white"/></div> Suivi Épargne</h1>
           <div className="mt-2 text-[11px] uppercase text-slate-500 dark:text-slate-400 font-bold tracking-wider flex items-center justify-between gap-2">
             <div className="flex items-center gap-2" title={data.lastSavedAt ? `Dernière écriture confirmée sur Drive : ${data.lastSavedAt.toLocaleTimeString('fr-FR')}` : undefined}>
-              <div className={`w-2 h-2 rounded-full flex-shrink-0 ${data.isOffline ? 'bg-slate-400' : data.isSaving ? 'bg-amber-500 animate-pulse' : data.syncError || data.syncConflict ? 'bg-rose-500' : 'bg-emerald-500'}`}></div>
+              <div className={`w-2 h-2 rounded-full flex-shrink-0${data.isOffline ? 'bg-slate-400' : data.isSaving ? 'bg-amber-500 animate-pulse' : data.syncError || data.syncConflict ? 'bg-rose-500' : 'bg-emerald-500'}`}></div>
               {data.isOffline ? 'Hors ligne' : data.isSaving ? 'Sauvegarde...' : data.syncError ? 'Erreur sync' : data.syncConflict ? 'Conflit' : data.lastSavedAt ? `Sur Drive à ${data.lastSavedAt.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}` : 'Synchronisé'}
             </div>
             <button onClick={toggleTheme} className="text-slate-400 hover:text-white" title={isDark ? 'Passer en clair' : 'Passer en sombre'}>
@@ -738,7 +737,7 @@ const App: React.FC = () => {
         <h1 className="text-base font-bold flex items-center gap-2"><div className="w-6 h-6 bg-indigo-600 rounded flex items-center justify-center"><RefreshCcw className="w-3.5 h-3.5 text-white"/></div> Suivi Épargne</h1>
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1.5" title={data.lastSavedAt ? `Dernière écriture confirmée sur Drive : ${data.lastSavedAt.toLocaleTimeString('fr-FR')}` : undefined}>
-            <div className={`w-2 h-2 rounded-full flex-shrink-0 ${data.isOffline ? 'bg-slate-400' : data.isSaving ? 'bg-amber-500 animate-pulse' : data.syncError || data.syncConflict ? 'bg-rose-500' : 'bg-emerald-500'}`}></div>
+            <div className={`w-2 h-2 rounded-full flex-shrink-0${data.isOffline ? 'bg-slate-400' : data.isSaving ? 'bg-amber-500 animate-pulse' : data.syncError || data.syncConflict ? 'bg-rose-500' : 'bg-emerald-500'}`}></div>
             <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">
               {data.isOffline ? 'Hors ligne' : data.isSaving ? 'Sauvegarde...' : data.syncError ? 'Erreur' : data.syncConflict ? 'Conflit' : data.lastSavedAt ? data.lastSavedAt.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : 'Sync'}
             </span>
@@ -843,6 +842,13 @@ const App: React.FC = () => {
                 accounts={data.accounts}
                 restitution={data.parentalRestitution}
                 onDeleteMovement={handleDeleteMovement}
+                onRemoveCancelling={(groups) => {
+                  // Mouvements qui s'annulent : leur somme est nulle, les soldes ne bougent pas.
+                  const ids = new Set(groups.flatMap(g => g.movements.map(m => m.id)));
+                  const snap = snapshotBalances(data.accounts, [...new Set(groups.map(g => g.accountId))]);
+                  data.setAccounts(prev => prev.map(a => ({ ...a, movements: (a.movements || []).filter(m => !ids.has(m.id)) })));
+                  addToast({ message: `${ids.size} mouvements supprimés (soldes inchangés)`, kind: 'success', action: { label: 'Annuler', onClick: () => data.setAccounts(prev => restoreBalances(prev, snap)) } });
+                }}
                 onRevertRate={(accountId, entryDate) => {
                   // Annule le changement de taux sur TOUT le groupe changé ensemble (Livret A et
                   // LDDS), remet le rappel de révision et propose de revenir en arrière.
@@ -939,9 +945,9 @@ const App: React.FC = () => {
                   {allTags.length > 0 && (
                     <div className="flex flex-wrap items-center gap-2">
                       <Tag className="w-3.5 h-3.5 text-slate-400" />
-                      <button onClick={() => setActiveTagFilter(null)} className={`text-xs font-bold px-3 py-1.5 rounded-full transition-colors ${!activeTagFilter ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}>Tous</button>
+                      <button onClick={() => setActiveTagFilter(null)} className={`text-xs font-bold px-3 py-1.5 rounded-full transition-colors${!activeTagFilter ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}>Tous</button>
                       {allTags.map(t => (
-                        <button key={t} onClick={() => setActiveTagFilter(t === activeTagFilter ? null : t)} className={`text-xs font-bold px-3 py-1.5 rounded-full transition-colors ${activeTagFilter === t ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}>{t}</button>
+                        <button key={t} onClick={() => setActiveTagFilter(t === activeTagFilter ? null : t)} className={`text-xs font-bold px-3 py-1.5 rounded-full transition-colors${activeTagFilter === t ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}>{t}</button>
                       ))}
                     </div>
                   )}
@@ -986,7 +992,7 @@ const App: React.FC = () => {
                                   </div>
                                 </td>
                                 <td className="px-4 md:px-6 py-4 text-right align-top"><div className="font-black text-indigo-600 text-lg whitespace-nowrap">{formatEUR(acc.ownedAmount)}</div><AccountTotal account={acc} /></td>
-                                <td className="hidden md:table-cell px-6 py-4 text-right font-bold text-amber-500">{formatEUR(acc.parentalCapital)}</td>
+                                <td className="hidden md:table-cell px-6 py-4 text-right font-bold text-amber-700 dark:text-amber-400">{formatEUR(acc.parentalCapital)}</td>
                                 <td className="hidden md:table-cell px-6 py-4 text-right"><div className="flex justify-end gap-2 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                                    <button onClick={(e) => { e.stopPropagation(); setEditingAccount(acc); setShowForm(true); }} className="p-2 text-indigo-600 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/40 rounded-lg hover:bg-indigo-100 dark:hover:bg-indigo-900"><Edit2 className="w-4 h-4"/></button>
                                    <button onClick={(e) => { e.stopPropagation(); handleDeleteAccount(acc); }} className="p-2 text-rose-600 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/40 rounded-lg hover:bg-rose-100 dark:hover:bg-rose-900"><Trash2 className="w-4 h-4"/></button>
@@ -1000,14 +1006,14 @@ const App: React.FC = () => {
                                    </label>
                                    <div className="max-h-60 overflow-y-auto space-y-2">
                                    {buildDisplayMovements(acc.movements).map(m => (
-                                     <div key={m.id} className={`flex justify-between items-center p-3 rounded-xl text-xs border shadow-sm ${m.grouped ? 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 italic' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700'}`}>
+                                     <div key={m.id} className={`flex justify-between items-center p-3 rounded-xl text-xs border shadow-sm${m.grouped ? 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 italic' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700'}`}>
                                        <div className="flex items-center gap-3">
                                            <span className="text-slate-500 dark:text-slate-400 font-mono bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded whitespace-nowrap">{m.date.split('-').reverse().join('/')}</span>
                                            <span className="font-bold text-slate-700 dark:text-slate-200">{m.label}</span>
                                            {!m.grouped && !isRestitutionMovement(m) && <button onClick={()=>handleRenameMovement(acc.id, m.id, m.label)} aria-label={`Renommer « ${m.label} »`} className="p-2 -m-1 opacity-60 hover:opacity-100"><Edit2 className="w-4 h-4 text-slate-500 dark:text-slate-400"/></button>}
                                        </div>
                                        <div className="flex items-center gap-3">
-                                           <span className={`font-mono text-sm ${m.type==='IN'?'text-emerald-600 font-bold':'text-rose-600 font-bold'}`}>{m.type==='IN'?'+':'−'}{formatEUR(m.amount)}</span>
+                                           <span className={`font-mono text-sm${m.type==='IN'?'text-emerald-600 font-bold':'text-rose-600 font-bold'}`}>{m.type==='IN'?'+':'−'}{formatEUR(m.amount)}</span>
                                            {!m.grouped && !isRestitutionMovement(m) && <button onClick={()=>handleDeleteMovement(acc.id, m.id)} aria-label={`Supprimer « ${m.label} »`} className="p-2.5 -m-1 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded text-slate-500 dark:text-slate-400 hover:text-rose-500"><Trash2 className="w-4 h-4"/></button>}
                                        </div>
                                      </div>
@@ -1034,7 +1040,7 @@ const App: React.FC = () => {
       {data.accounts.length > 0 && (
         <button
           onClick={() => setQuickAddOpen(true)}
-          className={`fixed bottom-20 md:bottom-6 right-4 z-40 w-14 h-14 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-900/30 flex items-center justify-center transition-all duration-200 ${fabHidden ? 'translate-y-24 opacity-0 pointer-events-none' : 'hover:scale-105'}`}
+          className={`fixed bottom-20 md:bottom-6 right-4 z-40 w-14 h-14 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-900/30 flex items-center justify-center transition-all duration-200${fabHidden ? 'translate-y-24 opacity-0 pointer-events-none' : 'hover:scale-105'}`}
           aria-label="Ajout rapide"
           title="Ajout rapide"
         >

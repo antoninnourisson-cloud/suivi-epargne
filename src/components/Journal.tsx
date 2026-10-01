@@ -10,7 +10,7 @@ import { SavingsAccount, ParentalRestitution } from '../types';
 import { formatEUR, formatRate } from '../lib/format';
 import { parseISODate } from '../lib/dates';
 import { History, Trash2, Undo2 } from 'lucide-react';
-import { isRestitutionMovement } from '../lib/accountOps';
+import { isRestitutionMovement, findCancellingGroups, CancellingGroup } from '../lib/accountOps';
 import { isInitialBalance } from '../lib/finance';
 
 type Filter = 'all' | 'own' | 'parental' | 'valuation' | 'rates';
@@ -32,6 +32,7 @@ interface Props {
   restitution?: ParentalRestitution;
   onDeleteMovement: (accountId: string, movementId: string) => void;
   onRevertRate: (accountId: string, entryDate: string) => void;
+  onRemoveCancelling: (groups: CancellingGroup[]) => void;
 }
 
 const BADGE: Record<Entry['kind'], { label: string; cls: string }> = {
@@ -45,10 +46,13 @@ const BADGE: Record<Entry['kind'], { label: string; cls: string }> = {
 
 const PAGE = 150;
 
-export const Journal: React.FC<Props> = ({ accounts, restitution, onDeleteMovement, onRevertRate }) => {
+export const Journal: React.FC<Props> = ({ accounts, restitution, onDeleteMovement, onRevertRate, onRemoveCancelling }) => {
   const [filter, setFilter] = useState<Filter>('all');
   const [accountId, setAccountId] = useState<string>('');
   const [limit, setLimit] = useState(PAGE);
+  const [showCleanup, setShowCleanup] = useState(false);
+  const cancelling = useMemo(() => findCancellingGroups(accounts), [accounts]);
+  const cancellingCount = cancelling.reduce((n, g) => n + g.movements.length, 0);
 
   const entries = useMemo(() => {
     const out: Entry[] = [];
@@ -88,7 +92,7 @@ export const Journal: React.FC<Props> = ({ accounts, restitution, onDeleteMoveme
 
   const seg = (f: Filter, label: string) => (
     <button type="button" onClick={() => { setFilter(f); setLimit(PAGE); }} aria-pressed={filter === f}
-      className={`px-3 py-2 text-xs font-bold ${filter === f ? 'bg-indigo-600 text-white' : 'bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}>{label}</button>
+      className={`px-3 py-2 text-xs font-bold${filter === f ? 'bg-indigo-600 text-white' : 'bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}>{label}</button>
   );
 
   return (
@@ -97,6 +101,29 @@ export const Journal: React.FC<Props> = ({ accounts, restitution, onDeleteMoveme
         <h2 className="text-2xl font-black text-slate-800 dark:text-slate-100 flex items-center gap-2 mb-1"><History className="w-6 h-6 text-indigo-600" /> Journal des modifications</h2>
         <p className="text-sm text-slate-500 dark:text-slate-400">Tout ce qui a changé sur vos comptes : versements et retraits, part des parents, variations de valeur, taux. Chaque mouvement peut être supprimé (avec annulation possible).</p>
       </div>
+
+      {cancellingCount > 0 && (
+        <div className="p-4 rounded-2xl border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/30 space-y-2">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm font-bold text-amber-900 dark:text-amber-200">
+              {cancellingCount} mouvements s'annulent entre eux (même compte, même jour) : sans effet sur vos soldes, sans doute des tests.
+            </p>
+            <div className="flex gap-2">
+              <button type="button" onClick={() => setShowCleanup(v => !v)} className="text-xs font-bold underline text-amber-900 dark:text-amber-200">{showCleanup ? 'Masquer' : 'Voir'}</button>
+              <button type="button" onClick={() => onRemoveCancelling(cancelling)} className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-black">Les supprimer</button>
+            </div>
+          </div>
+          {showCleanup && (
+            <ul className="text-xs text-amber-900 dark:text-amber-200 space-y-1">
+              {cancelling.map(g => (
+                <li key={g.accountId + g.date}>
+                  <b>{parseISODate(g.date).toLocaleDateString('fr-FR')} · {g.accountName}</b> : {g.movements.map(m => `${m.label} (${m.type === 'IN' ? '+' : '−'}${formatEUR(m.amount)})`).join(', ')}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
 
       <div className="flex flex-wrap items-center gap-2">
         <div className="flex flex-wrap rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700" role="group" aria-label="Type">
@@ -118,12 +145,12 @@ export const Journal: React.FC<Props> = ({ accounts, restitution, onDeleteMoveme
             <span className="flex-1 min-w-0">
               <span className="block text-sm font-bold text-slate-800 dark:text-slate-100 truncate">{e.title}</span>
               <span className="flex flex-wrap items-center gap-1.5 mt-0.5">
-                <span className={`text-[11px] font-black px-1.5 py-0.5 rounded ${BADGE[e.kind].cls}`}>{BADGE[e.kind].label}</span>
+                <span className={`text-[11px] font-black px-1.5 py-0.5 rounded${BADGE[e.kind].cls}`}>{BADGE[e.kind].label}</span>
                 {e.account && <span className="text-[11px] text-slate-500 dark:text-slate-400 truncate">{e.account.name}</span>}
               </span>
             </span>
             {e.amount !== undefined && (
-              <span className={`font-mono font-bold text-sm flex-shrink-0 ${e.amount >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>{e.amount >= 0 ? '+' : '−'}{formatEUR(Math.abs(e.amount))}</span>
+              <span className={`font-mono font-bold text-sm flex-shrink-0${e.amount >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>{e.amount >= 0 ? '+' : '−'}{formatEUR(Math.abs(e.amount))}</span>
             )}
             {e.movementId && e.account && (
               <button type="button" onClick={() => onDeleteMovement(e.account!.id, e.movementId!)} aria-label={`Supprimer « ${e.title} »`} className="p-2 text-slate-400 hover:text-rose-500 flex-shrink-0"><Trash2 className="w-4 h-4" /></button>

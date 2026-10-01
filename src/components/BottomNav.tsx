@@ -11,8 +11,8 @@ interface BottomNavProps {
 
 const TabButton = ({ active, onClick, icon: Icon, label }: any) => (
   <button onClick={onClick} className="flex-1 flex flex-col items-center justify-center gap-0.5 py-2">
-    <Icon className={`w-5 h-5 ${active ? 'text-indigo-600' : 'text-slate-500 dark:text-slate-400'}`} />
-    <span className={`text-[11px] font-bold ${active ? 'text-indigo-600' : 'text-slate-500 dark:text-slate-400'}`}>{label}</span>
+    <Icon className={`w-5 h-5${active ? 'text-indigo-600' : 'text-slate-500 dark:text-slate-400'}`} />
+    <span className={`text-[11px] font-bold${active ? 'text-indigo-600' : 'text-slate-500 dark:text-slate-400'}`}>{label}</span>
   </button>
 );
 
@@ -39,7 +39,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ view, setView, moreOpen, s
                 <button
                   key={item.key}
                   onClick={() => { setView(item.key); setMoreOpen(false); }}
-                  className={`flex flex-col items-center gap-2 p-4 rounded-2xl ${view === item.key ? 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600' : 'bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}
+                  className={`flex flex-col items-center gap-2 p-4 rounded-2xl${view === item.key ? 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600' : 'bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}
                 >
                   <item.icon className="w-5 h-5" />
                   <span className="text-[11px] font-bold text-center">{item.label}</span>

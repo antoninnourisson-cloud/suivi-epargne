@@ -82,7 +82,7 @@ export const RestitutionPanel: React.FC<RestitutionPanelProps> = ({ accounts, re
   return (
     <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-4">
       <div>
-        <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 flex items-center gap-2"><HandCoins className="w-5 h-5 text-amber-500" /> Restitution du capital</h3>
+        <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 flex items-center gap-2"><HandCoins className="w-5 h-5 text-amber-700 dark:text-amber-400" /> Restitution du capital</h3>
         <p className="text-sm text-slate-500 dark:text-slate-400">Votre part ne bouge pas : seul l'argent de vos parents est retiré.</p>
       </div>
 
@@ -96,14 +96,14 @@ export const RestitutionPanel: React.FC<RestitutionPanelProps> = ({ accounts, re
         )}
         <button
           onClick={() => onPlan(isPlanned && restitution?.plannedDate === date ? undefined : date)}
-          className={`flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-black ${isPlanned && restitution?.plannedDate === date ? 'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200' : 'bg-indigo-600 hover:bg-indigo-700 text-white'}`}
+          className={`flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-black${isPlanned && restitution?.plannedDate === date ? 'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200' : 'bg-indigo-600 hover:bg-indigo-700 text-white'}`}
         >
           <CalendarCheck className="w-4 h-4" /> {isPlanned && restitution?.plannedDate === date ? 'Retirer les rappels' : isPlanned ? 'Changer la date' : 'Planifier (rappels)'}
         </button>
       </div>
       {isPlanned && <p className="text-xs text-slate-500 dark:text-slate-400">Rappels prévus : début décembre, puis le {dayLabel(restitution!.plannedDate!)}.</p>}
 
-      <p className={`text-xs font-bold flex items-start gap-1.5 ${early ? 'text-amber-700 dark:text-amber-300' : 'text-emerald-700 dark:text-emerald-300'}`}>
+      <p className={`text-xs font-bold flex items-start gap-1.5${early ? 'text-amber-700 dark:text-amber-300' : 'text-emerald-700 dark:text-emerald-300'}`}>
         <Lightbulb className="w-3.5 h-3.5 flex-shrink-0 mt-px" />
         {early
           ? `À cette date, ${fmt(plan.totalLost)} d'intérêts ${plan.interestYear} sont perdus par rapport au ${dayLabel(plan.bestDate)} : les livrets ne rapportent plus rien depuis le dernier 1er ou 16.`

@@ -221,7 +221,7 @@ export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parent
                 </div>
             </div>
             <div className="mt-4 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-lg p-3 flex gap-2 items-start">
-                <AlertTriangle className="w-4 h-4 text-amber-500 mt-0.5 flex-shrink-0"/>
+                <AlertTriangle className="w-4 h-4 text-amber-700 dark:text-amber-400 mt-0.5 flex-shrink-0"/>
                 <p className="text-xs text-amber-700 dark:text-amber-300 leading-relaxed">Ces clés sont stockées en clair dans votre fichier sur Drive (comme le reste de vos réglages) — jamais envoyées ailleurs qu'à Google. Chaque extraction utilise votre propre quota Gemini.</p>
             </div>
         </div>
@@ -242,7 +242,7 @@ export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parent
                     </div>
                     <button
                         onClick={toggleBiometric}
-                        className={`flex-shrink-0 px-4 py-2 rounded-xl font-bold text-sm ${biometricOn ? 'bg-emerald-600 hover:bg-emerald-700 text-white' : 'bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200'}`}
+                        className={`flex-shrink-0 px-4 py-2 rounded-xl font-bold text-sm${biometricOn ? 'bg-emerald-600 hover:bg-emerald-700 text-white' : 'bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200'}`}
                     >
                         {biometricOn ? 'Activé' : 'Désactivé'}
                     </button>
@@ -257,7 +257,7 @@ export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parent
                     </div>
                     <button
                         onClick={togglePin}
-                        className={`flex-shrink-0 px-4 py-2 rounded-xl font-bold text-sm ${pinOn ? 'bg-emerald-600 hover:bg-emerald-700 text-white' : 'bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200'}`}
+                        className={`flex-shrink-0 px-4 py-2 rounded-xl font-bold text-sm${pinOn ? 'bg-emerald-600 hover:bg-emerald-700 text-white' : 'bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200'}`}
                     >
                         {pinOn ? 'Activé' : 'Désactivé'}
                     </button>
@@ -430,7 +430,7 @@ export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parent
                 </div>
             ))}
             <div className="bg-amber-50 dark:bg-amber-950/40 p-3 rounded-lg flex gap-2 items-start mt-4">
-                <AlertTriangle className="w-4 h-4 text-amber-500 mt-1 flex-shrink-0"/>
+                <AlertTriangle className="w-4 h-4 text-amber-700 dark:text-amber-400 mt-1 flex-shrink-0"/>
                 <p className="text-xs text-amber-700 dark:text-amber-300 leading-relaxed">Les tranches doivent être ordonnées. Mettez 999999999 pour l'infini.</p>
             </div>
           </div>

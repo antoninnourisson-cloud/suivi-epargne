@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { applyMovement, snapshotBalances, restoreBalances, isRestitutionMovement } from './accountOps';
+import { applyMovement, snapshotBalances, restoreBalances, isRestitutionMovement, findCancellingGroups } from './accountOps';
 import { AccountType, SavingsAccount, AccountMovement } from '../types';
 
 const acc = (over: Partial<SavingsAccount> = {}): SavingsAccount => ({
@@ -48,5 +48,20 @@ describe('annulation exacte', () => {
     expect(restored).toMatchObject({ ownedAmount: 1050, parentalCapital: 500, totalAmount: 1550 });
     expect(restored.movements?.map(m => m.id)).toEqual(['later']);
     expect(isRestitutionMovement(mv({ tag: 'restitution', label: 'renommé' }))).toBe(true);
+  });
+});
+
+describe('findCancellingGroups', () => {
+  it('repère les mouvements du même jour qui s’annulent, pas les autres', () => {
+    const a = acc({ movements: [
+      mv({ id: '1', date: '2026-08-26', amount: 2, label: 'Test final A' }),
+      mv({ id: '2', date: '2026-08-26', amount: 2, type: 'OUT', label: 'Test final B' }),
+      mv({ id: '3', date: '2026-08-26', amount: 1 }), mv({ id: '4', date: '2026-08-26', amount: 1, type: 'OUT' }),
+      mv({ id: '5', date: '2026-09-01', amount: 500 }), mv({ id: '6', date: '2026-09-01', amount: 200, type: 'OUT' }),
+      mv({ id: '7', date: '2026-09-02', amount: 100, linkId: 'l' }), mv({ id: '8', date: '2026-09-02', amount: 100, type: 'OUT', linkId: 'l' }),
+    ] });
+    const g = findCancellingGroups([a]);
+    expect(g.map(x => x.date)).toEqual(['2026-08-26']);
+    expect(g[0].movements.map(m => m.id)).toEqual(['1', '2', '3', '4']);
   });
 });

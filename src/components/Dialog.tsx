@@ -56,7 +56,7 @@ export const Dialog: React.FC<{ state: DialogState; onClose: () => void }> = ({ 
           <button onClick={onClose} className="px-4 py-2 rounded-xl font-bold text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700">Annuler</button>
           <button
             onClick={confirm}
-            className={`px-4 py-2 rounded-xl font-bold text-sm text-white ${state.danger ? 'bg-rose-600 hover:bg-rose-700' : 'bg-indigo-600 hover:bg-indigo-700'}`}
+            className={`px-4 py-2 rounded-xl font-bold text-sm text-white${state.danger ? 'bg-rose-600 hover:bg-rose-700' : 'bg-indigo-600 hover:bg-indigo-700'}`}
           >
             {state.confirmLabel || 'Confirmer'}
           </button>

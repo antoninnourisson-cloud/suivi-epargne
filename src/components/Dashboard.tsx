@@ -1,8 +1,8 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { 
-  ResponsiveContainer, Tooltip as RechartsTooltip, Legend, 
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, AreaChart, Area, LabelList 
-} from 'recharts';
+import React, { useState, useMemo, useEffect, lazy, Suspense } from 'react';
+
+// Graphiques chargés à part (recharts) : les cartes s'affichent sans les attendre.
+const StackedSavingsChart = lazy(() => import('./DashboardCharts').then(m => ({ default: m.StackedSavingsChart })));
+const InstitutionChart = lazy(() => import('./DashboardCharts').then(m => ({ default: m.InstitutionChart })));
 import { SavingsAccount, PortfolioSnapshot, AccountType, Expense, FiscalConfig, WorkBenefits, RecurringMovement, Subscription } from '../types';
 import { Euro, Lock, Wallet, ListTodo, ChevronDown, Landmark, CalendarClock, Unlock, Save, AlertTriangle, Trash2, Clock, TrendingUp, TrendingDown, PiggyBank, Percent, ShieldAlert, Repeat } from 'lucide-react';
 import { computeAccruedParentalInterest, computeRecentSavingsRate, computeAccountBalanceAtDate, findStaleRegulatedRates, computeLepEligibility, computeIncome, findDueRecurring, computeMonthSavedAmount, computeSavedSince, payPeriodOf, computeSavingsRateHistory, computeUnlockCost, findFiscalReview, applyTaxScale, nextSubscriptionDate, findAvRateUpdatesDue } from '../lib/finance';
@@ -420,7 +420,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
           {subtext && <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 uppercase font-bold tracking-wide">{subtext}</p>}
           {extra}
         </div>
-        <div className={`hidden 2xl:block p-3 rounded-lg ${color}`}>
+        <div className={`hidden 2xl:block p-3 rounded-lg${color}`}>
           <Icon className="w-6 h-6 text-white" />
         </div>
       </div>
@@ -458,7 +458,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
               <ListTodo className="w-4 h-4 text-indigo-600" /> À faire
               <span className="px-2 py-0.5 rounded-full bg-indigo-600 text-white text-[11px] font-black">{todoCount}</span>
             </span>
-            <ChevronDown className={`w-4 h-4 text-slate-500 dark:text-slate-400 transition-transform ${todoOpen ? 'rotate-180' : ''}`} />
+            <ChevronDown className={`w-4 h-4 text-slate-500 dark:text-slate-400 transition-transform${todoOpen ? 'rotate-180' : ''}`} />
           </button>
           {todoOpen && (
             <div className="px-4 pb-4 space-y-2">
@@ -481,7 +481,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
       ))}
 
       {lepStatus && lepStatus.status !== 'ok' && (
-        <div className={`flex items-start gap-3 p-3 rounded-xl border text-sm font-bold ${lepStatus.status === 'exceeded' ? 'bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-900 text-rose-800 dark:text-rose-300' : 'bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-900 text-amber-800 dark:text-amber-300'}`}>
+        <div className={`flex items-start gap-3 p-3 rounded-xl border text-sm font-bold${lepStatus.status === 'exceeded' ? 'bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-900 text-rose-800 dark:text-rose-300' : 'bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-900 text-amber-800 dark:text-amber-300'}`}>
           <ShieldAlert className="w-4 h-4 flex-shrink-0 mt-0.5" />
           <div>
             {lepStatus.status === 'exceeded'
@@ -645,7 +645,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
             </div>
             {hasPlan && (
               <div className="h-2.5 rounded-full bg-slate-100 dark:bg-slate-700 overflow-hidden">
-                <div className={`h-full rounded-full ${done ? 'bg-emerald-500' : 'bg-indigo-600'}`} style={{ width: `${pct}%` }} />
+                <div className={`h-full rounded-full${done ? 'bg-emerald-500' : 'bg-indigo-600'}`} style={{ width: `${pct}%` }} />
               </div>
             )}
             <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-2">
@@ -669,7 +669,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
                     const current = i === rateHistory.length - 1;
                     return (
                       <div key={m.month} className="flex-1 flex flex-col items-center justify-end h-full gap-1" title={`${m.month} : ${Math.round(m.rate)} % (${fmtEUR(m.saved)})`}>
-                        <div className={`w-full rounded-sm ${m.rate < 0 ? 'bg-rose-400' : current ? 'bg-indigo-300 dark:bg-indigo-700' : 'bg-indigo-600'}`} style={{ height: `${h}%` }} />
+                        <div className={`w-full rounded-sm${m.rate < 0 ? 'bg-rose-400' : current ? 'bg-indigo-300 dark:bg-indigo-700' : 'bg-indigo-600'}`} style={{ height: `${h}%` }} />
                         <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">{MONTH_INITIALS[Number(m.month.slice(5)) - 1]}</span>
                       </div>
                     );
@@ -705,7 +705,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
           </div>
 
           {projection.drift && (
-            <div className={`mt-4 flex items-start gap-2 p-3 rounded-lg text-xs font-bold ${projection.drift.changeRatio < 0 ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300' : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300'}`}>
+            <div className={`mt-4 flex items-start gap-2 p-3 rounded-lg text-xs font-bold${projection.drift.changeRatio < 0 ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300' : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300'}`}>
               {projection.drift.changeRatio < 0
                 ? <TrendingDown className="w-4 h-4 flex-shrink-0 mt-0.5" />
                 : <TrendingUp className="w-4 h-4 flex-shrink-0 mt-0.5" />}
@@ -731,69 +731,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
           </div>
         </div>
         <div className="h-80">
-        <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={stackedData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-            <defs>
-              {accounts.map(acc => {
-                const color = getAccountColor(acc.id);
-                return (
-                  <React.Fragment key={acc.id}>
-                    <linearGradient id={`color-${acc.id}`} x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor={color} stopOpacity={0.8}/>
-                      <stop offset="95%" stopColor={color} stopOpacity={0.1}/>
-                    </linearGradient>
-                    <pattern id={`stripe-${acc.id}`} patternUnits="userSpaceOnUse" width="8" height="8" patternTransform="rotate(45)">
-                       <rect width="100%" height="100%" fill="white" fillOpacity="0" />
-                       <path d="M 0 0 L 0 8" stroke={color} strokeWidth="3" strokeOpacity="0.5" />
-                       <rect width="100%" height="100%" fill={color} fillOpacity="0.1" /> 
-                    </pattern>
-                  </React.Fragment>
-                );
-              })}
-            </defs>
-            <XAxis dataKey="displayDate" tick={{ fontSize: 10 }} minTickGap={30} />
-            <YAxis tickFormatter={(val) => `${(val / 1000).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} k€`} tick={{ fontSize: 10 }} width={52} />
-            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-            <RechartsTooltip 
-              contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-              itemStyle={{ fontSize: '12px', padding: 0 }}
-              formatter={(value: number, name: string) => {
-                const accName = accounts.find(a => a.id === name)?.name || name;
-                if (name === 'total') return [formatEUR(value, 2), "TOTAL"];
-                return [formatEUR(value, 2), accName];
-              }}
-              labelStyle={{ color: '#64748b', marginBottom: '0.5rem', fontWeight: 'bold' }}
-            />
-            <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} formatter={(value) => accounts.find(a => a.id === value)?.name || value} />
-            {accounts.map(acc => (
-              <Area
-                key={acc.id}
-                type="monotone"
-                dataKey={acc.id}
-                name={acc.id}
-                stackId="1"
-                stroke={getAccountColor(acc.id)}
-                fill={isConstrainedAccount(acc.type) ? `url(#stripe-${acc.id})` : `url(#color-${acc.id})`}
-                fillOpacity={1}
-              />
-            ))}
-          </AreaChart>
-        </ResponsiveContainer>
+        <Suspense fallback={<div className="h-full w-full rounded-lg bg-slate-100 dark:bg-slate-900 animate-pulse" aria-hidden />}>
+          <StackedSavingsChart stackedData={stackedData} accounts={accounts} getAccountColor={getAccountColor} isConstrainedAccount={isConstrainedAccount} />
+        </Suspense>
         </div>
       </div>
 
       <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 h-80">
         <h3 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-4">Par établissement</h3>
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={dataByInstitution} layout="vertical">
-            <XAxis type="number" hide />
-            <YAxis dataKey="name" type="category" width={96} tick={{fontSize: 11, fontWeight: 600, fill: '#94a3b8'}} />
-            <RechartsTooltip formatter={(v: number) => formatEUR(v)} cursor={{fill: 'transparent'}} />
-            <Bar dataKey="value" fill="#6366f1" radius={[0, 4, 4, 0]} barSize={24}>
-              <LabelList dataKey="value" position="insideRight" formatter={(v: number) => formatEUR(v, 0)} style={{ fill: '#fff', fontSize: 11, fontWeight: 700 }} />
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
+        <Suspense fallback={<div className="h-full w-full rounded-lg bg-slate-100 dark:bg-slate-900 animate-pulse" aria-hidden />}>
+          <InstitutionChart data={dataByInstitution} />
+        </Suspense>
       </div>
       </div>
     </div>

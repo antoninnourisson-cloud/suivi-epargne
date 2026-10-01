@@ -55,8 +55,8 @@ export const History: React.FC<HistoryProps> = ({ history, expensesHistory, revi
       </div>
 
       <div className="flex gap-4 border-b border-slate-200 dark:border-slate-700">
-        <button onClick={() => setTab('patrimoine')} className={`pb-2 px-4 font-bold text-sm flex items-center gap-2 ${tab === 'patrimoine' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-500 dark:text-slate-400'}`}><Wallet className="w-4 h-4" /> Patrimoine</button>
-        <button onClick={() => setTab('charges')} className={`pb-2 px-4 font-bold text-sm flex items-center gap-2 ${tab === 'charges' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-500 dark:text-slate-400'}`}><Receipt className="w-4 h-4" /> Charges fixes</button>
+        <button onClick={() => setTab('patrimoine')} className={`pb-2 px-4 font-bold text-sm flex items-center gap-2${tab === 'patrimoine' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-500 dark:text-slate-400'}`}><Wallet className="w-4 h-4" /> Patrimoine</button>
+        <button onClick={() => setTab('charges')} className={`pb-2 px-4 font-bold text-sm flex items-center gap-2${tab === 'charges' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-500 dark:text-slate-400'}`}><Receipt className="w-4 h-4" /> Charges fixes</button>
       </div>
 
       {tab === 'patrimoine' && (
@@ -68,7 +68,7 @@ export const History: React.FC<HistoryProps> = ({ history, expensesHistory, revi
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700"><p className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Total actuel</p><p className="text-2xl font-black text-slate-800 dark:text-slate-100">{fmt(latest.totalAmount)}</p></div>
             <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700"><p className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Ma part actuelle</p><p className="text-2xl font-black text-indigo-600">{fmt(latest.ownedAmount)}</p></div>
-            <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700"><p className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Évolution depuis {monthLabel(first.date)}</p><p className={`text-2xl font-black ${totalGrowth >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>{totalGrowth >= 0 ? '+' : ''}{fmt(totalGrowth)}</p></div>
+            <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700"><p className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Évolution depuis {monthLabel(first.date)}</p><p className={`text-2xl font-black${totalGrowth >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>{totalGrowth >= 0 ? '+' : ''}{fmt(totalGrowth)}</p></div>
           </div>
       )}
       {sorted.length < 2 ? (
@@ -115,7 +115,7 @@ export const History: React.FC<HistoryProps> = ({ history, expensesHistory, revi
                       <td className="px-3 sm:px-6 py-3 text-right font-mono text-indigo-600">{fmt(r.owned)}</td>
                       <td className="px-3 sm:px-6 py-3 text-right font-bold">
                         {r.deltaTotal === null ? <span className="text-slate-300">—</span> :
-                          r.deltaTotal > 0 ? <span className="text-emerald-600 inline-flex items-center gap-1 justify-end"><ArrowUpRight className="w-3.5 h-3.5" />{fmt(r.deltaTotal)}</span> :
+                          r.deltaTotal > 0 ? <span className="text-emerald-700 dark:text-emerald-400 inline-flex items-center gap-1 justify-end"><ArrowUpRight className="w-3.5 h-3.5" />{fmt(r.deltaTotal)}</span> :
                           r.deltaTotal < 0 ? <span className="text-rose-600 inline-flex items-center gap-1 justify-end"><ArrowDownRight className="w-3.5 h-3.5" />{fmt(r.deltaTotal)}</span> :
                           <span className="text-slate-500 dark:text-slate-400 inline-flex items-center gap-1 justify-end"><Minus className="w-3.5 h-3.5" />0</span>}
                         {r.deltaTotal !== null && r.monthsGap > 1 && (

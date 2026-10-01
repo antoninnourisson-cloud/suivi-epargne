@@ -49,7 +49,7 @@ export const InstallPrompt: React.FC = () => {
           </button>
         )}
       </div>
-      <button type="button" onClick={dismiss} aria-label="Masquer pendant 30 jours" className="p-2 -m-1 text-indigo-400 hover:text-indigo-600"><X className="w-4 h-4" /></button>
+      <button type="button" onClick={dismiss} aria-label="Masquer pendant 30 jours" className="p-2 -m-1 text-indigo-600 dark:text-indigo-400 hover:text-indigo-600"><X className="w-4 h-4" /></button>
     </div>
   );
 };

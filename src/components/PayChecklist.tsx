@@ -95,7 +95,7 @@ export const PayChecklist: React.FC<PayChecklistProps> = ({
     const varied = isDone && Math.abs(entry.amount - l.amount) >= 0.005;
     const invalid = !isDone && draftAmount(l) === null;
     return (
-      <div key={l.key} className={`flex items-center gap-3 text-sm p-2 rounded-lg ${isDone ? 'bg-emerald-50 dark:bg-emerald-950/30' : 'bg-slate-50 dark:bg-slate-900'}`}>
+      <div key={l.key} className={`flex items-center gap-3 text-sm p-2 rounded-lg${isDone ? 'bg-emerald-50 dark:bg-emerald-950/30' : 'bg-slate-50 dark:bg-slate-900'}`}>
         <input
           type="checkbox"
           checked={isDone}
@@ -105,7 +105,7 @@ export const PayChecklist: React.FC<PayChecklistProps> = ({
           className="w-5 h-5 flex-shrink-0 accent-emerald-600"
         />
         <div className="flex-1 min-w-0">
-          <p className={`font-bold truncate ${isDone ? 'text-emerald-800 dark:text-emerald-300' : 'text-slate-700 dark:text-slate-200'}`}>{l.label}</p>
+          <p className={`font-bold truncate${isDone ? 'text-emerald-800 dark:text-emerald-300' : 'text-slate-700 dark:text-slate-200'}`}>{l.label}</p>
           <p className="text-[11px] text-slate-500 dark:text-slate-400">
             {l.detail && <>{l.detail} · </>}
             {isDone
@@ -127,7 +127,7 @@ export const PayChecklist: React.FC<PayChecklistProps> = ({
               value={drafts[l.key] ?? toInputAmount(l.amount)}
               onChange={e => setDrafts(d => ({ ...d, [l.key]: e.target.value }))}
               onKeyDown={e => { if (e.key === 'Enter') check(l); }}
-              className={`w-24 p-1.5 text-right font-mono font-bold bg-white dark:bg-slate-800 border rounded-lg ${invalid ? 'border-rose-400' : 'border-slate-200 dark:border-slate-700'} text-slate-700 dark:text-slate-200`}
+              className={`w-24 p-1.5 text-right font-mono font-bold bg-white dark:bg-slate-800 border rounded-lg${invalid ? 'border-rose-400' : 'border-slate-200 dark:border-slate-700'} text-slate-700 dark:text-slate-200`}
             />
             <span className="text-slate-500 dark:text-slate-400 font-bold">€</span>
           </label>
@@ -142,7 +142,7 @@ export const PayChecklist: React.FC<PayChecklistProps> = ({
       <div className="flex flex-wrap items-start justify-between gap-3 mb-1">
         <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 flex items-center gap-2"><Wallet className="w-5 h-5 text-indigo-600" /> Votre paie, virement par virement</h3>
         {totalLines > 0 && (
-          <span className={`text-xs font-black px-2.5 py-1 rounded-full ${doneCount === totalLines ? 'bg-emerald-600 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'}`}>
+          <span className={`text-xs font-black px-2.5 py-1 rounded-full${doneCount === totalLines ? 'bg-emerald-600 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'}`}>
             {doneCount === totalLines ? <span className="inline-flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" /> Tout est fait</span> : `${doneCount}/${totalLines} faits`}
           </span>
         )}
