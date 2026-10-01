@@ -25,6 +25,7 @@ import {
   computeRestitutionPlan,
 } from '../../src/lib/finance';
 import { LATEST_TAX_SCALE } from '../../src/constants';
+import { computeYearReview } from '../../src/lib/agenda';
 import { formatISODay } from '../../src/lib/dates';
 import { frenchDay } from '../../src/lib/format';
 import { DEFAULT_FISCAL_CONFIG } from '../../src/constants';
@@ -333,6 +334,22 @@ export const computeReminders = (data: GlobalAppData, now: Date, appUrl: string)
         });
       }
     }
+  }
+
+
+  // 12. Début janvier : le bilan de l'année écoulée est prêt (Historique).
+  if (now.getMonth() === 0 && now.getDate() >= 2 && now.getDate() <= 6 && accounts.length > 0) {
+    const y = now.getFullYear() - 1;
+    const review = computeYearReview(data, y, now);
+    out.push({
+      key: `year-review:${y}`,
+      message: {
+        title: `Votre bilan ${y}`,
+        body: `${review.saved >= 0 ? '+' : ''}${eur(review.saved)} mis de côté, ${eur(review.interest)} d'intérêts${review.parentalInterest >= 1 ? ` (dont ${eur(review.parentalInterest)} offerts par vos parents)` : ''}. Le détail dans Historique.`,
+        url: link('history'),
+        tag: 'year-review',
+      },
+    });
   }
 
   return out;

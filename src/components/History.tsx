@@ -4,10 +4,14 @@ import { PortfolioSnapshot, ExpenseSnapshot } from '../types';
 import { parseISODate } from '../lib/dates';
 import { LineChart as LineChartIcon, ArrowUpRight, ArrowDownRight, Minus, Wallet, Receipt } from 'lucide-react';
 import { formatEUR } from '../lib/format';
+import { YearReviewCard } from './YearReviewCard';
+import type { GlobalAppData } from '../types';
 
 interface HistoryProps {
   history: PortfolioSnapshot[];
   expensesHistory: ExpenseSnapshot[];
+  // Données complètes, pour le bilan annuel (facultatif).
+  reviewData?: GlobalAppData;
 }
 
 const fmt = (n: number) => formatEUR(n, 0);
@@ -16,7 +20,7 @@ const monthLabel = (iso: string) => {
   return d.toLocaleDateString('fr-FR', { month: 'short', year: '2-digit' });
 };
 
-export const History: React.FC<HistoryProps> = ({ history, expensesHistory }) => {
+export const History: React.FC<HistoryProps> = ({ history, expensesHistory, reviewData }) => {
   const [tab, setTab] = useState<'patrimoine' | 'charges'>('patrimoine');
   const sorted = useMemo(() => [...history].sort((a, b) => a.date.localeCompare(b.date)), [history]);
   const chartData = useMemo(() => sorted.map(s => ({ ...s, label: monthLabel(s.date) })), [sorted]);
@@ -44,6 +48,7 @@ export const History: React.FC<HistoryProps> = ({ history, expensesHistory }) =>
 
   return (
     <div className="space-y-6 animate-fade-in pb-20">
+      {reviewData && <YearReviewCard data={reviewData} />}
       <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
         <h2 className="text-2xl font-black text-slate-800 dark:text-slate-100 flex items-center gap-2 mb-1"><LineChartIcon className="w-6 h-6 text-indigo-600" /> Historique du patrimoine</h2>
         <p className="text-sm text-slate-500 dark:text-slate-400">Un point est enregistré chaque mois automatiquement.</p>

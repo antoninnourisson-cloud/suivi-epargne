@@ -28,10 +28,11 @@ import {
   LayoutDashboard, Wallet, Trash2, Edit2, ShieldCheck,
   ArrowRightLeft, RefreshCcw, PlusCircle, Cloud, LogOut,
   Loader2, Settings as SettingsIcon, AlertTriangle, RotateCw,
-  Coins, LineChart, Users, Sun, Moon, Zap, Tag, Save, WifiOff, FileText, Clock, CalendarClock, HandHeart
+  Coins, LineChart, Users, Sun, Moon, Zap, Tag, Save, WifiOff, FileText, Clock, CalendarClock, HandHeart, CalendarDays
 } from 'lucide-react';
 
 // Code-splitting : les vues lourdes (recharts, etc.) sont chargées à la demande.
+const Agenda = lazy(() => import('./components/Agenda').then(m => ({ default: m.Agenda })));
 const Donations = lazy(() => import('./components/Donations').then(m => ({ default: m.Donations })));
 const Subscriptions = lazy(() => import('./components/Subscriptions').then(m => ({ default: m.Subscriptions })));
 const Dashboard = lazy(() => import('./components/Dashboard').then(m => ({ default: m.Dashboard })));
@@ -61,8 +62,8 @@ const NavButton = ({ active, onClick, icon: Icon, label, highlight }: any) => (
     </button>
 );
 
-type View = 'dashboard' | 'accounts' | 'transfers' | 'pilot' | 'update' | 'settings' | 'yield' | 'history' | 'parental' | 'payslips' | 'subscriptions' | 'donations';
-const VALID_VIEWS: View[] = ['dashboard', 'accounts', 'transfers', 'pilot', 'update', 'settings', 'yield', 'history', 'parental', 'payslips', 'subscriptions', 'donations'];
+type View = 'dashboard' | 'accounts' | 'transfers' | 'pilot' | 'update' | 'settings' | 'yield' | 'history' | 'parental' | 'payslips' | 'subscriptions' | 'donations' | 'agenda';
+const VALID_VIEWS: View[] = ['dashboard', 'accounts', 'transfers', 'pilot', 'update', 'settings', 'yield', 'history', 'parental', 'payslips', 'subscriptions', 'donations', 'agenda'];
 
 const App: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -174,6 +175,8 @@ const App: React.FC = () => {
     [data.paydayAmount, data.buildData]
   );
   const monthlyPay = useMemo(() => computeMonthlyPay(data.buildData()), [data.buildData]);
+  // Instantané complet des données (agenda, bilan annuel).
+  const fullData = useMemo(() => data.buildData(), [data.buildData]);
 
   // Lien direct vers un écran (`?view=update`), utilisé par les notifications. Traité
   // après authentification + déverrouillage, comme le raccourci d'ajout rapide.
@@ -715,6 +718,7 @@ const App: React.FC = () => {
 
           <div className="pt-6 pb-2 text-[11px] font-black text-slate-600 dark:text-slate-300 uppercase px-4 tracking-widest">Analyses</div>
           <NavButton active={view === 'pilot'} onClick={() => setView('pilot')} icon={ShieldCheck} label="Pilotage" />
+          <NavButton active={view === 'agenda'} onClick={() => setView('agenda')} icon={CalendarDays} label="Agenda" />
           <NavButton active={view === 'yield'} onClick={() => setView('yield')} icon={Coins} label="Rendement" />
           <NavButton active={view === 'history'} onClick={() => setView('history')} icon={LineChart} label="Historique" />
           {showParentalScreen && <NavButton active={view === 'parental'} onClick={() => setView('parental')} icon={Users} label="Part parentale" />}
@@ -836,7 +840,8 @@ const App: React.FC = () => {
             {view === 'update' && <AccountUpdate accounts={data.accounts} onUpdateAccountsComplex={data.updateAccountsWithMovements} lastSavedAt={data.lastSavedAt} />}
 
             {view === 'yield' && <Yield accounts={data.accounts} fiscalConfig={data.fiscalConfig} />}
-            {view === 'history' && <History history={data.history} expensesHistory={data.expensesHistory} />}
+            {view === 'history' && <History history={data.history} expensesHistory={data.expensesHistory} reviewData={fullData} />}
+            {view === 'agenda' && <Agenda data={fullData} onOpen={(v) => VALID_VIEWS.includes(v as View) && setView(v as View)} />}
             {view === 'parental' && <ParentalShare
                 accounts={data.accounts}
                 restitution={data.parentalRestitution}
@@ -1012,6 +1017,7 @@ const App: React.FC = () => {
         setMoreOpen={setMoreNavOpen}
         moreItems={[
           { key: 'transfers', label: 'Virements', icon: ArrowRightLeft },
+          { key: 'agenda', label: 'Agenda', icon: CalendarDays },
           { key: 'yield', label: 'Rendement', icon: Coins },
           { key: 'history', label: 'Historique', icon: LineChart },
           ...(showParentalScreen ? [{ key: 'parental', label: 'Part parentale', icon: Users }] : []),

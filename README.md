@@ -34,6 +34,10 @@ Un **petit serveur optionnel** (Cloudflare Worker, dossier [`worker/`](worker/))
   - intérêts parentaux de fin d'année.
 - **Échéances récurrentes** proposées à l'enregistrement, jamais écrites sans confirmation.
 
+### Agenda et bilan
+- **Agenda** : les douze prochains mois en un écran (paies, prélèvements, révisions de taux, restitution, rendez-vous fiscaux, maturités).
+- **Bilan annuel** (Historique, notification chaque début janvier) : épargne mise de côté, taux d'épargne, intérêts, meilleur mois, dons, abonnements.
+
 ### Comptes et mouvements
 - Distinction entre **part propre** et **capital des parents** sur chaque compte. Le capital parental est intouchable, ses intérêts reviennent à l'utilisateur.
 - **Restitution du capital parental** : date conseillée (le 1er janvier garde toute l'année d'intérêts), montants par compte, effet sur le plan de placement, rappels début décembre et le jour J, enregistrement en un clic avec récapitulatif aux parents et relevé exportable. Ensuite, l'app passe en mode solo.
