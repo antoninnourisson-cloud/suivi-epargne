@@ -208,8 +208,11 @@ const App: React.FC = () => {
     if (!isAuthenticated || locked) return;
     const params = new URLSearchParams(window.location.search);
     const target = params.get('view') as View | null;
-    if (target) {
-      if (VALID_VIEWS.includes(target)) { deepLinkedRef.current = true; setView(target); }
+    // Écran inconnu de cette version (lien d'une version plus récente, encore en cours de
+    // mise à jour) : on laisse le lien dans l'adresse pour que la nouvelle version, chargée
+    // juste après, l'ouvre.
+    if (target && VALID_VIEWS.includes(target)) {
+      deepLinkedRef.current = true; setView(target);
       params.delete('view');
       const rest = params.toString();
       window.history.replaceState({}, '', window.location.pathname + (rest ? `?${rest}` : ''));
