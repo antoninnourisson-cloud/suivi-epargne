@@ -674,13 +674,20 @@ export const computeAccruedParentalInterest = (
  * bien tout le flux depuis l'ouverture du compte (même limite que `stackedData` du
  * Dashboard, dont c'est la méthode d'origine).
  */
+/**
+ * « Solde initial » : montant saisi à la création d'un compte dans l'app. C'est de
+ * l'argent qui existait déjà, pas une épargne nouvelle : il ne doit compter ni dans le
+ * « mis de côté », ni dans les rythmes et trajectoires (il gonflait le mois de création).
+ */
+export const isInitialBalance = (m: AccountMovement) => m.label === 'Solde initial';
+
 export const computeAccountBalanceAtDate = (
   accounts: { ownedAmount: number; movements?: AccountMovement[] }[],
   dateStr: string
 ): number =>
   accounts.reduce((total, acc) => {
     let balance = acc.ownedAmount;
-    (acc.movements || []).filter(m => m.date > dateStr).forEach(m => {
+    (acc.movements || []).filter(m => m.date > dateStr && !isInitialBalance(m)).forEach(m => {
       balance += m.type === 'IN' ? -m.amount : m.amount;
     });
     return total + balance;
@@ -983,7 +990,7 @@ export const computeMonthSavedAmount = (
   for (const a of accounts) {
     if (a.type === AccountType.COMPTE_COURANT || a.type === AccountType.IMMOBILIER) continue;
     for (const m of a.movements || []) {
-      if (m.kind === 'valuation' || !m.date.startsWith(monthKey) || m.date > todayKey) continue;
+      if (m.kind === 'valuation' || isInitialBalance(m) || !m.date.startsWith(monthKey) || m.date > todayKey) continue;
       total += m.type === 'IN' ? m.amount : -m.amount;
     }
   }

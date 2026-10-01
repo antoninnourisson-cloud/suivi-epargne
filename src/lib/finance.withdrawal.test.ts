@@ -288,3 +288,13 @@ describe('LDDS et taux servi', () => {
     expect(findAvRateUpdatesDue([av], new Date(2027, 5, 1))).toEqual([]);
   });
 });
+
+describe('solde initial', () => {
+  it("n'est compté ni comme épargne du mois ni dans la reconstitution du passé", () => {
+    const a = acc({ totalAmount: 5300, ownedAmount: 5300, movements: [
+      { id: 'i', date: '2026-09-02', amount: 5000, label: 'Solde initial', type: 'IN' },
+      { id: 'v', date: '2026-09-10', amount: 300, label: 'Virement', type: 'IN' },
+    ] });
+    expect(computeMonthSavedAmount([a], NOW)).toBe(300);
+  });
+});

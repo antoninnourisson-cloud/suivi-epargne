@@ -275,7 +275,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
     const monthlyRate = computeRecentSavingsRate(accounts, 90, now);
     if (monthlyRate === null || Math.abs(monthlyRate) < 1) return null; // pas assez d'historique, ou rythme quasi nul
 
-    const totalNow = computeAccountBalanceAtDate(accounts, now.toISOString().split('T')[0]);
+    const totalNow = computeAccountBalanceAtDate(accounts, formatISODay(now));
 
     // --- DÉRIVE DE RYTHME : comparaison au trimestre précédent (jours -180 à -90) ---
     // Même fonction, `asOfDate` décalé d'un trimestre, pour détecter un ralentissement (ou
