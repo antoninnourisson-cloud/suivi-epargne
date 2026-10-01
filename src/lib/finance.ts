@@ -701,6 +701,14 @@ export const isInitialBalance = (m: AccountMovement) => m.tag === 'initial' || (
 /** Mouvement de la part des parents (ajout, correction, restitution) : pas votre argent. */
 export const isParentalMovement = (m: AccountMovement) => m.kind === 'parental';
 
+/**
+ * Mouvement qui compte comme ÉPARGNE (argent réellement mis de côté ou retiré) : ni
+ * valorisation, ni part des parents, ni correction, ni solde initial, et postérieur au
+ * « point de départ » du suivi s'il y en a un.
+ */
+export const isSavingsFlow = (m: AccountMovement, trackingStartISO?: string) =>
+  !m.kind && !isInitialBalance(m) && (!trackingStartISO || m.date >= trackingStartISO);
+
 export const computeAccountBalanceAtDate = (
   accounts: { ownedAmount: number; movements?: AccountMovement[] }[],
   dateStr: string
@@ -1072,7 +1080,8 @@ export const computeWithdrawalTax = (
  */
 export const computeMonthSavedAmount = (
   accounts: { type: AccountType; movements?: AccountMovement[] }[],
-  asOfDate: Date = new Date()
+  asOfDate: Date = new Date(),
+  trackingStartISO?: string
 ): number => {
   const monthKey = `${asOfDate.getFullYear()}-${String(asOfDate.getMonth() + 1).padStart(2, '0')}`;
   const todayKey = formatISODay(asOfDate);
@@ -1080,7 +1089,7 @@ export const computeMonthSavedAmount = (
   for (const a of accounts) {
     if (a.type === AccountType.COMPTE_COURANT || a.type === AccountType.IMMOBILIER) continue;
     for (const m of a.movements || []) {
-      if (m.kind === 'valuation' || isParentalMovement(m) || isInitialBalance(m) || !m.date.startsWith(monthKey) || m.date > todayKey) continue;
+      if (!isSavingsFlow(m, trackingStartISO) || !m.date.startsWith(monthKey) || m.date > todayKey) continue;
       total += m.type === 'IN' ? m.amount : -m.amount;
     }
   }
@@ -1244,14 +1253,15 @@ export const computeSavingsRateHistory = (
   accounts: { type: AccountType; movements?: AccountMovement[] }[],
   monthlyPay: number,
   months: number = 12,
-  asOfDate: Date = new Date()
+  asOfDate: Date = new Date(),
+  trackingStartISO?: string
 ): MonthSavingsRate[] => {
   const out: MonthSavingsRate[] = [];
   for (let k = months - 1; k >= 0; k--) {
     const end = k === 0
       ? asOfDate
       : new Date(asOfDate.getFullYear(), asOfDate.getMonth() - k + 1, 0);
-    const saved = computeMonthSavedAmount(accounts, end);
+    const saved = computeMonthSavedAmount(accounts, end, trackingStartISO);
     out.push({
       month: `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, '0')}`,
       saved,
@@ -1627,14 +1637,15 @@ export const applyRateChange = <T extends { interestRate?: number; rateHistory?:
 export const computeSavedSince = (
   accounts: { type: AccountType; movements?: AccountMovement[] }[],
   fromISO: string,
-  asOfDate: Date = new Date()
+  asOfDate: Date = new Date(),
+  trackingStartISO?: string
 ): number => {
   const todayKey = formatISODay(asOfDate);
   let total = 0;
   for (const a of accounts) {
     if (a.type === AccountType.COMPTE_COURANT || a.type === AccountType.IMMOBILIER) continue;
     for (const m of a.movements || []) {
-      if (m.kind === 'valuation' || isParentalMovement(m) || isInitialBalance(m) || m.date < fromISO || m.date > todayKey) continue;
+      if (!isSavingsFlow(m, trackingStartISO) || m.date < fromISO || m.date > todayKey) continue;
       total += m.type === 'IN' ? m.amount : -m.amount;
     }
   }

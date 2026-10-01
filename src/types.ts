@@ -28,7 +28,10 @@ export interface AccountMovement {
   // 'parental' : mouvement de la PART DES PARENTS (ajout, correction, restitution). Exclu
   // de tout ce qui concerne votre part, mais compté pour reconstituer le solde total
   // passé (intérêts). Absent = argent de votre part réellement bougé.
-  kind?: 'valuation' | 'parental';
+  // 'adjustment' : correction de solde qui n'est PAS de l'épargne (ex. erreur de saisie,
+  // intérêts crédités, argent qui n'a fait que transiter). Compte dans les soldes, pas dans
+  // « Placé », le taux d'épargne ni les bilans.
+  kind?: 'valuation' | 'parental' | 'adjustment';
   // Marque stable des mouvements spéciaux (le libellé, lui, peut être renommé).
   tag?: 'initial' | 'restitution';
 }
@@ -283,6 +286,9 @@ export interface GlobalAppData {
     // lieu du plan automatique « meilleur taux d'abord ». Facultative.
     savingsSplit?: { accountId: string; pct: number }[];
     savingsSplitFrom?: string; // 'YYYY-MM-DD' : appliquée à partir de cette date
+    // « Repartir de zéro » : seuls les mouvements à partir de cette date comptent comme
+    // épargne (Placé, taux d'épargne, bilans). Soldes, intérêts et historique inchangés.
+    trackingStartDate?: string;
   };
   goals?: SavingsGoal[];
   lastView?: string;

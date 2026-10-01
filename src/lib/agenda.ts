@@ -152,7 +152,7 @@ export const computeYearReview = (data: GlobalAppData, year: number, asOfDate: D
   for (let m = 0; m < 12; m++) {
     const end = new Date(year, m + 1, 0);
     if (new Date(year, m, 1) > asOfDate) break;
-    monthly.push({ month: m, saved: computeMonthSavedAmount(accounts, end > asOfDate ? asOfDate : end) });
+    monthly.push({ month: m, saved: computeMonthSavedAmount(accounts, end > asOfDate ? asOfDate : end, data.config?.trackingStartDate) });
   }
   const saved = monthly.reduce((s, x) => s + x.saved, 0);
   const sorted = [...monthly].sort((a, b) => b.saved - a.saved);
@@ -175,7 +175,7 @@ export const computeYearReview = (data: GlobalAppData, year: number, asOfDate: D
     ? formatISODay(new Date(Number(startSnap.date.slice(0, 4)), Number(startSnap.date.slice(5, 7)), 0))
     : `${year - 1}-12-31`;
   const flowsSinceStart = accounts.reduce((sum, a) => sum + (a.movements || [])
-    .filter(m => m.kind !== 'valuation' && m.kind !== 'parental' && m.label !== 'Solde initial' && m.date > flowsFrom && m.date <= endISO)
+    .filter(m => m.kind !== 'valuation' && m.kind !== 'parental' && m.kind !== 'adjustment' && m.label !== 'Solde initial' && m.date > flowsFrom && m.date <= endISO)
     .reduce((t, m) => t + (m.type === 'IN' ? m.amount : -m.amount), 0), 0);
   const gap = (netEnd - netStart) - flowsSinceStart;
   const restitutionThisYear = done && (done.date.startsWith(`${year}-`) || done.date === `${year + 1}-01-01`)

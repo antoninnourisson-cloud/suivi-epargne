@@ -794,7 +794,7 @@ const App: React.FC = () => {
             )}
 
             <Suspense fallback={<ViewLoader />}>
-            {view === 'dashboard' && <Dashboard accounts={data.accounts} history={data.history} expenses={allCharges} fiscalConfig={data.fiscalConfig} workBenefits={data.workBenefits} onDeleteAccount={handleDeleteAccount} config={dashboardConfig} monthPlan={monthPlan} monthlyPay={monthlyPay} paydayDay={data.paydayDay} payRaise={payRaise && !payRaiseHandled ? { delta: payRaise.delta, period: payRaise.latest.extracted.period || '', hasFixedAmount: data.paydayAmount !== undefined } : null} onAcceptPayRaise={acceptPayRaise} onDismissPayRaise={dismissPayRaise} subscriptions={data.subscriptions} onUpdateFiscalConfig={data.setFiscalConfig} onUpdateAccounts={data.setAccounts} onOpenSettings={() => setView('settings')} recurringMovements={data.recurringMovements} onRecordRecurring={(r, date) => handleQuickAdd(r.accountId, r.amount, r.type, r.label, date)} />}
+            {view === 'dashboard' && <Dashboard accounts={data.accounts} history={data.history} expenses={allCharges} fiscalConfig={data.fiscalConfig} workBenefits={data.workBenefits} onDeleteAccount={handleDeleteAccount} config={dashboardConfig} monthPlan={monthPlan} monthlyPay={monthlyPay} paydayDay={data.paydayDay} trackingStartDate={data.trackingStartDate} payRaise={payRaise && !payRaiseHandled ? { delta: payRaise.delta, period: payRaise.latest.extracted.period || '', hasFixedAmount: data.paydayAmount !== undefined } : null} onAcceptPayRaise={acceptPayRaise} onDismissPayRaise={dismissPayRaise} subscriptions={data.subscriptions} onUpdateFiscalConfig={data.setFiscalConfig} onUpdateAccounts={data.setAccounts} onOpenSettings={() => setView('settings')} recurringMovements={data.recurringMovements} onRecordRecurring={(r, date) => handleQuickAdd(r.accountId, r.amount, r.type, r.label, date)} />}
 
             {view === 'pilot' && <AssistantPilot
                 accounts={data.accounts}
@@ -842,6 +842,17 @@ const App: React.FC = () => {
                 accounts={data.accounts}
                 restitution={data.parentalRestitution}
                 onDeleteMovement={handleDeleteMovement}
+                trackingStartDate={data.trackingStartDate}
+                onSetTrackingStart={(date) => {
+                  const prev = data.trackingStartDate;
+                  data.setTrackingStartDate(date);
+                  addToast({ message: date ? `Suivi de l'épargne reparti du ${parseISODate(date).toLocaleDateString('fr-FR')}` : 'Point de départ retiré', kind: 'success', action: { label: 'Annuler', onClick: () => data.setTrackingStartDate(prev) } });
+                }}
+                onToggleAdjustment={(accountId, movementId) => {
+                  data.setAccounts(prev => prev.map(a => a.id !== accountId ? a : {
+                    ...a, movements: (a.movements || []).map(m => m.id !== movementId ? m : (m.kind === 'adjustment' ? { ...m, kind: undefined } : { ...m, kind: 'adjustment' })),
+                  }));
+                }}
                 onRemoveCancelling={(groups) => {
                   // Mouvements qui s'annulent : leur somme est nulle, les soldes ne bougent pas.
                   const ids = new Set(groups.flatMap(g => g.movements.map(m => m.id)));

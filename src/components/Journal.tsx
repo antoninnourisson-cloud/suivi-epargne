@@ -8,7 +8,7 @@
 import React, { useMemo, useState } from 'react';
 import { SavingsAccount, ParentalRestitution } from '../types';
 import { formatEUR, formatRate } from '../lib/format';
-import { parseISODate } from '../lib/dates';
+import { parseISODate, formatISODay as formatISODayLocal } from '../lib/dates';
 import { History, Trash2, Undo2 } from 'lucide-react';
 import { isRestitutionMovement, findCancellingGroups, CancellingGroup } from '../lib/accountOps';
 import { isInitialBalance } from '../lib/finance';
@@ -19,7 +19,7 @@ interface Entry {
   key: string;
   date: string;
   account?: SavingsAccount;
-  kind: 'own' | 'parental' | 'valuation' | 'initial' | 'rate' | 'restitution';
+  kind: 'own' | 'parental' | 'valuation' | 'initial' | 'rate' | 'restitution' | 'adjustment';
   title: string;
   amount?: number; // signé
   movementId?: string;
@@ -33,12 +33,16 @@ interface Props {
   onDeleteMovement: (accountId: string, movementId: string) => void;
   onRevertRate: (accountId: string, entryDate: string) => void;
   onRemoveCancelling: (groups: CancellingGroup[]) => void;
+  trackingStartDate?: string;
+  onSetTrackingStart: (date: string | undefined) => void;
+  onToggleAdjustment: (accountId: string, movementId: string) => void;
 }
 
 const BADGE: Record<Entry['kind'], { label: string; cls: string }> = {
   own: { label: 'Votre part', cls: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300' },
   parental: { label: 'Parents', cls: 'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300' },
   valuation: { label: 'Valorisation', cls: 'bg-teal-100 text-teal-700 dark:bg-teal-950/60 dark:text-teal-300' },
+  adjustment: { label: "Correction (pas de l'épargne)", cls: 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300' },
   initial: { label: 'Solde initial', cls: 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300' },
   rate: { label: 'Taux', cls: 'bg-violet-100 text-violet-700 dark:bg-violet-950/60 dark:text-violet-300' },
   restitution: { label: 'Restitution', cls: 'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300' },
@@ -46,7 +50,7 @@ const BADGE: Record<Entry['kind'], { label: string; cls: string }> = {
 
 const PAGE = 150;
 
-export const Journal: React.FC<Props> = ({ accounts, restitution, onDeleteMovement, onRevertRate, onRemoveCancelling }) => {
+export const Journal: React.FC<Props> = ({ accounts, restitution, onDeleteMovement, onRevertRate, onRemoveCancelling, trackingStartDate, onSetTrackingStart, onToggleAdjustment }) => {
   const [filter, setFilter] = useState<Filter>('all');
   const [accountId, setAccountId] = useState<string>('');
   const [limit, setLimit] = useState(PAGE);
@@ -58,7 +62,7 @@ export const Journal: React.FC<Props> = ({ accounts, restitution, onDeleteMoveme
     const out: Entry[] = [];
     for (const a of accounts) {
       for (const m of a.movements || []) {
-        const kind: Entry['kind'] = m.kind === 'parental' ? 'parental' : m.kind === 'valuation' ? 'valuation' : isInitialBalance(m) ? 'initial' : 'own';
+        const kind: Entry['kind'] = m.kind === 'parental' ? 'parental' : m.kind === 'valuation' ? 'valuation' : m.kind === 'adjustment' ? 'adjustment' : isInitialBalance(m) ? 'initial' : 'own';
         // Les mouvements de restitution s'annulent depuis Part parentale (sinon le relevé
         // de restitution resterait affiché alors que le capital serait rétabli).
         const isRestitution = isRestitutionMovement(m);
@@ -85,7 +89,7 @@ export const Journal: React.FC<Props> = ({ accounts, restitution, onDeleteMoveme
   const shown = entries.filter(e =>
     (!accountId || e.account?.id === accountId) &&
     (filter === 'all'
-      || (filter === 'own' && (e.kind === 'own' || e.kind === 'initial'))
+      || (filter === 'own' && (e.kind === 'own' || e.kind === 'initial' || e.kind === 'adjustment'))
       || (filter === 'parental' && (e.kind === 'parental' || e.kind === 'restitution'))
       || (filter === 'valuation' && e.kind === 'valuation')
       || (filter === 'rates' && e.kind === 'rate')));
@@ -101,6 +105,22 @@ export const Journal: React.FC<Props> = ({ accounts, restitution, onDeleteMoveme
         <h2 className="text-2xl font-black text-slate-800 dark:text-slate-100 flex items-center gap-2 mb-1"><History className="w-6 h-6 text-indigo-600" /> Journal des modifications</h2>
         <p className="text-sm text-slate-500 dark:text-slate-400">Tout ce qui a changé sur vos comptes : versements et retraits, part des parents, variations de valeur, taux. Chaque mouvement peut être supprimé (avec annulation possible).</p>
       </div>
+
+      <details className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm group" open={!!trackingStartDate}>
+        <summary className="list-none cursor-pointer p-4 text-sm font-bold text-slate-800 dark:text-slate-100 flex items-center justify-between">
+          {trackingStartDate ? `Suivi de l'épargne reparti du ${parseISODate(trackingStartDate).toLocaleDateString('fr-FR')}` : "Repartir de zéro pour le suivi de l'épargne"}
+          <span className="text-xs text-slate-500 dark:text-slate-400 group-open:hidden">Afficher</span>
+        </summary>
+        <div className="px-4 pb-4 space-y-2 text-sm text-slate-600 dark:text-slate-300">
+          <p>Seuls les mouvements à partir de cette date comptent dans « Placé depuis la paie », le taux d'épargne et les bilans. Vos soldes, leur historique et les intérêts ne changent pas, et rien n'est effacé.</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <input type="date" defaultValue={trackingStartDate || formatISODayLocal(new Date())} id="tracking-start" aria-label="Point de départ du suivi" className="p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" />
+            <button type="button" onClick={() => { const v = (document.getElementById('tracking-start') as HTMLInputElement | null)?.value; if (v) onSetTrackingStart(v); }} className="px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black">{trackingStartDate ? 'Changer la date' : 'Repartir de cette date'}</button>
+            {trackingStartDate && <button type="button" onClick={() => onSetTrackingStart(undefined)} className="text-xs font-bold underline">Retirer le point de départ</button>}
+          </div>
+          <p className="text-xs text-slate-500 dark:text-slate-400">Pour un seul mouvement qui n'était pas de l'épargne (correction, intérêts, argent en transit), utilisez plutôt « Pas de l'épargne » sur sa ligne.</p>
+        </div>
+      </details>
 
       {cancellingCount > 0 && (
         <div className="p-4 rounded-2xl border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/30 space-y-2">
@@ -151,6 +171,13 @@ export const Journal: React.FC<Props> = ({ accounts, restitution, onDeleteMoveme
             </span>
             {e.amount !== undefined && (
               <span className={`font-mono font-bold text-sm flex-shrink-0 ${e.amount >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>{e.amount >= 0 ? '+' : '−'}{formatEUR(Math.abs(e.amount))}</span>
+            )}
+            {e.movementId && e.account && (e.kind === 'own' || e.kind === 'adjustment') && (
+              <button type="button" onClick={() => onToggleAdjustment(e.account!.id, e.movementId!)}
+                title={e.kind === 'adjustment' ? "Compter de nouveau comme de l'épargne" : "Ce n'est pas de l'épargne (correction) : reste dans les soldes, sort de « Placé » et des bilans"}
+                className={`px-2 py-1 rounded-md text-[11px] font-bold flex-shrink-0 ${e.kind === 'adjustment' ? 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'}`}>
+                {e.kind === 'adjustment' ? 'Épargne ?' : "Pas de l'épargne"}
+              </button>
             )}
             {e.movementId && e.account && (
               <button type="button" onClick={() => onDeleteMovement(e.account!.id, e.movementId!)} aria-label={`Supprimer « ${e.title} »`} className="p-2 text-slate-400 hover:text-rose-500 flex-shrink-0"><Trash2 className="w-4 h-4" /></button>

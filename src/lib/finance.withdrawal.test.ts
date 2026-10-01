@@ -369,3 +369,18 @@ describe('part des parents tracée', () => {
     expect(computeAccruedInterest(la, 2026, new Date(2027, 0, 1))).toBeCloseTo(2400 * 0.024);
   });
 });
+
+describe('corrections et point de départ du suivi', () => {
+  const a = acc({ movements: [
+    { id: '1', date: '2026-09-27', amount: 850, label: 'Actualisation (+)', type: 'IN', kind: 'adjustment' },
+    { id: '2', date: '2026-09-10', amount: 300, label: 'Virement', type: 'IN' },
+    { id: '3', date: '2026-09-28', amount: 200, label: 'Virement', type: 'IN' },
+  ] });
+  it("une correction n'est pas de l'épargne", () => {
+    expect(computeMonthSavedAmount([a], NOW)).toBe(500);
+  });
+  it('seuls les mouvements après le point de départ comptent', () => {
+    expect(computeMonthSavedAmount([a], NOW, '2026-09-20')).toBe(200);
+    expect(computeSavedSince([a], '2026-09-01', NOW, '2026-09-20')).toBe(200);
+  });
+});

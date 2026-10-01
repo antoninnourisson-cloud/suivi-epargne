@@ -29,6 +29,7 @@ interface DashboardProps {
   // Paie nette mensuelle, pour le taux d'épargne.
   monthlyPay?: number;
   paydayDay?: number;
+  trackingStartDate?: string;
   subscriptions?: Subscription[];
   // Mise à jour des paramètres fiscaux (nouveau barème, vérification annuelle).
   onUpdateFiscalConfig?: (update: (prev: FiscalConfig) => FiscalConfig) => void;
@@ -45,7 +46,7 @@ interface DashboardProps {
   };
 }
 
-export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expenses, fiscalConfig, workBenefits, onDeleteAccount, config, recurringMovements = [], onRecordRecurring, monthPlan, monthlyPay = 0, paydayDay, subscriptions = [], onUpdateFiscalConfig, onOpenSettings, onUpdateAccounts, payRaise, onAcceptPayRaise, onDismissPayRaise }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expenses, fiscalConfig, workBenefits, onDeleteAccount, config, recurringMovements = [], onRecordRecurring, monthPlan, monthlyPay = 0, paydayDay, trackingStartDate, subscriptions = [], onUpdateFiscalConfig, onOpenSettings, onUpdateAccounts, payRaise, onAcceptPayRaise, onDismissPayRaise }) => {
   const [dateRange, setDateRange] = useState(() => {
     try {
         const stored = localStorage.getItem('dashboard_date_range');
@@ -266,9 +267,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
   // calendaire : le 1er octobre, c'est encore la paie du 27 septembre qu'on place.
   const payPeriod = paydayDay ? payPeriodOf(paydayDay) : null;
   const monthSaved = useMemo(
-    () => (payPeriod ? computeSavedSince(accounts, formatISODay(payPeriod.payDate)) : computeMonthSavedAmount(accounts)),
+    () => (payPeriod ? computeSavedSince(accounts, formatISODay(payPeriod.payDate), new Date(), trackingStartDate) : computeMonthSavedAmount(accounts, new Date(), trackingStartDate)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [accounts, payPeriod?.key]
+    [accounts, payPeriod?.key, trackingStartDate]
   );
 
   const [todoOpen, setTodoOpen] = useState(() => {
@@ -278,7 +279,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
     try { localStorage.setItem('dashboard_todo_open', open ? '0' : '1'); } catch { /* préférence non mémorisée */ }
     return !open;
   });
-  const rateHistory = useMemo(() => computeSavingsRateHistory(accounts, monthlyPay), [accounts, monthlyPay]);
+  const rateHistory = useMemo(() => computeSavingsRateHistory(accounts, monthlyPay, 12, new Date(), trackingStartDate), [accounts, monthlyPay, trackingStartDate]);
   // Moyenne des mois COMPLETS seulement : le mois en cours n'est pas encore fini.
   const avgRate = useMemo(() => {
     const full = rateHistory.slice(0, -1).filter(m => m.saved !== 0);
