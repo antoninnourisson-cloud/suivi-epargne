@@ -17,7 +17,7 @@ import {
 import { isBackendEnabled, hasBackendSession } from './services/backendService';
 import { disablePush } from './services/pushService';
 import { isLockEnabled } from './services/appLockService';
-import { computeMaturityCountdown, depositsAfterCashFlow, computeMonthlySavingsCapacity, subscriptionsAsExpenses, computeMonthlyPay, computeRestitutionPlan, accountsAfterRestitution, RESTITUTION_LABEL } from './lib/finance';
+import { computeMaturityCountdown, depositsAfterCashFlow, computeMonthlySavingsCapacity, subscriptionsAsExpenses, computeMonthlyPay, computeRestitutionPlan, accountsAfterRestitution } from './lib/finance';
 import { localTodayISO, parseISODate } from './lib/dates';
 import { formatEUR, formatSignedEUR } from './lib/format';
 import { MovementSearch } from './components/MovementSearch';
@@ -27,6 +27,7 @@ import './services/installPrompt';
 import { RegulatedRatesEditor } from './components/RegulatedRatesEditor';
 import { AccountType } from './types';
 import { computeBadgeCount, detectPayRaise } from './lib/projection';
+import { applyMovement, snapshotBalances, restoreBalances, isRestitutionMovement, round2 as round2Cents } from './lib/accountOps';
 import {
   LayoutDashboard, Wallet, Trash2, Edit2, ShieldCheck,
   ArrowRightLeft, RefreshCcw, PlusCircle, Cloud, LogOut,
@@ -405,7 +406,9 @@ const App: React.FC = () => {
     // plus le solde, et les parents n'étaient pas prévenus d'un mouvement sur Livret A/LEP
     // alors qu'ils l'étaient pour la même opération saisie par les deux autres chemins.
     const ownedDiff = existing ? normalized.ownedAmount - existing.ownedAmount : 0;
-    if (existing && Math.abs(ownedDiff) > 0.001) {
+    const parentalDiff = existing ? normalized.parentalCapital - existing.parentalCapital : 0;
+    // Parents prévenus aussi quand c'est LEUR part qui change (comme dans Actualiser).
+    if (existing && (Math.abs(ownedDiff) > 0.001 || Math.abs(parentalDiff) > 0.001)) {
       data.notifyParentsIfNeeded([{ account: normalized, date: today }]);
     }
 
@@ -413,7 +416,7 @@ const App: React.FC = () => {
       const isNew = !prev.find(a => a.id === normalized.id);
       if (isNew) {
         const withInitial: SavingsAccount = normalized.ownedAmount > 0
-          ? { ...normalized, movements: [{ id: crypto.randomUUID(), date: today, amount: normalized.ownedAmount, label: "Solde initial", type: 'IN' }] }
+          ? { ...normalized, movements: [{ id: crypto.randomUUID(), date: today, amount: normalized.ownedAmount, label: "Solde initial", type: 'IN', tag: 'initial' }] }
           : normalized;
         return [...prev, withInitial];
       }
@@ -441,47 +444,11 @@ const App: React.FC = () => {
     setEditingAccount(undefined);
   };
 
-  // Arrondi systématique à 2 décimales sur toute recomposition owned/total : les ajouts
-  // successifs en flottant dérivaient (0.1+0.2...), et un compte "vidé" n'était plus
-  // reconnu comme vide (totalAmount !== 0 à cause d'un résidu de 1e-13).
-  const round2 = (n: number) => Math.round(n * 100) / 100;
+  // Arrondi au centime de toute recomposition (voir lib/accountOps).
+  const round2 = round2Cents;
 
-  const doDeleteMovement = (accountId: string, movementId: string) => {
-    const account = data.accounts.find(a => a.id === accountId);
-    if (!account) return;
-    const movement = account.movements?.find(m => m.id === movementId);
-    if (!movement) return;
-    const linkId = movement.linkId;
-    data.setAccounts(prev => prev.map(acc => {
-      // TOUTES les jambes présentes sur ce compte, pas seulement la première : si deux
-      // jambes d'un même linkId vivaient sur le même compte, on n'en supprimait qu'une
-      // alors que l'undo (collectMovementLegs) restaurait les deux — doublon garanti.
-      const toDelete = (acc.movements || []).filter(m => m.id === movementId || (linkId && m.linkId === linkId));
-      if (toDelete.length === 0) return acc;
-      let newOwned = acc.ownedAmount;
-      let newParental = acc.parentalCapital;
-      toDelete.forEach(m => {
-        const d = m.type === 'IN' ? -m.amount : m.amount;
-        if (m.kind === 'parental') newParental += d; else newOwned += d;
-      });
-      newOwned = round2(newOwned);
-      newParental = round2(Math.max(0, newParental));
-      const deletedIds = new Set(toDelete.map(m => m.id));
-      return {
-          ...acc,
-          ownedAmount: newOwned,
-          parentalCapital: newParental,
-          totalAmount: round2(newOwned + newParental),
-          movements: acc.movements?.filter(m => !deletedIds.has(m.id)) || []
-      };
-    }));
-  };
-
-  // Recense TOUTES les lignes que la suppression va réellement retirer. Un virement interne
-  // en compte deux (le OUT côté source et le IN côté destination, appariés par `linkId`) et
-  // `doDeleteMovement` les supprime ensemble : les recenser avant permet de tout restaurer
-  // d'un bloc. Sans ça, l'undo était purement et simplement désactivé pour les virements,
-  // faisant de l'opération la plus destructrice de l'app la seule sans filet.
+  // Toutes les lignes que la suppression retire : un virement interne en compte deux (le
+  // OUT côté source et le IN côté destination, appariés par `linkId`).
   type MovementLeg = { accountId: string; movement: AccountMovement };
   const collectMovementLegs = (accountId: string, movementId: string): MovementLeg[] => {
     const account = data.accounts.find(a => a.id === accountId);
@@ -489,62 +456,47 @@ const App: React.FC = () => {
     if (!movement) return [];
     if (!movement.linkId) return [{ accountId, movement }];
     const legs: MovementLeg[] = [];
-    data.accounts.forEach(acc => {
-      (acc.movements || []).forEach(m => {
-        if (m.linkId === movement.linkId) legs.push({ accountId: acc.id, movement: m });
-      });
-    });
-    return legs;
-  };
-
-  const restoreMovementLegs = (legs: MovementLeg[]) => {
-    data.setAccounts(prev => prev.map(acc => {
-      const toRestore = legs.filter(l => l.accountId === acc.id);
-      if (toRestore.length === 0) return acc;
-      let newOwned = acc.ownedAmount;
-      let newParental = acc.parentalCapital;
-      toRestore.forEach(({ movement }) => {
-        const d = movement.type === 'IN' ? movement.amount : -movement.amount;
-        if (movement.kind === 'parental') newParental += d; else newOwned += d;
-      });
-      newOwned = round2(newOwned);
-      newParental = round2(Math.max(0, newParental));
-      return {
-        ...acc,
-        ownedAmount: newOwned,
-        parentalCapital: newParental,
-        totalAmount: round2(newOwned + newParental),
-        movements: [...(acc.movements || []), ...toRestore.map(l => l.movement)],
-      };
+    data.accounts.forEach(acc => (acc.movements || []).forEach(m => {
+      if (m.linkId === movement.linkId) legs.push({ accountId: acc.id, movement: m });
     }));
+    return legs;
   };
 
   const handleDeleteMovement = (accountId: string, movementId: string) => {
     const account = data.accounts.find(a => a.id === accountId);
     const movement = account?.movements?.find(m => m.id === movementId);
+    if (!movement) return;
+    if (isRestitutionMovement(movement)) {
+      addToast({ message: 'La restitution s\'annule depuis Part parentale.', kind: 'error' });
+      return;
+    }
     const legs = collectMovementLegs(accountId, movementId);
     const isTransfer = legs.length > 1;
     setDialog({
       open: true, kind: 'confirm', danger: true, confirmLabel: 'Supprimer',
       title: isTransfer ? 'Supprimer le virement' : 'Supprimer le mouvement',
-      message: movement
-        ? (isTransfer
-            ? `« ${movement.label} » est un virement interne : les ${legs.length} lignes liées seront supprimées ensemble.`
-            : `« ${movement.label} » sera supprimé.`)
-        : undefined,
+      message: isTransfer
+        ? `« ${movement.label} » est un virement interne : les ${legs.length} lignes liées seront supprimées ensemble.`
+        : `« ${movement.label} » sera supprimé.`,
       onConfirm: () => {
-        doDeleteMovement(accountId, movementId);
-        if (legs.length > 0) {
-          addToast({
-            message: isTransfer ? `Virement supprimé (${legs.length} lignes)` : 'Mouvement supprimé',
-            action: { label: 'Annuler', onClick: () => restoreMovementLegs(legs) },
-          });
-        }
+        // Instantané avant suppression : l'annulation rétablit l'état EXACT (une part des
+        // parents plafonnée à 0 pendant la suppression revenait sinon à un mauvais montant).
+        const ids = [...new Set(legs.map(l => l.accountId))];
+        const snap = snapshotBalances(data.accounts, ids);
+        data.setAccounts(prev => prev.map(acc => legs
+          .filter(l => l.accountId === acc.id)
+          .reduce((cur, l) => applyMovement(cur, l.movement, -1), acc)));
+        addToast({
+          message: isTransfer ? `Virement supprimé (${legs.length} lignes)` : 'Mouvement supprimé',
+          action: { label: 'Annuler', onClick: () => data.setAccounts(prev => restoreBalances(prev, snap)) },
+        });
       },
     });
   };
 
   const handleRenameMovement = (accountId: string, movementId: string, currentLabel: string) => {
+    const m = data.accounts.find(a => a.id === accountId)?.movements?.find(x => x.id === movementId);
+    if (m && isRestitutionMovement(m)) return;
     setDialog({
       open: true, kind: 'prompt', title: 'Renommer le mouvement', defaultValue: currentLabel, confirmLabel: 'Renommer',
       onConfirm: (newLabel) => {
@@ -617,17 +569,14 @@ const App: React.FC = () => {
       addToast({ message: `Retrait impossible : votre part sur ${account.name} n'est que de ${formatEUR(account.ownedAmount)}.`, kind: 'error' });
       return undefined;
     }
-    const delta = type === 'IN' ? amount : -amount;
-    const newOwned = round2(account.ownedAmount + delta);
-    const newTotal = round2(newOwned + account.parentalCapital);
     const movement: AccountMovement = { id: crypto.randomUUID(), date, amount, label, type };
+    const after = applyMovement(account, movement, 1, { trackDeposits: true });
 
     // Notifie les parents AVANT la mise à jour d'état (le hook compare à l'état courant).
-    data.notifyParentsIfNeeded([{ account: { ...account, ownedAmount: newOwned, totalAmount: newTotal }, date }]);
+    // L'e-mail est rattaché au mouvement : décocher ce versement l'annule, lui seul.
+    data.notifyParentsIfNeeded([{ account: after, date }], movement.id);
 
-    data.setAccounts(prev => prev.map(a => a.id === accountId
-      ? { ...a, ownedAmount: newOwned, totalAmount: newTotal, totalDeposits: depositsAfterCashFlow(a, delta), movements: [...(a.movements || []), movement] }
-      : a));
+    data.setAccounts(prev => prev.map(a => (a.id === accountId ? applyMovement(a, movement, 1, { trackDeposits: true }) : a)));
 
     addToast({ message: `${label} — ${account.name}`, kind: 'success' });
     return movement.id;
@@ -649,11 +598,11 @@ const App: React.FC = () => {
     const interestsOffered: { year: number; amount: number }[] = plan.totalInterest >= 0.5
       ? [{ year: plan.interestYear, amount: Math.round(plan.totalInterest * 100) / 100 }] : [];
     const previous = data.parentalRestitution;
-    const before = data.accounts.map(a => ({ id: a.id, parentalCapital: a.parentalCapital }));
+    const snap = snapshotBalances(data.accounts, plan.rows.map(r => r.accountId));
     let emailed = false;
     if (sendMail) {
       const rows = plan.rows.map(r => `<tr><td style="padding:4px 12px 4px 0">${r.name}</td><td style="padding:4px 0;text-align:right"><b>${formatEUR(r.amount, 2)}</b></td></tr>`).join('');
-      emailed = data.queueParentsMail('Restitution de votre capital', `
+      emailed = data.queueParentsMail('restitution', 'Restitution de votre capital', `
         <div style="font-family: sans-serif; color: #1e293b;">
           <p>Bonjour,</p>
           <p>Voici le récapitulatif de la restitution de votre capital, retiré le ${parseISODate(date).toLocaleDateString('fr-FR')} :</p>
@@ -662,7 +611,13 @@ const App: React.FC = () => {
           </table>
         </div>`);
     }
-    data.setAccounts(prev => accountsAfterRestitution(prev, date));
+    const after = accountsAfterRestitution(data.accounts, date);
+    const createdIds = after.flatMap(a => (a.movements || []).filter(m => isRestitutionMovement(m) && m.date === date).map(m => m.id));
+    data.setAccounts(prev => accountsAfterRestitution(prev, date).map(a => {
+      // mêmes ids que `after` : l'annulation sait quels mouvements jeter
+      const ref = after.find(x => x.id === a.id);
+      return ref ? { ...a, movements: ref.movements } : a;
+    }));
     data.setParentalRestitution({
       ...previous,
       done: { date, accounts: plan.rows.map(r => ({ accountId: r.accountId, name: r.name, amount: r.amount })), interestsOffered, emailed: emailed || undefined },
@@ -670,50 +625,34 @@ const App: React.FC = () => {
     addToast({
       message: `Restitution enregistrée : ${formatEUR(plan.total)}${emailed ? ' · récapitulatif envoyé après la sauvegarde' : ''}`,
       kind: 'success',
-      action: { label: 'Annuler', onClick: () => restoreParental(before, previous) },
+      action: { label: 'Annuler', onClick: () => {
+        data.cancelQueuedParentsMail('restitution');
+        data.setAccounts(prev => restoreBalances(prev, snap, createdIds));
+        data.setParentalRestitution(previous);
+      } },
     });
   };
 
-  const restoreParental = (before: { id: string; parentalCapital: number }[], previous: typeof data.parentalRestitution) => {
-    data.cancelQueuedParentsMail();
-    data.setAccounts(prev => prev.map(a => {
-      const b = before.find(x => x.id === a.id);
-      if (!b || b.parentalCapital <= 0) return a;
-      return {
-        ...a,
-        parentalCapital: b.parentalCapital,
-        totalAmount: round2(a.ownedAmount + b.parentalCapital),
-        movements: (a.movements || []).filter(m => !(m.kind === 'parental' && m.label === RESTITUTION_LABEL)),
-      };
-    }));
-    data.setParentalRestitution(previous);
-  };
-
-  // Annulation depuis l'écran (après coup) : reconstruit à partir du relevé.
+  // Annulation depuis l'écran (après coup) : les mouvements de restitution sont retirés,
+  // ce qui rend leur part aux parents.
   const handleUndoRestitution = () => {
-    const done = data.parentalRestitution?.done;
-    if (!done) return;
-    restoreParental(done.accounts.map(a => ({ id: a.accountId, parentalCapital: a.amount })), { ...data.parentalRestitution, done: undefined });
+    if (!data.parentalRestitution?.done) return;
+    data.cancelQueuedParentsMail('restitution');
+    data.setAccounts(prev => prev.map(a => (a.movements || [])
+      .filter(isRestitutionMovement)
+      .reduce((cur, m) => applyMovement(cur, m, -1), a)));
+    data.setParentalRestitution({ ...data.parentalRestitution, done: undefined });
     addToast({ message: 'Restitution annulée : la part de vos parents est rétablie', kind: 'success' });
   };
 
   // Annule un versement enregistré depuis la liste des virements de paie : retire le
   // mouvement et rétablit solde et versements cumulés.
   const handleCancelPayDeposit = (accountId: string, movementId: string) => {
-    data.cancelQueuedParentsMail();
+    data.cancelQueuedParentsMail(movementId);
     data.setAccounts(prev => prev.map(a => {
       if (a.id !== accountId) return a;
       const m = (a.movements || []).find(x => x.id === movementId);
-      if (!m) return a;
-      const delta = m.type === 'IN' ? -m.amount : m.amount;
-      const owned = round2(a.ownedAmount + delta);
-      return {
-        ...a,
-        ownedAmount: owned,
-        totalAmount: round2(owned + a.parentalCapital),
-        totalDeposits: a.totalDeposits !== undefined ? Math.max(0, round2(a.totalDeposits + delta)) : undefined,
-        movements: (a.movements || []).filter(x => x.id !== movementId),
-      };
+      return m ? applyMovement(a, m, -1, { trackDeposits: true }) : a;
     }));
   };
 
@@ -1050,11 +989,11 @@ const App: React.FC = () => {
                                        <div className="flex items-center gap-3">
                                            <span className="text-slate-500 dark:text-slate-400 font-mono bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded whitespace-nowrap">{m.date.split('-').reverse().join('/')}</span>
                                            <span className="font-bold text-slate-700 dark:text-slate-200">{m.label}</span>
-                                           {!m.grouped && <button onClick={()=>handleRenameMovement(acc.id, m.id, m.label)} aria-label={`Renommer « ${m.label} »`} className="p-2 -m-1 opacity-60 hover:opacity-100"><Edit2 className="w-4 h-4 text-slate-500 dark:text-slate-400"/></button>}
+                                           {!m.grouped && !isRestitutionMovement(m) && <button onClick={()=>handleRenameMovement(acc.id, m.id, m.label)} aria-label={`Renommer « ${m.label} »`} className="p-2 -m-1 opacity-60 hover:opacity-100"><Edit2 className="w-4 h-4 text-slate-500 dark:text-slate-400"/></button>}
                                        </div>
                                        <div className="flex items-center gap-3">
                                            <span className={`font-mono text-sm ${m.type==='IN'?'text-emerald-600 font-bold':'text-rose-600 font-bold'}`}>{m.type==='IN'?'+':'−'}{formatEUR(m.amount)}</span>
-                                           {!m.grouped && <button onClick={()=>handleDeleteMovement(acc.id, m.id)} aria-label={`Supprimer « ${m.label} »`} className="p-2.5 -m-1 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded text-slate-500 dark:text-slate-400 hover:text-rose-500"><Trash2 className="w-4 h-4"/></button>}
+                                           {!m.grouped && !isRestitutionMovement(m) && <button onClick={()=>handleDeleteMovement(acc.id, m.id)} aria-label={`Supprimer « ${m.label} »`} className="p-2.5 -m-1 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded text-slate-500 dark:text-slate-400 hover:text-rose-500"><Trash2 className="w-4 h-4"/></button>}
                                        </div>
                                      </div>
                                    ))}

@@ -2,7 +2,8 @@
 // FILE: src/hooks/usePortfolioData.ts
 // ================================================
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { tracksDeposits, depositsAfterCashFlow, totalFixedCharges, normalizeAccounts, dedupeMonthlySnapshots } from '../lib/finance';
+import { tracksDeposits, totalFixedCharges, normalizeAccounts, dedupeMonthlySnapshots } from '../lib/finance';
+import { applyMovement } from '../lib/accountOps';
 import {
   GlobalAppData, SavingsAccount, Expense, PortfolioSnapshot, ExpenseSnapshot,
   FiscalConfig, WorkBenefits, AccountMovement, SavingsGoal, PayslipRecord, RecurringMovement, Subscription, Donation, PayChecklist, ParentalRestitution
@@ -492,26 +493,32 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
   // (conflit, session expirée) puis que l'utilisateur rechargeait depuis Drive, les parents
   // avaient été notifiés d'un mouvement qui n'a jamais existé. Le mail est donc mis en
   // attente ici et n'est expédié qu'après une écriture Drive CONFIRMÉE.
-  const pendingParentMailRef = useRef<{ to: string; subject: string; body: string } | null>(null);
+  // File d'attente (et non une seule case) : deux opérations rapprochées envoient chacune
+  // leur e-mail, et annuler une opération ne retire que SON e-mail (`opId`).
+  const pendingParentMailRef = useRef<{ opId: string; to: string; subject: string; body: string }[]>([]);
   const flushPendingParentMail = () => {
-    const mail = pendingParentMailRef.current;
-    if (!mail) return;
-    pendingParentMailRef.current = null;
+    const mails = pendingParentMailRef.current;
+    if (mails.length === 0) return;
+    pendingParentMailRef.current = [];
     setMailError(null);
-    // Non bloquant, mais l'échec reste visible via mailError (bannière).
-    sendGmail(mail.to, mail.subject, mail.body).catch(err => {
-      console.error('Envoi du mail aux parents échoué', err);
-      setMailError(mail.to);
-    });
+    for (const mail of mails) {
+      // Non bloquant, mais l'échec reste visible via mailError (bannière).
+      sendGmail(mail.to, mail.subject, mail.body).catch(err => {
+        console.error('Envoi du mail aux parents échoué', err);
+        setMailError(mail.to);
+      });
+    }
   };
 
   /** Annule l'e-mail aux parents en attente (opération annulée avant la sauvegarde). */
-  const cancelQueuedParentsMail = () => { pendingParentMailRef.current = null; };
+  const cancelQueuedParentsMail = (opId: string) => {
+    pendingParentMailRef.current = pendingParentMailRef.current.filter(m => m.opId !== opId);
+  };
 
   /** Met en attente un e-mail aux parents (envoyé après la prochaine sauvegarde confirmée). */
-  const queueParentsMail = (subject: string, htmlBody: string): boolean => {
+  const queueParentsMail = (opId: string, subject: string, htmlBody: string): boolean => {
     if (!parentsEmail) return false;
-    pendingParentMailRef.current = { to: parentsEmail, subject, body: htmlBody };
+    pendingParentMailRef.current = [...pendingParentMailRef.current.filter(m => m.opId !== opId), { opId, to: parentsEmail, subject, body: htmlBody }];
     return true;
   };
 
@@ -689,7 +696,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
   // Construit et envoie l'email récapitulatif aux parents si un mouvement Livret A/LEP
   // est détecté. Factorisé pour être réutilisable par l'ajout rapide (FAB) et par les
   // actualisations de solde classiques.
-  const notifyParentsIfNeeded = (updates: { account: SavingsAccount, date: string }[]) => {
+  const notifyParentsIfNeeded = (updates: { account: SavingsAccount, date: string }[], opId: string = crypto.randomUUID()) => {
     let mailBody = `
       <div style="font-family: Arial, sans-serif; color: #1e293b;">
         <h2 style="color: #4f46e5; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px;">Mise à jour des comptes</h2>
@@ -754,7 +761,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
     if (shouldSendMail && parentsEmail) {
         // Mis en attente : expédié uniquement après la prochaine écriture Drive confirmée
         // (voir flushPendingParentMail) — jamais pour un mouvement qui n'a pas persisté.
-        pendingParentMailRef.current = { to: parentsEmail, subject: 'Mise à jour Épargne', body: mailBody };
+        pendingParentMailRef.current = [...pendingParentMailRef.current, { opId, to: parentsEmail, subject: 'Mise à jour Épargne', body: mailBody }];
     } else if (shouldSendMail && !parentsEmail) {
         console.warn("⚠️ Mouvement détecté mais aucun email parent configuré.");
     }
@@ -803,34 +810,13 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
   const executeLinkedTransfer = (sourceId: string, destId: string, amount: number, date: string) => {
     const linkId = crypto.randomUUID();
     setAccounts(prev => {
-      const next = [...prev];
-      const sourceIdx = next.findIndex(a => a.id === sourceId);
-      const destIdx = next.findIndex(a => a.id === destId);
-      
-      if (sourceIdx === -1 || destIdx === -1) return prev;
-      
-      const source = next[sourceIdx];
-      const dest = next[destIdx];
-      
+      const source = prev.find(a => a.id === sourceId);
+      const dest = prev.find(a => a.id === destId);
+      if (!source || !dest) return prev;
       const moveOut: AccountMovement = { id: crypto.randomUUID(), date, amount, label: `Virement vers ${dest.name}`, type: 'OUT', linkId };
-      next[sourceIdx] = { 
-          ...source, 
-          ownedAmount: source.ownedAmount - amount, 
-          totalAmount: source.totalAmount - amount, 
-          totalDeposits: depositsAfterCashFlow(source, -amount),
-          movements: [...(source.movements || []), moveOut] 
-      };
-      
       const moveIn: AccountMovement = { id: crypto.randomUUID(), date, amount, label: `Virement de ${source.name}`, type: 'IN', linkId };
-      next[destIdx] = { 
-          ...dest, 
-          ownedAmount: dest.ownedAmount + amount, 
-          totalAmount: dest.totalAmount + amount, 
-          totalDeposits: depositsAfterCashFlow(dest, amount),
-          movements: [...(dest.movements || []), moveIn] 
-      };
-      
-      return next;
+      return prev.map(a => a.id === sourceId ? applyMovement(a, moveOut, 1, { trackDeposits: true })
+        : a.id === destId ? applyMovement(a, moveIn, 1, { trackDeposits: true }) : a);
     });
   };
 

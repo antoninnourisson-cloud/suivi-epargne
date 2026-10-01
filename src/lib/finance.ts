@@ -479,7 +479,7 @@ export const computeAccruedInterest = (
   const account = {
     ...accountIn,
     movements: (accountIn.movements || []).map(m => isInitialBalance(m)
-      ? { ...m, date: accountIn.openingDate && accountIn.openingDate <= m.date ? accountIn.openingDate : '0001-01-01' }
+      ? { ...m, date: accountIn.openingDate && accountIn.openingDate <= m.date ? accountIn.openingDate : m.date }
       : m),
   };
   const currentRate = account.interestRate || 0;
@@ -689,7 +689,7 @@ export const computeAccruedParentalInterest = (
  * l'argent qui existait déjà, pas une épargne nouvelle : il ne doit compter ni dans le
  * « mis de côté », ni dans les rythmes et trajectoires (il gonflait le mois de création).
  */
-export const isInitialBalance = (m: AccountMovement) => m.label === 'Solde initial';
+export const isInitialBalance = (m: AccountMovement) => m.tag === 'initial' || (!m.tag && m.label === 'Solde initial');
 
 /** Mouvement de la part des parents (ajout, correction, restitution) : pas votre argent. */
 export const isParentalMovement = (m: AccountMovement) => m.kind === 'parental';
@@ -1530,7 +1530,7 @@ export const accountsAfterRestitution = <T extends { ownedAmount: number; parent
     parentalCapital: 0,
     totalAmount: Math.round(a.ownedAmount * 100) / 100,
     movements: dateISO && a.parentalCapital > 0
-      ? [...(a.movements || []), { id: `restitution-${dateISO}-${Math.random().toString(36).slice(2, 8)}`, date: dateISO, amount: Math.round(a.parentalCapital * 100) / 100, label: RESTITUTION_LABEL, type: 'OUT' as const, kind: 'parental' as const }]
+      ? [...(a.movements || []), { id: `restitution-${dateISO}-${Math.random().toString(36).slice(2, 8)}`, date: dateISO, amount: Math.round(a.parentalCapital * 100) / 100, label: RESTITUTION_LABEL, type: 'OUT' as const, kind: 'parental' as const, tag: 'restitution' as const }]
       : a.movements,
   }));
 

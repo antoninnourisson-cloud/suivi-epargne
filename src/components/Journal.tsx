@@ -10,6 +10,8 @@ import { SavingsAccount, ParentalRestitution } from '../types';
 import { formatEUR, formatRate } from '../lib/format';
 import { parseISODate } from '../lib/dates';
 import { History, Trash2, Undo2 } from 'lucide-react';
+import { isRestitutionMovement } from '../lib/accountOps';
+import { isInitialBalance } from '../lib/finance';
 
 type Filter = 'all' | 'own' | 'parental' | 'valuation' | 'rates';
 
@@ -52,10 +54,10 @@ export const Journal: React.FC<Props> = ({ accounts, restitution, onDeleteMoveme
     const out: Entry[] = [];
     for (const a of accounts) {
       for (const m of a.movements || []) {
-        const kind: Entry['kind'] = m.kind === 'parental' ? 'parental' : m.kind === 'valuation' ? 'valuation' : m.label === 'Solde initial' ? 'initial' : 'own';
+        const kind: Entry['kind'] = m.kind === 'parental' ? 'parental' : m.kind === 'valuation' ? 'valuation' : isInitialBalance(m) ? 'initial' : 'own';
         // Les mouvements de restitution s'annulent depuis Part parentale (sinon le relevé
         // de restitution resterait affiché alors que le capital serait rétabli).
-        const isRestitution = m.kind === 'parental' && m.label === 'Restitution aux parents';
+        const isRestitution = isRestitutionMovement(m);
         out.push({ key: `m-${a.id}-${m.id}`, date: m.date, account: a, kind, title: m.label, amount: m.type === 'IN' ? m.amount : -m.amount, movementId: isRestitution ? undefined : m.id });
       }
       // Historique des taux : une entrée { date, rate } = « rate » courait jusqu'à « date ».

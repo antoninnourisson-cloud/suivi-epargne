@@ -29,6 +29,8 @@ export interface AccountMovement {
   // de tout ce qui concerne votre part, mais compté pour reconstituer le solde total
   // passé (intérêts). Absent = argent de votre part réellement bougé.
   kind?: 'valuation' | 'parental';
+  // Marque stable des mouvements spéciaux (le libellé, lui, peut être renommé).
+  tag?: 'initial' | 'restitution';
 }
 
 export interface RateChange {
