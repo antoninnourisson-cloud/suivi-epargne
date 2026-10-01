@@ -49,7 +49,8 @@ export const MovementSearch: React.FC<MovementSearchProps> = ({ accounts }) => {
       .sort((x, y) => y.m.date.localeCompare(x.m.date));
   }, [accounts, query, direction]);
 
-  const net = results.reduce((sum, r) => sum + (r.m.type === 'IN' ? r.m.amount : -r.m.amount), 0);
+  // Solde net de VOTRE part : les mouvements de la part des parents n'y entrent pas.
+  const net = results.filter(r => r.m.kind !== 'parental').reduce((sum, r) => sum + (r.m.type === 'IN' ? r.m.amount : -r.m.amount), 0);
   const seg = (active: boolean) => `px-3 py-2 text-xs font-bold ${active ? 'bg-indigo-600 text-white' : 'bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`;
 
   return (

@@ -73,7 +73,7 @@ export const SavingsSplitEditor: React.FC<Props> = ({ accounts, split, from, sam
                   className="flex-1 min-w-0 p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-bold text-slate-700 dark:text-slate-200"
                   aria-label="Compte"
                 >
-                  {eligible.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                  {eligible.filter(a => a.id === row.accountId || !split!.some(r => r.accountId === a.id)).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
                 </select>
                 <input
                   type="text"

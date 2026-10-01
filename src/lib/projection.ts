@@ -56,24 +56,31 @@ export const projectSavings = (
   years: number,
   split?: SavingsSplit
 ): ProjectionResult => {
+  // Les plafonds se vérifient sur le solde RÉEL (part des parents comprise) ; le résultat
+  // ne compte que votre part. Les intérêts du capital parental vous reviennent (accord
+  // familial) : ils s'ajoutent à votre part.
   const sim = accounts
     .filter(a => a.type !== AccountType.COMPTE_COURANT && a.type !== AccountType.IMMOBILIER)
-    .map(a => ({ ...a, parentalCapital: 0, totalAmount: a.ownedAmount }));
-  const start = sim.reduce((s, a) => s + a.totalAmount, 0);
+    .map(a => ({ ...a, own: a.ownedAmount }));
+  const start = sim.reduce((s, a) => s + a.own, 0);
   const rates = new Map(sim.map(a => [a.id, netAnnualRate(a, fiscalConfig) / 100 / 12]));
   for (let m = 0; m < years * 12; m++) {
-    for (const a of sim) a.totalAmount *= 1 + (rates.get(a.id) || 0);
+    for (const a of sim) {
+      const interest = a.totalAmount * (rates.get(a.id) || 0);
+      a.totalAmount += interest;
+      a.own += interest;
+    }
     for (const st of computePlacementStrategy(monthly, sim, fiscalConfig, split)) {
       if (st.infoOnly || !st.accountId) continue;
       const a = sim.find(x => x.id === st.accountId);
-      if (a) a.totalAmount += st.fillAmount;
+      if (a) { a.totalAmount += st.fillAmount; a.own += st.fillAmount; }
     }
   }
-  const total = sim.reduce((s, a) => s + a.totalAmount, 0);
+  const total = sim.reduce((s, a) => s + a.own, 0);
   const deposited = monthly * years * 12;
   return {
     total, deposited, interest: total - start - deposited,
-    byAccount: sim.filter(a => a.totalAmount >= 0.5).map(a => ({ accountId: a.id, name: a.name, amount: a.totalAmount })),
+    byAccount: sim.filter(a => a.own >= 0.5).map(a => ({ accountId: a.id, name: a.name, amount: a.own })),
   };
 };
 

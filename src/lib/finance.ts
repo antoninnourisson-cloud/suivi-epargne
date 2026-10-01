@@ -653,25 +653,32 @@ export const computeParentalInterest = (
  * (computeAccruedInterest) et non sur le rythme annualisé. À utiliser partout où l'on
  * annonce « cette année » : rappel de fin d'année, gains nets si retrait.
  *
- * La répartition moi/parents se fait au prorata du capital détenu à ce jour — les
- * mouvements ne distinguent pas la part parentale de la part propre, donc affiner
- * davantage serait une fausse précision.
+ * La part des parents est reconstituée par ses propres mouvements (`kind: 'parental'` :
+ * ajouts, corrections, restitution), datés : une restitution ou une correction en cours
+ * d'année ne s'applique qu'à partir de sa date. Sans mouvement parental, leur capital est
+ * supposé constant sur l'année.
  */
 export const computeAccruedParentalInterest = (
-  accounts: { type: AccountType; interestRate?: number; rateHistory?: RateChange[]; totalAmount: number; ownedAmount: number; movements?: AccountMovement[] }[],
+  accounts: { type: AccountType; interestRate?: number; rateHistory?: RateChange[]; totalAmount: number; ownedAmount: number; parentalCapital?: number; movements?: AccountMovement[]; openingDate?: string }[],
   year: number,
   asOfDate: Date = new Date()
 ): ParentalInterestBreakdown => {
   let totalAnnual = 0;
-  let totalAnnualOwned = 0;
+  let totalAnnualParental = 0;
   accounts.forEach(a => {
     const accrued = computeAccruedInterest(a, year, asOfDate);
     if (accrued <= 0) return;
     totalAnnual += accrued;
-    const ownedShare = a.totalAmount > 0 ? a.ownedAmount / a.totalAmount : 1;
-    totalAnnualOwned += accrued * Math.min(1, Math.max(0, ownedShare));
+    const parentalNow = a.parentalCapital ?? Math.max(0, a.totalAmount - a.ownedAmount);
+    // Vue « part des parents seule » : leur capital actuel et leurs mouvements.
+    const parentalView = {
+      type: a.type, interestRate: a.interestRate, rateHistory: a.rateHistory,
+      totalAmount: parentalNow,
+      movements: (a.movements || []).filter(m => m.kind === 'parental').map(m => ({ ...m, kind: undefined })),
+    };
+    totalAnnualParental += Math.min(accrued, computeAccruedInterest(parentalView, year, asOfDate));
   });
-  return { totalAnnual, totalAnnualOwned, totalAnnualParental: Math.max(0, totalAnnual - totalAnnualOwned) };
+  return { totalAnnual, totalAnnualOwned: Math.max(0, totalAnnual - totalAnnualParental), totalAnnualParental };
 };
 
 // --- RYTHME D'ÉPARGNE RÉEL OBSERVÉ ---
@@ -731,7 +738,7 @@ export const computeRecentSavingsRate = (
   const nowStr = formatISODay(asOfDate);
   const pastStr = formatISODay(past);
 
-  const hasMovementsInWindow = accounts.some(a => (a.movements || []).some(m => m.date > pastStr && m.date <= nowStr));
+  const hasMovementsInWindow = accounts.some(a => (a.movements || []).some(m => m.date > pastStr && m.date <= nowStr && m.kind !== 'parental' && m.kind !== 'valuation'));
   if (!hasMovementsInWindow) return null;
 
   const totalNow = computeAccountBalanceAtDate(accounts, nowStr);
@@ -863,7 +870,11 @@ export const activeSavingsSplit = (
  * compte de la répartition sans plafond, sinon il suit le plan automatique.
  */
 const splitPlacement = (totalToInvest: number, accounts: SavingsAccount[], fiscalConfig: FiscalConfig, split: SavingsSplit): PlacementStep[] | null => {
-  const valid = split.filter(s => s.pct > 0 && accounts.some(a => a.id === s.accountId));
+  // Un même compte présent sur deux lignes : parts additionnées (sinon la seconde écrasait
+  // la première et le plafond était vérifié deux fois sur le même solde).
+  const merged = new Map<string, number>();
+  for (const row of split) if (row.pct > 0 && accounts.some(a => a.id === row.accountId)) merged.set(row.accountId, (merged.get(row.accountId) || 0) + row.pct);
+  const valid = [...merged.entries()].map(([accountId, pct]) => ({ accountId, pct }));
   const sum = valid.reduce((t, s) => t + s.pct, 0);
   if (sum <= 0) return null;
   const ceilings: Partial<Record<AccountType, number>> = {

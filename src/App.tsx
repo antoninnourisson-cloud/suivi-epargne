@@ -17,7 +17,7 @@ import {
 import { isBackendEnabled, hasBackendSession } from './services/backendService';
 import { disablePush } from './services/pushService';
 import { isLockEnabled } from './services/appLockService';
-import { computeMaturityCountdown, depositsAfterCashFlow, computeMonthlySavingsCapacity, subscriptionsAsExpenses, computeMonthlyPay, computeRestitutionPlan, accountsAfterRestitution } from './lib/finance';
+import { computeMaturityCountdown, depositsAfterCashFlow, computeMonthlySavingsCapacity, subscriptionsAsExpenses, computeMonthlyPay, computeRestitutionPlan, accountsAfterRestitution, REGULATED_RATE_GROUPS } from './lib/finance';
 import { localTodayISO, parseISODate } from './lib/dates';
 import { formatEUR, formatSignedEUR } from './lib/format';
 import { MovementSearch } from './components/MovementSearch';
@@ -844,15 +844,30 @@ const App: React.FC = () => {
                 restitution={data.parentalRestitution}
                 onDeleteMovement={handleDeleteMovement}
                 onRevertRate={(accountId, entryDate) => {
-                  // Dernier changement de taux annulé : retour au taux qui courait avant.
+                  // Annule le changement de taux sur TOUT le groupe changé ensemble (Livret A et
+                  // LDDS), remet le rappel de révision et propose de revenir en arrière.
+                  const source = data.accounts.find(a => a.id === accountId);
+                  const group = REGULATED_RATE_GROUPS.find(g => source && g.types.includes(source.type));
+                  const ids = data.accounts
+                    .filter(a => a.id === accountId || (group && group.types.includes(a.type) && (a.rateHistory || []).some(h => h.date === entryDate)))
+                    .map(a => a.id);
+                  const before = data.accounts.filter(a => ids.includes(a.id)).map(a => ({ id: a.id, interestRate: a.interestRate, rateHistory: a.rateHistory, rateReviewedAt: a.rateReviewedAt }));
                   data.setAccounts(prev => prev.map(a => {
-                    if (a.id !== accountId) return a;
+                    if (!ids.includes(a.id)) return a;
                     const entry = (a.rateHistory || []).find(h => h.date === entryDate);
                     if (!entry) return a;
                     const rest = (a.rateHistory || []).filter(h => h !== entry);
-                    return { ...a, interestRate: entry.rate, rateHistory: rest.length > 0 ? rest : undefined };
+                    return { ...a, interestRate: entry.rate, rateHistory: rest.length > 0 ? rest : undefined,
+                      rateReviewedAt: a.rateReviewedAt && a.rateReviewedAt >= entryDate ? undefined : a.rateReviewedAt };
                   }));
-                  addToast({ message: 'Changement de taux annulé', kind: 'success' });
+                  addToast({
+                    message: ids.length > 1 ? `Changement de taux annulé (${ids.length} comptes)` : 'Changement de taux annulé',
+                    kind: 'success',
+                    action: { label: 'Rétablir', onClick: () => data.setAccounts(prev => prev.map(a => {
+                      const b = before.find(x => x.id === a.id);
+                      return b ? { ...a, interestRate: b.interestRate, rateHistory: b.rateHistory, rateReviewedAt: b.rateReviewedAt } : a;
+                    })) },
+                  });
                 }}
             />}
             {view === 'agenda' && <Agenda data={fullData} onOpen={(v) => VALID_VIEWS.includes(v as View) && setView(v as View)} />}

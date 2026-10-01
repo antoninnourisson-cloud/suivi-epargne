@@ -28,7 +28,7 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
   // `dirty` : saisi par l'utilisateur. Les brouillons NON modifiés suivent les comptes en
   // direct (un ajout rapide fait pendant que l'écran est ouvert n'est plus écrasé par un
   // ancien solde au moment d'enregistrer).
-  type Draft = { owned: string, parental: string, date: string, deposits: string, cashFlow: number, bankTotal?: string, dirty?: boolean };
+  type Draft = { owned: string, parental: string, date: string, deposits: string, cashFlow: number, bankTotal?: string, touched?: string[] };
   const draftFrom = (account: SavingsAccount): Draft => ({
     owned: toInputAmount(account.ownedAmount),
     parental: toInputAmount(account.parentalCapital),
@@ -38,15 +38,29 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
   });
   const [updates, setUpdatesRaw] = useState<Record<string, Draft>>(() =>
     Object.fromEntries(accounts.map(a => [a.id, draftFrom(a)])));
-  // Toute modification passe par ici : le brouillon touché devient « sale ».
+  // Toute modification passe par ici : on retient CHAMP PAR CHAMP ce que l'utilisateur a
+  // saisi. Les champs non touchés suivent les comptes en direct (changer seulement la date
+  // n'empêche plus un ajout rapide d'être pris en compte).
+  const FIELDS = ['owned', 'parental', 'date', 'deposits', 'cashFlow', 'bankTotal'] as const;
   const setUpdates = (fn: (prev: Record<string, Draft>) => Record<string, Draft>) =>
     setUpdatesRaw(prev => {
       const next = fn(prev);
-      for (const id of Object.keys(next)) if (next[id] !== prev[id]) next[id] = { ...next[id], dirty: true };
+      for (const id of Object.keys(next)) {
+        if (next[id] === prev[id]) continue;
+        const changed = FIELDS.filter(f => next[id][f] !== prev[id]?.[f]);
+        next[id] = { ...next[id], touched: [...new Set([...(prev[id]?.touched || []), ...changed])] };
+      }
       return next;
     });
   useEffect(() => {
-    setUpdatesRaw(prev => Object.fromEntries(accounts.map(a => [a.id, prev[a.id]?.dirty ? prev[a.id] : draftFrom(a)])));
+    setUpdatesRaw(prev => Object.fromEntries(accounts.map(a => {
+      const fresh = draftFrom(a);
+      const d = prev[a.id];
+      if (!d?.touched?.length) return [a.id, fresh];
+      const merged: Draft = { ...fresh, touched: d.touched };
+      for (const f of d.touched) (merged as any)[f] = (d as any)[f];
+      return [a.id, merged];
+    })));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accounts]);
 
@@ -163,7 +177,7 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
     onUpdateAccountsComplex(payloads);
     // Brouillons remis à zéro : un second « Enregistrer » ne rejoue pas les versements
     // (le flux d'argent `cashFlow` aurait été compté deux fois).
-    setUpdatesRaw(prev => Object.fromEntries(Object.entries(prev).map(([id, d]) => [id, { ...d, cashFlow: 0, dirty: false }])));
+    setUpdatesRaw(prev => Object.fromEntries(Object.entries(prev).map(([id, d]) => [id, { ...d, cashFlow: 0, touched: [] }])));
   };
 
   if (accounts.length === 0) {
@@ -204,7 +218,7 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
           const diffParental = Math.round((safeNumber(u.parental, 0) - account.parentalCapital) * 100) / 100;
           const depositsDraft = parseDeposits(u.deposits);
           const depositsChanged = tracksDeposits(account.type) && depositsDraft !== null && depositsDraft !== account.totalDeposits;
-          const isChanged = diffOwned !== 0 || diffParental !== 0 || u.date !== today || depositsChanged;
+          const isChanged = diffOwned !== 0 || diffParental !== 0 || depositsChanged;
 
           return (
             <div key={account.id} className={`bg-white dark:bg-slate-800 p-6 rounded-2xl border transition-all ${isChanged ? 'border-indigo-400 shadow-lg ring-1 ring-indigo-400/10' : 'border-slate-200 dark:border-slate-700 shadow-sm'}`}>

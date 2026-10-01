@@ -41,7 +41,9 @@ export const PayChecklist: React.FC<PayChecklistProps> = ({
   // Liste créée avant ce correctif, au 1er du mois calendaire suivant (ex. « octobre »
   // pour la paie du 27 septembre) : on la rattache à la bonne paie, une seule fois.
   useEffect(() => {
-    if (checklist && checklist.month > month) onChange({ ...checklist, month });
+    const [y, m] = month.split('-').map(Number);
+    const nextKey = `${m === 12 ? y + 1 : y}-${String(m === 12 ? 1 : m + 1).padStart(2, '0')}`;
+    if (checklist && checklist.month === nextKey) onChange({ ...checklist, month });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [checklist?.month, month]);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
@@ -167,7 +169,7 @@ export const PayChecklist: React.FC<PayChecklistProps> = ({
       </div>
 
       {shortfall > 0 && (
-        <p className="mt-3 text-xs font-bold text-rose-600 flex items-center gap-1"><Info className="w-3.5 h-3.5" /> Il manque {formatEUR(shortfall)} : les virements dépassent la paie.</p>
+        <p className="mt-3 text-xs font-bold text-rose-600 flex items-center gap-1"><Info className="w-3.5 h-3.5" /> Il manque {formatEUR(shortfall)} : les virements et l'épargne prévus dépassent la paie.</p>
       )}
       {frozen && doneCount === 0 && (
         <button type="button" onClick={() => onChange(undefined)} className="mt-3 text-xs font-bold text-indigo-600 hover:underline flex items-center gap-1">

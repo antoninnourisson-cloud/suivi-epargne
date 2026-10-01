@@ -466,7 +466,7 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
               transfers={payTransfers}
               steps={strategy}
               totalToInvest={budgetData.totalToInvest}
-              shortfall={budgetData.finalCapacity < 0 ? -budgetData.finalCapacity : 0}
+              shortfall={Math.max(0, -budgetData.finalCapacity, -budgetData.theoreticalCapacity, paydayAmount !== undefined && manualSavingsCapacity === null ? paydayAmount - Math.max(0, budgetData.theoreticalCapacity) : 0)}
               checklist={payChecklist}
               onChange={onPayChecklistChange}
               onRecordDeposit={onRecordPayDeposit}
