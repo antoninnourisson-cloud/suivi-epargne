@@ -337,7 +337,7 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
                         <button type="button" onClick={() => applyAdjust(account.id)} className="px-3 py-2 rounded-lg bg-slate-800 dark:bg-slate-100 text-white dark:text-slate-900 text-xs font-black hover:opacity-90">Appliquer</button>
                       </div>
                       {adjustErrors[account.id] && (
-                        <p className="mt-2 text-[11px] font-bold text-rose-600 dark:text-rose-400">{adjustErrors[account.id]}</p>
+                        <p className="mt-2 text-[11px] font-bold text-rose-700 dark:text-rose-400">{adjustErrors[account.id]}</p>
                       )}
                     </div>
                   );

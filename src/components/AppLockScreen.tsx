@@ -89,7 +89,7 @@ export const AppLockScreen: React.FC<AppLockScreenProps> = ({ onUnlock }) => {
         {biometricOn && (
           <>
             {failed && (
-              <div className="mb-4 flex items-center gap-2 justify-center text-sm font-bold text-rose-600 dark:text-rose-400">
+              <div className="mb-4 flex items-center gap-2 justify-center text-sm font-bold text-rose-700 dark:text-rose-400">
                 <AlertTriangle className="w-4 h-4 flex-shrink-0" /> Vérification annulée ou échouée.
               </div>
             )}
@@ -119,7 +119,7 @@ export const AppLockScreen: React.FC<AppLockScreenProps> = ({ onUnlock }) => {
               ))}
             </div>
             {pinError && (
-              <p className="mb-3 text-xs font-bold text-rose-600 dark:text-rose-400">
+              <p className="mb-3 text-xs font-bold text-rose-700 dark:text-rose-400">
                 {cooldown > 0 ? `Code incorrect. Réessayez dans ${cooldown} s.` : 'Code incorrect.'}
               </p>
             )}

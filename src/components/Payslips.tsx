@@ -233,7 +233,7 @@ export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, 
           )}
 
           {draft.status === 'error' && (
-            <div className="text-sm text-rose-600 dark:text-rose-400 flex items-start gap-2">
+            <div className="text-sm text-rose-700 dark:text-rose-400 flex items-start gap-2">
               <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
               <div>
                 {draft.error}

@@ -238,7 +238,7 @@ export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parent
                     <div>
                         <p className="font-bold text-slate-800 dark:text-slate-100 text-sm">Verrou biométrique</p>
                         <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 max-w-md">Face ID / empreinte / Windows Hello à chaque ouverture de l'app.</p>
-                        {lockError && <p className="text-[11px] text-rose-600 dark:text-rose-400 mt-2 font-bold">{lockError}</p>}
+                        {lockError && <p className="text-[11px] text-rose-700 dark:text-rose-400 mt-2 font-bold">{lockError}</p>}
                     </div>
                     <button
                         onClick={toggleBiometric}
@@ -279,7 +279,7 @@ export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parent
                         <button onClick={() => { setSettingPin(false); setPinDraft(''); setPinError(null); }} className="px-3 py-2 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 rounded-lg font-bold text-sm">Annuler</button>
                     </div>
                 )}
-                {pinError && <p className="text-[11px] text-rose-600 dark:text-rose-400 mt-2 font-bold">{pinError}</p>}
+                {pinError && <p className="text-[11px] text-rose-700 dark:text-rose-400 mt-2 font-bold">{pinError}</p>}
             </div>
         </div>
 
@@ -311,14 +311,14 @@ export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parent
                        <div className="space-y-2">
                            <div><label className="text-[11px] font-bold text-slate-500 dark:text-slate-400">Prix de base mensuel (€)</label><NumberInput ariaLabel="Prix de base mensuel (€)" value={localBenefits.navigo.basePrice} onChange={v => updateBenefit('navigo', 'basePrice', v)} className="w-full p-2 rounded border border-indigo-200 dark:border-indigo-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100" /></div>
                            <div><label className="text-[11px] font-bold text-slate-500 dark:text-slate-400">Remboursement (%)</label><NumberInput ariaLabel="Remboursement (%)" value={localBenefits.navigo.refundRate} onChange={v => updateBenefit('navigo', 'refundRate', v)} className="w-full p-2 rounded border border-indigo-200 dark:border-indigo-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100" /></div>
-                           <p className="text-[11px] text-emerald-600 dark:text-emerald-400 text-right mt-1">+{formatEUR(localBenefits.navigo.basePrice * localBenefits.navigo.refundRate / 100, 2)}/mois (gain)</p>
+                           <p className="text-[11px] text-emerald-700 dark:text-emerald-400 text-right mt-1">+{formatEUR(localBenefits.navigo.basePrice * localBenefits.navigo.refundRate / 100, 2)}/mois (gain)</p>
                        </div>
                    )}
                </div>
 
                {/* MUTUELLE */}
                <div className="bg-rose-50 dark:bg-rose-950/40 p-4 rounded-xl border border-rose-100 dark:border-rose-900">
-                   <label className="flex items-center gap-2 font-black text-xs uppercase text-rose-600 dark:text-rose-300 mb-3 cursor-pointer">
+                   <label className="flex items-center gap-2 font-black text-xs uppercase text-rose-700 dark:text-rose-300 mb-3 cursor-pointer">
                        <input type="checkbox" checked={localBenefits.mutuelle.active} onChange={e => updateBenefit('mutuelle', 'active', e.target.checked)} className="accent-rose-600"/>
                        Mutuelle santé
                    </label>
@@ -326,14 +326,14 @@ export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parent
                        <div className="space-y-2">
                            <div><label className="text-[11px] font-bold text-slate-500 dark:text-slate-400">Coût total du contrat (€)</label><NumberInput ariaLabel="Coût total du contrat (€)" value={localBenefits.mutuelle.totalCost} onChange={v => updateBenefit('mutuelle', 'totalCost', v)} className="w-full p-2 rounded border border-rose-200 dark:border-rose-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100" /></div>
                            <div><label className="text-[11px] font-bold text-slate-500 dark:text-slate-400">Prise en charge employeur (%)</label><NumberInput ariaLabel="Prise en charge employeur (%)" value={localBenefits.mutuelle.employerRate} onChange={v => updateBenefit('mutuelle', 'employerRate', v)} className="w-full p-2 rounded border border-rose-200 dark:border-rose-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100" /></div>
-                           <p className="text-[11px] text-rose-600 dark:text-rose-400 text-right mt-1">−{formatEUR(localBenefits.mutuelle.totalCost * (1 - localBenefits.mutuelle.employerRate/100), 2)}/mois (coût)</p>
+                           <p className="text-[11px] text-rose-700 dark:text-rose-400 text-right mt-1">−{formatEUR(localBenefits.mutuelle.totalCost * (1 - localBenefits.mutuelle.employerRate/100), 2)}/mois (coût)</p>
                        </div>
                    )}
                </div>
 
                {/* TICKETS RESTO */}
                <div className="bg-emerald-50 dark:bg-emerald-950/40 p-4 rounded-xl border border-emerald-100 dark:border-emerald-900">
-                   <label className="flex items-center gap-2 font-black text-xs uppercase text-emerald-600 dark:text-emerald-300 mb-3 cursor-pointer">
+                   <label className="flex items-center gap-2 font-black text-xs uppercase text-emerald-700 dark:text-emerald-300 mb-3 cursor-pointer">
                        <input type="checkbox" checked={localBenefits.mealVouchers.active} onChange={e => updateBenefit('mealVouchers', 'active', e.target.checked)} className="accent-emerald-600"/>
                        Titres-restaurant
                    </label>
@@ -344,7 +344,7 @@ export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parent
                                <div><label className="text-[11px] font-bold text-slate-500 dark:text-slate-400">Jours par mois</label><NumberInput ariaLabel="Jours par mois" value={localBenefits.mealVouchers.daysPerMonth} onChange={v => updateBenefit('mealVouchers', 'daysPerMonth', v)} className="w-full p-2 rounded border border-emerald-200 dark:border-emerald-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100" /></div>
                            </div>
                            <div><label className="text-[11px] font-bold text-slate-500 dark:text-slate-400">Prise en charge employeur (%)</label><NumberInput ariaLabel="Prise en charge employeur (%)" value={localBenefits.mealVouchers.employerRate} onChange={v => updateBenefit('mealVouchers', 'employerRate', v)} className="w-full p-2 rounded border border-emerald-200 dark:border-emerald-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100" /></div>
-                           <p className="text-[11px] text-emerald-600 dark:text-emerald-400 text-right mt-1">−{formatEUR(localBenefits.mealVouchers.faceValue * localBenefits.mealVouchers.daysPerMonth * (1 - localBenefits.mealVouchers.employerRate/100), 2)}/mois (coût)</p>
+                           <p className="text-[11px] text-emerald-700 dark:text-emerald-400 text-right mt-1">−{formatEUR(localBenefits.mealVouchers.faceValue * localBenefits.mealVouchers.daysPerMonth * (1 - localBenefits.mealVouchers.employerRate/100), 2)}/mois (coût)</p>
                        </div>
                    )}
                </div>
@@ -383,7 +383,7 @@ export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parent
           <h3 className="font-bold text-slate-800 dark:text-slate-100 mb-4 border-b border-slate-200 dark:border-slate-700 pb-2 flex items-center gap-2"><PiggyBank className="w-4 h-4 text-indigo-600" /> Plafonds des livrets (€)</h3>
           <div className="grid grid-cols-2 gap-4">
               <div><label className="text-[11px] text-indigo-600 dark:text-indigo-300 font-black uppercase">Livret A</label><NumberInput ariaLabel="Livret A" value={localFiscal.ceilings.livretA} onChange={v => handleCeilingChange('livretA', v)} className="w-full p-2 bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900 rounded font-bold text-slate-800 dark:text-slate-100" /></div>
-              <div><label className="text-[11px] text-rose-600 dark:text-rose-300 font-black uppercase">LEP</label><NumberInput ariaLabel="LEP" value={localFiscal.ceilings.lep} onChange={v => handleCeilingChange('lep', v)} className="w-full p-2 bg-rose-50 dark:bg-rose-950/40 border border-rose-100 dark:border-rose-900 rounded font-bold text-slate-800 dark:text-slate-100" /></div>
+              <div><label className="text-[11px] text-rose-700 dark:text-rose-300 font-black uppercase">LEP</label><NumberInput ariaLabel="LEP" value={localFiscal.ceilings.lep} onChange={v => handleCeilingChange('lep', v)} className="w-full p-2 bg-rose-50 dark:bg-rose-950/40 border border-rose-100 dark:border-rose-900 rounded font-bold text-slate-800 dark:text-slate-100" /></div>
           </div>
         </div>
 

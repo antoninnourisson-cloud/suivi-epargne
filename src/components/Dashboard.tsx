@@ -592,7 +592,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
         <div className="col-span-2"><StatCard title="Contrainte fiscale" amount={availabilityStats.taxLocked} icon={Euro} color="bg-amber-500" subtext="AV/PEA récents" extra={availabilityStats.taxLocked > 0 && (
           <div className="mt-2 space-y-0.5 text-[11px] text-slate-600 dark:text-slate-300">
             {unlockCost.extraTax >= 1 && <p>Tout retirer aujourd'hui : <b>≈ {formatEUR(unlockCost.extraTax, 0)}</b> d'impôt en plus qu'après la maturité.</p>}
-            {unlockCost.closesPea && <p className="text-rose-600 dark:text-rose-400 font-bold">Un retrait clôturerait votre PEA.</p>}
+            {unlockCost.closesPea && <p className="text-rose-700 dark:text-rose-400 font-bold">Un retrait clôturerait votre PEA.</p>}
             {unlockCost.nextFree && <p>Libre de surcoût le <b>{parseISODate(unlockCost.nextFree.date).toLocaleDateString('fr-FR')}</b> ({unlockCost.nextFree.name}).</p>}
             {unlockCost.unknown.length > 0 && <p className="text-slate-500 dark:text-slate-400">Versements à renseigner pour chiffrer : {unlockCost.unknown.join(', ')}.</p>}
           </div>

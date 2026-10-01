@@ -314,7 +314,7 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
             )}
 
             {activePayslip && display.effectiveMonthlyTax === undefined && (
-              <div className="mb-4 text-xs text-rose-600 dark:text-rose-400 font-bold flex items-center gap-2">
+              <div className="mb-4 text-xs text-rose-700 dark:text-rose-400 font-bold flex items-center gap-2">
                 <Info className="w-3.5 h-3.5 flex-shrink-0" />
                 Cette fiche n'a pas encore l'impôt réellement prélevé / le net payé (extraite avant l'ajout de ces champs) : "Net réel perçu" affiche "—" plutôt qu'une estimation. Réimportez-la depuis Drive pour compléter.
               </div>
@@ -329,13 +329,13 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
                   : <NumberInput value={Math.round(autoValues.grossMonth)} onChange={updateFromGrossMonth} min={0} className="w-full bg-transparent font-black text-slate-800 dark:text-slate-100 text-lg outline-none" />}
               </div>
               <div className="bg-indigo-50 dark:bg-indigo-950/40 p-3 rounded-xl border border-indigo-100 dark:border-indigo-900">
-                <label className="text-[11px] font-black text-indigo-400 dark:text-indigo-400 uppercase">Net avant impôt</label>
+                <label className="text-[11px] font-black text-indigo-600 dark:text-indigo-400 uppercase">Net avant impôt</label>
                 {activePayslip
                   ? <p className="font-black text-indigo-700 dark:text-indigo-300 text-lg">{showEUR(display.netBeforeTax)}</p>
                   : <NumberInput value={Math.round(autoValues.netBeforeTax * 100)/100} onChange={updateFromNet} min={0} className="w-full bg-transparent font-black text-indigo-700 dark:text-indigo-300 text-lg outline-none" />}
               </div>
               <div className="bg-emerald-50 dark:bg-emerald-950/40 p-3 rounded-xl border border-emerald-100 dark:border-emerald-900 relative">
-                <label className="text-[11px] font-black text-emerald-600 dark:text-emerald-400 uppercase flex items-center gap-1">{activePayslip ? 'Net réel perçu' : 'Super net (Poche)'} <Info className="w-3 h-3 cursor-pointer" onClick={() => setShowDetails(!showDetails)}/></label>
+                <label className="text-[11px] font-black text-emerald-700 dark:text-emerald-400 uppercase flex items-center gap-1">{activePayslip ? 'Net réel perçu' : 'Super net (Poche)'} <Info className="w-3 h-3 cursor-pointer" onClick={() => setShowDetails(!showDetails)}/></label>
                 <p className="font-black text-emerald-700 dark:text-emerald-300 text-2xl">{showEUR(effectiveSuperNet)}</p>
               </div>
             </div>
