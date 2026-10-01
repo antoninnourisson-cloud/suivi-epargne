@@ -50,8 +50,8 @@ export const SavingsSplitEditor: React.FC<Props> = ({ accounts, split, from, sam
     <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-700 space-y-3">
       <p className="text-sm font-bold text-slate-700 dark:text-slate-200 flex items-center gap-2"><PieChart className="w-4 h-4 text-indigo-600" /> Répartition de l'épargne</p>
       <div className="flex rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 w-fit" role="group" aria-label="Mode de répartition">
-        <button type="button" onClick={() => onChange(undefined, undefined)} aria-pressed={!custom} className={`px-3 py-2 text-xs font-black${!custom ? 'bg-indigo-600 text-white' : 'bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}>Automatique</button>
-        <button type="button" onClick={() => !custom && enableCustom()} aria-pressed={custom} className={`px-3 py-2 text-xs font-black${custom ? 'bg-indigo-600 text-white' : 'bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}>Personnalisée</button>
+        <button type="button" onClick={() => onChange(undefined, undefined)} aria-pressed={!custom} className={`px-3 py-2 text-xs font-black ${!custom ? 'bg-indigo-600 text-white' : 'bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}>Automatique</button>
+        <button type="button" onClick={() => !custom && enableCustom()} aria-pressed={custom} className={`px-3 py-2 text-xs font-black ${custom ? 'bg-indigo-600 text-white' : 'bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}>Personnalisée</button>
       </div>
 
       {missingSplitAccounts(split, accounts).length > 0 && (
@@ -97,7 +97,7 @@ export const SavingsSplitEditor: React.FC<Props> = ({ accounts, split, from, sam
             {split!.length < eligible.length && (
               <button type="button" onClick={() => setRows([...split!, { accountId: eligible.find(a => !split!.some(r => r.accountId === a.id))!.id, pct: 0 }])} className="text-xs font-bold text-indigo-600 dark:text-indigo-300 hover:underline flex items-center gap-1"><Plus className="w-3 h-3" /> Ajouter un compte</button>
             )}
-            <span className={`text-xs font-bold${Math.abs(total - 100) < 0.01 ? 'text-emerald-600' : 'text-amber-600'}`}>
+            <span className={`text-xs font-bold ${Math.abs(total - 100) < 0.01 ? 'text-emerald-600' : 'text-amber-600'}`}>
               Total : {total.toLocaleString('fr-FR')} %{Math.abs(total - 100) >= 0.01 && ' (ramené à 100 % dans le calcul)'}
             </span>
           </div>

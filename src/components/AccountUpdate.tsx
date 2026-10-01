@@ -221,7 +221,7 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
           const isChanged = diffOwned !== 0 || diffParental !== 0 || depositsChanged;
 
           return (
-            <div key={account.id} className={`bg-white dark:bg-slate-800 p-6 rounded-2xl border transition-all${isChanged ? 'border-indigo-400 shadow-lg ring-1 ring-indigo-400/10' : 'border-slate-200 dark:border-slate-700 shadow-sm'}`}>
+            <div key={account.id} className={`bg-white dark:bg-slate-800 p-6 rounded-2xl border transition-all ${isChanged ? 'border-indigo-400 shadow-lg ring-1 ring-indigo-400/10' : 'border-slate-200 dark:border-slate-700 shadow-sm'}`}>
               <div className="flex justify-between items-start mb-6">
                 <div>
                   <h4 className="font-black text-slate-900 dark:text-slate-100 text-lg leading-tight">{account.name}</h4>
@@ -248,7 +248,7 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
                     className="w-full bg-transparent text-lg font-black text-indigo-900 dark:text-indigo-200 outline-none"
                   />
                   {diffOwned !== 0 && (
-                    <div className={`text-[11px] mt-1 font-bold${diffOwned > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                    <div className={`text-[11px] mt-1 font-bold ${diffOwned > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
                       {formatSignedEUR(diffOwned, 2)}
                     </div>
                   )}
@@ -276,7 +276,7 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
                     className="w-full bg-transparent text-lg font-black text-amber-900 dark:text-amber-200 outline-none"
                   />
                   {diffParental !== 0 && (
-                    <div className={`text-[11px] mt-1 font-bold${diffParental > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                    <div className={`text-[11px] mt-1 font-bold ${diffParental > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
                       {formatSignedEUR(diffParental, 2)}
                     </div>
                   )}

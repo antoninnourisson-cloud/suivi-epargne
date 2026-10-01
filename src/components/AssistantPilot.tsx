@@ -294,8 +294,8 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
   return (
     <div className="space-y-8 animate-fade-in pb-20">
       <div className="flex gap-4 border-b border-slate-200 dark:border-slate-700">
-        <button onClick={() => setActiveTab('budget')} className={`pb-2 px-4 font-bold text-sm${activeTab === 'budget' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-500 dark:text-slate-400'}`}>Pilotage budgétaire</button>
-        <button onClick={() => setActiveTab('fiscal')} className={`pb-2 px-4 font-bold text-sm${activeTab === 'fiscal' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-500 dark:text-slate-400'}`}>Horloge fiscale</button>
+        <button onClick={() => setActiveTab('budget')} className={`pb-2 px-4 font-bold text-sm ${activeTab === 'budget' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-500 dark:text-slate-400'}`}>Pilotage budgétaire</button>
+        <button onClick={() => setActiveTab('fiscal')} className={`pb-2 px-4 font-bold text-sm ${activeTab === 'fiscal' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-500 dark:text-slate-400'}`}>Horloge fiscale</button>
       </div>
 
       {activeTab === 'budget' && (
@@ -526,10 +526,10 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
             </div>
           </div>
 
-          <div className={`p-8 rounded-3xl border-2 shadow-sm text-center transition-colors${survival.bg} ${survival.border}`}>
+          <div className={`p-8 rounded-3xl border-2 shadow-sm text-center transition-colors ${survival.bg} ${survival.border}`}>
             <h3 className="text-sm font-black uppercase tracking-widest opacity-60 mb-4 flex justify-center items-center gap-2"><Hourglass className="w-4 h-4" /> Durée de Survie</h3>
-            <div className={`text-6xl font-black${survival.color} mb-2`}>{survival.infinite ? '∞' : <>{survival.years > 0 && <span>{survival.years}a </span>}{survival.months}m {survival.days}j</>}</div>
-            <p className={`font-bold${survival.color} opacity-80`}>{survival.infinite ? 'Aucune charge fixe renseignée' : `Avec ${formatEUR(survival.monthlyBurn)} de charges fixes / mois`}</p>
+            <div className={`text-6xl font-black ${survival.color} mb-2`}>{survival.infinite ? '∞' : <>{survival.years > 0 && <span>{survival.years}a </span>}{survival.months}m {survival.days}j</>}</div>
+            <p className={`font-bold ${survival.color} opacity-80`}>{survival.infinite ? 'Aucune charge fixe renseignée' : `Avec ${formatEUR(survival.monthlyBurn)} de charges fixes / mois`}</p>
           </div>
         </>
       )}
@@ -553,7 +553,7 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
                 </div>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {fiscalClock.map((item: any) => (<div key={item.id} className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm relative overflow-hidden"><div className={`absolute top-0 right-0 p-16 opacity-5 rounded-full -mr-8 -mt-8${item.isAvailable ? 'bg-emerald-500' : 'bg-indigo-500'}`}></div><div className="flex justify-between items-start mb-4"><div className={`p-3 rounded-xl${item.isAvailable ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}>{item.isAvailable ? <Unlock className="w-6 h-6" /> : <Lock className="w-6 h-6" />}</div><span className="text-[11px] font-black uppercase bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded text-slate-500 dark:text-slate-400">{item.type}</span></div><h4 className="font-bold text-slate-800 dark:text-slate-100 text-lg mb-1">{item.name}</h4><div className="border-t border-slate-100 dark:border-slate-800 pt-4 mt-4"><div className="flex justify-between items-end"><div><p className="text-[11px] text-slate-500 dark:text-slate-400 uppercase font-bold">Échéance</p><p className="font-bold text-slate-700 dark:text-slate-200">{item.date}</p></div><div className={`text-right font-black text-xl${item.isAvailable ? 'text-emerald-500' : 'text-indigo-600'}`}>{item.timeLeft}</div></div></div></div>))}
+                {fiscalClock.map((item: any) => (<div key={item.id} className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm relative overflow-hidden"><div className={`absolute top-0 right-0 p-16 opacity-5 rounded-full -mr-8 -mt-8 ${item.isAvailable ? 'bg-emerald-500' : 'bg-indigo-500'}`}></div><div className="flex justify-between items-start mb-4"><div className={`p-3 rounded-xl ${item.isAvailable ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}>{item.isAvailable ? <Unlock className="w-6 h-6" /> : <Lock className="w-6 h-6" />}</div><span className="text-[11px] font-black uppercase bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded text-slate-500 dark:text-slate-400">{item.type}</span></div><h4 className="font-bold text-slate-800 dark:text-slate-100 text-lg mb-1">{item.name}</h4><div className="border-t border-slate-100 dark:border-slate-800 pt-4 mt-4"><div className="flex justify-between items-end"><div><p className="text-[11px] text-slate-500 dark:text-slate-400 uppercase font-bold">Échéance</p><p className="font-bold text-slate-700 dark:text-slate-200">{item.date}</p></div><div className={`text-right font-black text-xl ${item.isAvailable ? 'text-emerald-500' : 'text-indigo-600'}`}>{item.timeLeft}</div></div></div></div>))}
               </div>
             </>
           ) : (

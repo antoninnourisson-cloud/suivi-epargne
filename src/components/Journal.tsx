@@ -92,7 +92,7 @@ export const Journal: React.FC<Props> = ({ accounts, restitution, onDeleteMoveme
 
   const seg = (f: Filter, label: string) => (
     <button type="button" onClick={() => { setFilter(f); setLimit(PAGE); }} aria-pressed={filter === f}
-      className={`px-3 py-2 text-xs font-bold${filter === f ? 'bg-indigo-600 text-white' : 'bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}>{label}</button>
+      className={`px-3 py-2 text-xs font-bold ${filter === f ? 'bg-indigo-600 text-white' : 'bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}>{label}</button>
   );
 
   return (
@@ -145,12 +145,12 @@ export const Journal: React.FC<Props> = ({ accounts, restitution, onDeleteMoveme
             <span className="flex-1 min-w-0">
               <span className="block text-sm font-bold text-slate-800 dark:text-slate-100 truncate">{e.title}</span>
               <span className="flex flex-wrap items-center gap-1.5 mt-0.5">
-                <span className={`text-[11px] font-black px-1.5 py-0.5 rounded${BADGE[e.kind].cls}`}>{BADGE[e.kind].label}</span>
+                <span className={`text-[11px] font-black px-1.5 py-0.5 rounded ${BADGE[e.kind].cls}`}>{BADGE[e.kind].label}</span>
                 {e.account && <span className="text-[11px] text-slate-500 dark:text-slate-400 truncate">{e.account.name}</span>}
               </span>
             </span>
             {e.amount !== undefined && (
-              <span className={`font-mono font-bold text-sm flex-shrink-0${e.amount >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>{e.amount >= 0 ? '+' : '−'}{formatEUR(Math.abs(e.amount))}</span>
+              <span className={`font-mono font-bold text-sm flex-shrink-0 ${e.amount >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>{e.amount >= 0 ? '+' : '−'}{formatEUR(Math.abs(e.amount))}</span>
             )}
             {e.movementId && e.account && (
               <button type="button" onClick={() => onDeleteMovement(e.account!.id, e.movementId!)} aria-label={`Supprimer « ${e.title} »`} className="p-2 text-slate-400 hover:text-rose-500 flex-shrink-0"><Trash2 className="w-4 h-4" /></button>

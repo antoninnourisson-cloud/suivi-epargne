@@ -242,7 +242,7 @@ export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parent
                     </div>
                     <button
                         onClick={toggleBiometric}
-                        className={`flex-shrink-0 px-4 py-2 rounded-xl font-bold text-sm${biometricOn ? 'bg-emerald-600 hover:bg-emerald-700 text-white' : 'bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200'}`}
+                        className={`flex-shrink-0 px-4 py-2 rounded-xl font-bold text-sm ${biometricOn ? 'bg-emerald-600 hover:bg-emerald-700 text-white' : 'bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200'}`}
                     >
                         {biometricOn ? 'Activé' : 'Désactivé'}
                     </button>
@@ -257,7 +257,7 @@ export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parent
                     </div>
                     <button
                         onClick={togglePin}
-                        className={`flex-shrink-0 px-4 py-2 rounded-xl font-bold text-sm${pinOn ? 'bg-emerald-600 hover:bg-emerald-700 text-white' : 'bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200'}`}
+                        className={`flex-shrink-0 px-4 py-2 rounded-xl font-bold text-sm ${pinOn ? 'bg-emerald-600 hover:bg-emerald-700 text-white' : 'bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200'}`}
                     >
                         {pinOn ? 'Activé' : 'Désactivé'}
                     </button>

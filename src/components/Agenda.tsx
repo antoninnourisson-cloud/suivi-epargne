@@ -55,7 +55,7 @@ export const Agenda: React.FC<AgendaProps> = ({ data, onOpen }) => {
     return (
       <li>
         <button type="button" onClick={() => e.view && onOpen(e.view)} className="w-full flex items-center gap-3 py-2.5 text-left hover:bg-slate-50 dark:hover:bg-slate-700/40 rounded-lg px-2 -mx-2">
-          <span className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0${COLORS[e.kind]}`}><Icon className="w-4 h-4 text-white" /></span>
+          <span className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${COLORS[e.kind]}`}><Icon className="w-4 h-4 text-white" /></span>
           <span className="w-16 flex-shrink-0 text-xs font-black text-slate-500 dark:text-slate-400 leading-tight">
             {frenchDay(d).split(' ')[0]} {d.toLocaleDateString('fr-FR', { month: 'short' })}
             <span className="block font-bold text-[11px]">{when(e.date)}</span>
@@ -65,7 +65,7 @@ export const Agenda: React.FC<AgendaProps> = ({ data, onOpen }) => {
             {e.detail && <span className="block text-[11px] text-slate-500 dark:text-slate-400 truncate">{e.detail}</span>}
           </span>
           {e.amount !== undefined && (
-            <span className={`font-mono font-bold text-sm flex-shrink-0${e.kind === 'subscription' ? 'text-rose-600' : e.kind === 'payday' ? 'text-emerald-600' : 'text-slate-700 dark:text-slate-200'}`}>
+            <span className={`font-mono font-bold text-sm flex-shrink-0 ${e.kind === 'subscription' ? 'text-rose-600' : e.kind === 'payday' ? 'text-emerald-600' : 'text-slate-700 dark:text-slate-200'}`}>
               {e.kind === 'recurring' ? formatSignedEUR(e.amount) : formatEUR(e.amount)}
             </span>
           )}

@@ -352,7 +352,7 @@ export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, 
                 {[...payslips].sort((a, b) => (b.extracted.period || '').localeCompare(a.extracted.period || '')).map(p => {
                   const isActive = p.id === activePayslipId;
                   return (
-                  <tr key={p.id} className={`hover:bg-slate-50 dark:hover:bg-slate-800${isActive ? 'bg-amber-50/60 dark:bg-amber-950/20' : ''}`}>
+                  <tr key={p.id} className={`hover:bg-slate-50 dark:hover:bg-slate-800 ${isActive ? 'bg-amber-50/60 dark:bg-amber-950/20' : ''}`}>
                     <td className="px-3 sm:px-6 py-3">
                       <div className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
                         {p.extracted.period ? formatPeriod(p.extracted.period) : '—'}

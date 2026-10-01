@@ -420,7 +420,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
           {subtext && <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 uppercase font-bold tracking-wide">{subtext}</p>}
           {extra}
         </div>
-        <div className={`hidden 2xl:block p-3 rounded-lg${color}`}>
+        <div className={`hidden 2xl:block p-3 rounded-lg ${color}`}>
           <Icon className="w-6 h-6 text-white" />
         </div>
       </div>
@@ -458,7 +458,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
               <ListTodo className="w-4 h-4 text-indigo-600" /> À faire
               <span className="px-2 py-0.5 rounded-full bg-indigo-600 text-white text-[11px] font-black">{todoCount}</span>
             </span>
-            <ChevronDown className={`w-4 h-4 text-slate-500 dark:text-slate-400 transition-transform${todoOpen ? 'rotate-180' : ''}`} />
+            <ChevronDown className={`w-4 h-4 text-slate-500 dark:text-slate-400 transition-transform ${todoOpen ? 'rotate-180' : ''}`} />
           </button>
           {todoOpen && (
             <div className="px-4 pb-4 space-y-2">
@@ -481,7 +481,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
       ))}
 
       {lepStatus && lepStatus.status !== 'ok' && (
-        <div className={`flex items-start gap-3 p-3 rounded-xl border text-sm font-bold${lepStatus.status === 'exceeded' ? 'bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-900 text-rose-800 dark:text-rose-300' : 'bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-900 text-amber-800 dark:text-amber-300'}`}>
+        <div className={`flex items-start gap-3 p-3 rounded-xl border text-sm font-bold ${lepStatus.status === 'exceeded' ? 'bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-900 text-rose-800 dark:text-rose-300' : 'bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-900 text-amber-800 dark:text-amber-300'}`}>
           <ShieldAlert className="w-4 h-4 flex-shrink-0 mt-0.5" />
           <div>
             {lepStatus.status === 'exceeded'
@@ -645,7 +645,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
             </div>
             {hasPlan && (
               <div className="h-2.5 rounded-full bg-slate-100 dark:bg-slate-700 overflow-hidden">
-                <div className={`h-full rounded-full${done ? 'bg-emerald-500' : 'bg-indigo-600'}`} style={{ width: `${pct}%` }} />
+                <div className={`h-full rounded-full ${done ? 'bg-emerald-500' : 'bg-indigo-600'}`} style={{ width: `${pct}%` }} />
               </div>
             )}
             <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-2">
@@ -669,7 +669,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
                     const current = i === rateHistory.length - 1;
                     return (
                       <div key={m.month} className="flex-1 flex flex-col items-center justify-end h-full gap-1" title={`${m.month} : ${Math.round(m.rate)} % (${fmtEUR(m.saved)})`}>
-                        <div className={`w-full rounded-sm${m.rate < 0 ? 'bg-rose-400' : current ? 'bg-indigo-300 dark:bg-indigo-700' : 'bg-indigo-600'}`} style={{ height: `${h}%` }} />
+                        <div className={`w-full rounded-sm ${m.rate < 0 ? 'bg-rose-400' : current ? 'bg-indigo-300 dark:bg-indigo-700' : 'bg-indigo-600'}`} style={{ height: `${h}%` }} />
                         <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">{MONTH_INITIALS[Number(m.month.slice(5)) - 1]}</span>
                       </div>
                     );
@@ -705,7 +705,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
           </div>
 
           {projection.drift && (
-            <div className={`mt-4 flex items-start gap-2 p-3 rounded-lg text-xs font-bold${projection.drift.changeRatio < 0 ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300' : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300'}`}>
+            <div className={`mt-4 flex items-start gap-2 p-3 rounded-lg text-xs font-bold ${projection.drift.changeRatio < 0 ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300' : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300'}`}>
               {projection.drift.changeRatio < 0
                 ? <TrendingDown className="w-4 h-4 flex-shrink-0 mt-0.5" />
                 : <TrendingUp className="w-4 h-4 flex-shrink-0 mt-0.5" />}

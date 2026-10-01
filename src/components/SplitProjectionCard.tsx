@@ -55,13 +55,13 @@ export const SplitProjectionCard: React.FC<Props> = ({ accounts, fiscalConfig, m
         </label>
         <div className="flex rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700" role="group" aria-label="Durée">
           {[5, 10, 20].map(y => (
-            <button key={y} type="button" onClick={() => setYears(y)} aria-pressed={years === y} className={`px-3 py-2 text-xs font-black${years === y ? 'bg-indigo-600 text-white' : 'bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}>{y} ans</button>
+            <button key={y} type="button" onClick={() => setYears(y)} aria-pressed={years === y} className={`px-3 py-2 text-xs font-black ${years === y ? 'bg-indigo-600 text-white' : 'bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}>{y} ans</button>
           ))}
         </div>
       </div>
       <div className="space-y-2">
         {scenarios.map(sc => (
-          <div key={sc.label} className={`p-3 rounded-xl border${sc.result.total === best ? 'border-emerald-300 bg-emerald-50 dark:bg-emerald-950/30 dark:border-emerald-800' : 'border-slate-200 dark:border-slate-700'}`}>
+          <div key={sc.label} className={`p-3 rounded-xl border ${sc.result.total === best ? 'border-emerald-300 bg-emerald-50 dark:bg-emerald-950/30 dark:border-emerald-800' : 'border-slate-200 dark:border-slate-700'}`}>
             <div className="flex items-baseline justify-between gap-3">
               <p className="font-bold text-sm text-slate-800 dark:text-slate-100">{sc.label}</p>
               <p className="font-black text-slate-800 dark:text-slate-100 whitespace-nowrap">{formatEUR(sc.result.total, 0)}</p>

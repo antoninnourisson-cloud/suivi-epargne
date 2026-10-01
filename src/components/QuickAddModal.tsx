@@ -54,10 +54,10 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ open, accounts, on
           </div>
 
           <div className="flex gap-2">
-            <button onClick={() => setType('IN')} className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-bold text-sm border-2 transition-colors${type === 'IN' ? 'bg-emerald-50 border-emerald-400 text-emerald-700' : 'border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400'}`}>
+            <button onClick={() => setType('IN')} className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-bold text-sm border-2 transition-colors ${type === 'IN' ? 'bg-emerald-50 border-emerald-400 text-emerald-700' : 'border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400'}`}>
               <ArrowUpCircle className="w-4 h-4" /> Dépôt
             </button>
-            <button onClick={() => setType('OUT')} className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-bold text-sm border-2 transition-colors${type === 'OUT' ? 'bg-rose-50 border-rose-400 text-rose-700' : 'border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400'}`}>
+            <button onClick={() => setType('OUT')} className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-bold text-sm border-2 transition-colors ${type === 'OUT' ? 'bg-rose-50 border-rose-400 text-rose-700' : 'border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400'}`}>
               <ArrowDownCircle className="w-4 h-4" /> Retrait
             </button>
           </div>

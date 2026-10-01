@@ -108,13 +108,13 @@ export const TransferManager: React.FC<TransferManagerProps> = ({ accounts, onUp
     </div>
     <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
       <div className="border-b border-slate-200 dark:border-slate-700 flex">
-        <button onClick={() => setActiveTab('deposit')} className={`flex-1 min-w-0 px-2 py-4 text-sm font-black flex items-center justify-center gap-2${activeTab === 'deposit' ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border-b-2 border-emerald-600' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
+        <button onClick={() => setActiveTab('deposit')} className={`flex-1 min-w-0 px-2 py-4 text-sm font-black flex items-center justify-center gap-2 ${activeTab === 'deposit' ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border-b-2 border-emerald-600' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
           <Download className="w-4 h-4 hidden sm:block" /> Dépôt
         </button>
-        <button onClick={() => setActiveTab('transfer')} className={`flex-1 min-w-0 px-2 py-4 text-sm font-black flex items-center justify-center gap-2${activeTab === 'transfer' ? 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-400 border-b-2 border-indigo-600' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
+        <button onClick={() => setActiveTab('transfer')} className={`flex-1 min-w-0 px-2 py-4 text-sm font-black flex items-center justify-center gap-2 ${activeTab === 'transfer' ? 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-400 border-b-2 border-indigo-600' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
           <ArrowRightLeft className="w-4 h-4 hidden sm:block" /> Virement
         </button>
-        <button onClick={() => setActiveTab('recurring')} className={`flex-1 min-w-0 px-2 py-4 text-sm font-black flex items-center justify-center gap-2${activeTab === 'recurring' ? 'bg-violet-50 dark:bg-violet-950/40 text-violet-700 dark:text-violet-400 border-b-2 border-violet-600' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
+        <button onClick={() => setActiveTab('recurring')} className={`flex-1 min-w-0 px-2 py-4 text-sm font-black flex items-center justify-center gap-2 ${activeTab === 'recurring' ? 'bg-violet-50 dark:bg-violet-950/40 text-violet-700 dark:text-violet-400 border-b-2 border-violet-600' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
           <Repeat className="w-4 h-4 hidden sm:block" /> Récurrents
         </button>
       </div>

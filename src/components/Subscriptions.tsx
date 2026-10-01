@@ -132,7 +132,7 @@ export const Subscriptions: React.FC<SubscriptionsProps> = ({ subscriptions, onU
       {rows.length > 0 && (
         <ul className="space-y-2">
           {rows.map(({ s, next, inDays }) => (
-            <li key={s.id} className={`flex items-center gap-3 p-3 rounded-xl border bg-white dark:bg-slate-800${s.active ? 'border-slate-200 dark:border-slate-700' : 'border-dashed border-slate-300 dark:border-slate-700 opacity-60'}`}>
+            <li key={s.id} className={`flex items-center gap-3 p-3 rounded-xl border bg-white dark:bg-slate-800 ${s.active ? 'border-slate-200 dark:border-slate-700' : 'border-dashed border-slate-300 dark:border-slate-700 opacity-60'}`}>
               <div className="flex-1 min-w-0">
                 <p className="font-bold text-slate-800 dark:text-slate-100 text-sm truncate">
                   {s.name} · <span className="text-rose-600">{fmt(s.amount)}</span>
