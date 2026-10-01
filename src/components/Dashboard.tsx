@@ -399,7 +399,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
           {subtext && <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 uppercase font-bold tracking-wide">{subtext}</p>}
           {extra}
         </div>
-        <div className={`hidden md:block p-3 rounded-lg ${color}`}>
+        <div className={`hidden 2xl:block p-3 rounded-lg ${color}`}>
           <Icon className="w-6 h-6 text-white" />
         </div>
       </div>
@@ -539,10 +539,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
         </div>
       )}
 
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 md:gap-4">
+      <div className="grid grid-cols-2 xl:grid-cols-5 gap-3 md:gap-4">
         <StatCard title="Mon épargne nette" amount={mySavings} icon={Wallet} color="bg-indigo-600" subtext="Capital réel" />
         <StatCard title="Disponibilité immédiate" amount={availabilityStats.available} icon={Unlock} color="bg-emerald-500" subtext="Liquide" />
-        <div className="col-span-2 lg:col-span-2"><StatCard title="Contrainte fiscale" amount={availabilityStats.taxLocked} icon={Euro} color="bg-amber-500" subtext="AV/PEA récents" extra={availabilityStats.taxLocked > 0 && (
+        <div className="col-span-2"><StatCard title="Contrainte fiscale" amount={availabilityStats.taxLocked} icon={Euro} color="bg-amber-500" subtext="AV/PEA récents" extra={availabilityStats.taxLocked > 0 && (
           <div className="mt-2 space-y-0.5 text-[11px] text-slate-600 dark:text-slate-300">
             {unlockCost.extraTax >= 1 && <p>Tout retirer aujourd'hui : <b>≈ {formatEUR(unlockCost.extraTax, 0)}</b> d'impôt en plus qu'après la maturité.</p>}
             {unlockCost.closesPea && <p className="text-rose-600 dark:text-rose-400 font-bold">Un retrait clôturerait votre PEA.</p>}
