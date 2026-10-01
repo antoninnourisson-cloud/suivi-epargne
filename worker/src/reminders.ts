@@ -20,6 +20,7 @@ import {
   computeMonthlyPay,
   findAccountsAwaitingAnnualStatement,
   computeDonationSummary,
+  computeRestitutionPlan,
 } from '../../src/lib/finance';
 import { LATEST_TAX_SCALE } from '../../src/constants';
 import { formatISODay } from '../../src/lib/dates';
@@ -291,6 +292,43 @@ export const computeReminders = (data: GlobalAppData, now: Date, appUrl: string)
         tag: 'fiscal-review',
       },
     });
+  }
+
+
+  // 11. Restitution du capital parental : préparation début décembre, puis le jour J.
+  const restitution = data.parentalRestitution;
+  if (restitution?.plannedDate && !restitution.done) {
+    const plan = computeRestitutionPlan(accounts, restitution.plannedDate);
+    if (plan.total > 0) {
+      const [py, pm, pd] = restitution.plannedDate.split('-').map(Number);
+      const planned = new Date(py, pm - 1, pd);
+      const detail = plan.rows.map(r => `${r.name} ${eur(r.amount)}`).join(', ');
+      const plannedLabel = frenchDay(planned) + (planned.getFullYear() !== now.getFullYear() ? ` ${planned.getFullYear()}` : '');
+      const today0 = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const daysToPlanned = Math.round((planned.getTime() - today0.getTime()) / 86_400_000);
+      if (now.getMonth() === 11 && now.getDate() <= 3 && daysToPlanned > 3) {
+        out.push({
+          key: `restitution-prep:${restitution.plannedDate}`,
+          message: {
+            title: 'Restitution du capital de vos parents',
+            body: `Prévue le ${plannedLabel} : ${eur(plan.total)} à rendre (${detail}).${plan.totalLost >= 1 ? ` Attention : à cette date, ${eur(plan.totalLost)} d'intérêts sont perdus par rapport au 1er janvier.` : ' Attendez cette date pour garder les intérêts de décembre.'}`,
+            url: link('parental'),
+            tag: 'restitution',
+          },
+        });
+      }
+      if (daysToPlanned <= 0 && daysToPlanned > -3) {
+        out.push({
+          key: `restitution-day:${restitution.plannedDate}`,
+          message: {
+            title: `Restitution : ${eur(plan.total)} à rendre`,
+            body: `${detail}. Une fois les virements faits, enregistrez la restitution dans l'app (Part parentale).`,
+            url: link('parental'),
+            tag: 'restitution',
+          },
+        });
+      }
+    }
   }
 
   return out;

@@ -36,6 +36,7 @@ Un **petit serveur optionnel** (Cloudflare Worker, dossier [`worker/`](worker/))
 
 ### Comptes et mouvements
 - Distinction entre **part propre** et **capital des parents** sur chaque compte. Le capital parental est intouchable, ses intérêts reviennent à l'utilisateur.
+- **Restitution du capital parental** : date conseillée (le 1er janvier garde toute l'année d'intérêts), montants par compte, effet sur le plan de placement, rappels début décembre et le jour J, enregistrement en un clic avec récapitulatif aux parents et relevé exportable. Ensuite, l'app passe en mode solo.
 - **Recherche** dans les mouvements de tous les comptes (libellé, montant, date).
 - Étiquettes, historique des mouvements, annulation d'une suppression, virements internes liés.
 - **Ajout rapide** : bouton flottant ; raccourcis sur l'icône de l'app installée (ajout rapide, actualiser, virements de paie).

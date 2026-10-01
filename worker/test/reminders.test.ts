@@ -215,4 +215,21 @@ describe('computeReminders', () => {
       expect(at(data({ 't:Revolut commun': { amount: 900 }, 's:la': { amount: 500 } }), 30)).toBeUndefined();
     });
   });
+
+  describe('restitution du capital parental', () => {
+    const lep = { ...livret, id: 'lep', name: 'LEP', type: AccountType.LEP, totalAmount: 10000, ownedAmount: 1754, parentalCapital: 8246, interestRate: 2.4 };
+    const data = (done = false) => base({ accounts: [lep], parentalRestitution: { plannedDate: '2027-01-01', ...(done ? { done: { date: '2027-01-01', accounts: [], interestsOffered: [] } } : {}) } });
+    const keys = (d: ReturnType<typeof data>, date: Date) => computeReminders(d, date, APP).map(x => x.key);
+
+    it('prévient début décembre puis le jour J', () => {
+      expect(keys(data(), new Date(2026, 11, 1, 9))).toContain('restitution-prep:2027-01-01');
+      expect(keys(data(), new Date(2026, 11, 10, 9))).not.toContain('restitution-prep:2027-01-01');
+      const day = computeReminders(data(), new Date(2027, 0, 1, 9), APP).find(x => x.key === 'restitution-day:2027-01-01');
+      expect(day?.message.title).toMatch(/8\s246\s€ à rendre/);
+      expect(day?.message.url).toBe(`${APP}?view=parental`);
+    });
+    it('se tait une fois la restitution enregistrée', () => {
+      expect(keys(data(true), new Date(2027, 0, 1, 9)).some(k => k.startsWith('restitution'))).toBe(false);
+    });
+  });
 });

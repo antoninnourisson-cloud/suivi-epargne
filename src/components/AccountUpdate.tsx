@@ -104,6 +104,8 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
     patchAdjust(id, { amount: '' });
   };
 
+  const soloMode = !accounts.some(a => a.parentalCapital > 0);
+
   const changedCount = accounts.filter(account => {
     const u = updates[account.id];
     if (!u) return false;
@@ -230,7 +232,8 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
                   })()}
                 </div>
 
-                {/* Part des parents */}
+                {/* Part des parents (masquée quand plus aucun compte n'en a : mode solo) */}
+                {(!soloMode || safeNumber(u.parental, 0) > 0) && (
                 <div className="bg-amber-50 dark:bg-amber-950/40 p-3 rounded-xl border border-amber-100 dark:border-amber-900">
                   <label className="text-[11px] font-black text-amber-700 dark:text-amber-300 uppercase tracking-widest flex items-center gap-1 mb-2">
                     <Users className="w-3 h-3" /> Part des parents (€)
@@ -248,6 +251,7 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
                     </div>
                   )}
                 </div>
+                )}
 
                 {safeNumber(u.parental, 0) > 0 && (
                   <div className="md:col-span-2 bg-slate-50 dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-700">

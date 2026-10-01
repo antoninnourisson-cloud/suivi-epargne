@@ -13,12 +13,14 @@ import { formatEUR } from '../lib/format';
 
 interface AccountFormProps {
   onSave: (account: SavingsAccount) => void;
+  // Faux en mode solo (plus aucune part parentale) : le champ n'est plus proposé.
+  showParental?: boolean;
   initialData?: SavingsAccount;
   onCancel?: () => void;
   fiscalConfig: FiscalConfig;
 }
 
-export const AccountForm: React.FC<AccountFormProps> = ({ onSave, initialData, onCancel, fiscalConfig }) => {
+export const AccountForm: React.FC<AccountFormProps> = ({ onSave, initialData, onCancel, fiscalConfig, showParental = true }) => {
   const [type, setType] = useState<AccountType>(initialData?.type || AccountType.LIVRET_A);
   const [name, setName] = useState(initialData?.name || '');
   const [institution, setInstitution] = useState(initialData?.institution || '');
@@ -140,7 +142,7 @@ export const AccountForm: React.FC<AccountFormProps> = ({ onSave, initialData, o
             <label className="flex items-center gap-2 text-[11px] font-black text-indigo-700 dark:text-indigo-300 uppercase mb-4"><Calculator className="w-4 h-4" /> Répartition du Capital</label>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-indigo-100 dark:border-indigo-900"><label className="text-[11px] font-black text-indigo-700 dark:text-indigo-300 block mb-1">Solde total (€)</label><NumberInput value={totalAmount} onChange={handleTotalChange} className={moneyInputClass} min={0} /></div>
-              <div className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-amber-100 dark:border-amber-900"><label className="text-[11px] font-black text-amber-700 dark:text-amber-300 block mb-1"><Users className="w-3 h-3" /> Part des parents (€)</label><NumberInput value={parentalCapital} onChange={handleParentalChange} className={`${moneyInputClass} text-amber-700 dark:text-amber-300`} min={0} /></div>
+              {showParental && (<div className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-amber-100 dark:border-amber-900"><label className="text-[11px] font-black text-amber-700 dark:text-amber-300 block mb-1"><Users className="w-3 h-3" /> Part des parents (€)</label><NumberInput value={parentalCapital} onChange={handleParentalChange} className={`${moneyInputClass} text-amber-700 dark:text-amber-300`} min={0} /></div>)}
               <div className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-emerald-100 dark:border-emerald-900"><label className="text-[11px] font-black text-emerald-700 dark:text-emerald-300 block mb-1">Ma part nette (€)</label><NumberInput value={ownedAmount} onChange={handleOwnedChange} className={`${moneyInputClass} text-emerald-800 dark:text-emerald-300`} min={0} /></div>
             </div>
           </div>

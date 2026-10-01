@@ -1,16 +1,23 @@
 import React, { useMemo } from 'react';
-import { SavingsAccount } from '../types';
+import { SavingsAccount, ParentalRestitution } from '../types';
+import { RestitutionPanel } from './RestitutionPanel';
 import { Users, User } from 'lucide-react';
 import { formatEUR } from '../lib/format';
 import { AccountTotal } from './AccountTotal';
 
 interface ParentalShareProps {
   accounts: SavingsAccount[];
+  restitution?: ParentalRestitution;
+  monthPlan?: number;
+  canEmailParents: boolean;
+  onPlanRestitution: (date: string | undefined) => void;
+  onRestitute: (date: string, sendMail: boolean) => void;
+  onUndoRestitution: () => void;
 }
 
 const fmt = (n: number) => formatEUR(n);
 
-export const ParentalShare: React.FC<ParentalShareProps> = ({ accounts }) => {
+export const ParentalShare: React.FC<ParentalShareProps> = ({ accounts, restitution, monthPlan, canEmailParents, onPlanRestitution, onRestitute, onUndoRestitution }) => {
   const { totalOwned, totalParental, rows } = useMemo(() => {
     const rows = accounts
       .filter(a => a.parentalCapital > 0 || a.ownedAmount > 0)
@@ -24,6 +31,8 @@ export const ParentalShare: React.FC<ParentalShareProps> = ({ accounts }) => {
   }, [accounts]);
 
   const grand = totalOwned + totalParental;
+  // Après restitution il n'y a plus de part parentale : on ne garde que le relevé.
+  const noParental = totalParental <= 0;
   const ownedPct = grand > 0 ? (totalOwned / grand) * 100 : 0;
 
   return (
@@ -33,6 +42,17 @@ export const ParentalShare: React.FC<ParentalShareProps> = ({ accounts }) => {
         <p className="text-sm text-slate-500 dark:text-slate-400">Distinguez votre capital réel de l'argent géré pour vos parents.</p>
       </div>
 
+      <RestitutionPanel
+        accounts={accounts}
+        restitution={restitution}
+        monthPlan={monthPlan}
+        canEmailParents={canEmailParents}
+        onPlan={onPlanRestitution}
+        onRestitute={onRestitute}
+        onUndo={onUndoRestitution}
+      />
+
+      {!noParental && <>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-6 rounded-2xl">
           <p className="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase mb-1 flex items-center gap-2"><User className="w-4 h-4 text-indigo-600" /> Mon capital</p>
@@ -89,6 +109,7 @@ export const ParentalShare: React.FC<ParentalShareProps> = ({ accounts }) => {
           </table>
         </div>
       </div>
+      </>}
     </div>
   );
 };

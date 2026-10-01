@@ -17,8 +17,8 @@ import {
 import { isBackendEnabled, hasBackendSession } from './services/backendService';
 import { disablePush } from './services/pushService';
 import { isLockEnabled } from './services/appLockService';
-import { computeMaturityCountdown, depositsAfterCashFlow, computeMonthlySavingsCapacity, subscriptionsAsExpenses, computeMonthlyPay } from './lib/finance';
-import { localTodayISO } from './lib/dates';
+import { computeMaturityCountdown, depositsAfterCashFlow, computeMonthlySavingsCapacity, subscriptionsAsExpenses, computeMonthlyPay, computeRestitutionPlan, accountsAfterRestitution, computeAccruedParentalInterest } from './lib/finance';
+import { localTodayISO, parseISODate } from './lib/dates';
 import { formatEUR, formatSignedEUR } from './lib/format';
 import { MovementSearch } from './components/MovementSearch';
 import { AccountTotal } from './components/AccountTotal';
@@ -575,6 +575,71 @@ const App: React.FC = () => {
     return movement.id;
   };
 
+  // Mode solo : plus aucun compte n'a de part parentale (après la restitution). L'écran
+  // Part parentale reste accessible tant qu'un relevé de restitution existe.
+  const hasParental = data.accounts.some(a => a.parentalCapital > 0);
+  const showParentalScreen = hasParental || !!data.parentalRestitution?.done;
+
+  // --- RESTITUTION DU CAPITAL PARENTAL ---
+  // Retire la part des parents de chaque compte (la part propre ne bouge pas), garde un
+  // relevé (montants, intérêts offerts chaque année) et prévient les parents si demandé.
+  const handleRestitution = (date: string, sendMail: boolean) => {
+    const plan = computeRestitutionPlan(data.accounts, date);
+    if (plan.total <= 0) return;
+    const firstYear = Math.min(plan.interestYear, ...data.accounts
+      .filter(a => a.parentalCapital > 0)
+      .flatMap(a => (a.movements || []).map(m => Number(m.date.slice(0, 4))))
+      .filter(y => y > 2000));
+    const interestsOffered: { year: number; amount: number }[] = [];
+    for (let y = firstYear; y <= plan.interestYear; y++) {
+      const amount = y === plan.interestYear
+        ? plan.totalInterest
+        : computeAccruedParentalInterest(data.accounts, y, new Date(y + 1, 0, 1)).totalAnnualParental;
+      if (amount >= 0.5) interestsOffered.push({ year: y, amount: Math.round(amount * 100) / 100 });
+    }
+    const previous = data.parentalRestitution;
+    const before = data.accounts.map(a => ({ id: a.id, parentalCapital: a.parentalCapital }));
+    let emailed = false;
+    if (sendMail) {
+      const rows = plan.rows.map(r => `<tr><td style="padding:4px 12px 4px 0">${r.name}</td><td style="padding:4px 0;text-align:right"><b>${formatEUR(r.amount, 2)}</b></td></tr>`).join('');
+      emailed = data.queueParentsMail('Restitution de votre capital', `
+        <div style="font-family: sans-serif; color: #1e293b;">
+          <p>Bonjour,</p>
+          <p>Voici le récapitulatif de la restitution de votre capital, retiré le ${parseISODate(date).toLocaleDateString('fr-FR')} :</p>
+          <table style="border-collapse: collapse;">${rows}
+            <tr><td style="padding:8px 12px 4px 0;border-top:1px solid #e2e8f0">Total</td><td style="padding:8px 0 4px;text-align:right;border-top:1px solid #e2e8f0"><b>${formatEUR(plan.total, 2)}</b></td></tr>
+          </table>
+        </div>`);
+    }
+    data.setAccounts(prev => accountsAfterRestitution(prev));
+    data.setParentalRestitution({
+      ...previous,
+      done: { date, accounts: plan.rows.map(r => ({ accountId: r.accountId, name: r.name, amount: r.amount })), interestsOffered, emailed: emailed || undefined },
+    });
+    addToast({
+      message: `Restitution enregistrée : ${formatEUR(plan.total)}${emailed ? ' · récapitulatif envoyé après la sauvegarde' : ''}`,
+      kind: 'success',
+      action: { label: 'Annuler', onClick: () => restoreParental(before, previous) },
+    });
+  };
+
+  const restoreParental = (before: { id: string; parentalCapital: number }[], previous: typeof data.parentalRestitution) => {
+    data.setAccounts(prev => prev.map(a => {
+      const b = before.find(x => x.id === a.id);
+      if (!b || b.parentalCapital <= 0) return a;
+      return { ...a, parentalCapital: b.parentalCapital, totalAmount: round2(a.ownedAmount + b.parentalCapital) };
+    }));
+    data.setParentalRestitution(previous);
+  };
+
+  // Annulation depuis l'écran (après coup) : reconstruit à partir du relevé.
+  const handleUndoRestitution = () => {
+    const done = data.parentalRestitution?.done;
+    if (!done) return;
+    restoreParental(done.accounts.map(a => ({ id: a.accountId, parentalCapital: a.amount })), { ...data.parentalRestitution, done: undefined });
+    addToast({ message: 'Restitution annulée : la part de vos parents est rétablie', kind: 'success' });
+  };
+
   // Annule un versement enregistré depuis la liste des virements de paie : retire le
   // mouvement et rétablit solde et versements cumulés.
   const handleCancelPayDeposit = (accountId: string, movementId: string) => {
@@ -652,7 +717,7 @@ const App: React.FC = () => {
           <NavButton active={view === 'pilot'} onClick={() => setView('pilot')} icon={ShieldCheck} label="Pilotage" />
           <NavButton active={view === 'yield'} onClick={() => setView('yield')} icon={Coins} label="Rendement" />
           <NavButton active={view === 'history'} onClick={() => setView('history')} icon={LineChart} label="Historique" />
-          <NavButton active={view === 'parental'} onClick={() => setView('parental')} icon={Users} label="Part parentale" />
+          {showParentalScreen && <NavButton active={view === 'parental'} onClick={() => setView('parental')} icon={Users} label="Part parentale" />}
 
           <div className="pt-6 pb-2 text-[11px] font-black text-slate-600 dark:text-slate-300 uppercase px-4 tracking-widest">Gestion</div>
           <NavButton active={view === 'accounts'} onClick={() => setView('accounts')} icon={Wallet} label="Mes comptes" />
@@ -772,7 +837,15 @@ const App: React.FC = () => {
 
             {view === 'yield' && <Yield accounts={data.accounts} fiscalConfig={data.fiscalConfig} />}
             {view === 'history' && <History history={data.history} expensesHistory={data.expensesHistory} />}
-            {view === 'parental' && <ParentalShare accounts={data.accounts} />}
+            {view === 'parental' && <ParentalShare
+                accounts={data.accounts}
+                restitution={data.parentalRestitution}
+                monthPlan={monthPlan}
+                canEmailParents={!!data.parentsEmail}
+                onPlanRestitution={(date) => data.setParentalRestitution(prev => ({ ...prev, plannedDate: date }))}
+                onRestitute={handleRestitution}
+                onUndoRestitution={handleUndoRestitution}
+            />}
             {view === 'donations' && <Donations donations={data.donations} onUpdate={data.setDonations} pickerApiKey={data.pickerApiKey} />}
             {view === 'subscriptions' && <Subscriptions subscriptions={data.subscriptions} onUpdate={data.setSubscriptions} />}
             {view === 'payslips' && <Payslips payslips={data.payslips} onUpdatePayslips={data.setPayslips} geminiApiKey={data.geminiApiKey} pickerApiKey={data.pickerApiKey} onApplyToPilotage={handleApplyPayslipToPilotage} activePayslipId={data.activePayslipId} onClearActivePayslip={handleClearActivePayslip} />}
@@ -815,6 +888,7 @@ const App: React.FC = () => {
                       initialData={editingAccount}
                       onCancel={() => { setShowForm(false); setEditingAccount(undefined); }}
                       fiscalConfig={data.fiscalConfig}
+                      showParental={hasParental || !!editingAccount?.parentalCapital}
                   />
                 ) : (
                   <>
@@ -940,7 +1014,7 @@ const App: React.FC = () => {
           { key: 'transfers', label: 'Virements', icon: ArrowRightLeft },
           { key: 'yield', label: 'Rendement', icon: Coins },
           { key: 'history', label: 'Historique', icon: LineChart },
-          { key: 'parental', label: 'Part parentale', icon: Users },
+          ...(showParentalScreen ? [{ key: 'parental', label: 'Part parentale', icon: Users }] : []),
           { key: 'payslips', label: 'Fiches de paie', icon: FileText },
           { key: 'subscriptions', label: 'Abonnements', icon: CalendarClock },
           { key: 'donations', label: 'Dons', icon: HandHeart },

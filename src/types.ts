@@ -161,6 +161,17 @@ export interface PayChecklist {
   done: Record<string, { amount: number; movementId?: string; alreadyRecorded?: boolean }>;
 }
 
+// Restitution du capital parental (prévue fin 2026).
+export interface ParentalRestitution {
+  plannedDate?: string; // 'YYYY-MM-DD' : date prévue du retrait (rappels)
+  done?: {
+    date: string;                                                     // date du retrait réel
+    accounts: { accountId: string; name: string; amount: number }[];  // capital rendu par compte
+    interestsOffered: { year: number; amount: number }[];             // intérêts de leur capital, offerts
+    emailed?: boolean;
+  };
+}
+
 export interface PayslipRecord {
   id: string;
   // Fichier resté à sa place sur le Drive de l'utilisateur (sélectionné via Google
@@ -266,6 +277,7 @@ export interface GlobalAppData {
   subscriptions?: Subscription[];
   donations?: Donation[];
   payChecklist?: PayChecklist;
+  parentalRestitution?: ParentalRestitution;
   // Fiche de paie actuellement utilisée comme référence exacte dans le Pilotage Budgétaire
   // (bascule le détail charges/impôt sur les vrais chiffres au lieu de la formule
   // théorique). `undefined` = mode estimation (comportement historique, pour simuler des

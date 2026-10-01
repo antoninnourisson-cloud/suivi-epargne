@@ -18,6 +18,9 @@ import {
   dedupeMonthlySnapshots,
   computeExpectedYearInterest,
   quinzaineWithdrawalTip,
+  computeRestitutionPlan,
+  suggestedRestitutionDate,
+  accountsAfterRestitution,
 } from './finance';
 import { DEFAULT_FISCAL_CONFIG as CFG, TAX_SCALES, LATEST_TAX_SCALE } from '../constants';
 import { AccountType, SavingsAccount, Subscription } from '../types';
@@ -217,5 +220,32 @@ describe('intérêts attendus et conseil de retrait', () => {
     expect(quinzaineWithdrawalTip({ type: AccountType.LIVRET_A, interestRate: 2.4 }, 5000, new Date(2026, 8, 10))).toEqual({ waitUntil: '2026-09-16', gain: 5 });
     expect(quinzaineWithdrawalTip({ type: AccountType.LIVRET_A, interestRate: 2.4 }, 5000, new Date(2026, 8, 16))).toBeNull();
     expect(quinzaineWithdrawalTip({ type: AccountType.ASSURANCE_VIE, interestRate: 3 }, 5000, new Date(2026, 8, 10))).toBeNull();
+  });
+});
+
+describe('restitution du capital parental', () => {
+  const lep = acc({ id: 'lep', name: 'LEP', type: AccountType.LEP, interestRate: 2.4, totalAmount: 10000, ownedAmount: 1754, parentalCapital: 8246 });
+  const av = acc({ id: 'av', name: 'AV', type: AccountType.ASSURANCE_VIE, interestRate: 3, totalAmount: 400, ownedAmount: 400, parentalCapital: 0 });
+
+  it('conseille le 1er janvier : toute l’année est acquise', () => {
+    expect(suggestedRestitutionDate(NOW)).toBe('2027-01-01');
+    const p = computeRestitutionPlan([lep, av], '2027-01-01');
+    expect(p.interestYear).toBe(2026);
+    expect(p.rows.map(r => r.accountId)).toEqual(['lep']);
+    expect(p.total).toBe(8246);
+    expect(p.totalInterest).toBeCloseTo(8246 * 0.024);
+    expect(p.totalLost).toBe(0);
+  });
+
+  it('chiffre la perte d’un retrait mi-décembre (dernière quinzaine)', () => {
+    const p = computeRestitutionPlan([lep], '2026-12-20');
+    expect(p.totalLost).toBeCloseTo(8246 * 0.024 / 24);
+  });
+
+  it('retire la part parentale sans toucher à la part propre', () => {
+    const [after] = accountsAfterRestitution([lep]);
+    expect(after.parentalCapital).toBe(0);
+    expect(after.ownedAmount).toBe(1754);
+    expect(after.totalAmount).toBe(1754);
   });
 });

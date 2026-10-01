@@ -173,6 +173,7 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig }) => {
             {' '}Rythme actuel : ≈ {fmt(totalAnnual)}/an.
           </p>
         </div>
+        {(expected.parental >= 0.5 || accounts.some(a => a.parentalCapital > 0)) && (
         <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-6 rounded-2xl">
           <p className="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase mb-1 flex items-center gap-2"><PiggyBank className="w-4 h-4" /> Dont offerts par vos parents</p>
           <p className="text-4xl font-black text-indigo-600">{fmt(expected.parental)}</p>
@@ -180,6 +181,7 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig }) => {
             Intérêts attendus sur {currentYear} grâce à leur capital, qu'ils vous offrent en fin d'année. Le reste ({fmt(expected.own)}) vient de votre part propre.
           </p>
         </div>
+        )}
       </div>
 
       {missed.extra > 0.5 && (

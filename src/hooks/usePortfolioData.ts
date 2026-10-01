@@ -5,7 +5,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { tracksDeposits, depositsAfterCashFlow, totalFixedCharges, normalizeAccounts, dedupeMonthlySnapshots } from '../lib/finance';
 import {
   GlobalAppData, SavingsAccount, Expense, PortfolioSnapshot, ExpenseSnapshot,
-  FiscalConfig, WorkBenefits, AccountMovement, SavingsGoal, PayslipRecord, RecurringMovement, Subscription, Donation, PayChecklist
+  FiscalConfig, WorkBenefits, AccountMovement, SavingsGoal, PayslipRecord, RecurringMovement, Subscription, Donation, PayChecklist, ParentalRestitution
 } from '../types';
 import { 
   DEFAULT_FISCAL_CONFIG, DEFAULT_WORK_BENEFITS 
@@ -49,6 +49,7 @@ const canonicalize = (data: GlobalAppData | null | undefined): string => {
     subscriptions: data.subscriptions || [],
     donations: data.donations || [],
     payChecklist: data.payChecklist ?? null,
+    parentalRestitution: data.parentalRestitution ?? null,
     activePayslipId: data.activePayslipId ?? null,
     fiscalConfig: data.fiscalConfig || null,
     workBenefits: data.workBenefits || null,
@@ -113,6 +114,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [donations, setDonations] = useState<Donation[]>([]);
   const [payChecklist, setPayChecklist] = useState<PayChecklist | undefined>(undefined);
+  const [parentalRestitution, setParentalRestitution] = useState<ParentalRestitution | undefined>(undefined);
   // Fiche de paie servant de référence exacte au Pilotage Budgétaire (undefined = mode
   // estimation théorique, comportement historique).
   const [activePayslipId, setActivePayslipId] = useState<string | undefined>(undefined);
@@ -234,6 +236,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
         setSubscriptions(data.subscriptions || []);
         setDonations(data.donations || []);
         setPayChecklist(data.payChecklist || undefined);
+        setParentalRestitution(data.parentalRestitution || undefined);
         setActivePayslipId(data.activePayslipId || undefined);
         setFiscalConfig(data.fiscalConfig || DEFAULT_FISCAL_CONFIG);
         
@@ -331,6 +334,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
     subscriptions,
     donations,
     payChecklist,
+    parentalRestitution,
     activePayslipId,
     config: {
       grossAnnual, leisureBudget, projectSavings, navigoBase, navigoRate,
@@ -340,7 +344,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
     lastView: lastViewRef.current,
   }), [accounts, expenses, history, expensesHistory, fiscalConfig, workBenefits, grossAnnual,
        leisureBudget, projectSavings, navigoBase, navigoRate, taxRateManual,
-       extraMonthlyIncome, parentsEmail, goals, payslips, recurringMovements, subscriptions, donations, payChecklist, activePayslipId, geminiApiKey, pickerApiKey,
+       extraMonthlyIncome, parentsEmail, goals, payslips, recurringMovements, subscriptions, donations, payChecklist, parentalRestitution, activePayslipId, geminiApiKey, pickerApiKey,
        paydayDay, paydayAmount]);
 
   // Applique un objet de données (import / rechargement) à l'état.
@@ -355,6 +359,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
     setSubscriptions(data.subscriptions || []);
     setDonations(data.donations || []);
     setPayChecklist(data.payChecklist || undefined);
+    setParentalRestitution(data.parentalRestitution || undefined);
     setActivePayslipId(data.activePayslipId || undefined);
     if (data.fiscalConfig) setFiscalConfig(data.fiscalConfig);
     if (data.workBenefits) setWorkBenefits(data.workBenefits);
@@ -489,6 +494,13 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
     });
   };
 
+  /** Met en attente un e-mail aux parents (envoyé après la prochaine sauvegarde confirmée). */
+  const queueParentsMail = (subject: string, htmlBody: string): boolean => {
+    if (!parentsEmail) return false;
+    pendingParentMailRef.current = { to: parentsEmail, subject, body: htmlBody };
+    return true;
+  };
+
   // --- COORDINATION MULTI-ONGLETS ---
   // Chaque sauvegarde réussie est annoncée via localStorage (l'événement `storage` ne se
   // déclenche que dans les AUTRES onglets). Sans ça, deux onglets du même appareil se
@@ -610,7 +622,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
     taxRateManual, extraMonthlyIncome, parentsEmail, geminiApiKey, pickerApiKey,
     paydayDay, paydayAmount,
     isAuthenticated, driveFileId, isLoadingData,
-    buildData, syncConflict, sessionExpired, goals, payslips, recurringMovements, subscriptions, donations, payChecklist, activePayslipId, isOffline, runExclusive
+    buildData, syncConflict, sessionExpired, goals, payslips, recurringMovements, subscriptions, donations, payChecklist, parentalRestitution, activePayslipId, isOffline, runExclusive
   ]);
 
   // Réveil périodique pour que les snapshots ci-dessous s'ouvrent sur le nouveau mois même
@@ -821,6 +833,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
       setSubscriptions([]);
       setDonations([]);
       setPayChecklist(undefined);
+      setParentalRestitution(undefined);
       setActivePayslipId(undefined);
       setDriveFileId(null);
       // Purge des sauvegardes locales à la déconnexion : sans ça, se reconnecter avec un
@@ -844,6 +857,8 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
     subscriptions, setSubscriptions,
     donations, setDonations,
     payChecklist, setPayChecklist,
+    parentalRestitution, setParentalRestitution,
+    queueParentsMail,
     activePayslipId, setActivePayslipId,
     fiscalConfig, setFiscalConfig,
     workBenefits, setWorkBenefits,
