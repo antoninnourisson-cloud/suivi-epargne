@@ -269,6 +269,10 @@ export interface GlobalAppData {
     paydayDay?: number; // 1-31 (ramené au dernier jour des mois plus courts)
     // Montant à placer chaque mois. Absent = capacité d'épargne calculée par le Pilotage.
     paydayAmount?: number;
+    // Répartition personnalisée de l'épargne (ex. 50 % Livret A, 50 % Assurance Vie) au
+    // lieu du plan automatique « meilleur taux d'abord ». Facultative.
+    savingsSplit?: { accountId: string; pct: number }[];
+    savingsSplitFrom?: string; // 'YYYY-MM-DD' : appliquée à partir de cette date
   };
   goals?: SavingsGoal[];
   lastView?: string;

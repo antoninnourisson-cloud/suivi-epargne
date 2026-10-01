@@ -16,6 +16,7 @@ import {
   computePayTransfers,
   buildPayLines,
   payPeriodOf,
+  activeSavingsSplit,
   computeMonthSavedAmount,
   computeAccountBalanceAtDate,
   computeAccruedInterest,
@@ -138,7 +139,7 @@ export const computeReminders = (data: GlobalAppData, now: Date, appUrl: string)
     if (today >= effectiveDay && today < effectiveDay + PAYDAY_WINDOW_DAYS) {
       const amount = data.config.paydayAmount ?? computeMonthlySavingsCapacity(data);
       const steps = amount > 0
-        ? computePlacementStrategy(amount, accounts, data.fiscalConfig || DEFAULT_FISCAL_CONFIG)
+        ? computePlacementStrategy(amount, accounts, data.fiscalConfig || DEFAULT_FISCAL_CONFIG, activeSavingsSplit(data.config, now))
         : [];
       if (steps.length > 0) {
         out.push({
@@ -171,7 +172,7 @@ export const computeReminders = (data: GlobalAppData, now: Date, appUrl: string)
       let lines = checklist?.lines;
       if (!lines) {
         const amount = data.config.paydayAmount ?? computeMonthlySavingsCapacity(data);
-        const steps = amount > 0 ? computePlacementStrategy(amount, accounts, data.fiscalConfig || DEFAULT_FISCAL_CONFIG) : [];
+        const steps = amount > 0 ? computePlacementStrategy(amount, accounts, data.fiscalConfig || DEFAULT_FISCAL_CONFIG, activeSavingsSplit(data.config, now)) : [];
         lines = buildPayLines(computePayTransfers({
           expenses: data.expenses || [],
           subscriptions: data.subscriptions,

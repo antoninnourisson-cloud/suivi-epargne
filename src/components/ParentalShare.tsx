@@ -9,6 +9,7 @@ interface ParentalShareProps {
   accounts: SavingsAccount[];
   restitution?: ParentalRestitution;
   monthPlan?: number;
+  hasCustomSplit?: boolean;
   canEmailParents: boolean;
   onPlanRestitution: (date: string | undefined) => void;
   onRestitute: (date: string, sendMail: boolean) => void;
@@ -17,7 +18,7 @@ interface ParentalShareProps {
 
 const fmt = (n: number) => formatEUR(n);
 
-export const ParentalShare: React.FC<ParentalShareProps> = ({ accounts, restitution, monthPlan, canEmailParents, onPlanRestitution, onRestitute, onUndoRestitution }) => {
+export const ParentalShare: React.FC<ParentalShareProps> = ({ accounts, restitution, monthPlan, hasCustomSplit, canEmailParents, onPlanRestitution, onRestitute, onUndoRestitution }) => {
   const { totalOwned, totalParental, rows } = useMemo(() => {
     const rows = accounts
       .filter(a => a.parentalCapital > 0 || a.ownedAmount > 0)
@@ -46,6 +47,7 @@ export const ParentalShare: React.FC<ParentalShareProps> = ({ accounts, restitut
         accounts={accounts}
         restitution={restitution}
         monthPlan={monthPlan}
+        hasCustomSplit={hasCustomSplit}
         canEmailParents={canEmailParents}
         onPlan={onPlanRestitution}
         onRestitute={onRestitute}

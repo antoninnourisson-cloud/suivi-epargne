@@ -25,6 +25,7 @@ import {
   computePlacementStrategy,
   findAvRateUpdatesDue,
   applyRateChange,
+  activeSavingsSplit,
   computeAccruedInterest,
 } from './finance';
 import { DEFAULT_FISCAL_CONFIG as CFG, TAX_SCALES, LATEST_TAX_SCALE } from '../constants';
@@ -314,5 +315,30 @@ describe('changement de taux daté', () => {
     const la = acc({ interestRate: 1.7, rateHistory: [{ date: '2026-10-01', rate: 1.5 }] });
     const next = applyRateChange(la, 1.7, '2026-08-01');
     expect(next.rateHistory).toEqual([{ date: '2026-08-01', rate: 1.5 }]);
+  });
+});
+
+describe('répartition personnalisée', () => {
+  const la = acc({ id: 'la', name: 'Livret A', interestRate: 1.7, totalAmount: 8310, ownedAmount: 8310 });
+  const av = acc({ id: 'av', name: 'AV', type: AccountType.ASSURANCE_VIE, interestRate: 3, totalAmount: 400, ownedAmount: 400 });
+  const lep = acc({ id: 'lep', name: 'LEP', type: AccountType.LEP, interestRate: 2.5, totalAmount: 1754, ownedAmount: 1754 });
+  const split = [{ accountId: 'la', pct: 50 }, { accountId: 'av', pct: 50 }];
+
+  it('répartit 1 000 € à 50/50, même si le LEP a de la place', () => {
+    const steps = computePlacementStrategy(1000, [la, av, lep], CFG, split);
+    expect(steps.map(s => [s.accountName, s.fillAmount])).toEqual([['Livret A', 500], ['AV', 500]]);
+  });
+  it("reporte l'excédent d'un livret plein sur le compte sans plafond", () => {
+    const fullish = { ...la, totalAmount: 22800 };
+    const steps = computePlacementStrategy(1000, [fullish, av], CFG, split);
+    expect(steps.find(s => s.accountId === 'la')?.fillAmount).toBeCloseTo(150);
+    expect(steps.find(s => s.accountId === 'av')?.fillAmount).toBeCloseTo(850);
+    expect(steps.some(s => s.infoOnly && s.hint?.includes('plein'))).toBe(true);
+  });
+  it('ramène les pourcentages à 100 et ne s’applique qu’à partir de la date choisie', () => {
+    const steps = computePlacementStrategy(900, [la, av], CFG, [{ accountId: 'la', pct: 1 }, { accountId: 'av', pct: 2 }]);
+    expect(steps.map(s => s.fillAmount)).toEqual([300, 600]);
+    expect(activeSavingsSplit({ savingsSplit: split, savingsSplitFrom: '2027-01-01' }, NOW)).toBeUndefined();
+    expect(activeSavingsSplit({ savingsSplit: split, savingsSplitFrom: '2027-01-01' }, new Date(2027, 0, 1))).toEqual(split);
   });
 });

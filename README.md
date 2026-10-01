@@ -45,6 +45,7 @@ Un **petit serveur optionnel** (Cloudflare Worker, dossier [`worker/`](worker/))
 - Étiquettes, historique des mouvements, annulation d'une suppression, virements internes liés.
 - **Ajout rapide** : bouton flottant ; raccourcis sur l'icône de l'app installée (ajout rapide, actualiser, virements de paie).
 - **Conseil quinzaine** : un retrait de livret en cours de quinzaine signale ce que rapporterait d'attendre le 1er ou le 16.
+- **Taux des livrets** mis à jour avec leur date d'effet (ex. 1,7 % au 1er août), pour tous les livrets concernés d'un coup.
 - **Actualiser solde** : saisie du nouveau solde, du total affiché par la banque (la part propre en est déduite), ou ajustement « + / − x € sur ma part / celle des parents ».
 - **Mouvements récurrents** mensuels (onglet Virements → Récurrents).
 - **Versements cumulés** sur PEA, Assurance Vie, Crypto… : un versement est distingué d'une variation de valeur.

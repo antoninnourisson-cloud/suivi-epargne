@@ -16,6 +16,7 @@ interface RestitutionPanelProps {
   restitution?: ParentalRestitution;
   monthPlan?: number;          // épargne prévue par mois (rappel de paie / capacité)
   canEmailParents: boolean;
+  hasCustomSplit?: boolean;
   onPlan: (date: string | undefined) => void;
   onRestitute: (date: string, sendMail: boolean) => void;
   onUndo: () => void;
@@ -27,7 +28,7 @@ const dayLabel = (iso: string) => {
   return `${frenchDay(d)} ${d.getFullYear()}`;
 };
 
-export const RestitutionPanel: React.FC<RestitutionPanelProps> = ({ accounts, restitution, monthPlan, canEmailParents, onPlan, onRestitute, onUndo }) => {
+export const RestitutionPanel: React.FC<RestitutionPanelProps> = ({ accounts, restitution, monthPlan, canEmailParents, hasCustomSplit, onPlan, onRestitute, onUndo }) => {
   const suggested = suggestedRestitutionDate();
   const [date, setDate] = useState(restitution?.plannedDate || suggested);
   const [confirming, setConfirming] = useState(false);
@@ -141,7 +142,7 @@ export const RestitutionPanel: React.FC<RestitutionPanelProps> = ({ accounts, re
           <p className="font-bold">Après la restitution</p>
           {freedRoom.map(r => (
             <p key={r.accountId} className="text-xs">
-              {r.name} retrouve {fmt(r.amount)} de place.{r.months !== null && ` Le plan du jour de paie le remplira en priorité : environ ${r.months} mois à ${fmt(monthPlan!)} par mois.`}
+              {r.name} retrouve {fmt(r.amount)} de place.{hasCustomSplit ? ' Votre répartition personnalisée s\'appliquera : ce livret ne sera rempli que s\'il en fait partie.' : r.months !== null && ` Le plan du jour de paie le remplira en priorité : environ ${r.months} mois à ${fmt(monthPlan!)} par mois.`}
             </p>
           ))}
           <p className="text-[11px] opacity-80">Votre épargne nette ne change pas : c'était leur argent. Leur rendre leur capital n'est pas un don, il n'y a rien à déclarer.</p>

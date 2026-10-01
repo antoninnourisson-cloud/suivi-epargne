@@ -2,7 +2,8 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { SavingsAccount, Expense, AccountType, FiscalConfig, WorkBenefits, PayslipRecord, Subscription, PayChecklist as PayChecklistData } from '../types';
 import { PayChecklist } from './PayChecklist';
-import { computeIncome, computeMaturityCountdown, computePlacementStrategy, payslipSuperNet, subscriptionsAsExpenses, computePayTransfers, computeRecentSavingsRate } from '../lib/finance';
+import { SavingsSplitEditor } from './SavingsSplitEditor';
+import { computeIncome, computeMaturityCountdown, computePlacementStrategy, payslipSuperNet, subscriptionsAsExpenses, computePayTransfers, computeRecentSavingsRate, activeSavingsSplit } from '../lib/finance';
 import { parseISODate } from '../lib/dates';
 import { parseFrenchNumber, safeNumber } from '../lib/numbers';
 import { NumberInput } from './NumberInput';
@@ -40,6 +41,9 @@ interface AssistantPilotProps {
   subscriptions: Subscription[];
   onOpenSubscriptions: () => void;
   payChecklist?: PayChecklistData;
+  savingsSplit?: { accountId: string; pct: number }[];
+  savingsSplitFrom?: string;
+  onSavingsSplitChange: (split: { accountId: string; pct: number }[] | undefined, from: string | undefined) => void;
   onPayChecklistChange: (next: PayChecklistData | undefined) => void;
   onRecordPayDeposit: (accountId: string, amount: number) => string | undefined;
   onCancelPayDeposit: (accountId: string, movementId: string) => void;
@@ -54,7 +58,7 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
   grossAnnual, setGrossAnnual, leisureBudget, setLeisureBudget, projectSavings, setProjectSavings,
   navigoBase, setNavigoBase, navigoRate, setNavigoRate, taxRateManual, setTaxRateManual,
   extraMonthlyIncome, setExtraMonthlyIncome, fiscalConfig, workBenefits, activePayslip, onClearActivePayslip,
-  subscriptions, onOpenSubscriptions, payChecklist, onPayChecklistChange, onRecordPayDeposit, onCancelPayDeposit, paydayDay, setPaydayDay, paydayAmount, setPaydayAmount
+  subscriptions, onOpenSubscriptions, savingsSplit, savingsSplitFrom, onSavingsSplitChange, payChecklist, onPayChecklistChange, onRecordPayDeposit, onCancelPayDeposit, paydayDay, setPaydayDay, paydayAmount, setPaydayAmount
 }) => {
   const [showDetails, setShowDetails] = useState(false);
   const removeWithUndo = useUndoableRemove();
@@ -191,8 +195,8 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
   );
 
   const strategy = useMemo(
-    () => computePlacementStrategy(budgetData.totalToInvest, accounts, fiscalConfig),
-    [budgetData.totalToInvest, accounts, fiscalConfig]
+    () => computePlacementStrategy(budgetData.totalToInvest, accounts, fiscalConfig, activeSavingsSplit({ savingsSplit, savingsSplitFrom })),
+    [budgetData.totalToInvest, accounts, fiscalConfig, savingsSplit, savingsSplitFrom]
   );
 
   const bookletStats = useMemo(() => {
@@ -464,6 +468,14 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
               onCancelDeposit={onCancelPayDeposit}
               paydayDay={paydayDay}
             >
+              <SavingsSplitEditor
+                accounts={accounts}
+                split={savingsSplit}
+                from={savingsSplitFrom}
+                sampleAmount={budgetData.totalToInvest}
+                fiscalConfig={fiscalConfig}
+                onChange={onSavingsSplitChange}
+              />
                {isBackendEnabled() && (
                  <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-700 space-y-3">
                    <p className="text-sm font-bold text-slate-700 dark:text-slate-200 flex items-center gap-2"><BellRing className="w-4 h-4 text-indigo-600" /> Rappel le jour de paie</p>

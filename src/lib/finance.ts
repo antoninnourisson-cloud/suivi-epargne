@@ -831,11 +831,77 @@ export interface PlacementStep {
  * > LDDS) jusqu'à leur plafond, le reste sur le premier autre placement (ou suggestion
  * d'ouvrir un PEA/AV).
  */
+export type SavingsSplit = { accountId: string; pct: number }[];
+
+/** Répartition personnalisée en vigueur à cette date, sinon `undefined` (plan automatique). */
+export const activeSavingsSplit = (
+  config: { savingsSplit?: SavingsSplit; savingsSplitFrom?: string } | undefined,
+  asOfDate: Date = new Date()
+): SavingsSplit | undefined => {
+  const split = (config?.savingsSplit || []).filter(s => s.pct > 0);
+  if (split.length === 0) return undefined;
+  if (config?.savingsSplitFrom && config.savingsSplitFrom > formatISODay(asOfDate)) return undefined;
+  return split;
+};
+
+/**
+ * Répartition personnalisée : chaque compte reçoit sa part (pourcentages ramenés à 100 si
+ * besoin). Un livret plein ne prend que la place qui lui reste ; l'excédent va sur un
+ * compte de la répartition sans plafond, sinon il suit le plan automatique.
+ */
+const splitPlacement = (totalToInvest: number, accounts: SavingsAccount[], fiscalConfig: FiscalConfig, split: SavingsSplit): PlacementStep[] | null => {
+  const valid = split.filter(s => s.pct > 0 && accounts.some(a => a.id === s.accountId));
+  const sum = valid.reduce((t, s) => t + s.pct, 0);
+  if (sum <= 0) return null;
+  const ceilings: Partial<Record<AccountType, number>> = {
+    [AccountType.LEP]: fiscalConfig.ceilings.lep, [AccountType.LIVRET_A]: fiscalConfig.ceilings.livretA, [AccountType.LDDS]: fiscalConfig.ceilings.ldds,
+  };
+  const ceilingOf = (a: SavingsAccount) => (a.ceiling && a.ceiling > 0 ? a.ceiling : ceilings[a.type] || 0);
+  const byId = new Map<string, PlacementStep>();
+  let overflow = 0;
+  const overflowFrom: string[] = [];
+  for (const s of valid) {
+    const a = accounts.find(x => x.id === s.accountId)!;
+    const share = totalToInvest * s.pct / sum;
+    const ceiling = ceilingOf(a);
+    const room = ceiling > 0 ? Math.max(0, ceiling - a.totalAmount) : Infinity;
+    const take = Math.min(share, room);
+    if (share - take > 0.005) { overflow += share - take; overflowFrom.push(a.name); }
+    if (take > 0.005) byId.set(a.id, { accountId: a.id, accountName: a.name, type: a.type, rate: a.interestRate, fillAmount: take, isFullAfter: take >= room, isLiquid: ceiling > 0 });
+  }
+  const steps = () => [...byId.values()];
+  if (overflow > 0.005) {
+    const target = valid.map(s => accounts.find(x => x.id === s.accountId)!).find(a => ceilingOf(a) === 0);
+    if (target) {
+      const cur = byId.get(target.id);
+      byId.set(target.id, cur ? { ...cur, fillAmount: cur.fillAmount + overflow } : { accountId: target.id, accountName: target.name, type: target.type, rate: target.interestRate, fillAmount: overflow, isFullAfter: false, isLiquid: false });
+    } else {
+      const after = accounts.map(a => { const st = byId.get(a.id); return st ? { ...a, totalAmount: a.totalAmount + st.fillAmount } : a; });
+      for (const st of computePlacementStrategy(overflow, after, fiscalConfig)) {
+        const cur = st.accountId ? byId.get(st.accountId) : undefined;
+        if (cur) byId.set(cur.accountId!, { ...cur, fillAmount: cur.fillAmount + st.fillAmount });
+        else byId.set(st.accountId || st.accountName, st);
+      }
+    }
+    const info: PlacementStep = {
+      accountName: 'Répartition', type: AccountType.AUTRE, fillAmount: overflow, isFullAfter: false, isLiquid: false, alert: true, infoOnly: true,
+      hint: `${overflowFrom.join(', ')} ${overflowFrom.length > 1 ? 'sont pleins' : 'est plein'} : ${formatEUR2(overflow)} de votre répartition vont ${target ? `sur ${target.name}` : 'sur les autres comptes'}.`,
+    };
+    return [...steps(), info];
+  }
+  return steps();
+};
+
 export const computePlacementStrategy = (
   totalToInvest: number,
   accounts: SavingsAccount[],
-  fiscalConfig: FiscalConfig
+  fiscalConfig: FiscalConfig,
+  split?: SavingsSplit
 ): PlacementStep[] => {
+  if (split && split.length > 0) {
+    const custom = splitPlacement(totalToInvest, accounts, fiscalConfig, split);
+    if (custom) return custom;
+  }
   let remainingMoney = totalToInvest;
   const steps: PlacementStep[] = [];
   const liquidTypes = [AccountType.LEP, AccountType.LIVRET_A, AccountType.LDDS];

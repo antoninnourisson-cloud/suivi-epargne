@@ -832,6 +832,9 @@ const App: React.FC = () => {
                 subscriptions={data.subscriptions}
                 onOpenSubscriptions={() => setView('subscriptions')}
                 payChecklist={data.payChecklist}
+                savingsSplit={data.savingsSplit}
+                savingsSplitFrom={data.savingsSplitFrom}
+                onSavingsSplitChange={(split, from) => { data.setSavingsSplit(split); data.setSavingsSplitFrom(from); }}
                 onPayChecklistChange={data.setPayChecklist}
                 onRecordPayDeposit={(accountId, amount) => handleQuickAdd(accountId, amount, 'IN', 'Virement de paie', localTodayISO())}
                 onCancelPayDeposit={handleCancelPayDeposit}
@@ -851,6 +854,7 @@ const App: React.FC = () => {
                 accounts={data.accounts}
                 restitution={data.parentalRestitution}
                 monthPlan={monthPlan}
+                hasCustomSplit={!!data.savingsSplit?.length}
                 canEmailParents={!!data.parentsEmail}
                 onPlanRestitution={(date) => data.setParentalRestitution(prev => ({ ...prev, plannedDate: date }))}
                 onRestitute={handleRestitution}
