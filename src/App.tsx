@@ -31,10 +31,11 @@ import {
   LayoutDashboard, Wallet, Trash2, Edit2, ShieldCheck,
   ArrowRightLeft, RefreshCcw, PlusCircle, Cloud, LogOut,
   Loader2, Settings as SettingsIcon, AlertTriangle, RotateCw,
-  Coins, LineChart, Users, Sun, Moon, Zap, Tag, Save, WifiOff, FileText, Clock, CalendarClock, HandHeart, CalendarDays, ChevronDown
+  Coins, LineChart, Users, Sun, Moon, Zap, Tag, Save, WifiOff, FileText, Clock, CalendarClock, HandHeart, CalendarDays, ChevronDown, ScrollText
 } from 'lucide-react';
 
 // Code-splitting : les vues lourdes (recharts, etc.) sont chargées à la demande.
+const Journal = lazy(() => import('./components/Journal').then(m => ({ default: m.Journal })));
 const Agenda = lazy(() => import('./components/Agenda').then(m => ({ default: m.Agenda })));
 const Donations = lazy(() => import('./components/Donations').then(m => ({ default: m.Donations })));
 const Subscriptions = lazy(() => import('./components/Subscriptions').then(m => ({ default: m.Subscriptions })));
@@ -65,8 +66,8 @@ const NavButton = ({ active, onClick, icon: Icon, label, highlight }: any) => (
     </button>
 );
 
-type View = 'dashboard' | 'accounts' | 'transfers' | 'pilot' | 'update' | 'settings' | 'yield' | 'history' | 'parental' | 'payslips' | 'subscriptions' | 'donations' | 'agenda';
-const VALID_VIEWS: View[] = ['dashboard', 'accounts', 'transfers', 'pilot', 'update', 'settings', 'yield', 'history', 'parental', 'payslips', 'subscriptions', 'donations', 'agenda'];
+type View = 'dashboard' | 'accounts' | 'transfers' | 'pilot' | 'update' | 'settings' | 'yield' | 'history' | 'parental' | 'payslips' | 'subscriptions' | 'donations' | 'agenda' | 'journal';
+const VALID_VIEWS: View[] = ['dashboard', 'accounts', 'transfers', 'pilot', 'update', 'settings', 'yield', 'history', 'parental', 'payslips', 'subscriptions', 'donations', 'agenda', 'journal'];
 
 const App: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -783,6 +784,7 @@ const App: React.FC = () => {
           <NavButton active={view === 'payslips'} onClick={() => setView('payslips')} icon={FileText} label="Fiches de paie" />
           <NavButton active={view === 'subscriptions'} onClick={() => setView('subscriptions')} icon={CalendarClock} label="Abonnements" />
           <NavButton active={view === 'donations'} onClick={() => setView('donations')} icon={HandHeart} label="Dons" />
+          <NavButton active={view === 'journal'} onClick={() => setView('journal')} icon={ScrollText} label="Journal" />
 
           <div className="my-4 border-t border-slate-800 mx-4"></div>
           <NavButton active={view === 'settings'} onClick={() => setView('settings')} icon={SettingsIcon} label="Paramètres" />
@@ -854,7 +856,7 @@ const App: React.FC = () => {
             )}
 
             <Suspense fallback={<ViewLoader />}>
-            {view === 'dashboard' && <Dashboard accounts={data.accounts} history={data.history} expenses={allCharges} fiscalConfig={data.fiscalConfig} workBenefits={data.workBenefits} onDeleteAccount={handleDeleteAccount} config={dashboardConfig} monthPlan={monthPlan} monthlyPay={monthlyPay} payRaise={payRaise && !payRaiseHandled ? { delta: payRaise.delta, period: payRaise.latest.extracted.period || '', hasFixedAmount: data.paydayAmount !== undefined } : null} onAcceptPayRaise={acceptPayRaise} onDismissPayRaise={dismissPayRaise} subscriptions={data.subscriptions} onUpdateFiscalConfig={data.setFiscalConfig} onUpdateAccounts={data.setAccounts} onOpenSettings={() => setView('settings')} recurringMovements={data.recurringMovements} onRecordRecurring={(r, date) => handleQuickAdd(r.accountId, r.amount, r.type, r.label, date)} />}
+            {view === 'dashboard' && <Dashboard accounts={data.accounts} history={data.history} expenses={allCharges} fiscalConfig={data.fiscalConfig} workBenefits={data.workBenefits} onDeleteAccount={handleDeleteAccount} config={dashboardConfig} monthPlan={monthPlan} monthlyPay={monthlyPay} paydayDay={data.paydayDay} payRaise={payRaise && !payRaiseHandled ? { delta: payRaise.delta, period: payRaise.latest.extracted.period || '', hasFixedAmount: data.paydayAmount !== undefined } : null} onAcceptPayRaise={acceptPayRaise} onDismissPayRaise={dismissPayRaise} subscriptions={data.subscriptions} onUpdateFiscalConfig={data.setFiscalConfig} onUpdateAccounts={data.setAccounts} onOpenSettings={() => setView('settings')} recurringMovements={data.recurringMovements} onRecordRecurring={(r, date) => handleQuickAdd(r.accountId, r.amount, r.type, r.label, date)} />}
 
             {view === 'pilot' && <AssistantPilot
                 accounts={data.accounts}
@@ -898,6 +900,22 @@ const App: React.FC = () => {
 
             {view === 'yield' && <Yield accounts={data.accounts} fiscalConfig={data.fiscalConfig} monthPlan={monthPlan} savingsSplit={data.savingsSplit} />}
             {view === 'history' && <History history={data.history} expensesHistory={data.expensesHistory} reviewData={fullData} />}
+            {view === 'journal' && <Journal
+                accounts={data.accounts}
+                restitution={data.parentalRestitution}
+                onDeleteMovement={handleDeleteMovement}
+                onRevertRate={(accountId, entryDate) => {
+                  // Dernier changement de taux annulé : retour au taux qui courait avant.
+                  data.setAccounts(prev => prev.map(a => {
+                    if (a.id !== accountId) return a;
+                    const entry = (a.rateHistory || []).find(h => h.date === entryDate);
+                    if (!entry) return a;
+                    const rest = (a.rateHistory || []).filter(h => h !== entry);
+                    return { ...a, interestRate: entry.rate, rateHistory: rest.length > 0 ? rest : undefined };
+                  }));
+                  addToast({ message: 'Changement de taux annulé', kind: 'success' });
+                }}
+            />}
             {view === 'agenda' && <Agenda data={fullData} onOpen={(v) => VALID_VIEWS.includes(v as View) && setView(v as View)} />}
             {view === 'parental' && <ParentalShare
                 accounts={data.accounts}
@@ -1091,6 +1109,7 @@ const App: React.FC = () => {
           { key: 'payslips', label: 'Fiches de paie', icon: FileText },
           { key: 'subscriptions', label: 'Abonnements', icon: CalendarClock },
           { key: 'donations', label: 'Dons', icon: HandHeart },
+          { key: 'journal', label: 'Journal', icon: ScrollText },
           { key: 'settings', label: 'Paramètres', icon: SettingsIcon },
         ]}
       />

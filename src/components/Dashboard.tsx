@@ -5,7 +5,7 @@ import {
 } from 'recharts';
 import { SavingsAccount, PortfolioSnapshot, AccountType, Expense, FiscalConfig, WorkBenefits, RecurringMovement, Subscription } from '../types';
 import { Euro, Lock, Wallet, ListTodo, ChevronDown, Landmark, CalendarClock, Unlock, Save, AlertTriangle, Trash2, Clock, TrendingUp, TrendingDown, PiggyBank, Percent, ShieldAlert, Repeat } from 'lucide-react';
-import { computeAccruedParentalInterest, computeRecentSavingsRate, computeAccountBalanceAtDate, findStaleRegulatedRates, computeLepEligibility, computeIncome, findDueRecurring, computeMonthSavedAmount, computeSavingsRateHistory, computeUnlockCost, findFiscalReview, applyTaxScale, nextSubscriptionDate, findAvRateUpdatesDue } from '../lib/finance';
+import { computeAccruedParentalInterest, computeRecentSavingsRate, computeAccountBalanceAtDate, findStaleRegulatedRates, computeLepEligibility, computeIncome, findDueRecurring, computeMonthSavedAmount, computeSavedSince, payPeriodOf, computeSavingsRateHistory, computeUnlockCost, findFiscalReview, applyTaxScale, nextSubscriptionDate, findAvRateUpdatesDue } from '../lib/finance';
 import { parseISODate, formatISODay, daysBetween, localTodayISO } from '../lib/dates';
 import { Button } from './Button';
 import { formatEUR, formatSignedEUR, frenchDay, formatPeriod } from '../lib/format';
@@ -28,6 +28,7 @@ interface DashboardProps {
   monthPlan?: number;
   // Paie nette mensuelle, pour le taux d'épargne.
   monthlyPay?: number;
+  paydayDay?: number;
   subscriptions?: Subscription[];
   // Mise à jour des paramètres fiscaux (nouveau barème, vérification annuelle).
   onUpdateFiscalConfig?: (update: (prev: FiscalConfig) => FiscalConfig) => void;
@@ -44,7 +45,7 @@ interface DashboardProps {
   };
 }
 
-export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expenses, fiscalConfig, workBenefits, onDeleteAccount, config, recurringMovements = [], onRecordRecurring, monthPlan, monthlyPay = 0, subscriptions = [], onUpdateFiscalConfig, onOpenSettings, onUpdateAccounts, payRaise, onAcceptPayRaise, onDismissPayRaise }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expenses, fiscalConfig, workBenefits, onDeleteAccount, config, recurringMovements = [], onRecordRecurring, monthPlan, monthlyPay = 0, paydayDay, subscriptions = [], onUpdateFiscalConfig, onOpenSettings, onUpdateAccounts, payRaise, onAcceptPayRaise, onDismissPayRaise }) => {
   const [dateRange, setDateRange] = useState(() => {
     try {
         const stored = localStorage.getItem('dashboard_date_range');
@@ -261,7 +262,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
   // la période affichée). `computeRecentSavingsRate`/`computeAccountBalanceAtDate` sont
   // partagées avec Objectifs, pour que les deux écrans ne puissent jamais raconter deux
   // rythmes différents.
-  const monthSaved = useMemo(() => computeMonthSavedAmount(accounts), [accounts]);
+  // Avec un jour de paie connu, la jauge suit la paie (du 27 au 26 suivant) et non le mois
+  // calendaire : le 1er octobre, c'est encore la paie du 27 septembre qu'on place.
+  const payPeriod = paydayDay ? payPeriodOf(paydayDay) : null;
+  const monthSaved = useMemo(
+    () => (payPeriod ? computeSavedSince(accounts, formatISODay(payPeriod.payDate)) : computeMonthSavedAmount(accounts)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [accounts, payPeriod?.key]
+  );
 
   const [todoOpen, setTodoOpen] = useState(() => {
     try { return localStorage.getItem('dashboard_todo_open') !== '0'; } catch { return true; }
@@ -589,7 +597,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
             {unlockCost.unknown.length > 0 && <p className="text-slate-500 dark:text-slate-400">Versements à renseigner pour chiffrer : {unlockCost.unknown.join(', ')}.</p>}
           </div>
         )} /></div>
-        <StatCard title="Bloqué" amount={availabilityStats.hardLocked} icon={Lock} color="bg-slate-500" subtext="Retraite/PEE" />
+        {availabilityStats.hardLocked > 0 && <StatCard title="Bloqué" amount={availabilityStats.hardLocked} icon={Lock} color="bg-slate-500" subtext="Retraite/PEE" />}
       </div>
 
       {/* Sur grand écran, les cartes se rangent sur deux colonnes au lieu de s'étirer. */}
@@ -620,7 +628,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
         const hasPlan = monthPlan !== undefined && monthPlan > 0;
         const plan = monthPlan || 0;
         const now = new Date();
-        const daysLeft = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate() - now.getDate();
+        const periodEnd = payPeriod
+          ? new Date(payPeriod.payDate.getFullYear(), payPeriod.payDate.getMonth() + 1, Math.min(paydayDay!, new Date(payPeriod.payDate.getFullYear(), payPeriod.payDate.getMonth() + 2, 0).getDate()))
+          : new Date(now.getFullYear(), now.getMonth() + 1, 1);
+        const daysLeft = Math.max(0, daysBetween(now, periodEnd));
+        const gaugeTitle = payPeriod ? `Placé depuis la paie du ${frenchDay(payPeriod.payDate)}` : 'Placé ce mois-ci';
         const pct = hasPlan ? Math.max(0, Math.min(100, (monthSaved / plan) * 100)) : 0;
         const done = hasPlan && monthSaved >= plan;
         const maxRate = Math.max(1, ...rateHistory.map(m => Math.abs(m.rate)));
@@ -628,7 +640,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
         return (
           <div className="bg-white dark:bg-slate-800 p-5 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
             <div className="flex items-baseline justify-between gap-3 mb-2">
-              <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2"><PiggyBank className="w-4 h-4 text-indigo-600" /> Placé ce mois-ci</h3>
+              <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2"><PiggyBank className="w-4 h-4 text-indigo-600" /> {gaugeTitle}</h3>
               <p className="text-sm font-black text-slate-700 dark:text-slate-200">{monthSaved < 0 ? formatSignedEUR(monthSaved, 0) : fmtEUR(monthSaved)}{hasPlan && <span className="text-slate-500 dark:text-slate-400 font-bold"> / {fmtEUR(plan)}</span>}</p>
             </div>
             {hasPlan && (
@@ -637,9 +649,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
               </div>
             )}
             <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-2">
-              {!hasPlan ? '' : done ? 'Objectif du mois atteint. '
-                : monthSaved < 0 ? `Vous avez plus retiré que versé ce mois-ci (${fmtEUR(monthSaved)}). `
-                : `Reste ${fmtEUR(plan - monthSaved)} à placer, ${daysLeft} jour${daysLeft > 1 ? 's' : ''} avant la fin du mois. `}
+              {!hasPlan ? '' : done ? 'Objectif atteint. '
+                : monthSaved < 0 ? `Vous avez plus retiré que versé (${fmtEUR(monthSaved)}). `
+                : `Reste ${fmtEUR(plan - monthSaved)} à placer, ${daysLeft} jour${daysLeft > 1 ? 's' : ''} avant ${payPeriod ? 'la prochaine paie' : 'la fin du mois'}. `}
               Versements moins retraits sur vos comptes d'épargne, hors variations de valeur.
             </p>
             {monthlyPay > 0 && (
@@ -740,7 +752,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
               })}
             </defs>
             <XAxis dataKey="displayDate" tick={{ fontSize: 10 }} minTickGap={30} />
-            <YAxis tickFormatter={(val) => `${(val/1000).toFixed(1)}k`} tick={{ fontSize: 10 }} />
+            <YAxis tickFormatter={(val) => `${(val / 1000).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} k€`} tick={{ fontSize: 10 }} width={52} />
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
             <RechartsTooltip 
               contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}

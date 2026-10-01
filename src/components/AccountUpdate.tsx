@@ -229,6 +229,7 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
                     type="text"
                     inputMode="decimal"
                     value={u.owned}
+                    aria-label={`Ma part sur ${account.name}`}
                     onChange={(e) => handleOwnedChange(account.id, e.target.value)}
                     className="w-full bg-transparent text-lg font-black text-indigo-900 dark:text-indigo-200 outline-none"
                   />
@@ -256,6 +257,7 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
                     type="text"
                     inputMode="decimal"
                     value={u.parental}
+                    aria-label={`Part des parents sur ${account.name}`}
                     onChange={(e) => handleParentalChange(account.id, e.target.value)}
                     className="w-full bg-transparent text-lg font-black text-amber-900 dark:text-amber-200 outline-none"
                   />
@@ -274,6 +276,7 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
                       type="text"
                       inputMode="decimal"
                       value={u.bankTotal ?? toInputAmount(newTotal)}
+                      aria-label={`Total affiché par la banque pour ${account.name}`}
                       onChange={(e) => handleBankTotalChange(account.id, e.target.value)}
                       className="w-full bg-transparent text-lg font-black text-slate-800 dark:text-slate-100 outline-none"
                     />
@@ -333,6 +336,7 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
                       type="text"
                       inputMode="decimal"
                       value={u.deposits}
+                      aria-label={`Versements cumulés sur ${account.name}`}
                       onChange={(e) => handleDepositsChange(account.id, e.target.value)}
                       placeholder="Inconnu"
                       className="w-full bg-transparent font-bold text-slate-700 dark:text-slate-200 outline-none text-sm"
@@ -355,6 +359,7 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
                     <input 
                       type="date"
                       value={u.date}
+                      aria-label={`Date du relevé de ${account.name}`}
                       onChange={(e) => handleDateChange(account.id, e.target.value)}
                       className="w-full bg-transparent font-bold text-slate-700 dark:text-slate-200 outline-none text-sm"
                     />

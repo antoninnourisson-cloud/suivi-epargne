@@ -8,6 +8,7 @@ interface NumberInputProps {
   placeholder?: string;
   suffix?: string; // ex: '€'
   min?: number;    // borne basse appliquée à la validation (ex: 0 pour un montant)
+  ariaLabel?: string; // libellé pour les lecteurs d'écran (le libellé visible n'est pas relié)
 }
 
 const fmt = (n: number) => (isNaN(n) ? '' : n.toLocaleString('fr-FR', { maximumFractionDigits: 2 }));
@@ -20,7 +21,7 @@ const fmt = (n: number) => (isNaN(n) ? '' : n.toLocaleString('fr-FR', { maximumF
  * pas le navigateur. Voir le commentaire de cette fonction pour le bug de perte de données
  * que ça corrige (la virgule décimale enregistrait 0).
  */
-export const NumberInput: React.FC<NumberInputProps> = ({ value, onChange, className, placeholder, suffix, min }) => {
+export const NumberInput: React.FC<NumberInputProps> = ({ value, onChange, className, placeholder, suffix, min, ariaLabel }) => {
   const [focused, setFocused] = useState(false);
   const [raw, setRaw] = useState(String(value ?? ''));
 
@@ -33,6 +34,7 @@ export const NumberInput: React.FC<NumberInputProps> = ({ value, onChange, class
       <input
         type="text"
         inputMode="decimal"
+        aria-label={ariaLabel}
         value={focused ? raw : (value || value === 0 ? fmt(value) : '')}
         placeholder={placeholder}
         onFocus={() => { setFocused(true); setRaw(value ? String(value) : ''); }}

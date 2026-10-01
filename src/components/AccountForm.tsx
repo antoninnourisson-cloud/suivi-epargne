@@ -145,9 +145,9 @@ export const AccountForm: React.FC<AccountFormProps> = ({ onSave, initialData, o
           <div className="md:col-span-2 bg-indigo-50 dark:bg-indigo-950/40 p-5 rounded-2xl border border-indigo-100 dark:border-indigo-900">
             <label className="flex items-center gap-2 text-[11px] font-black text-indigo-700 dark:text-indigo-300 uppercase mb-4"><Calculator className="w-4 h-4" /> Répartition du Capital</label>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-indigo-100 dark:border-indigo-900"><label className="text-[11px] font-black text-indigo-700 dark:text-indigo-300 block mb-1">Solde total (€)</label><NumberInput value={totalAmount} onChange={handleTotalChange} className={moneyInputClass} min={0} /></div>
-              {showParental && (<div className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-amber-100 dark:border-amber-900"><label className="text-[11px] font-black text-amber-700 dark:text-amber-300 block mb-1"><Users className="w-3 h-3" /> Part des parents (€)</label><NumberInput value={parentalCapital} onChange={handleParentalChange} className={`${moneyInputClass} text-amber-700 dark:text-amber-300`} min={0} /></div>)}
-              <div className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-emerald-100 dark:border-emerald-900"><label className="text-[11px] font-black text-emerald-700 dark:text-emerald-300 block mb-1">Ma part nette (€)</label><NumberInput value={ownedAmount} onChange={handleOwnedChange} className={`${moneyInputClass} text-emerald-800 dark:text-emerald-300`} min={0} /></div>
+              <div className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-indigo-100 dark:border-indigo-900"><label className="text-[11px] font-black text-indigo-700 dark:text-indigo-300 block mb-1">Solde total (€)</label><NumberInput ariaLabel="Solde total (€)" value={totalAmount} onChange={handleTotalChange} className={moneyInputClass} min={0} /></div>
+              {showParental && (<div className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-amber-100 dark:border-amber-900"><label className="text-[11px] font-black text-amber-700 dark:text-amber-300 block mb-1"><Users className="w-3 h-3" /> Part des parents (€)</label><NumberInput ariaLabel="Part des parents (€)" value={parentalCapital} onChange={handleParentalChange} className={`${moneyInputClass} text-amber-700 dark:text-amber-300`} min={0} /></div>)}
+              <div className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-emerald-100 dark:border-emerald-900"><label className="text-[11px] font-black text-emerald-700 dark:text-emerald-300 block mb-1">Ma part nette (€)</label><NumberInput ariaLabel="Ma part nette (€)" value={ownedAmount} onChange={handleOwnedChange} className={`${moneyInputClass} text-emerald-800 dark:text-emerald-300`} min={0} /></div>
             </div>
           </div>
 
@@ -165,7 +165,7 @@ export const AccountForm: React.FC<AccountFormProps> = ({ onSave, initialData, o
                 <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 flex items-center gap-1"><History className="w-3 h-3" /> {initialData.rateHistory.length} changement(s) historisé(s)</p>
               )}
             </div>
-            {!isTaxableType && <div><label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase mb-1">Plafond (€)</label><NumberInput value={ceiling} onChange={setCeiling} className="w-full p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-bold" min={0} /></div>}
+            {!isTaxableType && <div><label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase mb-1">Plafond (€)</label><NumberInput ariaLabel="Plafond (€)" value={ceiling} onChange={setCeiling} className="w-full p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-bold" min={0} /></div>}
             {showFee && (
               <div className="col-span-2">
                 <label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase mb-1 block">Frais de gestion annuels (%)</label>

@@ -98,22 +98,22 @@ export const History: React.FC<HistoryProps> = ({ history, expensesHistory, revi
 
           <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm min-w-[34rem]">
+              <table className="w-full text-left text-sm sm:min-w-[34rem]">
                 <thead className="bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700">
                   <tr>
-                    <th className="px-6 py-3 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Mois</th>
-                    <th className="px-6 py-3 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase text-right">Total</th>
-                    <th className="px-6 py-3 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase text-right">Ma part</th>
-                    <th className="px-6 py-3 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase text-right">Variation</th>
+                    <th className="px-3 sm:px-6 py-3 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Mois</th>
+                    <th className="hidden sm:table-cell px-6 py-3 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase text-right">Total</th>
+                    <th className="px-3 sm:px-6 py-3 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase text-right">Ma part</th>
+                    <th className="px-3 sm:px-6 py-3 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase text-right">Variation</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                   {deltas.map(r => (
                     <tr key={r.date} className="hover:bg-slate-50 dark:hover:bg-slate-800">
-                      <td className="px-6 py-3 font-bold text-slate-700 dark:text-slate-200">{monthLabel(r.date)}</td>
-                      <td className="px-6 py-3 text-right font-mono text-slate-600 dark:text-slate-300">{fmt(r.total)}</td>
-                      <td className="px-6 py-3 text-right font-mono text-indigo-600">{fmt(r.owned)}</td>
-                      <td className="px-6 py-3 text-right font-bold">
+                      <td className="px-3 sm:px-6 py-3 font-bold text-slate-700 dark:text-slate-200">{monthLabel(r.date)}</td>
+                      <td className="hidden sm:table-cell px-6 py-3 text-right font-mono text-slate-600 dark:text-slate-300">{fmt(r.total)}</td>
+                      <td className="px-3 sm:px-6 py-3 text-right font-mono text-indigo-600">{fmt(r.owned)}</td>
+                      <td className="px-3 sm:px-6 py-3 text-right font-bold">
                         {r.deltaTotal === null ? <span className="text-slate-300">—</span> :
                           r.deltaTotal > 0 ? <span className="text-emerald-600 inline-flex items-center gap-1 justify-end"><ArrowUpRight className="w-3.5 h-3.5" />{fmt(r.deltaTotal)}</span> :
                           r.deltaTotal < 0 ? <span className="text-rose-600 inline-flex items-center gap-1 justify-end"><ArrowDownRight className="w-3.5 h-3.5" />{fmt(r.deltaTotal)}</span> :

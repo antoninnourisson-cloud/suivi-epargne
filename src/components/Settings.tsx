@@ -309,8 +309,8 @@ export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parent
                    </label>
                    {localBenefits.navigo.active && (
                        <div className="space-y-2">
-                           <div><label className="text-[11px] font-bold text-slate-500 dark:text-slate-400">Prix de base mensuel (€)</label><NumberInput value={localBenefits.navigo.basePrice} onChange={v => updateBenefit('navigo', 'basePrice', v)} className="w-full p-2 rounded border border-indigo-200 dark:border-indigo-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100" /></div>
-                           <div><label className="text-[11px] font-bold text-slate-500 dark:text-slate-400">Remboursement (%)</label><NumberInput value={localBenefits.navigo.refundRate} onChange={v => updateBenefit('navigo', 'refundRate', v)} className="w-full p-2 rounded border border-indigo-200 dark:border-indigo-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100" /></div>
+                           <div><label className="text-[11px] font-bold text-slate-500 dark:text-slate-400">Prix de base mensuel (€)</label><NumberInput ariaLabel="Prix de base mensuel (€)" value={localBenefits.navigo.basePrice} onChange={v => updateBenefit('navigo', 'basePrice', v)} className="w-full p-2 rounded border border-indigo-200 dark:border-indigo-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100" /></div>
+                           <div><label className="text-[11px] font-bold text-slate-500 dark:text-slate-400">Remboursement (%)</label><NumberInput ariaLabel="Remboursement (%)" value={localBenefits.navigo.refundRate} onChange={v => updateBenefit('navigo', 'refundRate', v)} className="w-full p-2 rounded border border-indigo-200 dark:border-indigo-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100" /></div>
                            <p className="text-[11px] text-emerald-600 dark:text-emerald-400 text-right mt-1">+{formatEUR(localBenefits.navigo.basePrice * localBenefits.navigo.refundRate / 100, 2)}/mois (gain)</p>
                        </div>
                    )}
@@ -324,8 +324,8 @@ export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parent
                    </label>
                    {localBenefits.mutuelle.active && (
                        <div className="space-y-2">
-                           <div><label className="text-[11px] font-bold text-slate-500 dark:text-slate-400">Coût total du contrat (€)</label><NumberInput value={localBenefits.mutuelle.totalCost} onChange={v => updateBenefit('mutuelle', 'totalCost', v)} className="w-full p-2 rounded border border-rose-200 dark:border-rose-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100" /></div>
-                           <div><label className="text-[11px] font-bold text-slate-500 dark:text-slate-400">Prise en charge employeur (%)</label><NumberInput value={localBenefits.mutuelle.employerRate} onChange={v => updateBenefit('mutuelle', 'employerRate', v)} className="w-full p-2 rounded border border-rose-200 dark:border-rose-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100" /></div>
+                           <div><label className="text-[11px] font-bold text-slate-500 dark:text-slate-400">Coût total du contrat (€)</label><NumberInput ariaLabel="Coût total du contrat (€)" value={localBenefits.mutuelle.totalCost} onChange={v => updateBenefit('mutuelle', 'totalCost', v)} className="w-full p-2 rounded border border-rose-200 dark:border-rose-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100" /></div>
+                           <div><label className="text-[11px] font-bold text-slate-500 dark:text-slate-400">Prise en charge employeur (%)</label><NumberInput ariaLabel="Prise en charge employeur (%)" value={localBenefits.mutuelle.employerRate} onChange={v => updateBenefit('mutuelle', 'employerRate', v)} className="w-full p-2 rounded border border-rose-200 dark:border-rose-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100" /></div>
                            <p className="text-[11px] text-rose-600 dark:text-rose-400 text-right mt-1">−{formatEUR(localBenefits.mutuelle.totalCost * (1 - localBenefits.mutuelle.employerRate/100), 2)}/mois (coût)</p>
                        </div>
                    )}
@@ -340,10 +340,10 @@ export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parent
                    {localBenefits.mealVouchers.active && (
                        <div className="space-y-2">
                            <div className="grid grid-cols-2 gap-2">
-                               <div><label className="text-[11px] font-bold text-slate-500 dark:text-slate-400">Valeur (€)</label><NumberInput value={localBenefits.mealVouchers.faceValue} onChange={v => updateBenefit('mealVouchers', 'faceValue', v)} className="w-full p-2 rounded border border-emerald-200 dark:border-emerald-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100" /></div>
-                               <div><label className="text-[11px] font-bold text-slate-500 dark:text-slate-400">Jours par mois</label><NumberInput value={localBenefits.mealVouchers.daysPerMonth} onChange={v => updateBenefit('mealVouchers', 'daysPerMonth', v)} className="w-full p-2 rounded border border-emerald-200 dark:border-emerald-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100" /></div>
+                               <div><label className="text-[11px] font-bold text-slate-500 dark:text-slate-400">Valeur (€)</label><NumberInput ariaLabel="Valeur (€)" value={localBenefits.mealVouchers.faceValue} onChange={v => updateBenefit('mealVouchers', 'faceValue', v)} className="w-full p-2 rounded border border-emerald-200 dark:border-emerald-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100" /></div>
+                               <div><label className="text-[11px] font-bold text-slate-500 dark:text-slate-400">Jours par mois</label><NumberInput ariaLabel="Jours par mois" value={localBenefits.mealVouchers.daysPerMonth} onChange={v => updateBenefit('mealVouchers', 'daysPerMonth', v)} className="w-full p-2 rounded border border-emerald-200 dark:border-emerald-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100" /></div>
                            </div>
-                           <div><label className="text-[11px] font-bold text-slate-500 dark:text-slate-400">Prise en charge employeur (%)</label><NumberInput value={localBenefits.mealVouchers.employerRate} onChange={v => updateBenefit('mealVouchers', 'employerRate', v)} className="w-full p-2 rounded border border-emerald-200 dark:border-emerald-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100" /></div>
+                           <div><label className="text-[11px] font-bold text-slate-500 dark:text-slate-400">Prise en charge employeur (%)</label><NumberInput ariaLabel="Prise en charge employeur (%)" value={localBenefits.mealVouchers.employerRate} onChange={v => updateBenefit('mealVouchers', 'employerRate', v)} className="w-full p-2 rounded border border-emerald-200 dark:border-emerald-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100" /></div>
                            <p className="text-[11px] text-emerald-600 dark:text-emerald-400 text-right mt-1">−{formatEUR(localBenefits.mealVouchers.faceValue * localBenefits.mealVouchers.daysPerMonth * (1 - localBenefits.mealVouchers.employerRate/100), 2)}/mois (coût)</p>
                        </div>
                    )}
@@ -357,20 +357,20 @@ export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parent
           <div className="space-y-4">
             <div>
               <label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Charges salariales (ex. 0,2232)</label>
-              <NumberInput value={localFiscal.salaryChargesRate} onChange={v => handleFiscalChange('salaryChargesRate', v)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded font-bold" />
+              <NumberInput ariaLabel="Charges salariales (ex. 0,2232)" value={localFiscal.salaryChargesRate} onChange={v => handleFiscalChange('salaryChargesRate', v)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded font-bold" />
             </div>
             <div>
               <label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Abattement forfaitaire (ex. 0,10)</label>
-              <NumberInput value={localFiscal.standardAllowance} onChange={v => handleFiscalChange('standardAllowance', v)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded font-bold" />
+              <NumberInput ariaLabel="Abattement forfaitaire (ex. 0,10)" value={localFiscal.standardAllowance} onChange={v => handleFiscalChange('standardAllowance', v)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded font-bold" />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Plafond RFR LEP (1 part)</label>
-                <NumberInput value={localFiscal.lepIncomeCeiling ?? 0} onChange={v => handleFiscalChange('lepIncomeCeiling', v)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded font-bold" />
+                <NumberInput ariaLabel="Plafond RFR LEP (1 part)" value={localFiscal.lepIncomeCeiling ?? 0} onChange={v => handleFiscalChange('lepIncomeCeiling', v)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded font-bold" />
               </div>
               <div>
                 <label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Parts fiscales</label>
-                <NumberInput value={localFiscal.lepHouseholdParts ?? 1} onChange={v => handleFiscalChange('lepHouseholdParts', v)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded font-bold" />
+                <NumberInput ariaLabel="Parts fiscales" value={localFiscal.lepHouseholdParts ?? 1} onChange={v => handleFiscalChange('lepHouseholdParts', v)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded font-bold" />
               </div>
             </div>
             <p className="text-[11px] text-slate-500 dark:text-slate-400 -mt-2">
@@ -382,8 +382,8 @@ export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parent
         <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700">
           <h3 className="font-bold text-slate-800 dark:text-slate-100 mb-4 border-b border-slate-200 dark:border-slate-700 pb-2 flex items-center gap-2"><PiggyBank className="w-4 h-4 text-indigo-600" /> Plafonds des livrets (€)</h3>
           <div className="grid grid-cols-2 gap-4">
-              <div><label className="text-[11px] text-indigo-600 dark:text-indigo-300 font-black uppercase">Livret A</label><NumberInput value={localFiscal.ceilings.livretA} onChange={v => handleCeilingChange('livretA', v)} className="w-full p-2 bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900 rounded font-bold text-slate-800 dark:text-slate-100" /></div>
-              <div><label className="text-[11px] text-rose-600 dark:text-rose-300 font-black uppercase">LEP</label><NumberInput value={localFiscal.ceilings.lep} onChange={v => handleCeilingChange('lep', v)} className="w-full p-2 bg-rose-50 dark:bg-rose-950/40 border border-rose-100 dark:border-rose-900 rounded font-bold text-slate-800 dark:text-slate-100" /></div>
+              <div><label className="text-[11px] text-indigo-600 dark:text-indigo-300 font-black uppercase">Livret A</label><NumberInput ariaLabel="Livret A" value={localFiscal.ceilings.livretA} onChange={v => handleCeilingChange('livretA', v)} className="w-full p-2 bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900 rounded font-bold text-slate-800 dark:text-slate-100" /></div>
+              <div><label className="text-[11px] text-rose-600 dark:text-rose-300 font-black uppercase">LEP</label><NumberInput ariaLabel="LEP" value={localFiscal.ceilings.lep} onChange={v => handleCeilingChange('lep', v)} className="w-full p-2 bg-rose-50 dark:bg-rose-950/40 border border-rose-100 dark:border-rose-900 rounded font-bold text-slate-800 dark:text-slate-100" /></div>
           </div>
         </div>
 
@@ -420,11 +420,11 @@ export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parent
                 <div key={index} className="flex items-center gap-4">
                     <div className="flex-1">
                         <label className="text-[11px] uppercase font-bold text-slate-500 dark:text-slate-400">Limite haute (€)</label>
-                        <NumberInput value={bracket.limit === Infinity ? 999999999 : bracket.limit} onChange={v => updateBracket(index, 'limit', v)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded text-sm text-slate-800 dark:text-slate-100" />
+                        <NumberInput ariaLabel="Limite haute (€)" value={bracket.limit === Infinity ? 999999999 : bracket.limit} onChange={v => updateBracket(index, 'limit', v)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded text-sm text-slate-800 dark:text-slate-100" />
                     </div>
                     <div className="w-32">
                         <label className="text-[11px] uppercase font-bold text-slate-500 dark:text-slate-400">Taux (ex. 0,11)</label>
-                        <NumberInput value={bracket.rate} onChange={v => updateBracket(index, 'rate', v)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded text-sm font-bold text-indigo-600 dark:text-indigo-300" />
+                        <NumberInput ariaLabel="Taux (ex. 0,11)" value={bracket.rate} onChange={v => updateBracket(index, 'rate', v)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded text-sm font-bold text-indigo-600 dark:text-indigo-300" />
                     </div>
                     <button onClick={() => removeBracket(index)} className="mt-4 p-2 text-slate-300 hover:text-rose-500"><Trash2 className="w-4 h-4" /></button>
                 </div>

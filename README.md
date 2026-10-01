@@ -22,7 +22,7 @@ Un **petit serveur optionnel** (Cloudflare Worker, dossier [`worker/`](worker/))
 - Épargne nette, répartie entre disponible, contrainte fiscale (AV/PEA récents, avec l'impôt en plus d'un retrait anticipé et la date où il devient gratuit) et bloqué (PEE, PER…).
 - Évolution empilée par compte, et répartition par établissement.
 - **Prélèvements des 7 prochains jours** (abonnements).
-- **Placé ce mois-ci** : jauge des versements du mois face au plan d'épargne.
+- **Placé depuis la paie** : jauge des versements depuis la dernière paie (ou du mois) face au plan d'épargne.
 - **Taux d'épargne** : part de la paie mise de côté, mois par mois sur un an.
 - **Projection** à 6 et 12 mois d'après le rythme réel des 90 derniers jours, avec alerte si ce rythme ralentit ou accélère fortement.
 - **À faire** : les alertes regroupées dans une carte repliable :
@@ -41,6 +41,7 @@ Un **petit serveur optionnel** (Cloudflare Worker, dossier [`worker/`](worker/))
 ### Comptes et mouvements
 - Distinction entre **part propre** et **capital des parents** sur chaque compte. Le capital parental est intouchable, ses intérêts reviennent à l'utilisateur.
 - **Restitution du capital parental** : date conseillée (le 1er janvier garde toute l'année d'intérêts), montants par compte, effet sur le plan de placement, rappels début décembre et le jour J, enregistrement en un clic avec récapitulatif aux parents et relevé exportable. Ensuite, l'app passe en mode solo.
+- **Journal des modifications** : tous les mouvements (votre part, part des parents, valorisations), changements de taux et restitution ; suppression ou annulation depuis le journal.
 - **Recherche** dans les mouvements de tous les comptes (libellé, montant, date).
 - Étiquettes, historique des mouvements, annulation d'une suppression, virements internes liés.
 - **Ajout rapide** : bouton flottant ; raccourcis sur l'icône de l'app installée (ajout rapide, actualiser, virements de paie).

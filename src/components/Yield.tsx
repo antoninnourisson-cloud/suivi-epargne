@@ -201,32 +201,32 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig, monthPlan,
 
       <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm min-w-[34rem]">
+          <table className="w-full text-left text-sm sm:min-w-[34rem]">
             <thead className="bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700">
               <tr>
-                <th className="px-6 py-3 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Compte</th>
-                <th className="px-6 py-3 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase text-right">Taux</th>
-                <th className="px-6 py-3 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase text-right">Solde</th>
-                <th className="px-6 py-3 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase text-right">Acquis {currentYear}</th>
-                <th className="px-6 py-3 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase text-right">Attendu 31/12</th>
-                <th className="px-6 py-3 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase text-right">Rythme / an</th>
+                <th className="px-3 sm:px-6 py-3 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Compte</th>
+                <th className="px-3 sm:px-6 py-3 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase text-right">Taux</th>
+                <th className="hidden sm:table-cell px-6 py-3 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase text-right">Solde</th>
+                <th className="px-3 sm:px-6 py-3 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase text-right">Acquis {currentYear}</th>
+                <th className="px-3 sm:px-6 py-3 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase text-right">Attendu 31/12</th>
+                <th className="hidden sm:table-cell px-6 py-3 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase text-right">Rythme / an</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {rows.map(r => (
                 <tr key={r.id} className="hover:bg-slate-50 dark:hover:bg-slate-800">
-                  <td className="px-6 py-3"><div className="font-bold text-slate-800 dark:text-slate-100">{r.name}</div><div className="text-[11px] uppercase text-slate-500 dark:text-slate-400 font-bold">{r.type}</div></td>
-                  <td className="px-6 py-3 text-right font-mono text-slate-600 dark:text-slate-300">
+                  <td className="px-3 sm:px-6 py-3"><div className="font-bold text-slate-800 dark:text-slate-100">{r.name}</div><div className="text-[11px] uppercase text-slate-500 dark:text-slate-400 font-bold">{r.type}</div></td>
+                  <td className="px-3 sm:px-6 py-3 text-right font-mono whitespace-nowrap text-slate-600 dark:text-slate-300">
                     {formatRate(r.rate)}
                     {Math.abs(r.net - r.rate) > 0.005 && <span className="block text-[11px] font-bold text-emerald-600" title="Après prélèvements sociaux (et frais éventuels)">net {formatRate(Math.round(r.net * 100) / 100)}</span>}
                     {r.hasRateHistory && Math.abs(r.weightedRate - r.rate) > 0.01 && (
                       <span className="block text-[11px] text-indigo-400 font-bold normal-case" title="Moyenne pondérée dans le temps suite à un changement de taux">≈ {formatRate(Math.round(r.weightedRate * 100) / 100)} pondéré</span>
                     )}
                   </td>
-                  <td className="px-6 py-3 text-right font-mono text-slate-600 dark:text-slate-300">{fmt(r.base)}</td>
-                  <td className="px-6 py-3 text-right font-black text-emerald-600">{fmt(r.accrued)}</td>
-                  <td className="px-6 py-3 text-right font-bold text-slate-700 dark:text-slate-200">{fmt(r.expected)}</td>
-                  <td className="px-6 py-3 text-right font-mono text-slate-500 dark:text-slate-400">{fmt(r.annual)}</td>
+                  <td className="hidden sm:table-cell px-6 py-3 text-right font-mono text-slate-600 dark:text-slate-300">{fmt(r.base)}</td>
+                  <td className="px-3 sm:px-6 py-3 text-right font-black text-emerald-600">{fmt(r.accrued)}</td>
+                  <td className="px-3 sm:px-6 py-3 text-right font-bold text-slate-700 dark:text-slate-200">{fmt(r.expected)}</td>
+                  <td className="hidden sm:table-cell px-6 py-3 text-right font-mono text-slate-500 dark:text-slate-400">{fmt(r.annual)}</td>
                 </tr>
               ))}
               {rows.length === 0 && <tr><td colSpan={6} className="px-6 py-8 text-center text-slate-500 dark:text-slate-400 italic">Aucun compte rémunéré (renseignez un taux d'intérêt sur vos comptes).</td></tr>}
@@ -245,19 +245,19 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig, monthPlan,
           </div>
           {latentRows.length > 0 && (
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm min-w-[34rem]">
+              <table className="w-full text-left text-sm sm:min-w-[34rem]">
                 <thead className="bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700">
                   <tr>
-                    <th className="px-6 py-3 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Compte</th>
-                    <th className="px-6 py-3 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase text-right">Versé</th>
-                    <th className="px-6 py-3 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase text-right">Plus-value</th>
-                    <th className="px-6 py-3 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase text-right">Si tout retiré</th>
+                    <th className="px-3 sm:px-6 py-3 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Compte</th>
+                    <th className="hidden sm:table-cell px-6 py-3 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase text-right">Versé</th>
+                    <th className="px-3 sm:px-6 py-3 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase text-right">Plus-value</th>
+                    <th className="px-3 sm:px-6 py-3 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase text-right">Si tout retiré</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                   {latentRows.map(({ account: a, gain, tax }) => (
                     <tr key={a.id}>
-                      <td className="px-6 py-3">
+                      <td className="px-3 sm:px-6 py-3">
                         <div className="font-bold text-slate-800 dark:text-slate-100">{a.name}</div>
                         <div className="text-[11px] uppercase text-slate-500 dark:text-slate-400 font-bold">{a.type} · valeur {fmt(a.totalAmount)}</div>
                         {a.type === AccountType.PEA && (
@@ -266,9 +266,9 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig, monthPlan,
                           </div>
                         )}
                       </td>
-                      <td className="px-6 py-3 text-right font-mono text-slate-600 dark:text-slate-300">{fmt(a.totalDeposits || 0)}</td>
-                      <td className={`px-6 py-3 text-right font-mono font-bold ${gain >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>{gain >= 0 ? '+' : ''}{fmt(gain)}</td>
-                      <td className="px-6 py-3 text-right">
+                      <td className="hidden sm:table-cell px-6 py-3 text-right font-mono text-slate-600 dark:text-slate-300">{fmt(a.totalDeposits || 0)}</td>
+                      <td className={`px-3 sm:px-6 py-3 text-right font-mono font-bold ${gain >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>{gain >= 0 ? '+' : ''}{fmt(gain)}</td>
+                      <td className="px-3 sm:px-6 py-3 text-right">
                         {tax.known ? (
                           <>
                             <div className="font-black text-emerald-600">{fmt(gain - tax.socialCharges - tax.incomeTax)}</div>
@@ -318,22 +318,22 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig, monthPlan,
           </p>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm min-w-[34rem]">
+            <table className="w-full text-left text-sm sm:min-w-[34rem]">
               <thead className="bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700">
                 <tr>
-                  <th className="px-6 py-3 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Compte</th>
-                  <th className="px-6 py-3 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase text-right">Solde</th>
-                  <th className="px-6 py-3 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase text-right">Brut acquis {currentYear}</th>
-                  <th className="px-6 py-3 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase text-right">Net si retiré</th>
+                  <th className="px-3 sm:px-6 py-3 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Compte</th>
+                  <th className="hidden sm:table-cell px-6 py-3 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase text-right">Solde</th>
+                  <th className="px-3 sm:px-6 py-3 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase text-right">Brut acquis {currentYear}</th>
+                  <th className="px-3 sm:px-6 py-3 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase text-right">Net si retiré</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {taxableRows.map(r => (
                   <tr key={r.id} className="hover:bg-slate-50 dark:hover:bg-slate-800">
-                    <td className="px-6 py-3"><div className="font-bold text-slate-800 dark:text-slate-100">{r.name}</div><div className="text-[11px] uppercase text-slate-500 dark:text-slate-400 font-bold">{r.institution} · {r.type}</div></td>
-                    <td className="px-6 py-3 text-right font-mono text-slate-600 dark:text-slate-300">{fmt(r.base)}</td>
-                    <td className="px-6 py-3 text-right font-mono text-slate-500 dark:text-slate-400">{fmt(r.estimatedAnnualInterest)}</td>
-                    <td className="px-6 py-3 text-right">
+                    <td className="px-3 sm:px-6 py-3"><div className="font-bold text-slate-800 dark:text-slate-100">{r.name}</div><div className="text-[11px] uppercase text-slate-500 dark:text-slate-400 font-bold">{r.institution} · {r.type}</div></td>
+                    <td className="hidden sm:table-cell px-6 py-3 text-right font-mono text-slate-600 dark:text-slate-300">{fmt(r.base)}</td>
+                    <td className="px-3 sm:px-6 py-3 text-right font-mono text-slate-500 dark:text-slate-400">{fmt(r.estimatedAnnualInterest)}</td>
+                    <td className="px-3 sm:px-6 py-3 text-right">
                       <div className="font-black text-emerald-600">{r.tax.regime === 'NON_MODELISE' ? '—' : fmt(r.tax.netInterest)}</div>
                       <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase">{REGIME_LABEL[r.tax.regime]}</div>
                     </td>

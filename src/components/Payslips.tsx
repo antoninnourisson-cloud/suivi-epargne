@@ -339,13 +339,13 @@ export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, 
       {payslips.length > 0 && (
         <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm min-w-[34rem]">
+            <table className="w-full text-left text-sm sm:min-w-[34rem]">
               <thead className="bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700">
                 <tr>
-                  <th className="px-6 py-3 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Période</th>
-                  <th className="px-6 py-3 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase text-right">Brut</th>
-                  <th className="px-6 py-3 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase text-right">Net payé</th>
-                  <th className="px-6 py-3 text-right"></th>
+                  <th className="px-3 sm:px-6 py-3 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Période</th>
+                  <th className="hidden sm:table-cell px-6 py-3 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase text-right">Brut</th>
+                  <th className="px-3 sm:px-6 py-3 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase text-right">Net payé</th>
+                  <th className="px-3 sm:px-6 py-3 text-right"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -353,16 +353,16 @@ export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, 
                   const isActive = p.id === activePayslipId;
                   return (
                   <tr key={p.id} className={`hover:bg-slate-50 dark:hover:bg-slate-800 ${isActive ? 'bg-amber-50/60 dark:bg-amber-950/20' : ''}`}>
-                    <td className="px-6 py-3">
+                    <td className="px-3 sm:px-6 py-3">
                       <div className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
                         {p.extracted.period ? formatPeriod(p.extracted.period) : '—'}
                         {isActive && <span className="text-[11px] font-black uppercase bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300 px-1.5 py-0.5 rounded">Référence du Pilotage</span>}
                       </div>
                       <div className="text-[11px] uppercase text-slate-500 dark:text-slate-400 font-bold">{p.extracted.employer || p.fileName}</div>
                     </td>
-                    <td className="px-6 py-3 text-right font-mono text-slate-600 dark:text-slate-300">{fmt(p.extracted.grossAmount)}</td>
-                    <td className="px-6 py-3 text-right font-black text-emerald-600">{fmt(p.extracted.netPaid ?? p.extracted.netAmount)}</td>
-                    <td className="px-6 py-3 text-right">
+                    <td className="hidden sm:table-cell px-6 py-3 text-right font-mono text-slate-600 dark:text-slate-300">{fmt(p.extracted.grossAmount)}</td>
+                    <td className="px-3 sm:px-6 py-3 text-right font-black text-emerald-600">{fmt(p.extracted.netPaid ?? p.extracted.netAmount)}</td>
+                    <td className="px-3 sm:px-6 py-3 text-right">
                       <div className="flex justify-end gap-1">
                         {isActive ? (
                           <button onClick={onClearActivePayslip} className="p-2 text-amber-600 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900 rounded-lg" title="Revenir à l'estimation théorique"><Wand2 className="w-4 h-4" /></button>

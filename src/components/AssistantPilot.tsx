@@ -321,7 +321,7 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
             )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-              <div className="bg-slate-50 dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-700"><label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Brut annuel</label><NumberInput value={Math.round(grossAnnual)} onChange={updateFromGrossAnnual} min={0} suffix="€" className="w-full bg-transparent font-black text-slate-800 dark:text-slate-100 text-lg outline-none" /></div>
+              <div className="bg-slate-50 dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-700"><label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Brut annuel</label><NumberInput ariaLabel="Brut annuel" value={Math.round(grossAnnual)} onChange={updateFromGrossAnnual} min={0} suffix="€" className="w-full bg-transparent font-black text-slate-800 dark:text-slate-100 text-lg outline-none" /></div>
               <div className="bg-slate-50 dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
                 <label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Brut mensuel</label>
                 {activePayslip
@@ -355,7 +355,7 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
                     ) : (
                     <div className="flex items-center justify-between text-[11px] gap-2">
                         <div className="flex flex-col"><span className="text-slate-500 dark:text-slate-400">Taux du barème (Auto) : <strong>{autoValues.autoRate.toFixed(1)}%</strong></span>{taxRateManual > 0 && <span className="text-amber-600">Force à : <strong>{taxRateManual}%</strong></span>}</div>
-                        <div className="flex items-center gap-1"><label className="text-slate-500 dark:text-slate-400">Forcer taux :</label><NumberInput value={taxRateManual} onChange={setTaxRateManual} min={0} className="w-12 p-1 text-right bg-white dark:bg-slate-800 border border-amber-200 rounded font-bold outline-none" placeholder="Auto"/><span className="text-slate-500 dark:text-slate-400">%</span></div>
+                        <div className="flex items-center gap-1"><label className="text-slate-500 dark:text-slate-400">Forcer taux :</label><NumberInput ariaLabel="Forcer taux :" value={taxRateManual} onChange={setTaxRateManual} min={0} className="w-12 p-1 text-right bg-white dark:bg-slate-800 border border-amber-200 rounded font-bold outline-none" placeholder="Auto"/><span className="text-slate-500 dark:text-slate-400">%</span></div>
                     </div>
                     )}
                  </div>
@@ -437,8 +437,8 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
 
             <div className="lg:col-span-2 space-y-6">
               <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm grid grid-cols-2 gap-4">
-                  <div><label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Argent plaisir</label><NumberInput value={leisureBudget} onChange={setLeisureBudget} min={0} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
-                  <div><label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Épargne projets</label><NumberInput value={projectSavings} onChange={setProjectSavings} min={0} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
+                  <div><label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Argent plaisir</label><NumberInput ariaLabel="Argent plaisir" value={leisureBudget} onChange={setLeisureBudget} min={0} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
+                  <div><label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Épargne projets</label><NumberInput ariaLabel="Épargne projets" value={projectSavings} onChange={setProjectSavings} min={0} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
               </div>
 
               <div className="bg-slate-900 p-6 rounded-2xl shadow-lg text-white grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
@@ -454,7 +454,7 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
                   </div>
                   <div className="bg-slate-800 p-4 rounded-xl border border-slate-700">
                       <label className="text-[11px] font-black text-indigo-300 uppercase flex items-center gap-2"><Coins className="w-3 h-3"/> Ajout d'une somme externe</label>
-                      <NumberInput value={externalSavings} onChange={setExternalSavings} className="w-full bg-slate-900 border border-slate-600 rounded-lg p-2 mt-2 text-white font-bold focus:ring-2 focus:ring-indigo-500 outline-none" />
+                      <NumberInput ariaLabel="Ajout d'une somme externe" value={externalSavings} onChange={setExternalSavings} className="w-full bg-slate-900 border border-slate-600 rounded-lg p-2 mt-2 text-white font-bold focus:ring-2 focus:ring-indigo-500 outline-none" />
                   </div>
               </div>
             </div>

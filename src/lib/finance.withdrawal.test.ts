@@ -26,6 +26,7 @@ import {
   findAvRateUpdatesDue,
   applyRateChange,
   activeSavingsSplit,
+  computeSavedSince,
   computeAccruedInterest,
 } from './finance';
 import { DEFAULT_FISCAL_CONFIG as CFG, TAX_SCALES, LATEST_TAX_SCALE } from '../constants';
@@ -340,5 +341,31 @@ describe('répartition personnalisée', () => {
     expect(steps.map(s => s.fillAmount)).toEqual([300, 600]);
     expect(activeSavingsSplit({ savingsSplit: split, savingsSplitFrom: '2027-01-01' }, NOW)).toBeUndefined();
     expect(activeSavingsSplit({ savingsSplit: split, savingsSplitFrom: '2027-01-01' }, new Date(2027, 0, 1))).toEqual(split);
+  });
+});
+
+describe('part des parents tracée', () => {
+  const lep = acc({ id: 'lep', name: 'LEP', type: AccountType.LEP, interestRate: 2.4, totalAmount: 10000, ownedAmount: 1754, parentalCapital: 8246, movements: [{ id: 'o', date: '2025-01-01', amount: 1754, label: 'x', type: 'IN' }] });
+
+  it('la restitution laisse un mouvement et ne réécrit pas les intérêts de l’année', () => {
+    const before = computeAccruedInterest(lep, 2026, new Date(2027, 0, 1));
+    const [after] = accountsAfterRestitution([lep], '2027-01-01');
+    expect(after.movements?.some(m => m.kind === 'parental' && m.type === 'OUT' && m.amount === 8246)).toBe(true);
+    expect(computeAccruedInterest(after, 2026, new Date(2027, 0, 1))).toBeCloseTo(before);
+  });
+
+  it("n'est jamais comptée comme votre épargne", () => {
+    const a = acc({ movements: [
+      { id: 'p', date: '2026-09-05', amount: 500, label: 'Part des parents (+)', type: 'IN', kind: 'parental' },
+      { id: 'v', date: '2026-09-06', amount: 100, label: 'Virement', type: 'IN' },
+    ] });
+    expect(computeMonthSavedAmount([a], NOW)).toBe(100);
+    expect(computeSavedSince([a], '2026-09-01', NOW)).toBe(100);
+  });
+
+  it('un solde initial rapporte depuis l’ouverture du compte', () => {
+    const la = acc({ interestRate: 2.4, totalAmount: 2400, ownedAmount: 2400, openingDate: '2020-01-01',
+      movements: [{ id: 'i', date: '2026-06-10', amount: 2400, label: 'Solde initial', type: 'IN' }] });
+    expect(computeAccruedInterest(la, 2026, new Date(2027, 0, 1))).toBeCloseTo(2400 * 0.024);
   });
 });
