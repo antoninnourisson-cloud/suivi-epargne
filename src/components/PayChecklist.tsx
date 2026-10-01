@@ -7,7 +7,7 @@
 // ================================================
 import React, { useState } from 'react';
 import { PayChecklist as PayChecklistData, PayChecklistLine } from '../types';
-import { PayTransfer, PlacementStep } from '../lib/finance';
+import { PayTransfer, PlacementStep, buildPayLines } from '../lib/finance';
 import { formatEUR, toInputAmount, formatRate } from '../lib/format';
 import { parseFrenchNumber } from '../lib/numbers';
 import { Wallet, Info, CheckCircle2, RotateCcw, PiggyBank } from 'lucide-react';
@@ -36,13 +36,7 @@ export const PayChecklist: React.FC<PayChecklistProps> = ({
   const month = monthKeyOf(now);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
 
-  const liveLines: PayChecklistLine[] = [
-    ...transfers.map(t => ({ key: `t:${t.label}`, label: t.label, amount: t.amount, kind: 'transfer' as const })),
-    ...steps.filter(st => !st.alert && st.accountId).map(st => ({
-      key: `s:${st.accountId}`, label: st.accountName, amount: st.fillAmount, kind: 'saving' as const,
-      accountId: st.accountId, detail: `${st.type}${st.rate ? ` · ${formatRate(st.rate)}` : ''}`,
-    })),
-  ];
+  const liveLines = buildPayLines(transfers, steps);
   const openAccountStep = steps.find(st => st.alert);
 
   const frozen = checklist && checklist.month === month ? checklist : undefined;

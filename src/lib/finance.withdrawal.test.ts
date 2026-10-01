@@ -16,6 +16,8 @@ import {
   applyTaxScale,
   normalizeAccounts,
   dedupeMonthlySnapshots,
+  computeExpectedYearInterest,
+  quinzaineWithdrawalTip,
 } from './finance';
 import { DEFAULT_FISCAL_CONFIG as CFG, TAX_SCALES, LATEST_TAX_SCALE } from '../constants';
 import { AccountType, SavingsAccount, Subscription } from '../types';
@@ -200,5 +202,20 @@ describe('nettoyage au chargement', () => {
       { date: '2026-01-03', v: 1 }, { date: '2026-01-28', v: 2 }, { date: '2026-02-10', v: 3 }, { date: '2026-01-15', v: 4 },
     ]);
     expect(h.map(x => x.v)).toEqual([2, 3]);
+  });
+});
+
+describe('intérêts attendus et conseil de retrait', () => {
+  it("compte l'année entière aux soldes actuels, part parentale à part", () => {
+    // 10 000 € toute l'année à 3 %, dont 4 000 € aux parents.
+    const a = acc({ interestRate: 3, totalAmount: 10000, ownedAmount: 6000, parentalCapital: 4000, movements: [{ id: 'm', date: '2025-06-01', amount: 6000, label: 'x', type: 'IN' }] });
+    const e = computeExpectedYearInterest([a], 2026);
+    expect(e.total).toBeCloseTo(300);
+    expect(e.parental).toBeCloseTo(120);
+  });
+  it('conseille d’attendre la prochaine quinzaine pour un retrait de livret', () => {
+    expect(quinzaineWithdrawalTip({ type: AccountType.LIVRET_A, interestRate: 2.4 }, 5000, new Date(2026, 8, 10))).toEqual({ waitUntil: '2026-09-16', gain: 5 });
+    expect(quinzaineWithdrawalTip({ type: AccountType.LIVRET_A, interestRate: 2.4 }, 5000, new Date(2026, 8, 16))).toBeNull();
+    expect(quinzaineWithdrawalTip({ type: AccountType.ASSURANCE_VIE, interestRate: 3 }, 5000, new Date(2026, 8, 10))).toBeNull();
   });
 });

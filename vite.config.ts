@@ -63,6 +63,20 @@ export default defineConfig({
             description: 'Enregistrer rapidement un dépôt ou un retrait',
             url: './?action=quickadd',
             icons: [{ src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png' }]
+          },
+          {
+            name: 'Actualiser les soldes',
+            short_name: 'Actualiser',
+            description: 'Saisir les nouveaux soldes des comptes',
+            url: './?view=update',
+            icons: [{ src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png' }]
+          },
+          {
+            name: 'Virements de paie',
+            short_name: 'Paie',
+            description: 'Cocher les virements de la paie du mois',
+            url: './?view=pilot',
+            icons: [{ src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png' }]
           }
         ],
         icons: [

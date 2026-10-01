@@ -2,12 +2,12 @@
 import React, { useState } from 'react';
 import { SavingsAccount } from '../types';
 import { Button } from './Button';
-import { Save, AlertCircle, RefreshCw, Calendar, User, Users, CheckCircle } from 'lucide-react';
+import { Save, AlertCircle, RefreshCw, Calendar, User, Users, CheckCircle , Lightbulb } from 'lucide-react';
 import { useSaveFeedback } from '../hooks/useSaveFeedback';
 import { safeNumber, parseFrenchNumber } from '../lib/numbers';
-import { tracksDeposits, depositsAfterWithdrawal } from '../lib/finance';
-import { localTodayISO } from '../lib/dates';
-import { formatEUR, formatSignedEUR, toInputAmount } from '../lib/format';
+import { tracksDeposits, depositsAfterWithdrawal, quinzaineWithdrawalTip } from '../lib/finance';
+import { localTodayISO, parseISODate } from '../lib/dates';
+import { formatEUR, formatSignedEUR, toInputAmount, frenchDay } from '../lib/format';
 
 interface AccountUpdateProps {
   accounts: SavingsAccount[];
@@ -221,6 +221,13 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
                       {formatSignedEUR(diffOwned, 2)}
                     </div>
                   )}
+                  {(() => {
+                    // Baisse de solde sur un livret en cours de quinzaine : conseil d'attendre.
+                    const when = parseISODate(u.date || today);
+                    const tip = diffOwned < 0 ? quinzaineWithdrawalTip(account, -diffOwned, when) : null;
+                    const since = when.getDate() < 16 ? '1er' : '16';
+                    return tip ? <p className="text-[11px] font-bold text-amber-700 dark:text-amber-300 flex items-start gap-1 mt-1"><Lightbulb className="w-3.5 h-3.5 flex-shrink-0" /> <span>Retiré le {frenchDay(when)}, ce montant ne rapporte déjà plus rien depuis le {since}. En attendant le {frenchDay(parseISODate(tip.waitUntil))}, vous gardez ~{formatEUR(tip.gain, 0)} d'intérêts.</span></p> : null;
+                  })()}
                 </div>
 
                 {/* Part des parents */}

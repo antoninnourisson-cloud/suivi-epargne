@@ -3,7 +3,7 @@
 // Logique fiscale centralisée (calcul du "super net", impôt par tranches).
 // Fonctions pures, testables, réutilisées par le Pilotage et le Dashboard.
 // ================================================
-import { FiscalConfig, TaxBracket, WorkBenefits, RateChange, AccountType, AccountMovement, RecurringMovement, SavingsAccount, GlobalAppData, PayslipExtractedData, Subscription, Expense, Donation } from '../types';
+import { FiscalConfig, TaxBracket, WorkBenefits, RateChange, AccountType, AccountMovement, RecurringMovement, SavingsAccount, GlobalAppData, PayslipExtractedData, Subscription, Expense, Donation, PayChecklistLine } from '../types';
 import { DEFAULT_STANDARD_ALLOWANCE_CAP, DEFAULT_FISCAL_CONFIG, DEFAULT_WORK_BENEFITS, TAX_SCALES, LATEST_TAX_SCALE, TaxScale } from '../constants';
 import { MS_PER_DAY, formatISODay, parseISODate, daysBetween } from './dates';
 
@@ -1292,4 +1292,53 @@ export const dedupeMonthlySnapshots = <T extends { date: string }>(snapshots: T[
   const byMonth = new Map<string, T>();
   for (const s of [...snapshots].sort((a, b) => a.date.localeCompare(b.date))) byMonth.set(s.date.slice(0, 7), s);
   return [...byMonth.values()];
+};
+
+// ---------------------------------------------------------------------------
+// Lignes de la liste des virements de paie (app et rappel serveur)
+// ---------------------------------------------------------------------------
+
+/** Virements sortants puis versements d'épargne, dans l'ordre de la liste à cocher. */
+export const buildPayLines = (transfers: PayTransfer[], steps: PlacementStep[]): PayChecklistLine[] => [
+  ...transfers.map(t => ({ key: `t:${t.label}`, label: t.label, amount: t.amount, kind: 'transfer' as const })),
+  ...steps.filter(st => !st.alert && st.accountId).map(st => ({
+    key: `s:${st.accountId}`, label: st.accountName, amount: st.fillAmount, kind: 'saving' as const,
+    accountId: st.accountId,
+    detail: `${st.type}${st.rate ? ` · ${st.rate.toLocaleString('fr-FR', { maximumFractionDigits: 2 })} %` : ''}`,
+  })),
+];
+
+// ---------------------------------------------------------------------------
+// Intérêts attendus sur l'année, conseil de retrait
+// ---------------------------------------------------------------------------
+
+/**
+ * Intérêts de l'année entière si les soldes ne bougent plus d'ici le 31 décembre :
+ * acquis à ce jour + quinzaines (ou jours) restantes au solde actuel.
+ */
+export const computeExpectedYearInterest = (
+  accounts: Parameters<typeof computeAccruedParentalInterest>[0],
+  year: number
+): { total: number; parental: number; own: number } => {
+  const r = computeAccruedParentalInterest(accounts, year, new Date(year + 1, 0, 1));
+  return { total: r.totalAnnual, parental: r.totalAnnualParental, own: r.totalAnnualOwned };
+};
+
+/**
+ * Retrait d'un livret réglementé en cours de quinzaine : il ne rapporte déjà plus rien
+ * depuis le 1er ou le 16. Attendre la prochaine borne garde la quinzaine en cours.
+ * `null` si sans objet (autre compte, ou retrait pile le 1er ou le 16).
+ */
+export const quinzaineWithdrawalTip = (
+  account: { type: AccountType; interestRate?: number },
+  amount: number,
+  date: Date
+): { waitUntil: string; gain: number } | null => {
+  if (!REGULATED_TYPES.includes(account.type) || amount <= 0) return null;
+  const day = date.getDate();
+  if (day === 1 || day === 16) return null;
+  const gain = amount * ((account.interestRate || 0) / 100) / 24;
+  if (gain < 0.5) return null;
+  const next = day < 16 ? new Date(date.getFullYear(), date.getMonth(), 16) : new Date(date.getFullYear(), date.getMonth() + 1, 1);
+  return { waitUntil: formatISODay(next), gain };
 };

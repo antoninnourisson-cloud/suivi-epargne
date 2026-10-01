@@ -13,6 +13,7 @@ import {
   computePlacementStrategy,
   findDueSubscriptions,
   computePayTransfers,
+  buildPayLines,
   computeMonthSavedAmount,
   computeAccountBalanceAtDate,
   computeAccruedInterest,
@@ -40,6 +41,7 @@ const STALE_UPDATE_DAYS = 30;
 // Le rappel de paie reste valable quelques jours : un cron manqué (panne, déploiement)
 // ne doit pas faire sauter le mois. La clé mensuelle garantit un seul envoi.
 const PAYDAY_WINDOW_DAYS = 3;
+const PAYDAY_FOLLOWUP_DELAY_DAYS = 3;
 
 // Écran de l'app ouvert au clic (voir le traitement de `?view=` dans App.tsx).
 export const viewUrl = (appUrl: string, view: string) =>
@@ -150,6 +152,36 @@ export const computeReminders = (data: GlobalAppData, now: Date, appUrl: string)
             ].join(' · ') + '.',
             url: link('pilot'),
             tag: 'payday',
+          },
+        });
+      }
+    }
+
+    // 5 bis. Trois jours après la paie : virements encore ni faits ni cochés dans la liste
+    //        du Pilotage. Une seule relance par mois, et rien si tout est coché.
+    const followUpDay = effectiveDay + PAYDAY_FOLLOWUP_DELAY_DAYS;
+    if (today >= followUpDay && today < followUpDay + PAYDAY_WINDOW_DAYS) {
+      const checklist = data.payChecklist && data.payChecklist.month === monthKey ? data.payChecklist : undefined;
+      let lines = checklist?.lines;
+      if (!lines) {
+        const amount = data.config.paydayAmount ?? computeMonthlySavingsCapacity(data);
+        const steps = amount > 0 ? computePlacementStrategy(amount, accounts, data.fiscalConfig || DEFAULT_FISCAL_CONFIG) : [];
+        lines = buildPayLines(computePayTransfers({
+          expenses: data.expenses || [],
+          subscriptions: data.subscriptions,
+          leisureBudget: data.config.leisureBudget ?? 0,
+          projectSavings: data.config.projectSavings ?? 0,
+        }), steps);
+      }
+      const pending = lines.filter(l => !checklist?.done[l.key]);
+      if (pending.length > 0) {
+        out.push({
+          key: `payday-followup:${monthKey}`,
+          message: {
+            title: `${pending.length} virement${pending.length > 1 ? 's' : ''} de paie à faire ou à cocher`,
+            body: `${pending.map(l => l.label).join(', ')}. Cochez-les dans le Pilotage une fois faits.`,
+            url: link('pilot'),
+            tag: 'payday-followup',
           },
         });
       }

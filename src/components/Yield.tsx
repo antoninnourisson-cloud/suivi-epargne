@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { SavingsAccount, AccountType, FiscalConfig } from '../types';
-import { computeWeightedAnnualRate, computeCapitalGainsTax, computeParentalInterest, computeAccruedInterest, CapitalTaxRegime, computeWithdrawalTax, tracksDeposits, PEA_DEPOSIT_CEILING } from '../lib/finance';
+import { computeWeightedAnnualRate, computeCapitalGainsTax, computeParentalInterest, computeAccruedInterest, CapitalTaxRegime, computeWithdrawalTax, tracksDeposits, PEA_DEPOSIT_CEILING, computeExpectedYearInterest } from '../lib/finance';
 import { Coins, TrendingUp, AlertCircle, PiggyBank, FileDown, Landmark, Info } from 'lucide-react';
 import { formatEUR, formatRate } from '../lib/format';
 
@@ -39,6 +39,8 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig }) => {
           // de la date d'arrivée de chaque euro. Les deux cohabitent volontairement : le
           // premier répond à « combien ça rapporte », le second à « combien j'ai gagné ».
           accrued: computeAccruedInterest(a, currentYear),
+          // Année complète si les soldes ne bougent plus d'ici le 31 décembre.
+          expected: computeAccruedInterest(a, currentYear, new Date(currentYear + 1, 0, 1)),
         };
       })
       .sort((x, y) => y.annual - x.annual),
@@ -49,6 +51,10 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig }) => {
   // Intérêts produits par le capital de mes parents : ils me les offrent en fin d'année,
   // donc le TOTAL est bien ce qui me revient (je ne touche pas à leur capital, mais
   // j'encaisse 100 % des intérêts).
+  // Intérêts de l'année complète (acquis + reste de l'année aux soldes actuels) : ce qui
+  // sera réellement crédité au 31 décembre si rien ne bouge d'ici là.
+  const expected = useMemo(() => computeExpectedYearInterest(accounts, currentYear), [accounts, currentYear]);
+  const accruedTotal = useMemo(() => accounts.reduce((sum, a) => sum + computeAccruedInterest(a, currentYear), 0), [accounts, currentYear]);
   const { totalAnnual, totalAnnualOwned, totalAnnualParental } = useMemo(
     () => computeParentalInterest(accounts, currentYear),
     [accounts, currentYear]
@@ -155,20 +161,23 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig }) => {
     <div className="space-y-6 animate-fade-in pb-20">
       <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
         <h2 className="text-2xl font-black text-slate-800 dark:text-slate-100 flex items-center gap-2 mb-1"><Coins className="w-6 h-6 text-indigo-600" /> Rendement réel</h2>
-        <p className="text-sm text-slate-500 dark:text-slate-400">« Acquis » = réellement gagné depuis le 1er janvier (règle des quinzaines pour les livrets). « Rythme » = ce que rapporteraient vos soldes actuels sur douze mois.</p>
+        <p className="text-sm text-slate-500 dark:text-slate-400">« Acquis » = réellement gagné depuis le 1er janvier (règle des quinzaines pour les livrets). « Attendu » = l'année complète si vos soldes ne bougent plus. « Rythme » = ce que rapporteraient vos soldes actuels sur douze mois.</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="bg-slate-900 text-white p-6 rounded-2xl">
-          <p className="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase mb-1 flex items-center gap-2"><TrendingUp className="w-4 h-4" /> Intérêts annuels qui vous reviennent</p>
-          <p className="text-4xl font-black text-emerald-400">{fmt(totalAnnual)}</p>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">soit ≈ {fmt(totalAnnual / 12)}/mois — capital parental inclus</p>
+          <p className="text-slate-400 text-xs font-bold uppercase mb-1 flex items-center gap-2"><TrendingUp className="w-4 h-4" /> Intérêts attendus sur {currentYear}</p>
+          <p className="text-4xl font-black text-emerald-400">{fmt(expected.total)}</p>
+          <p className="text-xs text-slate-400 mt-1">
+            Dont {fmt(accruedTotal)} déjà acquis. Si vos soldes ne bougent plus, c'est ce qui sera crédité au 31 décembre (versé début janvier pour les livrets), capital parental inclus.
+            {' '}Rythme actuel : ≈ {fmt(totalAnnual)}/an.
+          </p>
         </div>
         <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-6 rounded-2xl">
           <p className="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase mb-1 flex items-center gap-2"><PiggyBank className="w-4 h-4" /> Dont offerts par vos parents</p>
-          <p className="text-4xl font-black text-indigo-600">{fmt(totalAnnualParental)}</p>
+          <p className="text-4xl font-black text-indigo-600">{fmt(expected.parental)}</p>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            Intérêts générés par leur capital, qu'ils vous offrent en fin d'année. Le reste ({fmt(totalAnnualOwned)}) vient de votre part propre.
+            Intérêts attendus sur {currentYear} grâce à leur capital, qu'ils vous offrent en fin d'année. Le reste ({fmt(expected.own)}) vient de votre part propre.
           </p>
         </div>
       </div>
@@ -192,6 +201,7 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig }) => {
                 <th className="px-6 py-3 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase text-right">Taux</th>
                 <th className="px-6 py-3 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase text-right">Solde</th>
                 <th className="px-6 py-3 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase text-right">Acquis {currentYear}</th>
+                <th className="px-6 py-3 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase text-right">Attendu 31/12</th>
                 <th className="px-6 py-3 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase text-right">Rythme / an</th>
               </tr>
             </thead>
@@ -207,10 +217,11 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig }) => {
                   </td>
                   <td className="px-6 py-3 text-right font-mono text-slate-600 dark:text-slate-300">{fmt(r.base)}</td>
                   <td className="px-6 py-3 text-right font-black text-emerald-600">{fmt(r.accrued)}</td>
+                  <td className="px-6 py-3 text-right font-bold text-slate-700 dark:text-slate-200">{fmt(r.expected)}</td>
                   <td className="px-6 py-3 text-right font-mono text-slate-500 dark:text-slate-400">{fmt(r.annual)}</td>
                 </tr>
               ))}
-              {rows.length === 0 && <tr><td colSpan={5} className="px-6 py-8 text-center text-slate-500 dark:text-slate-400 italic">Aucun compte rémunéré (renseignez un taux d'intérêt sur vos comptes).</td></tr>}
+              {rows.length === 0 && <tr><td colSpan={6} className="px-6 py-8 text-center text-slate-500 dark:text-slate-400 italic">Aucun compte rémunéré (renseignez un taux d'intérêt sur vos comptes).</td></tr>}
             </tbody>
           </table>
         </div>

@@ -1,8 +1,11 @@
 import React, { useState } from 'react';
 import { SavingsAccount } from '../types';
-import { X, Zap, ArrowUpCircle, ArrowDownCircle } from 'lucide-react';
+import { X, Zap, ArrowUpCircle, ArrowDownCircle , Lightbulb } from 'lucide-react';
 import { NumberInput } from './NumberInput';
 import { localTodayISO } from '../lib/dates';
+import { quinzaineWithdrawalTip } from '../lib/finance';
+import { parseISODate } from '../lib/dates';
+import { formatEUR, frenchDay } from '../lib/format';
 
 interface QuickAddModalProps {
   open: boolean;
@@ -19,6 +22,11 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ open, accounts, on
   const [date, setDate] = useState(localTodayISO());
 
   if (!open) return null;
+
+  // Retrait d'un livret en cours de quinzaine : la quinzaine entière est déjà perdue.
+  const account = accounts.find(a => a.id === accountId);
+  const tip = type === 'OUT' && account ? quinzaineWithdrawalTip(account, amount, parseISODate(date)) : null;
+  const since = parseISODate(date).getDate() < 16 ? '1er' : '16';
 
   const submit = () => {
     if (!accountId || amount <= 0) return;
@@ -56,6 +64,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ open, accounts, on
           <div>
             <label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Montant (€)</label>
             <NumberInput value={amount} onChange={setAmount} className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl font-black text-2xl text-slate-800 dark:text-slate-100" min={0} />
+                      {tip && <p className="text-[11px] font-bold text-amber-700 dark:text-amber-300 flex items-start gap-1 mt-1"><Lightbulb className="w-3.5 h-3.5 flex-shrink-0" /> <span>Retiré à cette date, ce montant ne rapporte déjà plus rien depuis le {since}. En attendant le {frenchDay(parseISODate(tip.waitUntil))}, vous gardez ~{formatEUR(tip.gain, 0)} d'intérêts.</span></p>}
           </div>
 
           <div className="grid grid-cols-2 gap-3">

@@ -184,4 +184,35 @@ describe('computeReminders', () => {
       expect(at(2027)).toBeUndefined();
     });
   });
+
+  describe('relance des virements de paie', () => {
+    const data = (done?: Record<string, { amount: number }>) => base({
+      accounts: [livret],
+      expenses: [{ id: 'e', name: 'Revolut commun', amount: 900 }],
+      config: { ...base().config, paydayDay: 27, paydayAmount: 500 },
+      payChecklist: done ? {
+        month: '2026-09',
+        lines: [
+          { key: 't:Revolut commun', label: 'Revolut commun', amount: 900, kind: 'transfer' },
+          { key: 's:la', label: 'Livret A', amount: 500, kind: 'saving', accountId: 'la' },
+        ],
+        done,
+      } : undefined,
+    });
+    const at = (d: ReturnType<typeof data>, day: number) => computeReminders(d, new Date(2026, 8, day, 9), APP).find(x => x.key === 'payday-followup:2026-09');
+
+    it('relance 3 jours après la paie les virements non cochés', () => {
+      const r = at(data({ 't:Revolut commun': { amount: 900 } }), 30);
+      expect(r?.message.title).toBe('1 virement de paie à faire ou à cocher');
+      expect(r?.message.body).toContain('Livret A');
+      expect(r?.message.body).not.toContain('Revolut commun');
+    });
+    it("relance tout si la liste n'a pas été touchée, et rien avant le délai", () => {
+      expect(at(data(), 30)?.message.title).toBe('2 virements de paie à faire ou à cocher');
+      expect(at(data(), 28)).toBeUndefined();
+    });
+    it('se tait quand tout est coché', () => {
+      expect(at(data({ 't:Revolut commun': { amount: 900 }, 's:la': { amount: 500 } }), 30)).toBeUndefined();
+    });
+  });
 });
