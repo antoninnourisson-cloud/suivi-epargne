@@ -78,12 +78,12 @@ export const AppLockScreen: React.FC<AppLockScreenProps> = ({ onUnlock }) => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-4">
+    <div className="min-h-screen bg-sapin flex flex-col items-center justify-center p-4">
       <div className="bg-white dark:bg-slate-800 p-8 rounded-3xl shadow-2xl max-w-md w-full text-center">
-        <div className="w-16 h-16 bg-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-indigo-500/30">
+        <div className="w-16 h-16 bg-sapin rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg">
           <Fingerprint className="w-8 h-8 text-white" />
         </div>
-        <h1 className="text-2xl font-black text-slate-900 dark:text-slate-100 mb-2">Suivi Épargne verrouillé</h1>
+        <h1 className="text-2xl font-black text-slate-900 dark:text-slate-100 mb-2">Pécule verrouillé</h1>
         <p className="text-slate-500 dark:text-slate-400 mb-6">Vérifiez votre identité pour accéder à vos données.</p>
 
         {biometricOn && (

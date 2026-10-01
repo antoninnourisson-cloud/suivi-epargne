@@ -1,3 +1,10 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Pécule : le vert sapin des petits textes d'accent est trop sombre sur fond sombre. Si un
+   élément n'a pas sa propre teinte de mode sombre, on l'éclaircit ici. */
+.dark .text-indigo-500:not([class*="dark:text-"]),
+.dark .text-indigo-600:not([class*="dark:text-"]) { color: #5ca37d; }
+.dark .text-indigo-700:not([class*="dark:text-"]),
+.dark .text-indigo-800:not([class*="dark:text-"]) { color: #8cc2a3; }

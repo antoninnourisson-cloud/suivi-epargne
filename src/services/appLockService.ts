@@ -22,7 +22,7 @@
 const CREDENTIAL_ID_KEY = 'app_lock_credential_id';
 const PIN_HASH_KEY = 'app_lock_pin_hash';
 const PIN_SALT_KEY = 'app_lock_pin_salt';
-const RP_NAME = 'Suivi Épargne';
+const RP_NAME = 'Pécule';
 
 const bufferToBase64 = (buf: ArrayBuffer): string =>
   btoa(String.fromCharCode(...new Uint8Array(buf)));

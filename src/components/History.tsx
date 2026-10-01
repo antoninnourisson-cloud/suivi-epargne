@@ -82,15 +82,15 @@ export const History: React.FC<HistoryProps> = ({ history, expensesHistory, revi
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                 <defs>
-                  <linearGradient id="gTotal" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#6366f1" stopOpacity={0.6} /><stop offset="95%" stopColor="#6366f1" stopOpacity={0.05} /></linearGradient>
+                  <linearGradient id="gTotal" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#3b8560" stopOpacity={0.6} /><stop offset="95%" stopColor="#3b8560" stopOpacity={0.05} /></linearGradient>
                   <linearGradient id="gOwned" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#10b981" stopOpacity={0.6} /><stop offset="95%" stopColor="#10b981" stopOpacity={0.05} /></linearGradient>
                 </defs>
                 <XAxis dataKey="label" tick={{ fontSize: 11 }} />
                 <YAxis tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 11 }} />
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f5f5f4" />
                 <RechartsTooltip formatter={(v: number, name: string) => [fmt(v), name === 'totalAmount' ? 'Total' : 'Ma part']} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
                 <Legend formatter={(v) => (v === 'totalAmount' ? 'Total' : 'Ma part')} wrapperStyle={{ fontSize: 12 }} />
-                <Area type="monotone" dataKey="totalAmount" stroke="#6366f1" fill="url(#gTotal)" strokeWidth={2} />
+                <Area type="monotone" dataKey="totalAmount" stroke="#3b8560" fill="url(#gTotal)" strokeWidth={2} />
                 <Area type="monotone" dataKey="ownedAmount" stroke="#10b981" fill="url(#gOwned)" strokeWidth={2} />
               </AreaChart>
             </ResponsiveContainer>
@@ -147,7 +147,7 @@ export const History: React.FC<HistoryProps> = ({ history, expensesHistory, revi
                 </defs>
                 <XAxis dataKey="label" tick={{ fontSize: 11 }} />
                 <YAxis tickFormatter={(v) => formatEUR(v, 0)} tick={{ fontSize: 11 }} />
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f5f5f4" />
                 <RechartsTooltip formatter={(v: number) => [fmt(v), 'Charges fixes']} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
                 <Area type="monotone" dataKey="total" stroke="#ef4444" fill="url(#gCharges)" strokeWidth={2} />
               </AreaChart>

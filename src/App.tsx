@@ -29,6 +29,8 @@ import { AccountType } from './types';
 import { computeBadgeCount, detectPayRaise } from './lib/projection';
 import { applyMovement, snapshotBalances, restoreBalances, isRestitutionMovement, round2 as round2Cents } from './lib/accountOps';
 import { WhatsNewModal } from './components/WhatsNew';
+import { Logo } from './components/Logo';
+import { LATEST_VERSION } from './changelog';
 import {
   LayoutDashboard, Wallet, Trash2, Edit2, ShieldCheck,
   ArrowRightLeft, RefreshCcw, PlusCircle, Cloud, LogOut,
@@ -58,11 +60,9 @@ const ViewLoader = () => (
 const NavButton = ({ active, onClick, icon: Icon, label, highlight }: any) => (
     <button
       onClick={onClick}
-      className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-bold transition-all rounded-xl mb-1 ${active ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/20' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-800 hover:text-white'}
-        ${highlight ? 'text-indigo-400' : ''}
-      `}
+      className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-bold transition-all rounded-xl mb-1 ${active ? 'bg-creme text-sapin shadow-lg shadow-black/10' : `${highlight ? 'text-amber-300' : 'text-emerald-50/80'} hover:bg-white/10 hover:text-white`}`}
     >
-      <Icon className={`w-5 h-5 ${active ? 'text-white' : highlight ? 'text-indigo-400' : 'text-slate-500 dark:text-slate-400'}`} />
+      <Icon className={`w-5 h-5 ${active ? 'text-sapin' : highlight ? 'text-amber-300' : 'text-emerald-100/70'}`} />
       {label}
     </button>
 );
@@ -667,12 +667,11 @@ const App: React.FC = () => {
 
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-4">
+      <div className="min-h-screen bg-sapin flex flex-col items-center justify-center p-4">
         <div className="bg-white dark:bg-slate-800 p-8 rounded-3xl shadow-2xl max-w-md w-full text-center">
-          <div className="w-16 h-16 bg-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-indigo-500/30">
-            <RefreshCcw className="w-8 h-8 text-white" />
-          </div>
-          <h1 className="text-2xl font-black text-slate-900 dark:text-slate-100 mb-2">Suivi Épargne</h1>
+          <Logo className="w-16 h-16 mx-auto mb-6 shadow-lg" />
+          <h1 className="text-2xl font-black text-slate-900 dark:text-slate-100 mb-1">Pécule</h1>
+          <p className="text-sm font-bold text-indigo-700 dark:text-indigo-300 mb-4">Faites pousser votre épargne</p>
           <p className="text-slate-500 dark:text-slate-400 mb-8">Vos données sont stockées en sécurité sur votre Google Drive personnel.</p>
           {apiError ? (
             <div className="text-left bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-xl p-4">
@@ -684,6 +683,7 @@ const App: React.FC = () => {
             <button onClick={handleLogin} className="w-full flex justify-center gap-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 py-4 rounded-xl font-bold hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 transition-colors">Continuer avec Google</button>
           }
         </div>
+        <p className="mt-4 text-[11px] font-bold text-emerald-100/70">version {LATEST_VERSION}</p>
       </div>
     );
   }
@@ -693,15 +693,15 @@ const App: React.FC = () => {
   return (
     <ToastContext.Provider value={addToast}>
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900 flex flex-col md:flex-row font-sans text-slate-900 dark:text-slate-100">
-      <aside className="hidden md:flex bg-slate-900 text-white w-full md:w-64 flex-shrink-0 flex-col border-r border-slate-800">
-        <div className="p-6 border-b border-slate-800">
-          <h1 className="text-xl font-bold flex items-center gap-2"><div className="w-8 h-8 bg-indigo-600 rounded flex center justify-center items-center"><RefreshCcw className="w-4 h-4 text-white"/></div> Suivi Épargne</h1>
-          <div className="mt-2 text-[11px] uppercase text-slate-500 dark:text-slate-400 font-bold tracking-wider flex items-center justify-between gap-2">
+      <aside className="hidden md:flex bg-sapin text-white w-full md:w-64 flex-shrink-0 flex-col">
+        <div className="p-6 border-b border-white/10">
+          <h1 className="text-xl font-black flex items-center gap-2"><Logo className="w-8 h-8 ring-1 ring-white/20" /> Pécule</h1>
+          <div className="mt-2 text-[11px] uppercase text-emerald-100/70 font-bold tracking-wider flex items-center justify-between gap-2">
             <div className="flex items-center gap-2" title={data.lastSavedAt ? `Dernière écriture confirmée sur Drive : ${data.lastSavedAt.toLocaleTimeString('fr-FR')}` : undefined}>
               <div className={`w-2 h-2 rounded-full flex-shrink-0 ${data.isOffline ? 'bg-slate-400' : data.isSaving ? 'bg-amber-500 animate-pulse' : data.syncError || data.syncConflict ? 'bg-rose-500' : 'bg-emerald-500'}`}></div>
               {data.isOffline ? 'Hors ligne' : data.isSaving ? 'Sauvegarde...' : data.syncError ? 'Erreur sync' : data.syncConflict ? 'Conflit' : data.lastSavedAt ? `Sur Drive à ${data.lastSavedAt.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}` : 'Synchronisé'}
             </div>
-            <button onClick={toggleTheme} className="text-slate-400 hover:text-white" title={isDark ? 'Passer en clair' : 'Passer en sombre'}>
+            <button onClick={toggleTheme} className="text-emerald-100/70 hover:text-white" title={isDark ? 'Passer en clair' : 'Passer en sombre'}>
               {isDark ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
             </button>
           </div>
@@ -710,14 +710,14 @@ const App: React.FC = () => {
           <NavButton active={view === 'dashboard'} onClick={() => setView('dashboard')} icon={LayoutDashboard} label="Tableau de bord" />
           <NavButton active={view === 'update'} onClick={() => setView('update')} icon={RefreshCcw} label="Actualiser solde" highlight />
 
-          <div className="pt-6 pb-2 text-[11px] font-black text-slate-600 dark:text-slate-300 uppercase px-4 tracking-widest">Analyses</div>
+          <div className="pt-6 pb-2 text-[11px] font-black text-emerald-100/60 uppercase px-4 tracking-widest">Analyses</div>
           <NavButton active={view === 'pilot'} onClick={() => setView('pilot')} icon={ShieldCheck} label="Pilotage" />
           <NavButton active={view === 'agenda'} onClick={() => setView('agenda')} icon={CalendarDays} label="Agenda" />
           <NavButton active={view === 'yield'} onClick={() => setView('yield')} icon={Coins} label="Rendement" />
           <NavButton active={view === 'history'} onClick={() => setView('history')} icon={LineChart} label="Historique" />
           {showParentalScreen && <NavButton active={view === 'parental'} onClick={() => setView('parental')} icon={Users} label="Part parentale" />}
 
-          <div className="pt-6 pb-2 text-[11px] font-black text-slate-600 dark:text-slate-300 uppercase px-4 tracking-widest">Gestion</div>
+          <div className="pt-6 pb-2 text-[11px] font-black text-emerald-100/60 uppercase px-4 tracking-widest">Gestion</div>
           <NavButton active={view === 'accounts'} onClick={() => setView('accounts')} icon={Wallet} label="Mes comptes" />
           <NavButton active={view === 'transfers'} onClick={() => setView('transfers')} icon={ArrowRightLeft} label="Virements" />
           <NavButton active={view === 'payslips'} onClick={() => setView('payslips')} icon={FileText} label="Fiches de paie" />
@@ -725,17 +725,18 @@ const App: React.FC = () => {
           <NavButton active={view === 'donations'} onClick={() => setView('donations')} icon={HandHeart} label="Dons" />
           <NavButton active={view === 'journal'} onClick={() => setView('journal')} icon={ScrollText} label="Journal" />
 
-          <div className="my-4 border-t border-slate-800 mx-4"></div>
+          <div className="my-4 border-t border-white/10 mx-4"></div>
           <NavButton active={view === 'settings'} onClick={() => setView('settings')} icon={SettingsIcon} label="Paramètres" />
         </nav>
-        <div className="p-4 border-t border-slate-800">
-            <button onClick={handleLogout} className="w-full flex items-center gap-3 px-4 py-3 text-rose-400 hover:bg-rose-950/30 rounded-xl font-bold text-sm transition-colors"><LogOut className="w-5 h-5"/> Déconnexion</button>
+        <div className="p-4 border-t border-white/10">
+            <button onClick={handleLogout} className="w-full flex items-center gap-3 px-4 py-3 text-rose-300 hover:bg-white/10 rounded-xl font-bold text-sm transition-colors"><LogOut className="w-5 h-5"/> Déconnexion</button>
+            <button onClick={() => setView('settings')} className="w-full mt-1 px-4 text-left text-[11px] font-bold text-emerald-100/60 hover:text-white" title="Historique des mises à jour dans Paramètres">Pécule · version {LATEST_VERSION}</button>
         </div>
       </aside>
 
       {/* Header compact mobile (la sidebar est masquée en dessous de md) */}
-      <header className="md:hidden sticky top-0 z-30 bg-slate-900 text-white px-4 py-3 flex items-center justify-between">
-        <h1 className="text-base font-bold flex items-center gap-2"><div className="w-6 h-6 bg-indigo-600 rounded flex items-center justify-center"><RefreshCcw className="w-3.5 h-3.5 text-white"/></div> Suivi Épargne</h1>
+      <header className="md:hidden sticky top-0 z-30 bg-sapin text-white px-4 py-3 flex items-center justify-between">
+        <h1 className="text-base font-black flex items-center gap-2"><Logo className="w-6 h-6 ring-1 ring-white/20" /> Pécule</h1>
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1.5" title={data.lastSavedAt ? `Dernière écriture confirmée sur Drive : ${data.lastSavedAt.toLocaleTimeString('fr-FR')}` : undefined}>
             <div className={`w-2 h-2 rounded-full flex-shrink-0 ${data.isOffline ? 'bg-slate-400' : data.isSaving ? 'bg-amber-500 animate-pulse' : data.syncError || data.syncConflict ? 'bg-rose-500' : 'bg-emerald-500'}`}></div>

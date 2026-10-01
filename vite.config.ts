@@ -40,13 +40,13 @@ export default defineConfig({
       },
       // Seules les icônes réellement présentes dans public/ (les anciennes entrées
       // favicon.ico / apple-touch-icon.png / mask-icon.svg pointaient vers des fichiers absents).
-      includeAssets: ['pwa-192x192.png', 'pwa-512x512.png'],
+      includeAssets: ['pwa-192x192.png', 'pwa-512x512.png', 'apple-touch-icon.png'],
       manifest: {
-        name: 'Suivi Épargne',
-        short_name: 'Épargne',
-        description: 'Mon assistant financier personnel et privé',
-        theme_color: '#0f172a',
-        background_color: '#0f172a',
+        name: 'Pécule',
+        short_name: 'Pécule',
+        description: 'Faites pousser votre épargne : comptes, paie, intérêts et fiscalité, données sur votre Google Drive',
+        theme_color: '#14532d',
+        background_color: '#14532d',
         display: 'standalone',
         orientation: 'portrait',
         // Relatifs pour matcher le `base` ci-dessus, quel que soit le sous-dossier

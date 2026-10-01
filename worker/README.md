@@ -1,4 +1,4 @@
-# Serveur Suivi Épargne (Cloudflare Worker)
+# Serveur Pécule (Cloudflare Worker)
 
 Deux fonctions, et seulement deux :
 

@@ -1,6 +1,6 @@
-# Suivi Épargne
+# Pécule
 
-> Tableau de bord d'épargne personnel, calibré pour la fiscalité française. Vos données restent sur **votre** Google Drive.
+> Faites pousser votre épargne. Tableau de bord d'épargne personnel, calibré pour la fiscalité française. Vos données restent sur **votre** Google Drive.
 
 [![React](https://img.shields.io/badge/React-18-blue?logo=react)](https://react.dev/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?logo=typescript)](https://www.typescriptlang.org/)
@@ -12,7 +12,7 @@
 
 ## Présentation
 
-Suivi Épargne est une application web installable (PWA) pour suivre ses comptes d'épargne, piloter son budget et anticiper sa fiscalité. Elle n'a pas de base de données : toutes les données tiennent dans un seul fichier `suivi_epargne.json`, sur le Google Drive de l'utilisateur. L'app n'a accès qu'aux fichiers qu'elle a créés (portée OAuth `drive.file`).
+Pécule (anciennement Pécule) est une application web installable (PWA) pour suivre ses comptes d'épargne, piloter son budget et anticiper sa fiscalité. Elle n'a pas de base de données : toutes les données tiennent dans un seul fichier `suivi_epargne.json`, sur le Google Drive de l'utilisateur. L'app n'a accès qu'aux fichiers qu'elle a créés (portée OAuth `drive.file`).
 
 Un **petit serveur optionnel** (Cloudflare Worker, dossier [`worker/`](worker/)) ajoute deux choses impossibles depuis le seul navigateur : une **session Google persistante** et des **notifications push**. Sans lui, l'app fonctionne entièrement côté navigateur.
 
@@ -92,6 +92,14 @@ Un **petit serveur optionnel** (Cloudflare Worker, dossier [`worker/`](worker/))
 - **E-mail récapitulatif aux parents** (via Gmail) lors des mouvements sur Livret A / LEP, envoyé seulement après une sauvegarde confirmée.
 - Export et import JSON complets, export CSV.
 - **Quoi de neuf** : après chaque mise à jour, une fenêtre résume une fois les nouveautés ; l'historique complet est dans Paramètres.
+
+## Identité visuelle
+
+- **Nom** : Pécule. **Slogan** : « Faites pousser votre épargne ».
+- **Logo** : une pousse qui sort d'une pièce. La source vectorielle est dans `src/components/Logo.tsx`, et les PNG dans `public/` (192, 512, `apple-touch-icon` 180).
+- **Couleurs** : vert sapin `#14532d` (fond de marque, menu), or `#fbbf24`, crème `#fef3c7`, gris chauds (stone). Dans `tailwind.config.js`, `indigo` pointe vers l'échelle sapin, donc les classes `indigo-*` du code sont vertes.
+- **Ton** : bienveillant et concret, en phrases simples.
+- Le dépôt, l'adresse GitHub Pages et le fichier Drive `suivi_epargne.json` gardent l'ancien nom pour ne rien casser.
 
 ## Architecture
 

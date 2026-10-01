@@ -703,7 +703,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
   const notifyParentsIfNeeded = (updates: { account: SavingsAccount, date: string }[], opId: string = crypto.randomUUID()) => {
     let mailBody = `
       <div style="font-family: Arial, sans-serif; color: #1e293b;">
-        <h2 style="color: #4f46e5; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px;">Mise à jour des comptes</h2>
+        <h2 style="color: #14532d; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px;">Mise à jour des comptes</h2>
         <p>Une opération a été détectée sur les livrets :</p>
         <table style="width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 14px; border: 1px solid #e2e8f0;">
           <tr style="background-color: #f1f5f9; text-align: left;">
@@ -765,7 +765,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
     if (shouldSendMail && parentsEmail) {
         // Mis en attente : expédié uniquement après la prochaine écriture Drive confirmée
         // (voir flushPendingParentMail) — jamais pour un mouvement qui n'a pas persisté.
-        pendingParentMailRef.current = [...pendingParentMailRef.current, { opId, to: parentsEmail, subject: 'Mise à jour Épargne', body: mailBody }];
+        pendingParentMailRef.current = [...pendingParentMailRef.current, { opId, to: parentsEmail, subject: 'Pécule : mise à jour des comptes', body: mailBody }];
     } else if (shouldSendMail && !parentsEmail) {
         console.warn("⚠️ Mouvement détecté mais aucun email parent configuré.");
     }

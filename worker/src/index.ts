@@ -302,7 +302,7 @@ const handleTestPush = async (req: Request, env: Env): Promise<Response> => {
   const s = await readSession(req, env);
   if (!s) return json(req, env, { error: 'REAUTH_REQUIRED' }, 401);
   const delivered = await deliver(env, s.session.sub, {
-    title: 'Suivi Épargne', body: 'Les notifications fonctionnent sur cet appareil.', url: env.APP_URL, tag: 'test',
+    title: 'Pécule', body: 'Les notifications fonctionnent sur cet appareil.', url: env.APP_URL, tag: 'test',
   });
   return json(req, env, { ok: delivered > 0, delivered });
 };

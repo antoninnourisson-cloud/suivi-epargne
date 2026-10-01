@@ -382,7 +382,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
     return acc;
   }, {} as Record<string, { name: string, value: number }>));
 
-  const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4'];
+  const COLORS = ['#3b8560', '#f59e0b', '#0ea5e9', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4'];
   // Couleur stable par IDENTITÉ de compte (hash de l'id), plus par position dans le
   // tableau : supprimer/restaurer/réordonner un compte remélangait toutes les couleurs du
   // graphique et de sa légende.

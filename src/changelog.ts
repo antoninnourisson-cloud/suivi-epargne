@@ -15,6 +15,17 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '2026.10.01-4',
+    date: '2026-10-01',
+    title: 'Suivi Épargne devient Pécule',
+    items: [
+      "Nouveau nom, nouveau logo (une pousse qui sort d'une pièce) et nouvelles couleurs : vert sapin, or et crème.",
+      "Le numéro de version est affiché sur l'écran de connexion, en bas du menu et dans Paramètres.",
+      "Vos données ne changent pas : même fichier Drive, même adresse.",
+      "Sur iPhone, pour voir la nouvelle icône, supprimez l'app de l'écran d'accueil puis ajoutez-la de nouveau depuis Safari.",
+    ],
+  },
+  {
     version: '2026.10.01-3',
     date: '2026-10-01',
     title: 'Suivi de l\'épargne plus juste',
