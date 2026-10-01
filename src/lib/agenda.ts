@@ -132,8 +132,13 @@ export interface YearReview {
   savingsRate: number | null;      // part de la paie actuelle × 12 (approximation)
   interest: number;                // intérêts de l'année (attendus si année en cours)
   parentalInterest: number;        // dont produits par le capital parental
-  netStart: number;                // épargne nette (part propre) au 31/12 précédent
+  netStart: number;                // épargne nette (part propre) en début d'année
+  netStartDate?: string;           // date du relevé mensuel utilisé comme point de départ
   netEnd: number;                  // … au 31/12 (ou aujourd'hui)
+  // Écart entre l'évolution réelle de l'épargne (relevés mensuels) et la somme des
+  // mouvements : des soldes ont été modifiés sans mouvement (ancienne version, part des
+  // parents corrigée…). Valeur absolue ≥ 100 € seulement.
+  unexplainedGap?: number;
   donations: number;
   subscriptionsYearly: number;     // coût annuel des abonnements actifs (aujourd'hui)
   restitution?: { date: string; amount: number };
@@ -156,6 +161,17 @@ export const computeYearReview = (data: GlobalAppData, year: number, asOfDate: D
   const offered = done?.interestsOffered.find(i => i.year === year)?.amount;
   const parentalInterest = offered ?? computeAccruedParentalInterest(accounts, year, new Date(year + 1, 0, 1)).totalAnnualParental;
   const endISO = complete ? `${year}-12-31` : formatISODay(asOfDate);
+  // Point de départ : le relevé mensuel le plus proche du 1er janvier (dernier de l'année
+  // précédente, sinon premier de l'année). Plus fiable que la reconstitution par les
+  // mouvements, qui peut être incomplète.
+  const snaps = [...(data.history || [])].sort((a, b) => a.date.localeCompare(b.date));
+  const startSnap = snaps.filter(x => x.date < `${year}-01-01`).pop() ?? snaps.find(x => x.date.startsWith(`${year}-`));
+  const netStart = startSnap ? startSnap.ownedAmount : computeAccountBalanceAtDate(accounts, `${year - 1}-12-31`);
+  const netEnd = computeAccountBalanceAtDate(accounts, endISO);
+  const flowsSinceStart = accounts.reduce((sum, a) => sum + (a.movements || [])
+    .filter(m => m.kind !== 'valuation' && m.label !== 'Solde initial' && m.date > (startSnap?.date ?? `${year - 1}-12-31`) && m.date <= endISO)
+    .reduce((t, m) => t + (m.type === 'IN' ? m.amount : -m.amount), 0), 0);
+  const gap = (netEnd - netStart) - flowsSinceStart;
   const restitutionThisYear = done && (done.date.startsWith(`${year}-`) || done.date === `${year + 1}-01-01`)
     ? { date: done.date, amount: done.accounts.reduce((s, a) => s + a.amount, 0) } : undefined;
   return {
@@ -163,8 +179,8 @@ export const computeYearReview = (data: GlobalAppData, year: number, asOfDate: D
     best: sorted[0], worst: sorted[sorted.length - 1],
     savingsRate: pay > 0 && monthly.length > 0 ? (saved / (pay * monthly.length)) * 100 : null,
     interest, parentalInterest,
-    netStart: computeAccountBalanceAtDate(accounts, `${year - 1}-12-31`),
-    netEnd: computeAccountBalanceAtDate(accounts, endISO),
+    netStart, netStartDate: startSnap?.date, netEnd,
+    unexplainedGap: Math.abs(gap) >= 100 ? gap : undefined,
     donations: computeDonationSummary(data.donations || [], year).total,
     subscriptionsYearly: (data.subscriptions || []).filter(s => s.active).reduce((s, x) => s + subscriptionMonthlyCost(x) * 12, 0),
     restitution: restitutionThisYear,

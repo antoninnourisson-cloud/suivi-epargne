@@ -72,3 +72,14 @@ describe('computeYearReview', () => {
     expect(r.parentalInterest).toBe(206);
   });
 });
+
+describe('bilan : relevés mensuels et écart', () => {
+  it("part du relevé mensuel et signale l'écart avec les mouvements", () => {
+    const la = acc({ id: 'la', totalAmount: 5000, ownedAmount: 5000, movements: [{ id: '1', date: '2026-03-01', amount: 4000, label: 'x', type: 'IN' }] });
+    const data = base({ accounts: [la], history: [{ date: '2026-01-28', totalAmount: 3000, ownedAmount: 3000 }] });
+    const r = computeYearReview(data, 2026, new Date(2026, 9, 1));
+    expect(r.netStart).toBe(3000);
+    expect(r.netStartDate).toBe('2026-01-28');
+    expect(r.unexplainedGap).toBe(-2000); // +2 000 réels contre +4 000 de mouvements
+  });
+});

@@ -46,9 +46,16 @@ export const YearReviewCard: React.FC<{ data: GlobalAppData }> = ({ data }) => {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Stat label="Mis de côté" value={formatSignedEUR(r.saved, 0)} sub={r.savingsRate !== null ? `≈ ${Math.round(r.savingsRate)} % de la paie` : undefined} />
         <Stat label={r.complete ? 'Intérêts gagnés' : 'Intérêts attendus'} value={formatEUR(r.interest, 0)} sub={r.parentalInterest >= 1 ? `dont ${formatEUR(r.parentalInterest, 0)} offerts par vos parents` : undefined} />
-        <Stat label="Épargne nette" value={formatEUR(r.netEnd, 0)} sub={`${formatSignedEUR(r.netEnd - r.netStart, 0)} sur l'année`} />
+        <Stat label="Épargne nette" value={formatEUR(r.netEnd, 0)} sub={`${formatSignedEUR(r.netEnd - r.netStart, 0)} depuis ${r.netStartDate ? parseISODate(r.netStartDate).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }) : 'le 1er janvier'}`} />
         <Stat label="Meilleur mois" value={r.best ? MONTHS[r.best.month] : '—'} sub={r.best ? formatSignedEUR(r.best.saved, 0) : undefined} />
       </div>
+
+      {r.unexplainedGap !== undefined && (
+        <p className="text-xs font-bold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 p-3 rounded-lg">
+          Vos mouvements de l'année ne correspondent pas à l'évolution de votre épargne : écart de {formatSignedEUR(-r.unexplainedGap, 0)}.
+          Des soldes ont sans doute été modifiés sans mouvement (ancienne version de l'app, part des parents corrigée…). « Mis de côté » et le meilleur mois peuvent donc être faussés ; l'épargne nette, elle, vient de vos relevés mensuels.
+        </p>
+      )}
 
       <ul className="text-sm text-slate-600 dark:text-slate-300 space-y-1">
         {r.worst && r.worst.saved < 0 && <li>Mois le plus difficile : <b>{MONTHS[r.worst.month]}</b> ({formatSignedEUR(r.worst.saved, 0)}).</li>}
