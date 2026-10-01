@@ -17,7 +17,7 @@ import {
 import { isBackendEnabled, hasBackendSession } from './services/backendService';
 import { disablePush } from './services/pushService';
 import { isLockEnabled } from './services/appLockService';
-import { computeMaturityCountdown, depositsAfterCashFlow, computeMonthlySavingsCapacity, subscriptionsAsExpenses, computeMonthlyPay, computeRestitutionPlan, accountsAfterRestitution, computeAccruedParentalInterest } from './lib/finance';
+import { computeMaturityCountdown, depositsAfterCashFlow, computeMonthlySavingsCapacity, subscriptionsAsExpenses, computeMonthlyPay, computeRestitutionPlan, accountsAfterRestitution, RESTITUTION_LABEL } from './lib/finance';
 import { localTodayISO, parseISODate } from './lib/dates';
 import { formatEUR, formatSignedEUR } from './lib/format';
 import { MovementSearch } from './components/MovementSearch';
@@ -420,7 +420,12 @@ const App: React.FC = () => {
       // en fin de liste, réordonnant l'affichage à chaque modification.
       return prev.map(a => {
         if (a.id !== normalized.id) return a;
-        if (Math.abs(ownedDiff) <= 0.001) return { ...normalized, movements: a.movements || [] };
+        // Part des parents corrigée dans la fiche : mouvement « part des parents » tracé.
+        const parentalMoves = (old: SavingsAccount): AccountMovement[] => {
+          const d = Math.round((normalized.parentalCapital - old.parentalCapital) * 100) / 100;
+          return Math.abs(d) > 0.001 ? [{ id: crypto.randomUUID(), date: today, amount: Math.abs(d), label: `Part des parents (${d > 0 ? '+' : '-'})`, type: d > 0 ? 'IN' : 'OUT', kind: 'parental' }] : [];
+        };
+        if (Math.abs(ownedDiff) <= 0.001) return { ...normalized, movements: [...(a.movements || []), ...parentalMoves(a)] };
         const movement: AccountMovement = {
           id: crypto.randomUUID(),
           date: today,
@@ -428,7 +433,7 @@ const App: React.FC = () => {
           label: ownedDiff > 0 ? 'Correction de solde (+)' : 'Correction de solde (-)',
           type: ownedDiff > 0 ? 'IN' : 'OUT',
         };
-        return { ...normalized, movements: [...(a.movements || []), movement] };
+        return { ...normalized, movements: [...(a.movements || []), movement, ...parentalMoves(a)] };
       });
     });
     setShowForm(false);
@@ -453,15 +458,19 @@ const App: React.FC = () => {
       const toDelete = (acc.movements || []).filter(m => m.id === movementId || (linkId && m.linkId === linkId));
       if (toDelete.length === 0) return acc;
       let newOwned = acc.ownedAmount;
+      let newParental = acc.parentalCapital;
       toDelete.forEach(m => {
-        if (m.type === 'IN') newOwned -= m.amount; else newOwned += m.amount;
+        const d = m.type === 'IN' ? -m.amount : m.amount;
+        if (m.kind === 'parental') newParental += d; else newOwned += d;
       });
       newOwned = round2(newOwned);
+      newParental = round2(Math.max(0, newParental));
       const deletedIds = new Set(toDelete.map(m => m.id));
       return {
           ...acc,
           ownedAmount: newOwned,
-          totalAmount: round2(newOwned + acc.parentalCapital),
+          parentalCapital: newParental,
+          totalAmount: round2(newOwned + newParental),
           movements: acc.movements?.filter(m => !deletedIds.has(m.id)) || []
       };
     }));
@@ -492,14 +501,18 @@ const App: React.FC = () => {
       const toRestore = legs.filter(l => l.accountId === acc.id);
       if (toRestore.length === 0) return acc;
       let newOwned = acc.ownedAmount;
+      let newParental = acc.parentalCapital;
       toRestore.forEach(({ movement }) => {
-        if (movement.type === 'IN') newOwned += movement.amount; else newOwned -= movement.amount;
+        const d = movement.type === 'IN' ? movement.amount : -movement.amount;
+        if (movement.kind === 'parental') newParental += d; else newOwned += d;
       });
       newOwned = round2(newOwned);
+      newParental = round2(Math.max(0, newParental));
       return {
         ...acc,
         ownedAmount: newOwned,
-        totalAmount: round2(newOwned + acc.parentalCapital),
+        parentalCapital: newParental,
+        totalAmount: round2(newOwned + newParental),
         movements: [...(acc.movements || []), ...toRestore.map(l => l.movement)],
       };
     }));
@@ -597,6 +610,12 @@ const App: React.FC = () => {
   const handleQuickAdd = (accountId: string, amount: number, type: 'IN' | 'OUT', label: string, date: string): string | undefined => {
     const account = data.accounts.find(a => a.id === accountId);
     if (!account) return undefined;
+    amount = round2(amount);
+    // Garde-fou : un retrait ne peut pas entamer la part des parents.
+    if (type === 'OUT' && amount > account.ownedAmount + 0.004) {
+      addToast({ message: `Retrait impossible : votre part sur ${account.name} n'est que de ${formatEUR(account.ownedAmount)}.`, kind: 'error' });
+      return undefined;
+    }
     const delta = type === 'IN' ? amount : -amount;
     const newOwned = round2(account.ownedAmount + delta);
     const newTotal = round2(newOwned + account.parentalCapital);
@@ -624,17 +643,10 @@ const App: React.FC = () => {
   const handleRestitution = (date: string, sendMail: boolean) => {
     const plan = computeRestitutionPlan(data.accounts, date);
     if (plan.total <= 0) return;
-    const firstYear = Math.min(plan.interestYear, ...data.accounts
-      .filter(a => a.parentalCapital > 0)
-      .flatMap(a => (a.movements || []).map(m => Number(m.date.slice(0, 4))))
-      .filter(y => y > 2000));
-    const interestsOffered: { year: number; amount: number }[] = [];
-    for (let y = firstYear; y <= plan.interestYear; y++) {
-      const amount = y === plan.interestYear
-        ? plan.totalInterest
-        : computeAccruedParentalInterest(data.accounts, y, new Date(y + 1, 0, 1)).totalAnnualParental;
-      if (amount >= 0.5) interestsOffered.push({ year: y, amount: Math.round(amount * 100) / 100 });
-    }
+    // Seule l'année de la restitution est chiffrée avec certitude : les années précédentes
+    // dépendaient d'une part parentale qui a pu varier (on ne l'invente pas).
+    const interestsOffered: { year: number; amount: number }[] = plan.totalInterest >= 0.5
+      ? [{ year: plan.interestYear, amount: Math.round(plan.totalInterest * 100) / 100 }] : [];
     const previous = data.parentalRestitution;
     const before = data.accounts.map(a => ({ id: a.id, parentalCapital: a.parentalCapital }));
     let emailed = false;
@@ -649,7 +661,7 @@ const App: React.FC = () => {
           </table>
         </div>`);
     }
-    data.setAccounts(prev => accountsAfterRestitution(prev));
+    data.setAccounts(prev => accountsAfterRestitution(prev, date));
     data.setParentalRestitution({
       ...previous,
       done: { date, accounts: plan.rows.map(r => ({ accountId: r.accountId, name: r.name, amount: r.amount })), interestsOffered, emailed: emailed || undefined },
@@ -662,10 +674,16 @@ const App: React.FC = () => {
   };
 
   const restoreParental = (before: { id: string; parentalCapital: number }[], previous: typeof data.parentalRestitution) => {
+    data.cancelQueuedParentsMail();
     data.setAccounts(prev => prev.map(a => {
       const b = before.find(x => x.id === a.id);
       if (!b || b.parentalCapital <= 0) return a;
-      return { ...a, parentalCapital: b.parentalCapital, totalAmount: round2(a.ownedAmount + b.parentalCapital) };
+      return {
+        ...a,
+        parentalCapital: b.parentalCapital,
+        totalAmount: round2(a.ownedAmount + b.parentalCapital),
+        movements: (a.movements || []).filter(m => !(m.kind === 'parental' && m.label === RESTITUTION_LABEL)),
+      };
     }));
     data.setParentalRestitution(previous);
   };
@@ -681,6 +699,7 @@ const App: React.FC = () => {
   // Annule un versement enregistré depuis la liste des virements de paie : retire le
   // mouvement et rétablit solde et versements cumulés.
   const handleCancelPayDeposit = (accountId: string, movementId: string) => {
+    data.cancelQueuedParentsMail();
     data.setAccounts(prev => prev.map(a => {
       if (a.id !== accountId) return a;
       const m = (a.movements || []).find(x => x.id === movementId);

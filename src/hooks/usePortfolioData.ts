@@ -367,8 +367,11 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
     setPayChecklist(data.payChecklist || undefined);
     setParentalRestitution(data.parentalRestitution || undefined);
     setActivePayslipId(data.activePayslipId || undefined);
-    if (data.fiscalConfig) setFiscalConfig(data.fiscalConfig);
-    if (data.workBenefits) setWorkBenefits(data.workBenefits);
+    // Champs absents (import partiel) : valeurs par défaut, comme au chargement Drive, et
+    // non les réglages du fichier précédent (clés API, e-mail des parents…).
+    setFiscalConfig(data.fiscalConfig || DEFAULT_FISCAL_CONFIG);
+    setWorkBenefits(data.workBenefits || DEFAULT_WORK_BENEFITS);
+    if (!data.config) data = { ...data, config: {} as GlobalAppData['config'] };
     if (data.config) {
       setGrossAnnual(data.config.grossAnnual ?? 45000);
       setLeisureBudget(data.config.leisureBudget ?? 300);
@@ -501,6 +504,9 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
       setMailError(mail.to);
     });
   };
+
+  /** Annule l'e-mail aux parents en attente (opération annulée avant la sauvegarde). */
+  const cancelQueuedParentsMail = () => { pendingParentMailRef.current = null; };
 
   /** Met en attente un e-mail aux parents (envoyé après la prochaine sauvegarde confirmée). */
   const queueParentsMail = (subject: string, htmlBody: string): boolean => {
@@ -768,8 +774,9 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
         if (idx < 0) return;
         const oldAcc = newAccounts[idx];
         const diff = upd.account.ownedAmount - oldAcc.ownedAmount;
+        const parentalDiff = upd.account.parentalCapital - oldAcc.parentalCapital;
         const movements: AccountMovement[] = [];
-        const push = (amount: number, label: string, kind?: 'valuation') => {
+        const push = (amount: number, label: string, kind?: 'valuation' | 'parental') => {
           if (Math.abs(amount) <= 0.001) return;
           movements.push({
             id: crypto.randomUUID(), date: upd.date, amount: Math.round(Math.abs(amount) * 100) / 100,
@@ -784,6 +791,9 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
         } else {
           push(diff, 'Actualisation');
         }
+        // Changement de la part des parents : tracé à part, pour que l'historique (et les
+        // intérêts passés) restent justes et que le journal le montre.
+        push(parentalDiff, 'Part des parents', 'parental');
         newAccounts[idx] = { ...upd.account, movements: [...(oldAcc.movements || []), ...movements] };
       });
       return newAccounts;
@@ -867,6 +877,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
     payChecklist, setPayChecklist,
     parentalRestitution, setParentalRestitution,
     queueParentsMail,
+    cancelQueuedParentsMail,
     activePayslipId, setActivePayslipId,
     fiscalConfig, setFiscalConfig,
     workBenefits, setWorkBenefits,

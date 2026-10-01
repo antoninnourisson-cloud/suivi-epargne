@@ -184,10 +184,12 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
     // NaN → "Placement (NaN €)" et un plan de placement qui disparaissait sans message.
     // Saisie non interprétable = retour au calcul automatique.
     const manualParsed = manualSavingsCapacity !== null ? parseFrenchNumber(manualSavingsCapacity) : null;
-    const finalCapacity = manualParsed ?? theoreticalCapacity;
+    // Montant fixé dans le rappel de paie : c'est lui que le Pilotage répartit (même chiffre
+    // que la notification, la relance, l'agenda et la jauge du mois).
+    const finalCapacity = manualParsed ?? paydayAmount ?? theoreticalCapacity;
     const totalToInvest = Math.max(0, finalCapacity + externalSavings);
     return { totalFixed, subscriptionsFixed, theoreticalCapacity, finalCapacity, totalToInvest };
-  }, [effectiveSuperNetForCalc, expenses, subscriptionCharges, leisureBudget, projectSavings, manualSavingsCapacity, externalSavings]);
+  }, [effectiveSuperNetForCalc, expenses, subscriptionCharges, leisureBudget, projectSavings, manualSavingsCapacity, externalSavings, paydayAmount]);
 
   const payTransfers = useMemo(
     () => computePayTransfers({ expenses, subscriptions, leisureBudget, projectSavings }),
@@ -443,9 +445,12 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
                   <div>
                       <p className="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase mb-2">Capacité d'Épargne Réelle</p>
                       <div className="flex items-baseline gap-2">
-                          <input type="text" inputMode="decimal" value={manualSavingsCapacity !== null ? manualSavingsCapacity : String(Math.round(budgetData.theoreticalCapacity))} onChange={(e) => setManualSavingsCapacity(e.target.value)} className="bg-transparent text-5xl font-black text-emerald-400 w-40 outline-none border-b border-slate-700 focus:border-emerald-400" />
+                          <input type="text" inputMode="decimal" value={manualSavingsCapacity !== null ? manualSavingsCapacity : String(Math.round(paydayAmount ?? budgetData.theoreticalCapacity))} onChange={(e) => setManualSavingsCapacity(e.target.value)} className="bg-transparent text-5xl font-black text-emerald-400 w-40 outline-none border-b border-slate-700 focus:border-emerald-400" />
                           <span className="text-xl">€</span>
                       </div>
+                      {paydayAmount !== undefined && manualSavingsCapacity === null && (
+                        <p className="text-[11px] text-slate-400 mt-1">Montant fixé dans le rappel de paie (capacité calculée : {formatEUR(budgetData.theoreticalCapacity, 0)}).</p>
+                      )}
                   </div>
                   <div className="bg-slate-800 p-4 rounded-xl border border-slate-700">
                       <label className="text-[11px] font-black text-indigo-300 uppercase flex items-center gap-2"><Coins className="w-3 h-3"/> Ajout d'une somme externe</label>

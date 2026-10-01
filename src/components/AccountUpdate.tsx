@@ -1,5 +1,5 @@
 // src/components/AccountUpdate.tsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { SavingsAccount } from '../types';
 import { Button } from './Button';
 import { Save, AlertCircle, RefreshCw, Calendar, User, Users, CheckCircle , Lightbulb } from 'lucide-react';
@@ -25,19 +25,30 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
   // `deposits` : versements cumulés des placements (PEA, AV…), '' = inconnus.
   // `cashFlow` : argent réellement versé/retiré via l'ajustement rapide, pour distinguer
   // un versement d'une simple variation de valeur à l'enregistrement.
-  type Draft = { owned: string, parental: string, date: string, deposits: string, cashFlow: number, bankTotal?: string };
-  const [updates, setUpdates] = useState<Record<string, Draft>>(
-    accounts.reduce((acc, account) => ({ 
-      ...acc, 
-      [account.id]: { 
-        owned: toInputAmount(account.ownedAmount), 
-        parental: toInputAmount(account.parentalCapital), 
-        date: today,
-        deposits: account.totalDeposits !== undefined ? toInputAmount(account.totalDeposits) : '',
-        cashFlow: 0,
-      } 
-    }), {})
-  );
+  // `dirty` : saisi par l'utilisateur. Les brouillons NON modifiés suivent les comptes en
+  // direct (un ajout rapide fait pendant que l'écran est ouvert n'est plus écrasé par un
+  // ancien solde au moment d'enregistrer).
+  type Draft = { owned: string, parental: string, date: string, deposits: string, cashFlow: number, bankTotal?: string, dirty?: boolean };
+  const draftFrom = (account: SavingsAccount): Draft => ({
+    owned: toInputAmount(account.ownedAmount),
+    parental: toInputAmount(account.parentalCapital),
+    date: today,
+    deposits: account.totalDeposits !== undefined ? toInputAmount(account.totalDeposits) : '',
+    cashFlow: 0,
+  });
+  const [updates, setUpdatesRaw] = useState<Record<string, Draft>>(() =>
+    Object.fromEntries(accounts.map(a => [a.id, draftFrom(a)])));
+  // Toute modification passe par ici : le brouillon touché devient « sale ».
+  const setUpdates = (fn: (prev: Record<string, Draft>) => Record<string, Draft>) =>
+    setUpdatesRaw(prev => {
+      const next = fn(prev);
+      for (const id of Object.keys(next)) if (next[id] !== prev[id]) next[id] = { ...next[id], dirty: true };
+      return next;
+    });
+  useEffect(() => {
+    setUpdatesRaw(prev => Object.fromEntries(accounts.map(a => [a.id, prev[a.id]?.dirty ? prev[a.id] : draftFrom(a)])));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accounts]);
 
   const handleOwnedChange = (id: string, val: string) => {
     setUpdates(prev => ({ ...prev, [id]: { ...prev[id], owned: val, bankTotal: undefined } }));
@@ -107,7 +118,7 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
   const soloMode = !accounts.some(a => a.parentalCapital > 0);
 
   const changedCount = accounts.filter(account => {
-    const u = updates[account.id];
+    const u = updates[account.id] ?? draftFrom(account);
     if (!u) return false;
     const deposits = parseDeposits(u.deposits);
     return Math.abs(safeNumber(u.owned, 0) - account.ownedAmount) > 0.004
@@ -131,7 +142,7 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
 
   const handleSaveAll = () => {
     const payloads = accounts.map(account => {
-      const u = updates[account.id];
+      const u = updates[account.id] ?? draftFrom(account);
       const newOwned = safeNumber(u.owned, 0);
       const newParental = safeNumber(u.parental, 0);
       const deposits = parseDeposits(u.deposits);
@@ -150,6 +161,9 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
 
     markPending();
     onUpdateAccountsComplex(payloads);
+    // Brouillons remis à zéro : un second « Enregistrer » ne rejoue pas les versements
+    // (le flux d'argent `cashFlow` aurait été compté deux fois).
+    setUpdatesRaw(prev => Object.fromEntries(Object.entries(prev).map(([id, d]) => [id, { ...d, cashFlow: 0, dirty: false }])));
   };
 
   if (accounts.length === 0) {
@@ -184,7 +198,7 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {accounts.map(account => {
-          const u = updates[account.id];
+          const u = updates[account.id] ?? draftFrom(account);
           const newTotal = safeNumber(u.owned, 0) + safeNumber(u.parental, 0);
           const diffOwned = Math.round((safeNumber(u.owned, 0) - account.ownedAmount) * 100) / 100;
           const diffParental = Math.round((safeNumber(u.parental, 0) - account.parentalCapital) * 100) / 100;

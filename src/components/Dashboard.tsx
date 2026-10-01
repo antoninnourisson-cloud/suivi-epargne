@@ -70,7 +70,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
     const today = localTodayISO();
     let balance = acc.ownedAmount;
     (acc.movements || []).forEach(m => {
-      if (m.date > today) balance -= m.type === 'IN' ? m.amount : -m.amount;
+      if (m.date > today && m.kind !== 'parental') balance -= m.type === 'IN' ? m.amount : -m.amount;
     });
     return balance;
   };
@@ -216,6 +216,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
       let balanceAtEndDate = acc.ownedAmount;
       const byDate = new Map<string, number>();
       (acc.movements || []).forEach(m => {
+        if (m.kind === 'parental') return; // part des parents : hors de « mon épargne »
         const flow = m.type === 'IN' ? m.amount : -m.amount;
         if (m.date > endDateStr) balanceAtEndDate -= flow; // annule le mouvement futur
         else byDate.set(m.date, (byDate.get(m.date) || 0) + flow);

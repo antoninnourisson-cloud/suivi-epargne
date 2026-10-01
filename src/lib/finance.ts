@@ -469,10 +469,19 @@ const quinzaineEffectiveDate = (d: Date, isDeposit: boolean): Date => {
  * Année en cours : ne compte que jusqu'à `asOfDate`.
  */
 export const computeAccruedInterest = (
-  account: { type: AccountType; totalAmount: number; movements?: AccountMovement[]; interestRate?: number; rateHistory?: RateChange[] },
+  accountIn: { type: AccountType; totalAmount: number; movements?: AccountMovement[]; interestRate?: number; rateHistory?: RateChange[]; openingDate?: string },
   year: number,
   asOfDate: Date = new Date()
 ): number => {
+  // Un « Solde initial » est l'argent présent à la création du compte dans l'app : il
+  // rapporte depuis l'ouverture réelle du compte (ou depuis toujours si elle est inconnue),
+  // pas depuis le jour de la saisie.
+  const account = {
+    ...accountIn,
+    movements: (accountIn.movements || []).map(m => isInitialBalance(m)
+      ? { ...m, date: accountIn.openingDate && accountIn.openingDate <= m.date ? accountIn.openingDate : '0001-01-01' }
+      : m),
+  };
   const currentRate = account.interestRate || 0;
   if (currentRate <= 0 && !(account.rateHistory && account.rateHistory.length > 0)) return 0;
 
@@ -551,7 +560,7 @@ export const lastRateRevision = (asOfDate: Date = new Date()): { key: string; da
  * fenêtre de rappel) ou si tous les comptes sont à jour.
  */
 export const findStaleRegulatedRates = (
-  accounts: { id: string; name: string; type: AccountType; interestRate?: number; rateHistory?: RateChange[] }[],
+  accounts: { id: string; name: string; type: AccountType; interestRate?: number; rateHistory?: RateChange[]; rateReviewedAt?: string }[],
   asOfDate: Date = new Date(),
   reminderWindowDays = 45
 ): { revision: { key: string; date: Date; label: string }; accounts: { id: string; name: string }[] } | null => {
@@ -563,7 +572,8 @@ export const findStaleRegulatedRates = (
   const stale = accounts
     .filter(a => REGULATED_TYPES.includes(a.type))
     .filter(a => {
-      const touched = (a.rateHistory || []).some(c => parseISODate(c.date) >= revision.date);
+      const touched = (a.rateHistory || []).some(c => parseISODate(c.date) >= revision.date)
+        || (!!a.rateReviewedAt && parseISODate(a.rateReviewedAt) >= revision.date);
       return !touched;
     })
     .map(a => ({ id: a.id, name: a.name }));
@@ -681,13 +691,16 @@ export const computeAccruedParentalInterest = (
  */
 export const isInitialBalance = (m: AccountMovement) => m.label === 'Solde initial';
 
+/** Mouvement de la part des parents (ajout, correction, restitution) : pas votre argent. */
+export const isParentalMovement = (m: AccountMovement) => m.kind === 'parental';
+
 export const computeAccountBalanceAtDate = (
   accounts: { ownedAmount: number; movements?: AccountMovement[] }[],
   dateStr: string
 ): number =>
   accounts.reduce((total, acc) => {
     let balance = acc.ownedAmount;
-    (acc.movements || []).filter(m => m.date > dateStr && !isInitialBalance(m)).forEach(m => {
+    (acc.movements || []).filter(m => m.date > dateStr && !isInitialBalance(m) && !isParentalMovement(m)).forEach(m => {
       balance += m.type === 'IN' ? -m.amount : m.amount;
     });
     return total + balance;
@@ -759,7 +772,7 @@ export const findDueRecurring = (
       if (asOfDate.getDate() < day) return [];
       const account = accounts.find(a => a.id === r.accountId);
       if (!account) return []; // compte supprimé depuis
-      const alreadyDone = (account.movements || []).some(mv =>
+      const alreadyDone = (account.movements || []).filter(mv => !isParentalMovement(mv)).some(mv =>
         mv.date.startsWith(monthKey) && mv.type === r.type && Math.abs(mv.amount - r.amount) < 0.005
       );
       if (alreadyDone) return [];
@@ -1056,7 +1069,7 @@ export const computeMonthSavedAmount = (
   for (const a of accounts) {
     if (a.type === AccountType.COMPTE_COURANT || a.type === AccountType.IMMOBILIER) continue;
     for (const m of a.movements || []) {
-      if (m.kind === 'valuation' || isInitialBalance(m) || !m.date.startsWith(monthKey) || m.date > todayKey) continue;
+      if (m.kind === 'valuation' || isParentalMovement(m) || isInitialBalance(m) || !m.date.startsWith(monthKey) || m.date > todayKey) continue;
       total += m.type === 'IN' ? m.amount : -m.amount;
     }
   }
@@ -1170,6 +1183,7 @@ export const totalFixedCharges = (expenses: Expense[], subs: Subscription[] = []
 // ---------------------------------------------------------------------------
 
 export interface PayTransfer {
+  key: string;     // stable : deux charges du même nom ne partagent plus une case
   label: string;
   amount: number;
 }
@@ -1188,16 +1202,16 @@ export const computePayTransfers = (input: {
 }): PayTransfer[] => {
   const out: PayTransfer[] = input.expenses
     .filter(e => e.amount > 0)
-    .map(e => ({ label: e.name, amount: e.amount }));
+    .map(e => ({ key: `t:e:${e.id}`, label: e.name, amount: e.amount }));
   const subs = subscriptionsAsExpenses(input.subscriptions || []);
   const subsTotal = Math.round(subs.reduce((sum, e) => sum + e.amount, 0) * 100) / 100;
   if (subsTotal > 0) {
     const accounts = new Set(subs.map(e => e.paymentMethod || ''));
     const only = accounts.size === 1 ? [...accounts][0] : '';
-    out.push({ label: only ? `Abonnements (${only})` : 'Abonnements mensuels', amount: subsTotal });
+    out.push({ key: 't:subscriptions', label: only ? `Abonnements (${only})` : 'Abonnements mensuels', amount: subsTotal });
   }
-  if (input.projectSavings > 0) out.push({ label: 'Épargne projets', amount: input.projectSavings });
-  if (input.leisureBudget > 0) out.push({ label: 'Argent plaisir (reste sur le compte courant)', amount: input.leisureBudget });
+  if (input.projectSavings > 0) out.push({ key: 't:projects', label: 'Épargne projets', amount: input.projectSavings });
+  if (input.leisureBudget > 0) out.push({ key: 't:leisure', label: 'Argent plaisir (reste sur le compte courant)', amount: input.leisureBudget });
   return out;
 };
 
@@ -1395,9 +1409,9 @@ export const dedupeMonthlySnapshots = <T extends { date: string }>(snapshots: T[
 
 /** Virements sortants puis versements d'épargne, dans l'ordre de la liste à cocher. */
 export const buildPayLines = (transfers: PayTransfer[], steps: PlacementStep[]): PayChecklistLine[] => [
-  ...transfers.map(t => ({ key: `t:${t.label}`, label: t.label, amount: t.amount, kind: 'transfer' as const })),
+  ...transfers.map(t => ({ key: t.key, label: t.label, amount: Math.round(t.amount * 100) / 100, kind: 'transfer' as const })),
   ...steps.filter(st => !st.alert && st.accountId).map(st => ({
-    key: `s:${st.accountId}`, label: st.accountName, amount: st.fillAmount, kind: 'saving' as const,
+    key: `s:${st.accountId}`, label: st.accountName, amount: Math.round(st.fillAmount * 100) / 100, kind: 'saving' as const,
     accountId: st.accountId,
     detail: `${st.type}${st.rate ? ` · ${st.rate.toLocaleString('fr-FR', { maximumFractionDigits: 2 })} %` : ''}`,
   })),
@@ -1502,9 +1516,27 @@ export const computeRestitutionPlan = (accounts: SavingsAccount[], plannedDateIS
   };
 };
 
-/** Comptes tels qu'ils seront après la restitution (part parentale retirée). */
-export const accountsAfterRestitution = <T extends { ownedAmount: number; parentalCapital: number; totalAmount: number }>(accounts: T[]): T[] =>
-  accounts.map(a => ({ ...a, parentalCapital: 0, totalAmount: Math.round(a.ownedAmount * 100) / 100 }));
+/** Libellé des mouvements de restitution (reconnus pour l'annulation). */
+export const RESTITUTION_LABEL = 'Restitution aux parents';
+
+/**
+ * Comptes tels qu'ils seront après la restitution : part parentale retirée, avec un
+ * mouvement « part des parents » daté du retrait. Sans ce mouvement, l'app « oubliait »
+ * que ce capital avait existé et sous-estimait les intérêts passés.
+ */
+export const accountsAfterRestitution = <T extends { ownedAmount: number; parentalCapital: number; totalAmount: number; movements?: AccountMovement[] }>(accounts: T[], dateISO?: string): T[] =>
+  accounts.map(a => ({
+    ...a,
+    parentalCapital: 0,
+    totalAmount: Math.round(a.ownedAmount * 100) / 100,
+    movements: dateISO && a.parentalCapital > 0
+      ? [...(a.movements || []), { id: `restitution-${dateISO}-${Math.random().toString(36).slice(2, 8)}`, date: dateISO, amount: Math.round(a.parentalCapital * 100) / 100, label: RESTITUTION_LABEL, type: 'OUT' as const, kind: 'parental' as const }]
+      : a.movements,
+  }));
+
+/** Comptes d'une répartition personnalisée qui n'existent plus (supprimés depuis). */
+export const missingSplitAccounts = (split: SavingsSplit | undefined, accounts: { id: string }[]) =>
+  (split || []).filter(s => !accounts.some(a => a.id === s.accountId));
 
 // ---------------------------------------------------------------------------
 // Période de paie
@@ -1563,7 +1595,7 @@ export const REGULATED_RATE_GROUPS: { key: string; label: string; types: Account
  * jusqu'à `date` ». Les entrées postérieures à la date d'effet sont remplacées (le nouveau
  * taux s'applique depuis cette date).
  */
-export const applyRateChange = <T extends { interestRate?: number; rateHistory?: RateChange[] }>(
+export const applyRateChange = <T extends { interestRate?: number; rateHistory?: RateChange[]; rateReviewedAt?: string }>(
   account: T,
   newRate: number,
   effectiveISO: string
@@ -1572,5 +1604,28 @@ export const applyRateChange = <T extends { interestRate?: number; rateHistory?:
   const before = rateAtDate(account.interestRate || 0, account.rateHistory, new Date(effective.getTime() - 1));
   const kept = (account.rateHistory || []).filter(c => c.date < effectiveISO);
   const rateHistory = Math.abs(before - newRate) > 1e-9 ? [...kept, { date: effectiveISO, rate: before }] : kept;
-  return { ...account, interestRate: newRate, rateHistory: rateHistory.length > 0 ? rateHistory : undefined };
+  // Taux vérifié (même inchangé) : le rappel de révision est éteint.
+  const reviewed = formatISODay(new Date()) > effectiveISO ? formatISODay(new Date()) : effectiveISO;
+  return { ...account, interestRate: newRate, rateHistory: rateHistory.length > 0 ? rateHistory : undefined, rateReviewedAt: reviewed };
+};
+
+/**
+ * Argent mis de côté (part propre) depuis une date incluse jusqu'à `asOfDate` : versements
+ * − retraits, hors valorisations, part parentale et soldes initiaux.
+ */
+export const computeSavedSince = (
+  accounts: { type: AccountType; movements?: AccountMovement[] }[],
+  fromISO: string,
+  asOfDate: Date = new Date()
+): number => {
+  const todayKey = formatISODay(asOfDate);
+  let total = 0;
+  for (const a of accounts) {
+    if (a.type === AccountType.COMPTE_COURANT || a.type === AccountType.IMMOBILIER) continue;
+    for (const m of a.movements || []) {
+      if (m.kind === 'valuation' || isParentalMovement(m) || isInitialBalance(m) || m.date < fromISO || m.date > todayKey) continue;
+      total += m.type === 'IN' ? m.amount : -m.amount;
+    }
+  }
+  return total;
 };

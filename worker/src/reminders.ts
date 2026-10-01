@@ -133,17 +133,18 @@ export const computeReminders = (data: GlobalAppData, now: Date, appUrl: string)
   // 5. Jour de paie : le plan de placement du Pilotage, pour savoir quoi virer où.
   const payday = data.config?.paydayDay;
   if (payday && payday >= 1 && payday <= 31) {
-    const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-    const effectiveDay = Math.min(payday, daysInMonth); // le 31 devient le 30 ou le 28
-    const today = now.getDate();
-    if (today >= effectiveDay && today < effectiveDay + PAYDAY_WINDOW_DAYS) {
+    // Fenêtre de 3 jours comptée depuis la date de paie, même à cheval sur deux mois (une
+    // paie le 30 gardait sinon un seul jour pour un cron manqué).
+    const payPeriod = payPeriodOf(payday, now);
+    const daysSincePay = Math.round((new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() - payPeriod.payDate.getTime()) / 86_400_000);
+    if (daysSincePay >= 0 && daysSincePay < PAYDAY_WINDOW_DAYS) {
       const amount = data.config.paydayAmount ?? computeMonthlySavingsCapacity(data);
       const steps = amount > 0
         ? computePlacementStrategy(amount, accounts, data.fiscalConfig || DEFAULT_FISCAL_CONFIG, activeSavingsSplit(data.config, now))
         : [];
       if (steps.length > 0) {
         out.push({
-          key: `payday:${monthKey}`,
+          key: `payday:${payPeriod.key}`,
           message: {
             title: `Salaire versé : ${eur(amount)} à placer`,
             body: [
@@ -165,8 +166,8 @@ export const computeReminders = (data: GlobalAppData, now: Date, appUrl: string)
     // 5 bis. Trois jours après la paie : virements encore ni faits ni cochés dans la liste
     //        du Pilotage. Une seule relance par paie, et rien si tout est coché. La liste
     //        suit la paie (du 27 au 26 suivant), pas le mois calendaire.
-    const period = payPeriodOf(payday, now);
-    const sincePayday = Math.round((new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() - period.payDate.getTime()) / 86_400_000);
+    const period = payPeriod;
+    const sincePayday = daysSincePay;
     if (sincePayday >= PAYDAY_FOLLOWUP_DELAY_DAYS && sincePayday < PAYDAY_FOLLOWUP_DELAY_DAYS + PAYDAY_WINDOW_DAYS) {
       const checklist = data.payChecklist && data.payChecklist.month === period.key ? data.payChecklist : undefined;
       let lines = checklist?.lines;

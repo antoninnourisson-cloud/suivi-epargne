@@ -70,7 +70,11 @@ export const PayChecklist: React.FC<PayChecklistProps> = ({
     if (amount === null) return;
     const base: PayChecklistData = frozen ?? { month, lines: liveLines, done: {} };
     let movementId: string | undefined;
-    if (!alreadyRecorded && l.kind === 'saving' && l.accountId && amount > 0) movementId = onRecordDeposit(l.accountId, amount);
+    if (!alreadyRecorded && l.kind === 'saving' && l.accountId && amount > 0) {
+      movementId = onRecordDeposit(l.accountId, amount);
+      // Compte supprimé depuis (ou versement refusé) : on ne coche pas un virement fantôme.
+      if (!movementId) return;
+    }
     onChange({ ...base, done: { ...base.done, [l.key]: { amount, movementId, alreadyRecorded: alreadyRecorded || undefined } } });
   };
 

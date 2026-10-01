@@ -69,9 +69,10 @@ export const buildAgenda = (data: GlobalAppData, asOfDate: Date = new Date(), mo
   for (const r of data.recurringMovements || []) {
     if (!r.active) continue;
     const account = accounts.find(a => a.id === r.accountId);
+    if (!account) continue; // compte supprimé depuis
     for (let k = 0; k < 3; k++) {
       const y = today.getFullYear(), m = today.getMonth() + k;
-      const d = new Date(y, m, Math.min(r.dayOfMonth, new Date(y, m + 1, 0).getDate()));
+      const d = new Date(y, m, Math.min(Math.max(1, Math.round(r.dayOfMonth)), new Date(y, m + 1, 0).getDate()));
       if (d >= today && d <= shortHorizon) push(d, { kind: 'recurring', title: r.label, detail: account?.name, amount: r.type === 'IN' ? r.amount : -r.amount, view: 'dashboard' });
     }
   }
@@ -168,8 +169,13 @@ export const computeYearReview = (data: GlobalAppData, year: number, asOfDate: D
   const startSnap = snaps.filter(x => x.date < `${year}-01-01`).pop() ?? snaps.find(x => x.date.startsWith(`${year}-`));
   const netStart = startSnap ? startSnap.ownedAmount : computeAccountBalanceAtDate(accounts, `${year - 1}-12-31`);
   const netEnd = computeAccountBalanceAtDate(accounts, endISO);
+  // Un relevé mensuel garde la date de son premier enregistrement mais les soldes de FIN de
+  // mois : les mouvements comptent donc à partir du dernier jour de ce mois-là.
+  const flowsFrom = startSnap
+    ? formatISODay(new Date(Number(startSnap.date.slice(0, 4)), Number(startSnap.date.slice(5, 7)), 0))
+    : `${year - 1}-12-31`;
   const flowsSinceStart = accounts.reduce((sum, a) => sum + (a.movements || [])
-    .filter(m => m.kind !== 'valuation' && m.label !== 'Solde initial' && m.date > (startSnap?.date ?? `${year - 1}-12-31`) && m.date <= endISO)
+    .filter(m => m.kind !== 'valuation' && m.kind !== 'parental' && m.label !== 'Solde initial' && m.date > flowsFrom && m.date <= endISO)
     .reduce((t, m) => t + (m.type === 'IN' ? m.amount : -m.amount), 0), 0);
   const gap = (netEnd - netStart) - flowsSinceStart;
   const restitutionThisYear = done && (done.date.startsWith(`${year}-`) || done.date === `${year + 1}-01-01`)

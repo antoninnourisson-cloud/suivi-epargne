@@ -24,8 +24,11 @@ export interface AccountMovement {
   type: 'IN' | 'OUT';
   linkId?: string; 
   // 'valuation' : variation de valeur d'un placement (cours, gains) et non un versement ou
-  // un retrait d'argent. Exclu du « placé ce mois-ci ». Absent = argent réellement bougé.
-  kind?: 'valuation';
+  // un retrait d'argent. Exclu du « placé ce mois-ci ».
+  // 'parental' : mouvement de la PART DES PARENTS (ajout, correction, restitution). Exclu
+  // de tout ce qui concerne votre part, mais compté pour reconstituer le solde total
+  // passé (intérêts). Absent = argent de votre part réellement bougé.
+  kind?: 'valuation' | 'parental';
 }
 
 export interface RateChange {
@@ -56,6 +59,8 @@ export interface SavingsAccount {
   // Frais de gestion annuels (%) d'un contrat (unités de compte). Le taux servi d'un fonds
   // euros est déjà net de frais : laisser vide. Absent = 0.
   managementFee?: number;
+  // Dernière vérification du taux (même inchangé) : éteint le rappel de révision.
+  rateReviewedAt?: string;
 }
 
 export interface PortfolioSnapshot {

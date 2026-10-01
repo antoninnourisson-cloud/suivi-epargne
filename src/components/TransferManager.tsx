@@ -75,8 +75,9 @@ export const TransferManager: React.FC<TransferManagerProps> = ({ accounts, onUp
     const sourceAcc = accounts.find(a => a.id === sourceAccountId);
     if (!sourceAcc) { setFormError('Le compte source est introuvable.'); return; }
 
-    if (sourceAcc.totalAmount < amount) {
-      setFormError(`Fonds insuffisants : ${sourceAcc.name} ne contient que ${formatEUR(sourceAcc.totalAmount)}.`);
+    // Part propre seulement : le capital des parents n'est pas mobilisable.
+    if (sourceAcc.ownedAmount + 0.004 < amount) {
+      setFormError(`Fonds insuffisants : votre part sur ${sourceAcc.name} n'est que de ${formatEUR(sourceAcc.ownedAmount)}.`);
       return;
     }
 

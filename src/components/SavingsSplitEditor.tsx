@@ -6,7 +6,7 @@
 // ================================================
 import React, { useMemo, useState } from 'react';
 import { SavingsAccount, AccountType, FiscalConfig } from '../types';
-import { computePlacementStrategy } from '../lib/finance';
+import { computePlacementStrategy, missingSplitAccounts } from '../lib/finance';
 import { formatEUR } from '../lib/format';
 import { parseFrenchNumber } from '../lib/numbers';
 import { parseISODate } from '../lib/dates';
@@ -54,6 +54,12 @@ export const SavingsSplitEditor: React.FC<Props> = ({ accounts, split, from, sam
         <button type="button" onClick={() => !custom && enableCustom()} aria-pressed={custom} className={`px-3 py-2 text-xs font-black ${custom ? 'bg-indigo-600 text-white' : 'bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}>Personnalisée</button>
       </div>
 
+      {missingSplitAccounts(split, accounts).length > 0 && (
+        <p className="text-xs font-bold text-amber-700 dark:text-amber-300 p-2 rounded-lg bg-amber-50 dark:bg-amber-950/40">
+          Un compte de votre répartition a été supprimé : sa part est redistribuée sur les autres.{' '}
+          <button type="button" onClick={() => { setDrafts({}); setRows(split!.filter(r => accounts.some(a => a.id === r.accountId))); }} className="underline">Le retirer</button>
+        </p>
+      )}
       {!custom ? (
         <p className="text-xs text-slate-500 dark:text-slate-400">Meilleur taux d'abord : livrets jusqu'à leur plafond, puis le reste sur vos autres placements.</p>
       ) : (

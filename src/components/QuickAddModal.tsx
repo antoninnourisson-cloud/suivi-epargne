@@ -27,6 +27,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ open, accounts, on
   const account = accounts.find(a => a.id === accountId);
   const tip = type === 'OUT' && account ? quinzaineWithdrawalTip(account, amount, parseISODate(date)) : null;
   const since = parseISODate(date).getDate() < 16 ? '1er' : '16';
+  const tooMuch = type === 'OUT' && !!account && amount > account.ownedAmount + 0.004;
 
   const submit = () => {
     if (!accountId || amount <= 0) return;
@@ -64,7 +65,8 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ open, accounts, on
           <div>
             <label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Montant (€)</label>
             <NumberInput value={amount} onChange={setAmount} className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl font-black text-2xl text-slate-800 dark:text-slate-100" min={0} />
-                      {tip && <p className="text-[11px] font-bold text-amber-700 dark:text-amber-300 flex items-start gap-1 mt-1"><Lightbulb className="w-3.5 h-3.5 flex-shrink-0" /> <span>Retiré à cette date, ce montant ne rapporte déjà plus rien depuis le {since}. En attendant le {frenchDay(parseISODate(tip.waitUntil))}, vous gardez ~{formatEUR(tip.gain, 0)} d'intérêts.</span></p>}
+                      {tooMuch && <p className="text-[11px] font-bold text-rose-600 mt-1">Votre part sur ce compte n'est que de {formatEUR(account!.ownedAmount)} : la part des parents n'est pas mobilisable.</p>}
+            {tip && <p className="text-[11px] font-bold text-amber-700 dark:text-amber-300 flex items-start gap-1 mt-1"><Lightbulb className="w-3.5 h-3.5 flex-shrink-0" /> <span>Retiré à cette date, ce montant ne rapporte déjà plus rien depuis le {since}. En attendant le {frenchDay(parseISODate(tip.waitUntil))}, vous gardez ~{formatEUR(tip.gain, 0)} d'intérêts.</span></p>}
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -81,7 +83,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ open, accounts, on
 
         <button
           onClick={submit}
-          disabled={!accountId || amount <= 0}
+          disabled={!accountId || amount <= 0 || tooMuch}
           className="w-full mt-6 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white py-3.5 rounded-xl font-bold"
         >
           Ajouter
