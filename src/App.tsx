@@ -28,6 +28,7 @@ import { RegulatedRatesEditor } from './components/RegulatedRatesEditor';
 import { AccountType } from './types';
 import { computeBadgeCount, detectPayRaise } from './lib/projection';
 import { applyMovement, snapshotBalances, restoreBalances, isRestitutionMovement, round2 as round2Cents } from './lib/accountOps';
+import { WhatsNewModal } from './components/WhatsNew';
 import {
   LayoutDashboard, Wallet, Trash2, Edit2, ShieldCheck,
   ArrowRightLeft, RefreshCcw, PlusCircle, Cloud, LogOut,
@@ -1086,6 +1087,9 @@ const App: React.FC = () => {
       />
 
       <ToastContainer toasts={toasts} onDismiss={dismiss} />
+
+      {/* Une fois après chaque mise à jour : ce qui a changé. */}
+      <WhatsNewModal />
 
       <Dialog state={dialog} onClose={closeDialog} />
     </div>

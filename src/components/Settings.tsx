@@ -13,6 +13,7 @@ import { NumberInput } from './NumberInput';
 import { identifyTaxScale, sameTaxBrackets, applyTaxScale } from '../lib/finance';
 import { LATEST_TAX_SCALE } from '../constants';
 import { parseISODate } from '../lib/dates';
+import { ChangelogHistory } from './WhatsNew';
 
 interface SettingsProps {
   config: FiscalConfig;
@@ -285,6 +286,8 @@ export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parent
 
         {/* SECTION NOTIFICATIONS (visible seulement si l'app est reliée au serveur) */}
         <NotificationSettings paydayDay={paydayDay} onOpenPayday={onOpenPayday} />
+
+        <ChangelogHistory />
 
         {/* RÉGLAGES AVANCÉS : rarement modifiés, repliés par défaut */}
         <details className="lg:col-span-2 group">

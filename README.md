@@ -42,6 +42,7 @@ Un **petit serveur optionnel** (Cloudflare Worker, dossier [`worker/`](worker/))
 - Distinction entre **part propre** et **capital des parents** sur chaque compte. Le capital parental est intouchable, ses intérêts reviennent à l'utilisateur.
 - **Restitution du capital parental** : date conseillée (le 1er janvier garde toute l'année d'intérêts), montants par compte, effet sur le plan de placement, rappels début décembre et le jour J, enregistrement en un clic avec récapitulatif aux parents et relevé exportable. Ensuite, l'app passe en mode solo.
 - **Journal des modifications** : tous les mouvements (votre part, part des parents, valorisations), changements de taux et restitution ; suppression ou annulation depuis le journal. Il repère aussi les mouvements qui s'annulent (tests) et propose de les supprimer.
+- **Corrections et point de départ** : un mouvement peut être marqué « Pas de l'épargne » (erreur de saisie, intérêts, argent en transit). Il reste dans les soldes mais sort de « Placé », du taux d'épargne et des bilans. « Repartir de zéro » fait démarrer le suivi de l'épargne à une date, sans rien effacer.
 - **Recherche** dans les mouvements de tous les comptes (libellé, montant, date).
 - Étiquettes, historique des mouvements, annulation d'une suppression, virements internes liés.
 - **Ajout rapide** : bouton flottant ; raccourcis sur l'icône de l'app installée (ajout rapide, actualiser, virements de paie).
@@ -90,6 +91,7 @@ Un **petit serveur optionnel** (Cloudflare Worker, dossier [`worker/`](worker/))
 - **Notifications push**, activables appareil par appareil. Vérification quotidienne des rappels ; chaque rappel n'est envoyé qu'une fois et ouvre l'écran concerné. Bilan du mois écoulé le 1er, rappel des relevés annuels des placements mi-janvier.
 - **E-mail récapitulatif aux parents** (via Gmail) lors des mouvements sur Livret A / LEP, envoyé seulement après une sauvegarde confirmée.
 - Export et import JSON complets, export CSV.
+- **Quoi de neuf** : après chaque mise à jour, une fenêtre résume une fois les nouveautés ; l'historique complet est dans Paramètres.
 
 ## Architecture
 
@@ -148,6 +150,8 @@ VITE_BACKEND_URL=http://localhost:8787
 - **Écran de consentement « En production »** : en mode test, les sessions expirent après 7 jours.
 
 ## Déploiement
+
+**Avant chaque mise à jour visible**, ajouter une entrée en tête de [`src/changelog.ts`](src/changelog.ts) (version `AAAA.MM.JJ`, titre, deux à cinq phrases simples). C'est elle qui déclenche la fenêtre « Quoi de neuf ».
 
 - **App** : chaque push sur `main` déclenche GitHub Actions (tests, vérification des types, build, publication sur GitHub Pages). L'adresse du serveur est définie dans `.env.production`.
 - **Serveur** : `npm run deploy` dans `worker/`. L'installation initiale, les secrets et la révocation sont décrits dans [worker/README.md](worker/README.md).
