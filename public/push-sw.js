@@ -12,6 +12,8 @@ self.addEventListener('push', (event) => {
     data = { body: event.data ? event.data.text() : '' };
   }
   const title = data.title || 'Suivi Épargne';
+  // Pastille sur l'icône (le nombre exact est recalculé à l'ouverture de l'app).
+  if (self.navigator && self.navigator.setAppBadge) self.navigator.setAppBadge().catch(() => {});
   event.waitUntil(
     self.registration.showNotification(title, {
       body: data.body || '',

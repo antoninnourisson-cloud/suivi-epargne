@@ -3,6 +3,8 @@ import { SavingsAccount, AccountType, FiscalConfig } from '../types';
 import { computeWeightedAnnualRate, computeCapitalGainsTax, computeParentalInterest, computeAccruedInterest, CapitalTaxRegime, computeWithdrawalTax, tracksDeposits, PEA_DEPOSIT_CEILING, computeExpectedYearInterest } from '../lib/finance';
 import { Coins, TrendingUp, AlertCircle, PiggyBank, FileDown, Landmark, Info } from 'lucide-react';
 import { formatEUR, formatRate } from '../lib/format';
+import { netAnnualRate } from '../lib/projection';
+import { SplitProjectionCard } from './SplitProjectionCard';
 
 const REGIME_LABEL: Record<CapitalTaxRegime, string> = {
   PFU: 'PFU 30%',
@@ -14,12 +16,14 @@ const REGIME_LABEL: Record<CapitalTaxRegime, string> = {
 interface YieldProps {
   accounts: SavingsAccount[];
   fiscalConfig: FiscalConfig;
+  monthPlan?: number;
+  savingsSplit?: { accountId: string; pct: number }[];
 }
 
 const fmt = (n: number) => formatEUR(n);
 const REGULATED = [AccountType.LIVRET_A, AccountType.LDDS, AccountType.LEP];
 
-export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig }) => {
+export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig, monthPlan, savingsSplit }) => {
   const currentYear = new Date().getFullYear();
 
   const rows = useMemo(() =>
@@ -29,6 +33,7 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig }) => {
         const weightedRate = computeWeightedAnnualRate(a.interestRate || 0, a.rateHistory, currentYear);
         return {
           id: a.id, name: a.name, type: a.type, rate: a.interestRate || 0,
+          net: netAnnualRate(a, fiscalConfig),
           weightedRate,
           hasRateHistory: !!(a.rateHistory && a.rateHistory.length > 0),
           base: a.totalAmount,
@@ -213,6 +218,7 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig }) => {
                   <td className="px-6 py-3"><div className="font-bold text-slate-800 dark:text-slate-100">{r.name}</div><div className="text-[11px] uppercase text-slate-500 dark:text-slate-400 font-bold">{r.type}</div></td>
                   <td className="px-6 py-3 text-right font-mono text-slate-600 dark:text-slate-300">
                     {formatRate(r.rate)}
+                    {Math.abs(r.net - r.rate) > 0.005 && <span className="block text-[11px] font-bold text-emerald-600" title="Après prélèvements sociaux (et frais éventuels)">net {formatRate(Math.round(r.net * 100) / 100)}</span>}
                     {r.hasRateHistory && Math.abs(r.weightedRate - r.rate) > 0.01 && (
                       <span className="block text-[11px] text-indigo-400 font-bold normal-case" title="Moyenne pondérée dans le temps suite à un changement de taux">≈ {formatRate(Math.round(r.weightedRate * 100) / 100)} pondéré</span>
                     )}
@@ -228,6 +234,8 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig }) => {
           </table>
         </div>
       </div>
+
+      <SplitProjectionCard accounts={accounts} fiscalConfig={fiscalConfig} monthPlan={monthPlan} savingsSplit={savingsSplit} />
 
       {(latentRows.length > 0 || missingDeposits.length > 0) && (
         <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">

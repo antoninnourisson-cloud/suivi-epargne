@@ -53,6 +53,9 @@ export interface SavingsAccount {
   // la différence est la plus-value latente, seule part imposée lors d'un retrait.
   // Absent = inconnu (l'app ne devine pas).
   totalDeposits?: number;
+  // Frais de gestion annuels (%) d'un contrat (unités de compte). Le taux servi d'un fonds
+  // euros est déjà net de frais : laisser vide. Absent = 0.
+  managementFee?: number;
 }
 
 export interface PortfolioSnapshot {

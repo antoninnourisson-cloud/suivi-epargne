@@ -63,6 +63,7 @@ Un **petit serveur optionnel** (Cloudflare Worker, dossier [`worker/`](worker/))
 - **Horloge fiscale** : maturité des PEA, PEE et Assurance Vie.
 
 ### Rendement et fiscalité
+- **Rendement net** (prélèvements sociaux et frais éventuels déduits) et **projection selon la répartition** (100 % Livret A, votre répartition, 100 % Assurance Vie) sur 5, 10 ou 20 ans.
 - **Intérêts attendus au 31 décembre** (année complète aux soldes actuels), dont la part produite par le capital parental.
 - **Intérêts réellement acquis** selon la règle des quinzaines des livrets réglementés, à côté du rythme annualisé.
 - Taux pondérés dans le temps, et part des intérêts offerte par les parents.
@@ -83,6 +84,8 @@ Un **petit serveur optionnel** (Cloudflare Worker, dossier [`worker/`](worker/))
 
 ### Sécurité et notifications
 - **Verrou de l'appareil** par biométrie (WebAuthn) ou code PIN (PBKDF2). Il se réactive dès que l'app passe en arrière-plan.
+- **Pastille sur l'icône** de l'app installée : nombre de choses à faire.
+- **Hausse de salaire repérée** sur les fiches de paie, avec proposition d'ajuster l'épargne.
 - **Notifications push**, activables appareil par appareil. Vérification quotidienne des rappels ; chaque rappel n'est envoyé qu'une fois et ouvre l'écran concerné. Bilan du mois écoulé le 1er, rappel des relevés annuels des placements mi-janvier.
 - **E-mail récapitulatif aux parents** (via Gmail) lors des mouvements sur Livret A / LEP, envoyé seulement après une sauvegarde confirmée.
 - Export et import JSON complets, export CSV.

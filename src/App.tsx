@@ -26,6 +26,7 @@ import { AccountTotal } from './components/AccountTotal';
 import './services/installPrompt';
 import { RegulatedRatesEditor } from './components/RegulatedRatesEditor';
 import { AccountType } from './types';
+import { computeBadgeCount, detectPayRaise } from './lib/projection';
 import {
   LayoutDashboard, Wallet, Trash2, Edit2, ShieldCheck,
   ArrowRightLeft, RefreshCcw, PlusCircle, Cloud, LogOut,
@@ -179,6 +180,35 @@ const App: React.FC = () => {
   const monthlyPay = useMemo(() => computeMonthlyPay(data.buildData()), [data.buildData]);
   // Instantané complet des données (agenda, bilan annuel).
   const fullData = useMemo(() => data.buildData(), [data.buildData]);
+
+  // Pastille sur l'icône de l'app installée : nombre de choses à faire.
+  useEffect(() => {
+    if (!isAuthenticated || data.isLoadingData) return;
+    const nav = navigator as Navigator & { setAppBadge?: (n?: number) => Promise<void>; clearAppBadge?: () => Promise<void> };
+    const n = computeBadgeCount(fullData);
+    (n > 0 ? nav.setAppBadge?.(n) : nav.clearAppBadge?.())?.catch(() => { /* non pris en charge */ });
+  }, [fullData, isAuthenticated, data.isLoadingData]);
+
+  // Hausse de salaire repérée sur les fiches de paie (proposée une seule fois par fiche).
+  const payRaise = useMemo(() => {
+    const r = detectPayRaise(data.payslips);
+    if (!r) return null;
+    try { if (localStorage.getItem(`pay_raise_seen_${r.latest.id}`)) return null; } catch { /* ignoré */ }
+    return r;
+  }, [data.payslips]);
+  const [payRaiseHandled, setPayRaiseHandled] = useState(false);
+  const dismissPayRaise = () => {
+    if (payRaise) { try { localStorage.setItem(`pay_raise_seen_${payRaise.latest.id}`, '1'); } catch { /* ignoré */ } }
+    setPayRaiseHandled(true);
+  };
+  const acceptPayRaise = () => {
+    if (!payRaise) return;
+    const delta = Math.round(payRaise.delta);
+    if (data.paydayAmount !== undefined) data.setPaydayAmount(Math.round(data.paydayAmount + delta));
+    if (data.activePayslipId !== payRaise.latest.id) data.setActivePayslipId(payRaise.latest.id);
+    addToast({ message: data.paydayAmount !== undefined ? `Épargne mensuelle portée à ${formatEUR(Math.round(data.paydayAmount + delta))}` : 'Pilotage basé sur votre nouvelle fiche de paie', kind: 'success' });
+    dismissPayRaise();
+  };
 
   // Lien direct vers un écran (`?view=update`), utilisé par les notifications. Traité
   // après authentification + déverrouillage, comme le raccourci d'ajout rapide.
@@ -805,7 +835,7 @@ const App: React.FC = () => {
             )}
 
             <Suspense fallback={<ViewLoader />}>
-            {view === 'dashboard' && <Dashboard accounts={data.accounts} history={data.history} expenses={allCharges} fiscalConfig={data.fiscalConfig} workBenefits={data.workBenefits} onDeleteAccount={handleDeleteAccount} config={dashboardConfig} monthPlan={monthPlan} monthlyPay={monthlyPay} subscriptions={data.subscriptions} onUpdateFiscalConfig={data.setFiscalConfig} onUpdateAccounts={data.setAccounts} onOpenSettings={() => setView('settings')} recurringMovements={data.recurringMovements} onRecordRecurring={(r, date) => handleQuickAdd(r.accountId, r.amount, r.type, r.label, date)} />}
+            {view === 'dashboard' && <Dashboard accounts={data.accounts} history={data.history} expenses={allCharges} fiscalConfig={data.fiscalConfig} workBenefits={data.workBenefits} onDeleteAccount={handleDeleteAccount} config={dashboardConfig} monthPlan={monthPlan} monthlyPay={monthlyPay} payRaise={payRaise && !payRaiseHandled ? { delta: payRaise.delta, period: payRaise.latest.extracted.period || '', hasFixedAmount: data.paydayAmount !== undefined } : null} onAcceptPayRaise={acceptPayRaise} onDismissPayRaise={dismissPayRaise} subscriptions={data.subscriptions} onUpdateFiscalConfig={data.setFiscalConfig} onUpdateAccounts={data.setAccounts} onOpenSettings={() => setView('settings')} recurringMovements={data.recurringMovements} onRecordRecurring={(r, date) => handleQuickAdd(r.accountId, r.amount, r.type, r.label, date)} />}
 
             {view === 'pilot' && <AssistantPilot
                 accounts={data.accounts}
@@ -847,7 +877,7 @@ const App: React.FC = () => {
             {view === 'transfers' && <TransferManager accounts={data.accounts} onUpdateAccountsComplex={data.updateAccountsWithMovements} onLinkedTransfer={data.executeLinkedTransfer} lastSavedAt={data.lastSavedAt} recurringMovements={data.recurringMovements} onUpdateRecurring={data.setRecurringMovements} />}
             {view === 'update' && <AccountUpdate accounts={data.accounts} onUpdateAccountsComplex={data.updateAccountsWithMovements} lastSavedAt={data.lastSavedAt} />}
 
-            {view === 'yield' && <Yield accounts={data.accounts} fiscalConfig={data.fiscalConfig} />}
+            {view === 'yield' && <Yield accounts={data.accounts} fiscalConfig={data.fiscalConfig} monthPlan={monthPlan} savingsSplit={data.savingsSplit} />}
             {view === 'history' && <History history={data.history} expensesHistory={data.expensesHistory} reviewData={fullData} />}
             {view === 'agenda' && <Agenda data={fullData} onOpen={(v) => VALID_VIEWS.includes(v as View) && setView(v as View)} />}
             {view === 'parental' && <ParentalShare

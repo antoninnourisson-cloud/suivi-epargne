@@ -8,7 +8,7 @@ import { Euro, Lock, Wallet, ListTodo, ChevronDown, Landmark, CalendarClock, Unl
 import { computeAccruedParentalInterest, computeRecentSavingsRate, computeAccountBalanceAtDate, findStaleRegulatedRates, computeLepEligibility, computeIncome, findDueRecurring, computeMonthSavedAmount, computeSavingsRateHistory, computeUnlockCost, findFiscalReview, applyTaxScale, nextSubscriptionDate, findAvRateUpdatesDue } from '../lib/finance';
 import { parseISODate, formatISODay, daysBetween, localTodayISO } from '../lib/dates';
 import { Button } from './Button';
-import { formatEUR, formatSignedEUR, frenchDay } from '../lib/format';
+import { formatEUR, formatSignedEUR, frenchDay, formatPeriod } from '../lib/format';
 import { InstallPrompt } from './InstallPrompt';
 import { RegulatedRatesEditor } from './RegulatedRatesEditor';
 
@@ -33,6 +33,9 @@ interface DashboardProps {
   onUpdateFiscalConfig?: (update: (prev: FiscalConfig) => FiscalConfig) => void;
   onOpenSettings?: () => void;
   onUpdateAccounts?: (update: (prev: SavingsAccount[]) => SavingsAccount[]) => void;
+  payRaise?: { delta: number; period: string; hasFixedAmount: boolean } | null;
+  onAcceptPayRaise?: () => void;
+  onDismissPayRaise?: () => void;
   config: {
     grossAnnual: number;
     navigoBase: number;
@@ -41,7 +44,7 @@ interface DashboardProps {
   };
 }
 
-export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expenses, fiscalConfig, workBenefits, onDeleteAccount, config, recurringMovements = [], onRecordRecurring, monthPlan, monthlyPay = 0, subscriptions = [], onUpdateFiscalConfig, onOpenSettings, onUpdateAccounts }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expenses, fiscalConfig, workBenefits, onDeleteAccount, config, recurringMovements = [], onRecordRecurring, monthPlan, monthlyPay = 0, subscriptions = [], onUpdateFiscalConfig, onOpenSettings, onUpdateAccounts, payRaise, onAcceptPayRaise, onDismissPayRaise }) => {
   const [dateRange, setDateRange] = useState(() => {
     try {
         const stored = localStorage.getItem('dashboard_date_range');
@@ -427,7 +430,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
     ceilingAlerts.length +
     (onUpdateFiscalConfig && fiscalReview.newScale ? 1 : 0) +
     (onUpdateFiscalConfig && fiscalReview.annualCheckDue ? 1 : 0) +
-    (avRatesDue.length > 0 ? 1 : 0);
+    (avRatesDue.length > 0 ? 1 : 0) +
+    (payRaise ? 1 : 0);
 
   return (
     <div className="space-y-6">
@@ -531,6 +535,18 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
           </span>
           {onOpenSettings && <button onClick={onOpenSettings} className="text-xs font-bold underline flex-shrink-0 hover:opacity-70">Ouvrir les paramètres</button>}
           <button onClick={() => onUpdateFiscalConfig(prev => ({ ...prev, paramsReviewedYear: new Date().getFullYear() }))} className="px-3 py-1.5 rounded-lg bg-slate-800 dark:bg-slate-100 text-white dark:text-slate-900 text-xs font-black flex-shrink-0">C'est à jour</button>
+        </div>
+      )}
+
+      {payRaise && (
+        <div className="flex flex-wrap items-center gap-3 p-3 rounded-xl border bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-900 text-emerald-800 dark:text-emerald-300 text-sm font-bold">
+          <TrendingUp className="w-4 h-4 flex-shrink-0" />
+          <span className="flex-1 min-w-0">
+            Votre net a augmenté de {formatEUR(payRaise.delta, 0)} par mois (fiche de {formatPeriod(payRaise.period)}).
+            <span className="block text-[11px] font-normal opacity-80">{payRaise.hasFixedAmount ? `« Ajouter » augmente votre épargne mensuelle de ${formatEUR(payRaise.delta, 0)}.` : '« Ajouter » base le Pilotage sur cette fiche : la capacité d\'épargne suit.'} Si c'est une prime ponctuelle, ignorez.</span>
+          </span>
+          {onAcceptPayRaise && <button onClick={onAcceptPayRaise} className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black flex-shrink-0">Ajouter</button>}
+          {onDismissPayRaise && <button onClick={onDismissPayRaise} className="text-xs font-bold underline flex-shrink-0 hover:opacity-70">Ignorer</button>}
         </div>
       )}
 

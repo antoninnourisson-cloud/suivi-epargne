@@ -34,6 +34,8 @@ export const AccountForm: React.FC<AccountFormProps> = ({ onSave, initialData, o
   const [tags, setTags] = useState<string[]>(initialData?.tags || []);
   const [tagInput, setTagInput] = useState('');
   const [rateEffectiveDate, setRateEffectiveDate] = useState(localTodayISO());
+  const [managementFee, setManagementFee] = useState(initialData?.managementFee !== undefined ? String(initialData.managementFee).replace('.', ',') : '');
+  const showFee = [AccountType.ASSURANCE_VIE, AccountType.PEA, AccountType.PER].includes(type);
   // Texte et non nombre : vide = versements inconnus (différent de 0 €).
   const [totalDeposits, setTotalDeposits] = useState(initialData?.totalDeposits !== undefined ? String(initialData.totalDeposits) : '');
   const showDeposits = tracksDeposits(type);
@@ -115,6 +117,7 @@ export const AccountForm: React.FC<AccountFormProps> = ({ onSave, initialData, o
       isTaxable: isTaxableType,
       rateHistory: rateHistory.length > 0 ? rateHistory : undefined,
       tags: tags.length > 0 ? tags : undefined,
+      managementFee: showFee && managementFee.trim() !== '' && (parseFrenchNumber(managementFee) ?? -1) >= 0 ? parseFrenchNumber(managementFee)! : undefined,
       totalDeposits: showDeposits && parsedDeposits !== null && parsedDeposits !== undefined && parsedDeposits >= 0 ? parsedDeposits : undefined,
     });
   };
@@ -163,6 +166,13 @@ export const AccountForm: React.FC<AccountFormProps> = ({ onSave, initialData, o
               )}
             </div>
             {!isTaxableType && <div><label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase mb-1">Plafond (€)</label><NumberInput value={ceiling} onChange={setCeiling} className="w-full p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-bold" min={0} /></div>}
+            {showFee && (
+              <div className="col-span-2">
+                <label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase mb-1 block">Frais de gestion annuels (%)</label>
+                <input type="text" inputMode="decimal" value={managementFee} onChange={e => setManagementFee(e.target.value)} placeholder="0" className="w-full p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-bold" />
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">Facultatif. Le taux servi d'un fonds euros est déjà net de frais : laissez vide. Pour des unités de compte, indiquez les frais du contrat (souvent 0,5 à 0,85 %).</p>
+              </div>
+            )}
             {showDeposits && (
               <div className="col-span-2">
                 <label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase mb-1 block">Versements cumulés (€)</label>
