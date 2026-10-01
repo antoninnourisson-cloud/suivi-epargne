@@ -7,7 +7,7 @@ import { Button } from './Button';
 import { NumberInput } from './NumberInput';
 import { localTodayISO } from '../lib/dates';
 import { parseFrenchNumber } from '../lib/numbers';
-import { tracksDeposits, PEA_DEPOSIT_CEILING } from '../lib/finance';
+import { tracksDeposits, PEA_DEPOSIT_CEILING, applyRateChange } from '../lib/finance';
 import { PlusCircle, Save, Users, Calculator, ShieldCheck, Tag, X, History } from 'lucide-react';
 import { formatEUR } from '../lib/format';
 
@@ -33,6 +33,7 @@ export const AccountForm: React.FC<AccountFormProps> = ({ onSave, initialData, o
   const [ceiling, setCeiling] = useState<number>(initialData?.ceiling || 0);
   const [tags, setTags] = useState<string[]>(initialData?.tags || []);
   const [tagInput, setTagInput] = useState('');
+  const [rateEffectiveDate, setRateEffectiveDate] = useState(localTodayISO());
   // Texte et non nombre : vide = versements inconnus (différent de 0 €).
   const [totalDeposits, setTotalDeposits] = useState(initialData?.totalDeposits !== undefined ? String(initialData.totalDeposits) : '');
   const showDeposits = tracksDeposits(type);
@@ -91,11 +92,11 @@ export const AccountForm: React.FC<AccountFormProps> = ({ onSave, initialData, o
     // parseFrenchNumber et non parseFloat : « 2,4 » donnait 2 %.
     const newRate = parseFrenchNumber(interestRate) ?? 0;
 
-    // Historise l'ancien taux s'il a changé, pour affiner le calcul de rendement dans le temps.
+    // Historise l'ancien taux s'il a changé, à la date d'effet choisie (par défaut
+    // aujourd'hui) : un taux passé à 1,7 % le 1er août se saisit encore en octobre.
     let rateHistory = initialData?.rateHistory || [];
     if (initialData && initialData.interestRate !== undefined && initialData.interestRate !== newRate) {
-      const today = localTodayISO();
-      rateHistory = [...rateHistory, { date: today, rate: initialData.interestRate }];
+      rateHistory = applyRateChange(initialData, newRate, rateEffectiveDate || localTodayISO()).rateHistory || [];
     }
 
     onSave({
@@ -151,6 +152,12 @@ export const AccountForm: React.FC<AccountFormProps> = ({ onSave, initialData, o
             <div>
               <label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase mb-1 flex items-center gap-1">Taux actuel (%)</label>
               <input type="text" inputMode="decimal" value={interestRate} onChange={e => setInterestRate(e.target.value)} className="w-full p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-bold" />
+              {initialData && initialData.interestRate !== undefined && parseFrenchNumber(interestRate) !== null && parseFrenchNumber(interestRate) !== initialData.interestRate && (
+                <label className="block mt-2">
+                  <span className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Nouveau taux à partir du</span>
+                  <input type="date" value={rateEffectiveDate} onChange={e => setRateEffectiveDate(e.target.value)} className="block w-full p-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg font-bold text-sm" />
+                </label>
+              )}
               {initialData?.rateHistory && initialData.rateHistory.length > 0 && (
                 <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 flex items-center gap-1"><History className="w-3 h-3" /> {initialData.rateHistory.length} changement(s) historisé(s)</p>
               )}

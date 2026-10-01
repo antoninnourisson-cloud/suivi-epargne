@@ -24,6 +24,8 @@ import {
   payPeriodOf,
   computePlacementStrategy,
   findAvRateUpdatesDue,
+  applyRateChange,
+  computeAccruedInterest,
 } from './finance';
 import { DEFAULT_FISCAL_CONFIG as CFG, TAX_SCALES, LATEST_TAX_SCALE } from '../constants';
 import { AccountType, SavingsAccount, Subscription } from '../types';
@@ -296,5 +298,21 @@ describe('solde initial', () => {
       { id: 'v', date: '2026-09-10', amount: 300, label: 'Virement', type: 'IN' },
     ] });
     expect(computeMonthSavedAmount([a], NOW)).toBe(300);
+  });
+});
+
+describe('changement de taux daté', () => {
+  it("applique 1,7 % à partir du 1er août, l'ancien taux avant", () => {
+    const la = acc({ interestRate: 1.5, totalAmount: 2400, ownedAmount: 2400, movements: [{ id: 'm', date: '2025-01-01', amount: 2400, label: 'x', type: 'IN' }] });
+    const next = applyRateChange(la, 1.7, '2026-08-01');
+    expect(next.interestRate).toBe(1.7);
+    expect(next.rateHistory).toEqual([{ date: '2026-08-01', rate: 1.5 }]);
+    // 14 quinzaines à 1,5 % puis 10 à 1,7 % sur 2 400 €.
+    expect(computeAccruedInterest(next, 2026, new Date(2027, 0, 1))).toBeCloseTo(2400 * (0.015 * 14 + 0.017 * 10) / 24);
+  });
+  it('remplace un changement saisi plus tard par erreur (daté du jour de saisie)', () => {
+    const la = acc({ interestRate: 1.7, rateHistory: [{ date: '2026-10-01', rate: 1.5 }] });
+    const next = applyRateChange(la, 1.7, '2026-08-01');
+    expect(next.rateHistory).toEqual([{ date: '2026-08-01', rate: 1.5 }]);
   });
 });

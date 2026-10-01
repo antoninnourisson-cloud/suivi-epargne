@@ -24,11 +24,13 @@ import { MovementSearch } from './components/MovementSearch';
 import { AccountTotal } from './components/AccountTotal';
 // Importé ici (et pas dans l'écran, chargé à la demande) pour capter l'invitation d'installation dès le démarrage.
 import './services/installPrompt';
+import { RegulatedRatesEditor } from './components/RegulatedRatesEditor';
+import { AccountType } from './types';
 import {
   LayoutDashboard, Wallet, Trash2, Edit2, ShieldCheck,
   ArrowRightLeft, RefreshCcw, PlusCircle, Cloud, LogOut,
   Loader2, Settings as SettingsIcon, AlertTriangle, RotateCw,
-  Coins, LineChart, Users, Sun, Moon, Zap, Tag, Save, WifiOff, FileText, Clock, CalendarClock, HandHeart, CalendarDays
+  Coins, LineChart, Users, Sun, Moon, Zap, Tag, Save, WifiOff, FileText, Clock, CalendarClock, HandHeart, CalendarDays, ChevronDown
 } from 'lucide-react';
 
 // Code-splitting : les vues lourdes (recharts, etc.) sont chargées à la demande.
@@ -803,7 +805,7 @@ const App: React.FC = () => {
             )}
 
             <Suspense fallback={<ViewLoader />}>
-            {view === 'dashboard' && <Dashboard accounts={data.accounts} history={data.history} expenses={allCharges} fiscalConfig={data.fiscalConfig} workBenefits={data.workBenefits} onDeleteAccount={handleDeleteAccount} config={dashboardConfig} monthPlan={monthPlan} monthlyPay={monthlyPay} subscriptions={data.subscriptions} onUpdateFiscalConfig={data.setFiscalConfig} onOpenSettings={() => setView('settings')} recurringMovements={data.recurringMovements} onRecordRecurring={(r, date) => handleQuickAdd(r.accountId, r.amount, r.type, r.label, date)} />}
+            {view === 'dashboard' && <Dashboard accounts={data.accounts} history={data.history} expenses={allCharges} fiscalConfig={data.fiscalConfig} workBenefits={data.workBenefits} onDeleteAccount={handleDeleteAccount} config={dashboardConfig} monthPlan={monthPlan} monthlyPay={monthlyPay} subscriptions={data.subscriptions} onUpdateFiscalConfig={data.setFiscalConfig} onUpdateAccounts={data.setAccounts} onOpenSettings={() => setView('settings')} recurringMovements={data.recurringMovements} onRecordRecurring={(r, date) => handleQuickAdd(r.accountId, r.amount, r.type, r.label, date)} />}
 
             {view === 'pilot' && <AssistantPilot
                 accounts={data.accounts}
@@ -890,6 +892,15 @@ const App: React.FC = () => {
                   {!showForm && <button onClick={() => { setEditingAccount(undefined); setShowForm(true); }} className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-xl font-bold flex gap-2 transition-colors shadow-lg shadow-indigo-200"><PlusCircle className="w-5 h-5"/> Ajouter un compte</button>}
                 </div>
                 {!showForm && <MovementSearch accounts={data.accounts} />}
+                {!showForm && data.accounts.some(a => [AccountType.LIVRET_A, AccountType.LDDS, AccountType.LEP].includes(a.type)) && (
+                  <details className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 group">
+                    <summary className="list-none cursor-pointer p-4 flex items-center justify-between font-bold text-sm text-slate-800 dark:text-slate-100">
+                      Mettre à jour les taux des livrets
+                      <ChevronDown className="w-4 h-4 text-slate-500 transition-transform group-open:rotate-180" />
+                    </summary>
+                    <div className="px-4 pb-4"><RegulatedRatesEditor accounts={data.accounts} onApply={data.setAccounts} /></div>
+                  </details>
+                )}
                 {showForm ? (
                   <AccountForm
                       onSave={handleSaveAccount}

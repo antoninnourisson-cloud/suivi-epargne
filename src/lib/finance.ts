@@ -1480,3 +1480,31 @@ export const findAvRateUpdatesDue = (accounts: SavingsAccount[], asOfDate: Date 
     !(a.rateHistory || []).some(r => r.date >= yearStart)
   );
 };
+
+// ---------------------------------------------------------------------------
+// Changement de taux daté
+// ---------------------------------------------------------------------------
+
+/** Livrets dont le taux est fixé ensemble par l'État (Livret A et LDDS ont toujours le même). */
+export const REGULATED_RATE_GROUPS: { key: string; label: string; types: AccountType[] }[] = [
+  { key: 'livretA', label: 'Livret A et LDDS', types: [AccountType.LIVRET_A, AccountType.LDDS] },
+  { key: 'lep', label: 'LEP', types: [AccountType.LEP] },
+];
+
+/**
+ * Nouveau taux à partir de `effectiveISO` (ex. 1,7 % au 1er août 2026), même saisi plus
+ * tard. Convention de `rateHistory` : une entrée { date, rate } = « `rate` courait
+ * jusqu'à `date` ». Les entrées postérieures à la date d'effet sont remplacées (le nouveau
+ * taux s'applique depuis cette date).
+ */
+export const applyRateChange = <T extends { interestRate?: number; rateHistory?: RateChange[] }>(
+  account: T,
+  newRate: number,
+  effectiveISO: string
+): T => {
+  const effective = parseISODate(effectiveISO);
+  const before = rateAtDate(account.interestRate || 0, account.rateHistory, new Date(effective.getTime() - 1));
+  const kept = (account.rateHistory || []).filter(c => c.date < effectiveISO);
+  const rateHistory = Math.abs(before - newRate) > 1e-9 ? [...kept, { date: effectiveISO, rate: before }] : kept;
+  return { ...account, interestRate: newRate, rateHistory: rateHistory.length > 0 ? rateHistory : undefined };
+};

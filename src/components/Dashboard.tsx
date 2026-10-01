@@ -10,6 +10,7 @@ import { parseISODate, formatISODay, daysBetween, localTodayISO } from '../lib/d
 import { Button } from './Button';
 import { formatEUR, formatSignedEUR, frenchDay } from '../lib/format';
 import { InstallPrompt } from './InstallPrompt';
+import { RegulatedRatesEditor } from './RegulatedRatesEditor';
 
 interface DashboardProps {
   accounts: SavingsAccount[];
@@ -31,6 +32,7 @@ interface DashboardProps {
   // Mise à jour des paramètres fiscaux (nouveau barème, vérification annuelle).
   onUpdateFiscalConfig?: (update: (prev: FiscalConfig) => FiscalConfig) => void;
   onOpenSettings?: () => void;
+  onUpdateAccounts?: (update: (prev: SavingsAccount[]) => SavingsAccount[]) => void;
   config: {
     grossAnnual: number;
     navigoBase: number;
@@ -39,7 +41,7 @@ interface DashboardProps {
   };
 }
 
-export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expenses, fiscalConfig, workBenefits, onDeleteAccount, config, recurringMovements = [], onRecordRecurring, monthPlan, monthlyPay = 0, subscriptions = [], onUpdateFiscalConfig, onOpenSettings }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expenses, fiscalConfig, workBenefits, onDeleteAccount, config, recurringMovements = [], onRecordRecurring, monthPlan, monthlyPay = 0, subscriptions = [], onUpdateFiscalConfig, onOpenSettings, onUpdateAccounts }) => {
   const [dateRange, setDateRange] = useState(() => {
     try {
         const stored = localStorage.getItem('dashboard_date_range');
@@ -161,6 +163,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
 
   const unlockCost = useMemo(() => computeUnlockCost(accounts, fiscalConfig), [accounts, fiscalConfig]);
   const fiscalReview = useMemo(() => findFiscalReview(fiscalConfig), [fiscalConfig]);
+  const [ratesEditorOpen, setRatesEditorOpen] = useState(false);
 
   // Taux servi de l'AV publié en janvier : à reporter, ou à confirmer inchangé.
   const avRateKey = `av_rate_checked_${new Date().getFullYear()}`;
@@ -479,7 +482,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
       )}
 
       {showRateReminder && staleRates && (
-        <div className="flex items-start gap-3 p-3 rounded-xl border bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-900 text-amber-800 dark:text-amber-300 text-sm font-bold">
+        <div className="flex flex-wrap items-start gap-3 p-3 rounded-xl border bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-900 text-amber-800 dark:text-amber-300 text-sm font-bold">
           <Percent className="w-4 h-4 flex-shrink-0 mt-0.5" />
           <div className="flex-1 min-w-0">
             Les taux réglementés ont été révisés au {staleRates.revision.label}. Vous n'avez pas encore mis à jour :{' '}
@@ -488,6 +491,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
           <button onClick={dismissRateReminder} className="text-xs font-bold underline flex-shrink-0 hover:opacity-70">
             Taux inchangé
           </button>
+          {onUpdateAccounts && <button onClick={() => setRatesEditorOpen(o => !o)} className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-black flex-shrink-0">Mettre à jour</button>}
+          {ratesEditorOpen && onUpdateAccounts && <div className="basis-full mt-2"><RegulatedRatesEditor accounts={accounts} onApply={onUpdateAccounts} /></div>}
         </div>
       )}
 
