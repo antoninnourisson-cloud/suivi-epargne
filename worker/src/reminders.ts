@@ -4,6 +4,7 @@
 // les bannières de l'app (src/lib/finance.ts, importé tel quel) : une notification ne
 // peut donc jamais annoncer autre chose que ce que l'utilisateur verra en ouvrant l'app.
 // ================================================
+import { AccountType } from '../../src/types';
 import type { GlobalAppData } from '../../src/types';
 import {
   findDueRecurring,
@@ -150,7 +151,7 @@ export const computeReminders = (data: GlobalAppData, now: Date, appUrl: string)
                 leisureBudget: data.config.leisureBudget ?? 0,
                 projectSavings: data.config.projectSavings ?? 0,
               }).map(t => `${eur(t.amount)} ${t.label}`),
-              `Épargne : ${steps.map(s => `${eur(s.fillAmount)} ${s.alert ? '→ ouvrir un PEA/AV' : `sur ${s.accountName}`}`).join(', ')}`,
+              `Épargne : ${steps.filter(s => !s.infoOnly).map(s => `${eur(s.fillAmount)} ${s.alert ? `→ ${s.accountName.toLowerCase()}` : `sur ${s.accountName}`}`).join(', ')}`,
             ].join(' · ') + '.',
             url: link('pilot'),
             tag: 'payday',
@@ -254,7 +255,7 @@ export const computeReminders = (data: GlobalAppData, now: Date, appUrl: string)
         key: `annual-statement:${now.getFullYear()}`,
         message: {
           title: 'Relevés annuels de vos placements',
-          body: `Reportez la valeur au 31/12 et les versements de ${waiting.map(a => a.name).join(', ')} : les plus-values restent justes.`,
+          body: `Reportez la valeur au 31/12 et les versements de ${waiting.map(a => a.name).join(', ')} : les plus-values restent justes.${waiting.some(a => a.type === AccountType.ASSURANCE_VIE) ? ` Pensez aussi au taux servi ${now.getFullYear() - 1} du fonds euros, publié par l'assureur.` : ''}`,
           url: link('update'),
           tag: 'annual-statement',
         },

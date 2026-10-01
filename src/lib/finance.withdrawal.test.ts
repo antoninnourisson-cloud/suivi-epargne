@@ -22,6 +22,8 @@ import {
   suggestedRestitutionDate,
   accountsAfterRestitution,
   payPeriodOf,
+  computePlacementStrategy,
+  findAvRateUpdatesDue,
 } from './finance';
 import { DEFAULT_FISCAL_CONFIG as CFG, TAX_SCALES, LATEST_TAX_SCALE } from '../constants';
 import { AccountType, SavingsAccount, Subscription } from '../types';
@@ -262,5 +264,27 @@ describe('période de paie', () => {
     const p = payPeriodOf(31, new Date(2026, 8, 30));
     expect(p.key).toBe('2026-09');
     expect(p.payDate.getDate()).toBe(30);
+  });
+});
+
+describe('LDDS et taux servi', () => {
+  const fullLep = acc({ id: 'lep', name: 'LEP', type: AccountType.LEP, interestRate: 2.5, totalAmount: 10000, ownedAmount: 10000 });
+  const fullLa = acc({ id: 'la', name: 'Livret A', type: AccountType.LIVRET_A, interestRate: 1.5, totalAmount: 22950, ownedAmount: 22950 });
+  const av = acc({ id: 'av', name: 'AV', type: AccountType.ASSURANCE_VIE, interestRate: 3, totalAmount: 400, ownedAmount: 400 });
+
+  it("suggère un LDDS sans retirer l'argent de l'Assurance Vie existante", () => {
+    const steps = computePlacementStrategy(500, [fullLep, fullLa, av], CFG);
+    expect(steps.map(s => s.accountName)).toEqual(['Ouvrir un LDDS', 'AV']);
+    expect(steps[0].infoOnly).toBe(true);
+    expect(steps[1].fillAmount).toBe(500);
+  });
+  it("place sur le LDDS à ouvrir quand il n'y a aucun autre placement", () => {
+    const steps = computePlacementStrategy(500, [fullLep, fullLa], CFG);
+    expect(steps.map(s => [s.accountName, s.fillAmount, !!s.infoOnly])).toEqual([['Ouvrir un LDDS', 500, false]]);
+  });
+  it("demande le nouveau taux servi de l'AV après le 15 janvier", () => {
+    expect(findAvRateUpdatesDue([av], new Date(2027, 0, 20)).map(a => a.id)).toEqual(['av']);
+    expect(findAvRateUpdatesDue([{ ...av, rateHistory: [{ date: '2027-01-18', rate: 2.8 }] }], new Date(2027, 0, 20))).toEqual([]);
+    expect(findAvRateUpdatesDue([av], new Date(2027, 5, 1))).toEqual([]);
   });
 });

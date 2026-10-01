@@ -802,6 +802,8 @@ export const computeMonthlySavingsCapacity = (data: GlobalAppData): number => {
   return computeSavingsCapacity(superNet, totalFixed, c.leisureBudget ?? 0, c.projectSavings ?? 0);
 };
 
+const formatEUR2 = (n: number) => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(n);
+
 export interface PlacementStep {
   accountId?: string;     // absent pour la suggestion « Ouvrir un PEA/AV »
   accountName: string;
@@ -810,7 +812,11 @@ export interface PlacementStep {
   fillAmount: number;
   isFullAfter: boolean;
   isLiquid: boolean;
-  alert?: boolean; // aucun compte de repli : suggestion d'en ouvrir un
+  alert?: boolean; // suggestion d'ouvrir un compte (pas de compte réel derrière)
+  // Suggestion seulement : le montant n'est PAS retiré du plan (ex. LDDS conseillé alors
+  // que le surplus part déjà sur l'Assurance Vie existante).
+  infoOnly?: boolean;
+  hint?: string;
 }
 
 /**
@@ -857,12 +863,28 @@ export const computePlacementStrategy = (
     }
   }
 
+  // Livrets existants pleins et pas de LDDS : en ouvrir un garderait le surplus disponible
+  // à tout moment, sans impôt (12 000 €, même taux que le Livret A).
+  if (remainingMoney > 0 && !accounts.some(a => a.type === AccountType.LDDS)) {
+    const livretA = accounts.find(a => a.type === AccountType.LIVRET_A);
+    const fill = Math.min(remainingMoney, fiscalConfig.ceilings.ldds);
+    steps.push({
+      accountName: 'Ouvrir un LDDS', type: AccountType.LDDS, rate: livretA?.interestRate, fillAmount: fill,
+      isFullAfter: false, isLiquid: true, alert: true, infoOnly: userOtherAccounts.length > 0,
+      hint: userOtherAccounts.length > 0
+        ? `Vos livrets sont pleins : un LDDS (même taux que le Livret A, disponible à tout moment, sans impôt) accueillerait ${formatEUR2(fill)} sans les bloquer. En attendant, ce surplus va sur ${userOtherAccounts[0].name}.`
+        : `Vos livrets sont pleins : ouvrez un LDDS (même taux que le Livret A, disponible à tout moment, sans impôt) pour y placer ${formatEUR2(fill)}.`,
+    });
+    if (userOtherAccounts.length === 0) remainingMoney -= fill;
+  }
+
   if (remainingMoney > 0) {
     if (userOtherAccounts.length > 0) {
       const o = userOtherAccounts[0];
       steps.push({ accountId: o.id, accountName: o.name, type: o.type, rate: o.interestRate, fillAmount: remainingMoney, isFullAfter: false, isLiquid: false });
     } else {
-      steps.push({ accountName: 'Ouvrir un PEA/AV', type: AccountType.AUTRE, rate: 0, fillAmount: remainingMoney, isFullAfter: false, isLiquid: false, alert: true });
+      steps.push({ accountName: 'Ouvrir un PEA/AV', type: AccountType.AUTRE, rate: 0, fillAmount: remainingMoney, isFullAfter: false, isLiquid: false, alert: true,
+        hint: `${formatEUR2(remainingMoney)} de plus que vos livrets ne peuvent accueillir : ouvrez un PEA ou une Assurance Vie.` });
     }
   }
   return steps;
@@ -1431,4 +1453,23 @@ export const payPeriodOf = (paydayDay: number | undefined, asOfDate: Date = new 
   }
   const payDate = new Date(y, m, paydayDay ? effectivePayday(paydayDay, y, m) : 1);
   return { key: `${y}-${String(m + 1).padStart(2, '0')}`, payDate };
+};
+
+// ---------------------------------------------------------------------------
+// Taux servi de l'Assurance Vie (publié chaque début d'année)
+// ---------------------------------------------------------------------------
+
+/**
+ * Assurances Vie dont le taux n'a pas été revu depuis le 1er janvier : le taux servi du
+ * fonds euros de l'année écoulée est publié par l'assureur en janvier. Signalé du 15
+ * janvier au 31 mars.
+ */
+export const findAvRateUpdatesDue = (accounts: SavingsAccount[], asOfDate: Date = new Date()): SavingsAccount[] => {
+  const m = asOfDate.getMonth(), d = asOfDate.getDate();
+  if (!((m === 0 && d >= 15) || m === 1 || m === 2)) return [];
+  const yearStart = `${asOfDate.getFullYear()}-01-01`;
+  return accounts.filter(a =>
+    a.type === AccountType.ASSURANCE_VIE && a.totalAmount > 0 &&
+    !(a.rateHistory || []).some(r => r.date >= yearStart)
+  );
 };

@@ -47,7 +47,7 @@ export const PayChecklist: React.FC<PayChecklistProps> = ({
   const [drafts, setDrafts] = useState<Record<string, string>>({});
 
   const liveLines = buildPayLines(transfers, steps);
-  const openAccountStep = steps.find(st => st.alert);
+  const suggestions = steps.filter(st => st.alert && st.hint);
 
   const frozen = checklist && checklist.month === month ? checklist : undefined;
   const lines = frozen ? frozen.lines : liveLines;
@@ -156,12 +156,10 @@ export const PayChecklist: React.FC<PayChecklistProps> = ({
       </div>
       <div className="space-y-2 mt-2">
         {savingLines.map(renderLine)}
-        {!frozen && openAccountStep && (
-          <p className="text-xs font-bold text-amber-700 dark:text-amber-300 p-2 rounded-lg bg-amber-50 dark:bg-amber-950/40">
-            {formatEUR(openAccountStep.fillAmount)} de plus que vos livrets ne peuvent accueillir : ouvrez un PEA ou une Assurance Vie.
-          </p>
-        )}
-        {savingLines.length === 0 && !openAccountStep && <p className="text-sm text-slate-500 dark:text-slate-400 italic">Rien à placer ce mois-ci.</p>}
+        {!frozen && suggestions.map(st => (
+          <p key={st.accountName} className="text-xs font-bold text-amber-700 dark:text-amber-300 p-2 rounded-lg bg-amber-50 dark:bg-amber-950/40">{st.hint}</p>
+        ))}
+        {savingLines.length === 0 && suggestions.length === 0 && <p className="text-sm text-slate-500 dark:text-slate-400 italic">Rien à placer ce mois-ci.</p>}
       </div>
 
       {shortfall > 0 && (

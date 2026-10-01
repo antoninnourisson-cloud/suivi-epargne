@@ -5,7 +5,7 @@ import {
 } from 'recharts';
 import { SavingsAccount, PortfolioSnapshot, AccountType, Expense, FiscalConfig, WorkBenefits, RecurringMovement, Subscription } from '../types';
 import { Euro, Lock, Wallet, ListTodo, ChevronDown, Landmark, CalendarClock, Unlock, Save, AlertTriangle, Trash2, Clock, TrendingUp, TrendingDown, PiggyBank, Percent, ShieldAlert, Repeat } from 'lucide-react';
-import { computeAccruedParentalInterest, computeRecentSavingsRate, computeAccountBalanceAtDate, findStaleRegulatedRates, computeLepEligibility, computeIncome, findDueRecurring, computeMonthSavedAmount, computeSavingsRateHistory, computeUnlockCost, findFiscalReview, applyTaxScale, nextSubscriptionDate } from '../lib/finance';
+import { computeAccruedParentalInterest, computeRecentSavingsRate, computeAccountBalanceAtDate, findStaleRegulatedRates, computeLepEligibility, computeIncome, findDueRecurring, computeMonthSavedAmount, computeSavingsRateHistory, computeUnlockCost, findFiscalReview, applyTaxScale, nextSubscriptionDate, findAvRateUpdatesDue } from '../lib/finance';
 import { parseISODate, formatISODay, daysBetween, localTodayISO } from '../lib/dates';
 import { Button } from './Button';
 import { formatEUR, formatSignedEUR, frenchDay } from '../lib/format';
@@ -161,6 +161,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
 
   const unlockCost = useMemo(() => computeUnlockCost(accounts, fiscalConfig), [accounts, fiscalConfig]);
   const fiscalReview = useMemo(() => findFiscalReview(fiscalConfig), [fiscalConfig]);
+
+  // Taux servi de l'AV publié en janvier : à reporter, ou à confirmer inchangé.
+  const avRateKey = `av_rate_checked_${new Date().getFullYear()}`;
+  const [avRateChecked, setAvRateChecked] = useState(() => { try { return localStorage.getItem(avRateKey) === '1'; } catch { return false; } });
+  const avRatesDue = useMemo(() => (avRateChecked ? [] : findAvRateUpdatesDue(accounts)), [accounts, avRateChecked]);
+  const confirmAvRates = () => { try { localStorage.setItem(avRateKey, '1'); } catch { /* préférence non mémorisée */ } setAvRateChecked(true); };
 
   // Prélèvements des 7 prochains jours (aujourd'hui compris), du plus proche au plus lointain.
   const upcomingDebits = useMemo(() => {
@@ -417,7 +423,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
     (onDeleteAccount ? inactiveEmptyAccounts.length : 0) +
     ceilingAlerts.length +
     (onUpdateFiscalConfig && fiscalReview.newScale ? 1 : 0) +
-    (onUpdateFiscalConfig && fiscalReview.annualCheckDue ? 1 : 0);
+    (onUpdateFiscalConfig && fiscalReview.annualCheckDue ? 1 : 0) +
+    (avRatesDue.length > 0 ? 1 : 0);
 
   return (
     <div className="space-y-6">
@@ -519,6 +526,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
           </span>
           {onOpenSettings && <button onClick={onOpenSettings} className="text-xs font-bold underline flex-shrink-0 hover:opacity-70">Ouvrir les paramètres</button>}
           <button onClick={() => onUpdateFiscalConfig(prev => ({ ...prev, paramsReviewedYear: new Date().getFullYear() }))} className="px-3 py-1.5 rounded-lg bg-slate-800 dark:bg-slate-100 text-white dark:text-slate-900 text-xs font-black flex-shrink-0">C'est à jour</button>
+        </div>
+      )}
+
+      {avRatesDue.length > 0 && (
+        <div className="flex flex-wrap items-center gap-3 p-3 rounded-xl border bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-sm font-bold">
+          <Percent className="w-4 h-4 flex-shrink-0" />
+          <span className="flex-1 min-w-0">
+            Taux servi {new Date().getFullYear() - 1} : reportez le nouveau taux du fonds euros de {avRatesDue.map(a => a.name).join(', ')} (Mes comptes → modifier), publié par votre assureur en janvier.
+          </span>
+          <button onClick={confirmAvRates} className="text-xs font-bold underline flex-shrink-0 hover:opacity-70">Taux inchangé</button>
         </div>
       )}
 
