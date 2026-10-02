@@ -3,7 +3,8 @@
 // écarts avec les paramètres de l'app sont PROPOSÉS, jamais appliqués d'office.
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { FiscalConfig, SavingsAccount } from '../types';
-import { diffFiscalWatch, FiscalProposal, FiscalWatchResult, isWatchDue, parseFiscalWatch, FISCAL_WATCH_PROMPT } from '../lib/fiscalWatch';
+import { diffFiscalWatch, FiscalProposal, FiscalWatchResult, isWatchDue, parseFiscalWatch, FISCAL_WATCH_PROMPT, buildSourcesPrompt } from '../lib/fiscalWatch';
+import { getFiscalSources, isBackendEnabled } from '../services/backendService';
 import { askGeminiWithSearch } from '../services/geminiService';
 
 const KEY = 'fiscal_watch';
@@ -23,7 +24,11 @@ export const useFiscalWatch = (geminiApiKey: string, fiscal: FiscalConfig | unde
     if (!geminiApiKey || running) return;
     setRunning(true);
     try {
-      const text = await askGeminiWithSearch(geminiApiKey, FISCAL_WATCH_PROMPT);
+      let text: string;
+      const sources = isBackendEnabled() ? await getFiscalSources().catch(() => []) : [];
+      const readable = sources.filter(x => x.ok && x.text);
+      if (readable.length >= 3) text = await askGeminiWithSearch(geminiApiKey, buildSourcesPrompt(readable), 90_000, false);
+      else text = await askGeminiWithSearch(geminiApiKey, FISCAL_WATCH_PROMPT);
       const result = parseFiscalWatch(text);
       if (!result) { console.warn('Veille fiscale : réponse illisible', text.slice(0, 500)); throw new Error('Réponse de Gemini illisible'); }
       const now = new Date().toISOString();

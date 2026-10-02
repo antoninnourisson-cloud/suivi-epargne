@@ -55,7 +55,9 @@ export const DEFAULT_FISCAL_CONFIG: FiscalConfig = {
   standardAllowanceCap: DEFAULT_STANDARD_ALLOWANCE_CAP,
   standardAllowanceMin: DEFAULT_STANDARD_ALLOWANCE_MIN,
   decote: DEFAULT_DECOTE,
-  donation75Ceiling: 1000,
+  // Dons aux organismes d'aide aux personnes en difficulté : 75 % jusqu'à 2 000 € depuis le
+  // 14 octobre 2025 (1 000 € avant).
+  donation75Ceiling: 2000,
 
   ceilings: {
     livretA: 22950,

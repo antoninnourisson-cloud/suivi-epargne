@@ -26,6 +26,7 @@ import {
   OAUTH_SCOPES, exchangeCode, refreshAccessToken, decodeIdToken, verifyIdTokenClaims, revokeToken, readDataFile, GoogleAuthError,
 } from './google';
 import { sendPush, PushMessage } from './webpush';
+import { fetchFiscalSources, FiscalSource } from './fiscalSources';
 import { computeReminders, applyDiscreetMode, isDiscreet, parisCivilDate } from './reminders';
 import {
   allowedOrigins, isOriginAcceptable, safeReturnUrl, deriveStateKey, newOAuthState, signState, verifyState,
@@ -396,6 +397,19 @@ const handleTestPush = async (req: Request, env: Env): Promise<Response> => {
   return json(req, env, { ok: delivered > 0, delivered });
 };
 
+// Pages officielles pour la veille fiscale (mises en cache 3 jours : une lecture par semaine
+// et par appareil suffit, et le cache évite de solliciter les sites publics).
+const handleFiscalSources = async (req: Request, env: Env): Promise<Response> => {
+  const s = await readSession(req, env);
+  if (!s) return json(req, env, { error: 'REAUTH_REQUIRED' }, 401);
+  const cached = await env.STORE.get<{ fetchedAt: string; sources: FiscalSource[] }>('fiscal-sources', 'json');
+  if (cached && cached.sources.some(x => x.ok)) return json(req, env, cached);
+  const sources = await fetchFiscalSources();
+  const payload = { fetchedAt: new Date().toISOString(), sources };
+  if (sources.filter(x => x.ok).length >= 4) await env.STORE.put('fiscal-sources', JSON.stringify(payload), { expirationTtl: 3 * 86400 });
+  return json(req, env, payload);
+};
+
 const handleHealth = async (req: Request, env: Env): Promise<Response> => {
   const s = await readSession(req, env);
   if (!s) return json(req, env, { error: 'REAUTH_REQUIRED' }, 401);
@@ -490,6 +504,7 @@ const rateLimited = async (limiter: RateLimit | undefined, key: string): Promise
 const route = async (req: Request, env: Env, url: URL, r: string): Promise<Response> => {
   switch (r) {
     case 'GET /health': return handleHealth(req, env);
+    case 'GET /fiscal-sources': return handleFiscalSources(req, env);
     case 'GET /auth/start': return handleAuthStart(req, env, url);
     case 'GET /auth/callback': {
       const res = await handleAuthCallback(req, env, url);

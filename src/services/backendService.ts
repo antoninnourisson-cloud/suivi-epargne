@@ -154,3 +154,8 @@ export const deleteServerAccount = async (): Promise<void> => {
 
 export interface ServerHealth { lastRunAt: string | null; ok: boolean | null; usersProcessed?: number; error?: string }
 export const getServerHealth = async (): Promise<ServerHealth> => authedJson<ServerHealth>('/health');
+
+// --- Veille fiscale : texte des pages officielles, téléchargé par le serveur ---
+export interface FiscalSourceText { url: string; topic: string; text: string; ok: boolean }
+export const getFiscalSources = async (): Promise<FiscalSourceText[]> =>
+  (await authedJson<{ sources: FiscalSourceText[] }>('/fiscal-sources')).sources || [];

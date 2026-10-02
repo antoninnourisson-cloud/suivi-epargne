@@ -199,9 +199,11 @@ export const extractPayslipData = async (
  * Question libre à Gemini avec la recherche Google activée (veille fiscale). Renvoie le
  * texte de la réponse. Même chaîne de modèles et mêmes reprises que l'extraction.
  */
-export const askGeminiWithSearch = async (apiKey: string, prompt: string, timeoutMs = 90_000): Promise<string> => {
+export const askGeminiWithSearch = async (apiKey: string, prompt: string, timeoutMs = 90_000, useSearch = true): Promise<string> => {
   if (!apiKey) throw new GeminiError('GEMINI_API_KEY_MISSING', 'AUTH');
-  const body = JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], tools: [{ google_search: {} }] });
+  // La recherche Google n'est pas incluse dans la clé gratuite : sans elle, Gemini lit
+  // seulement le texte fourni dans la question.
+  const body = JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], ...(useSearch ? { tools: [{ google_search: {} }] } : {}) });
   let lastFailure = '';
   for (const model of modelChain()) {
     for (let attempt = 0; attempt < 2; attempt++) {

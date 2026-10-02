@@ -6,7 +6,7 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { tracksDeposits, totalFixedCharges } from '../lib/finance';
 import { applyMovement, balanceChangeMovements } from '../lib/accountOps';
-import { migrate, canonicalize, emptyData, isFromNewerApp, stripDeviceSecrets, validateImport, APP_SCHEMA_VERSION } from '../lib/schema';
+import { migrate, canonicalize, emptyData, isFromNewerApp, withoutDeviceOnlyFields, validateImport, APP_SCHEMA_VERSION } from '../lib/schema';
 import { buildAccountsUpdateMail } from '../lib/mailTemplates';
 import { localTodayISO } from '../lib/dates';
 import { GlobalAppData, SavingsAccount, AccountMovement, PortfolioSnapshot, ExpenseSnapshot } from '../types';
@@ -104,7 +104,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
 
   // Ce qui part sur Drive : le document, sans secret d'appareil, avec la vue courante.
   const buildData = useCallback((): GlobalAppData => ({
-    ...stripDeviceSecrets(doc), schemaVersion: APP_SCHEMA_VERSION, lastView: lastViewRef.current,
+    ...withoutDeviceOnlyFields(doc), schemaVersion: APP_SCHEMA_VERSION, lastView: lastViewRef.current,
   }), [doc]);
 
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -137,7 +137,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
   /** Remplace tout le document (chargement, import, restauration). */
   const applyData = useCallback((raw: unknown) => {
     adoptLegacyGeminiKey(raw);
-    setDoc(stripDeviceSecrets(migrate(raw)));
+    setDoc(withoutDeviceOnlyFields(migrate(raw)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

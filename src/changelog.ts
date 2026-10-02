@@ -21,6 +21,8 @@ export const CHANGELOG: ChangelogEntry[] = [
     items: [
       "Veille fiscale : la réponse de Gemini est mieux comprise, et en cas d'échec la raison s'affiche (clé refusée, quota, recherche indisponible…).",
       "Paramètres : la date de la dernière vérification réussie est affichée, avec un message pendant la recherche.",
+      "La veille fonctionne avec une clé Gemini gratuite : le serveur lit les pages officielles de service-public.gouv.fr et Gemini en relève les chiffres.",
+      "Dons : le plafond à 75 % passe à 2 000 € (règle en vigueur depuis le 14 octobre 2025).",
     ],
   },
   {

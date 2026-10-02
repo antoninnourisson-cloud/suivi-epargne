@@ -178,3 +178,18 @@ export const FISCAL_WATCH_PROMPT = `Tu es un assistant de veille fiscale frança
 }
 Les exemples ci-dessus ne sont que des formats : vérifie chaque valeur. Taux des livrets en % annuel ; prélèvements sociaux en fraction (0,186 = 18,6 %) ; "taxBrackets" = le barème le plus récent publié pour l'impôt sur le revenu (une part), "year" = année de publication du barème, "limit" = borne haute de la tranche (null pour la dernière). Les montants de plafond de revenus LEP sont ceux applicables pour une ouverture aujourd'hui.`;
 
+
+/**
+ * Question posée à Gemini quand le serveur fournit le texte des pages officielles : Gemini
+ * n'invente rien, il relève les valeurs dans ces textes (sans recherche Google, donc dans
+ * le quota gratuit).
+ */
+export const buildSourcesPrompt = (sources: { url: string; topic: string; text: string }[]): string => {
+  const format = FISCAL_WATCH_PROMPT.slice(FISCAL_WATCH_PROMPT.indexOf('{'), FISCAL_WATCH_PROMPT.lastIndexOf('}') + 1);
+  const docs = sources.map((s, i) => `=== PAGE ${i + 1} — ${s.topic} — ${s.url} ===\n${s.text}`).join('\n\n');
+  return `Tu es un assistant de veille fiscale française. Voici le texte de pages officielles (service-public.gouv.fr) lues aujourd'hui. N'utilise QUE ces textes : relève les valeurs EN VIGUEUR AUJOURD'HUI et omets tout champ absent des textes. Pour chaque valeur, "source" est l'adresse de la page où tu l'as lue. Réponds UNIQUEMENT par un objet JSON de cette forme :
+${format}
+Les exemples ne sont que des formats. Taux des livrets en % annuel ; prélèvements sociaux en fraction (0,186 = 18,6 %) ; "taxBrackets" = le barème le plus récent (une part), "year" = année d'imposition, "limit" = borne haute (null pour la dernière tranche) ; "donation75Ceiling" = plafond des dons ouvrant droit à 75 %.
+
+${docs}`;
+};

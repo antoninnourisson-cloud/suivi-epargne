@@ -148,14 +148,15 @@ describe("taux d'épargne", () => {
 describe('dons', () => {
   it('plafonne le taux de 75 % et bascule l’excédent à 66 %', () => {
     const s = computeDonationSummary([
-      { id: 'a', date: '2026-02-01', amount: 1200, organization: 'Restos', rate: 75, receiptReceived: true },
+      { id: 'a', date: '2026-02-01', amount: 2200, organization: 'Restos', rate: 75, receiptReceived: true },
       { id: 'b', date: '2026-06-01', amount: 100, organization: 'MSF', rate: 66, receiptReceived: false },
       { id: 'c', date: '2025-06-01', amount: 500, organization: 'Autre année', rate: 66, receiptReceived: false },
     ], 2026);
-    expect(s.total).toBe(1300);
-    expect(s.total75).toBe(1000);
+    // Plafond à 75 % : 2 000 € depuis le 14 octobre 2025.
+    expect(s.total).toBe(2300);
+    expect(s.total75).toBe(2000);
     expect(s.total66).toBe(300);
-    expect(s.reduction).toBeCloseTo(750 + 198);
+    expect(s.reduction).toBeCloseTo(1500 + 198);
     expect(s.missingReceipts.map(d => d.id)).toEqual(['b']);
   });
 });

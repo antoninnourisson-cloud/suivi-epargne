@@ -108,7 +108,7 @@ export const canonicalize = (data: unknown): string => {
 };
 
 /** Retire ce qui ne doit jamais quitter l'appareil (fichier Drive, export, sauvegarde). */
-export const stripDeviceSecrets = (data: GlobalAppData): GlobalAppData => {
+export const withoutDeviceOnlyFields = (data: GlobalAppData): GlobalAppData => {
   const { geminiApiKey: _g, ...config } = data.config as GlobalAppData['config'] & { geminiApiKey?: string };
   return { ...data, config: config as GlobalAppData['config'] };
 };

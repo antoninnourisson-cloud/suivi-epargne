@@ -1329,7 +1329,7 @@ export const findAccountsAwaitingAnnualStatement = (
 
 // Plafond des dons ouvrant droit au taux de 75 % (aide aux personnes en difficulté) ; au-delà,
 // ils basculent à 66 %. Montant fixé par la loi de finances : à revoir chaque année.
-export const DONATION_75_CEILING = 1000;
+export const DONATION_75_CEILING = 2000;
 
 export interface DonationSummary {
   year: number;
@@ -1468,7 +1468,7 @@ export const migrateFiscalConfig = (cfg: FiscalConfig): FiscalConfig => {
   if (out.standardAllowanceCap === undefined || out.standardAllowanceCap === 14171 || out.standardAllowanceCap === 14426) out.standardAllowanceCap = DEFAULT_STANDARD_ALLOWANCE_CAP;
   if (out.lepIncomeCeiling === 22419 || out.lepIncomeCeiling === 22823) out.lepIncomeCeiling = DEFAULT_FISCAL_CONFIG.lepIncomeCeiling;
   if (out.lepCeilingPerHalfPart === undefined) out.lepCeilingPerHalfPart = DEFAULT_FISCAL_CONFIG.lepCeilingPerHalfPart;
-  if (out.donation75Ceiling === undefined) out.donation75Ceiling = DEFAULT_FISCAL_CONFIG.donation75Ceiling;
+  if (out.donation75Ceiling === undefined || out.donation75Ceiling === 1000) out.donation75Ceiling = DEFAULT_FISCAL_CONFIG.donation75Ceiling;
   return out;
 };
 

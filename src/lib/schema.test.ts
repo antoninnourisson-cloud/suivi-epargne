@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { migrate, canonicalize, isFromNewerApp, validateImport, stripDeviceSecrets, APP_SCHEMA_VERSION, stableStringify } from './schema';
+import { migrate, canonicalize, isFromNewerApp, validateImport, withoutDeviceOnlyFields, APP_SCHEMA_VERSION, stableStringify } from './schema';
 
 describe('migrate', () => {
   it('donne un document complet à partir de rien', () => {
@@ -51,7 +51,7 @@ describe('garde-fous', () => {
     expect(validateImport({ accounts: [{ id: 'a', name: 'A', totalAmount: 10 }] })).toEqual([]);
   });
   it('retire la clé Gemini avant tout envoi', () => {
-    const d = stripDeviceSecrets(migrate({ accounts: [], config: { geminiApiKey: 'k', pickerApiKey: 'p' } }));
+    const d = withoutDeviceOnlyFields(migrate({ accounts: [], config: { geminiApiKey: 'k', pickerApiKey: 'p' } }));
     expect((d.config as any).geminiApiKey).toBeUndefined();
     expect(d.config.pickerApiKey).toBe('p');
   });
