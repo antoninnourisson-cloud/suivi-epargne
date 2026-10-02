@@ -9,6 +9,7 @@ import { safeNumber } from '../lib/numbers';
 import { localTodayISO } from '../lib/dates';
 import { depositsAfterCashFlow } from '../lib/finance';
 import { formatEUR } from '../lib/format';
+import { onTablistKeyDown } from '../lib/tablist';
 
 interface TransferManagerProps {
   accounts: SavingsAccount[];
@@ -107,14 +108,14 @@ export const TransferManager: React.FC<TransferManagerProps> = ({ accounts, onUp
       <p className="text-sm text-slate-500 dark:text-slate-400">Dépôt sur un compte, virement entre deux comptes, ou échéances qui reviennent chaque mois.</p>
     </div>
     <div className="bg-white dark:bg-slate-800 rounded-xl shadow-xs border border-slate-200 dark:border-slate-700 overflow-hidden">
-      <div role="tablist" aria-label="Type d'opération" className="border-b border-slate-200 dark:border-slate-700 flex">
-        <button role="tab" aria-selected={activeTab === 'deposit'} onClick={() => setActiveTab('deposit')} className={`flex-1 min-w-0 px-2 py-4 text-sm font-black flex items-center justify-center gap-2 ${activeTab === 'deposit' ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border-b-2 border-emerald-600' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
+      <div role="tablist" onKeyDown={onTablistKeyDown} aria-label="Type d'opération" className="border-b border-slate-200 dark:border-slate-700 flex">
+        <button role="tab" aria-selected={activeTab === 'deposit'} tabIndex={activeTab === 'deposit' ? 0 : -1} onClick={() => setActiveTab('deposit')} className={`flex-1 min-w-0 px-2 py-4 text-sm font-black flex items-center justify-center gap-2 ${activeTab === 'deposit' ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border-b-2 border-emerald-600' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
           <Download className="w-4 h-4 hidden sm:block" /> Dépôt
         </button>
-        <button role="tab" aria-selected={activeTab === 'transfer'} onClick={() => setActiveTab('transfer')} className={`flex-1 min-w-0 px-2 py-4 text-sm font-black flex items-center justify-center gap-2 ${activeTab === 'transfer' ? 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-400 border-b-2 border-indigo-600' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
+        <button role="tab" aria-selected={activeTab === 'transfer'} tabIndex={activeTab === 'transfer' ? 0 : -1} onClick={() => setActiveTab('transfer')} className={`flex-1 min-w-0 px-2 py-4 text-sm font-black flex items-center justify-center gap-2 ${activeTab === 'transfer' ? 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-400 border-b-2 border-indigo-600' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
           <ArrowRightLeft className="w-4 h-4 hidden sm:block" /> Virement
         </button>
-        <button role="tab" aria-selected={activeTab === 'recurring'} onClick={() => setActiveTab('recurring')} className={`flex-1 min-w-0 px-2 py-4 text-sm font-black flex items-center justify-center gap-2 ${activeTab === 'recurring' ? 'bg-violet-50 dark:bg-violet-950/40 text-violet-700 dark:text-violet-400 border-b-2 border-violet-600' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
+        <button role="tab" aria-selected={activeTab === 'recurring'} tabIndex={activeTab === 'recurring' ? 0 : -1} onClick={() => setActiveTab('recurring')} className={`flex-1 min-w-0 px-2 py-4 text-sm font-black flex items-center justify-center gap-2 ${activeTab === 'recurring' ? 'bg-violet-50 dark:bg-violet-950/40 text-violet-700 dark:text-violet-400 border-b-2 border-violet-600' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
           <Repeat className="w-4 h-4 hidden sm:block" /> Récurrents
         </button>
       </div>

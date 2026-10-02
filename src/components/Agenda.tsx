@@ -67,7 +67,7 @@ export const Agenda: React.FC<AgendaProps> = ({ data, onOpen }) => {
             {e.detail && <span className="block text-[11px] text-slate-500 dark:text-slate-400 truncate">{e.detail}</span>}
           </span>
           {e.amount !== undefined && (
-            <span className={`font-mono font-bold text-sm shrink-0 ${e.kind === 'subscription' ? 'text-rose-600' : e.kind === 'payday' ? 'text-emerald-600' : 'text-slate-700 dark:text-slate-200'}`}>
+            <span className={`font-mono font-bold text-sm shrink-0 ${e.kind === 'subscription' ? 'text-rose-700' : e.kind === 'payday' ? 'text-emerald-700' : 'text-slate-700 dark:text-slate-200'}`}>
               {e.kind === 'recurring' ? formatSignedEUR(e.amount) : formatEUR(e.amount)}
             </span>
           )}

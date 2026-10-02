@@ -69,7 +69,7 @@ export const RecurringManager: React.FC<RecurringManagerProps> = ({ accounts, re
               <li key={r.id} className={`flex items-center gap-3 p-3 rounded-xl border ${r.active ? 'border-slate-200 dark:border-slate-700' : 'border-dashed border-slate-300 dark:border-slate-700 opacity-60'}`}>
                 <div className="flex-1 min-w-0">
                   <p className="font-bold text-slate-800 dark:text-slate-100 text-sm truncate">
-                    <span className={r.type === 'IN' ? 'text-emerald-600' : 'text-rose-600'}>{r.type === 'IN' ? '+' : '-'}{fmt(r.amount)}</span>
+                    <span className={r.type === 'IN' ? 'text-emerald-700' : 'text-rose-700'}>{r.type === 'IN' ? '+' : '-'}{fmt(r.amount)}</span>
                     {' · '}{r.label}
                   </p>
                   <p className="text-[11px] text-slate-500 dark:text-slate-400 font-bold">

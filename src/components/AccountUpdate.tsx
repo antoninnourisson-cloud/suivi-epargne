@@ -197,9 +197,9 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
       {/* Header Action */}
       <div className="bg-indigo-600 text-white p-6 rounded-2xl shadow-lg flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h3 className="text-xl font-bold flex items-center gap-2">
-            <RefreshCw className="w-6 h-6" /> Actualiser les soldes
-          </h3>
+          <h2 className="text-xl font-bold flex items-center gap-2">
+            <RefreshCw className="w-6 h-6" aria-hidden="true" /> Actualiser les soldes
+          </h2>
           <p className="text-indigo-100 text-sm mt-1">
             Indiquez vos nouveaux soldes et la date du constat. Vos graphiques s'adapteront automatiquement.
           </p>
@@ -251,7 +251,7 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
                     className="w-full bg-transparent text-lg font-black text-indigo-900 dark:text-indigo-200 outline-hidden"
                   />
                   {diffOwned !== 0 && (
-                    <div className={`text-[11px] mt-1 font-bold ${diffOwned > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                    <div className={`text-[11px] mt-1 font-bold ${diffOwned > 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
                       {formatSignedEUR(diffOwned, 2)}
                     </div>
                   )}
@@ -279,7 +279,7 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
                     className="w-full bg-transparent text-lg font-black text-amber-900 dark:text-amber-200 outline-hidden"
                   />
                   {diffParental !== 0 && (
-                    <div className={`text-[11px] mt-1 font-bold ${diffParental > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                    <div className={`text-[11px] mt-1 font-bold ${diffParental > 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
                       {formatSignedEUR(diffParental, 2)}
                     </div>
                   )}
@@ -298,7 +298,7 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
                       className="w-full bg-transparent text-lg font-black text-slate-800 dark:text-slate-100 outline-hidden"
                     />
                     {u.bankTotal !== undefined && (parseFrenchNumber(u.bankTotal) ?? Infinity) < safeNumber(u.parental, 0)
-                      ? <p className="text-[11px] font-bold text-rose-600">Ce total est inférieur à la part de vos parents ({formatEUR(safeNumber(u.parental, 0))}) : vérifiez la saisie.</p>
+                      ? <p className="text-[11px] font-bold text-rose-700">Ce total est inférieur à la part de vos parents ({formatEUR(safeNumber(u.parental, 0))}) : vérifiez la saisie.</p>
                       : <p className="text-[11px] text-slate-500 dark:text-slate-400">Saisissez le solde de l'app bancaire : votre part est recalculée, celle de vos parents ne change pas.</p>}
                   </div>
                 )}
@@ -329,7 +329,7 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
                         <span className="text-xs font-bold text-slate-500 dark:text-slate-400">€ sur</span>
                         <div className="flex rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700" role="group" aria-label="Part concernée">
                           <button type="button" onClick={() => patchAdjust(account.id, { target: 'owned' })} aria-pressed={a.target === 'owned'} className={seg(a.target === 'owned', 'bg-indigo-600 text-white')}>Ma part</button>
-                          <button type="button" onClick={() => patchAdjust(account.id, { target: 'parental' })} aria-pressed={a.target === 'parental'} className={seg(a.target === 'parental', 'bg-amber-500 text-white')}>Parents</button>
+                          <button type="button" onClick={() => patchAdjust(account.id, { target: 'parental' })} aria-pressed={a.target === 'parental'} className={seg(a.target === 'parental', 'bg-amber-700 text-white')}>Parents</button>
                         </div>
                         {tracksDeposits(account.type) && typeof depositsDraft === 'number' && a.target === 'owned' && (
                           <label className="flex items-center gap-1.5 text-xs font-bold text-slate-500 dark:text-slate-400">

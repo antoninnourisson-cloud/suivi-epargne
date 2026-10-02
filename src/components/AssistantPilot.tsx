@@ -9,8 +9,9 @@ import { parseFrenchNumber, safeNumber } from '../lib/numbers';
 import { NumberInput } from './NumberInput';
 import { isBackendEnabled } from '../services/backendService';
 import { Calculator, TrendingUp, Lock, Unlock, Info, Plus, Trash2, Hourglass, Coins, BarChart3, X, Check, FileCheck2, Wand2, BellRing } from 'lucide-react';
-import { formatEUR, formatPeriod } from '../lib/format';
+import { formatEUR, formatPeriod, formatRate } from '../lib/format';
 import { useUndoableRemove } from './Toast';
+import { onTablistKeyDown } from '../lib/tablist';
 
 
 interface AssistantPilotProps {
@@ -293,9 +294,10 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
 
   return (
     <div className="space-y-8 animate-fade-in pb-20">
-      <div role="tablist" aria-label="Pilotage" className="flex gap-4 border-b border-slate-200 dark:border-slate-700">
-        <button role="tab" aria-selected={activeTab === 'budget'} onClick={() => setActiveTab('budget')} className={`pb-2 px-4 font-bold text-sm ${activeTab === 'budget' ? 'text-indigo-700 dark:text-indigo-300 border-b-2 border-indigo-600' : 'text-slate-600 dark:text-slate-300'}`}>Pilotage budgétaire</button>
-        <button role="tab" aria-selected={activeTab === 'fiscal'} onClick={() => setActiveTab('fiscal')} className={`pb-2 px-4 font-bold text-sm ${activeTab === 'fiscal' ? 'text-indigo-700 dark:text-indigo-300 border-b-2 border-indigo-600' : 'text-slate-600 dark:text-slate-300'}`}>Horloge fiscale</button>
+      <h2 className="sr-only">Pilotage</h2>
+      <div role="tablist" onKeyDown={onTablistKeyDown} aria-label="Pilotage" className="flex gap-4 border-b border-slate-200 dark:border-slate-700">
+        <button role="tab" aria-selected={activeTab === 'budget'} tabIndex={activeTab === 'budget' ? 0 : -1} onClick={() => setActiveTab('budget')} className={`pb-2 px-4 font-bold text-sm ${activeTab === 'budget' ? 'text-indigo-700 dark:text-indigo-300 border-b-2 border-indigo-600' : 'text-slate-600 dark:text-slate-300'}`}>Pilotage budgétaire</button>
+        <button role="tab" aria-selected={activeTab === 'fiscal'} tabIndex={activeTab === 'fiscal' ? 0 : -1} onClick={() => setActiveTab('fiscal')} className={`pb-2 px-4 font-bold text-sm ${activeTab === 'fiscal' ? 'text-indigo-700 dark:text-indigo-300 border-b-2 border-indigo-600' : 'text-slate-600 dark:text-slate-300'}`}>Horloge fiscale</button>
       </div>
 
       {activeTab === 'budget' && (
@@ -344,7 +346,7 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
             {showDetails && (
               <div className="bg-white dark:bg-slate-800 p-4 rounded-xl text-xs space-y-3 border border-slate-200 dark:border-slate-700 animate-in slide-in-from-top-2 shadow-inner mb-4">
                  <div className="flex justify-between font-bold border-b pb-1"><span>Salaire brut mensuel</span> <span>{showEUR(display.grossMonth)}</span></div>
-                 <div className="flex justify-between text-rose-700 dark:text-rose-300"><span>Charges salariales{!activePayslip && ` (${(fiscalConfig.salaryChargesRate*100).toFixed(2)}%)`}</span> <span>- {showEUR(display.socialCharges)}</span></div>
+                 <div className="flex justify-between text-rose-700 dark:text-rose-300"><span>Charges salariales{!activePayslip && ` (${formatRate(Math.round(fiscalConfig.salaryChargesRate*10000)/100)})`}</span> <span>- {showEUR(display.socialCharges)}</span></div>
                  <div className="flex justify-between text-emerald-700 dark:text-emerald-400"><span>Remboursement Navigo</span> <span>+ {showEUR(display.navigoGain)}</span></div>
                  {(activePayslip ? display.mutuelleCost !== undefined : workBenefits.mutuelle.active) && <div className="flex justify-between text-rose-700 dark:text-rose-300"><span>Mutuelle (part salarié)</span><span>- {showEUR(display.mutuelleCost)}</span></div>}
                  {(activePayslip ? display.swileCost !== undefined : workBenefits.mealVouchers.active) && <div className="flex justify-between text-rose-700 dark:text-rose-300"><span>Titres-restaurant (part salarié)</span><span>- {showEUR(display.swileCost)}</span></div>}
@@ -352,10 +354,10 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
                  <div className="bg-amber-50 dark:bg-amber-950/30 p-2 rounded-lg border border-amber-100 dark:border-amber-900">
                     <div className="flex justify-between items-center mb-2"><span className="text-amber-800 dark:text-amber-300 font-bold">{activePayslip ? 'Impôt réellement prélevé' : 'Impôt à la source'}</span><span className="text-amber-700 dark:text-amber-400 font-mono font-black">- {showEUR(display.effectiveMonthlyTax)}</span></div>
                     {activePayslip ? (
-                      <p className="text-[11px] text-slate-500 dark:text-slate-400">Taux réel constaté : <strong>{display.autoRate !== undefined ? `${display.autoRate.toFixed(1)}%` : '—'}</strong> (montant tel que retenu sur la fiche, pas une estimation)</p>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">Taux réel constaté : <strong>{display.autoRate !== undefined ? formatRate(Math.round(display.autoRate*10)/10) : '—'}</strong> (montant tel que retenu sur la fiche, pas une estimation)</p>
                     ) : (
                     <div className="flex items-center justify-between text-[11px] gap-2">
-                        <div className="flex flex-col"><span className="text-slate-500 dark:text-slate-400">Taux du barème (Auto) : <strong>{autoValues.autoRate.toFixed(1)}%</strong></span>{taxRateManual > 0 && <span className="text-amber-700 dark:text-amber-400">Force à : <strong>{taxRateManual}%</strong></span>}</div>
+                        <div className="flex flex-col"><span className="text-slate-500 dark:text-slate-400">Taux du barème (Auto) : <strong>{formatRate(Math.round(autoValues.autoRate*10)/10)}</strong></span>{taxRateManual > 0 && <span className="text-amber-700 dark:text-amber-400">Force à : <strong>{formatRate(taxRateManual)}</strong></span>}</div>
                         <div className="flex items-center gap-1"><label className="text-slate-500 dark:text-slate-400">Forcer taux :</label><NumberInput ariaLabel="Forcer taux :" value={taxRateManual} onChange={setTaxRateManual} min={0} className="w-12 p-1 text-right bg-white dark:bg-slate-800 border border-amber-200 rounded-sm font-bold outline-hidden" placeholder="Auto"/><span className="text-slate-500 dark:text-slate-400">%</span></div>
                     </div>
                     )}
@@ -433,7 +435,7 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
                 )}
                 <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">Seuls les abonnements mensuels (et hebdomadaires) comptent ici. Les annuels, semestriels et trimestriels ne font que déclencher un rappel avant le prélèvement.</p>
               </div>
-              <div className="mt-4 pt-4 border-t flex justify-between font-black text-rose-600"><span>Total des charges</span><span>{formatEUR(budgetData.totalFixed)}</span></div>
+              <div className="mt-4 pt-4 border-t flex justify-between font-black text-rose-700"><span>Total des charges</span><span>{formatEUR(budgetData.totalFixed)}</span></div>
             </div>
 
             <div className="lg:col-span-2 space-y-6">
@@ -547,7 +549,7 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
                 </div>
                 <div>
                   <p className="text-[11px] text-slate-500 dark:text-slate-400 uppercase font-bold">Disponibles</p>
-                  <p className="font-black text-2xl text-emerald-500">{fiscalClock.filter((i: any) => i.isAvailable).length}</p>
+                  <p className="font-black text-2xl text-emerald-700">{fiscalClock.filter((i: any) => i.isAvailable).length}</p>
                 </div>
                 <div>
                   <p className="text-[11px] text-slate-500 dark:text-slate-400 uppercase font-bold">Encore bloqués</p>
@@ -555,7 +557,7 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
                 </div>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {fiscalClock.map((item: any) => (<div key={item.id} className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xs relative overflow-hidden"><div className={`absolute top-0 right-0 p-16 opacity-5 rounded-full -mr-8 -mt-8 ${item.isAvailable ? 'bg-emerald-500' : 'bg-indigo-500'}`}></div><div className="flex justify-between items-start mb-4"><div className={`p-3 rounded-xl ${item.isAvailable ? 'bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}>{item.isAvailable ? <Unlock className="w-6 h-6" /> : <Lock className="w-6 h-6" />}</div><span className="text-[11px] font-black uppercase bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded-sm text-slate-500 dark:text-slate-400">{item.type}</span></div><h4 className="font-bold text-slate-800 dark:text-slate-100 text-lg mb-1">{item.name}</h4><div className="border-t border-slate-100 dark:border-slate-800 pt-4 mt-4"><div className="flex justify-between items-end"><div><p className="text-[11px] text-slate-500 dark:text-slate-400 uppercase font-bold">Échéance</p><p className="font-bold text-slate-700 dark:text-slate-200">{item.date}</p></div><div className={`text-right font-black text-xl ${item.isAvailable ? 'text-emerald-500' : 'text-indigo-600'}`}>{item.timeLeft}</div></div></div></div>))}
+                {fiscalClock.map((item: any) => (<div key={item.id} className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xs relative overflow-hidden"><div className={`absolute top-0 right-0 p-16 opacity-5 rounded-full -mr-8 -mt-8 ${item.isAvailable ? 'bg-emerald-500' : 'bg-indigo-500'}`}></div><div className="flex justify-between items-start mb-4"><div className={`p-3 rounded-xl ${item.isAvailable ? 'bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}>{item.isAvailable ? <Unlock className="w-6 h-6" /> : <Lock className="w-6 h-6" />}</div><span className="text-[11px] font-black uppercase bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded-sm text-slate-500 dark:text-slate-400">{item.type}</span></div><h4 className="font-bold text-slate-800 dark:text-slate-100 text-lg mb-1">{item.name}</h4><div className="border-t border-slate-100 dark:border-slate-800 pt-4 mt-4"><div className="flex justify-between items-end"><div><p className="text-[11px] text-slate-500 dark:text-slate-400 uppercase font-bold">Échéance</p><p className="font-bold text-slate-700 dark:text-slate-200">{item.date}</p></div><div className={`text-right font-black text-xl ${item.isAvailable ? 'text-emerald-700' : 'text-indigo-600'}`}>{item.timeLeft}</div></div></div></div>))}
               </div>
             </>
           ) : (

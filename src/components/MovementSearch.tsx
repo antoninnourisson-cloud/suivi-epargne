@@ -91,7 +91,7 @@ export const MovementSearch: React.FC<MovementSearchProps> = ({ accounts }) => {
                     <p className="font-bold text-slate-800 dark:text-slate-100 truncate">{m.label}{m.kind === 'valuation' && <span className="ml-1 text-[11px] font-bold text-slate-500 dark:text-slate-400">(valorisation)</span>}</p>
                     <p className="text-[11px] text-slate-500 dark:text-slate-400">{parseISODate(m.date).toLocaleDateString('fr-FR')} · {account.name}</p>
                   </div>
-                  <span className={`font-mono font-bold shrink-0 ${m.type === 'IN' ? 'text-emerald-600' : 'text-rose-600'}`}>{m.type === 'IN' ? '+' : '−'}{formatEUR(m.amount)}</span>
+                  <span className={`font-mono font-bold shrink-0 ${m.type === 'IN' ? 'text-emerald-700' : 'text-rose-700'}`}>{m.type === 'IN' ? '+' : '−'}{formatEUR(m.amount)}</span>
                 </li>
               ))}
             </ul>

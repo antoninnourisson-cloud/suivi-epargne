@@ -53,7 +53,7 @@ export const TaxNoticePanel: React.FC<Props> = ({ geminiApiKey, rfrByYear, house
         Votre banque vérifie chaque année le revenu fiscal de référence (RFR) pour le LEP. Importez votre avis d'imposition : Gemini en relève le RFR, et Pécule vous prévient si vous risquez de perdre le livret, avec la date de fermeture probable.
       </p>
 
-      <input ref={fileRef} type="file" accept="application/pdf,image/*" onChange={onFile} className="hidden" />
+      <input ref={fileRef} type="file" accept="application/pdf,image/*" onChange={onFile} className="hidden" tabIndex={-1} aria-hidden="true" />
       <button type="button" disabled={busy || !geminiApiKey} onClick={() => fileRef.current?.click()}
         className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white px-4 py-2 rounded-xl font-bold text-sm">
         {busy ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> : <Upload className="w-4 h-4" aria-hidden="true" />}

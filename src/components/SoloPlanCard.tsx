@@ -61,7 +61,7 @@ export const SoloPlanCard: React.FC<Props> = ({ accounts, fiscalConfig, monthPla
         <ul className="space-y-1">
           {plan.milestones.map(m => (
             <li key={`${m.date}-${m.label}`} className="text-sm text-slate-700 dark:text-slate-200 flex items-center gap-2">
-              <Flag className="w-4 h-4 text-amber-600" aria-hidden="true" />
+              <Flag className="w-4 h-4 text-amber-700" aria-hidden="true" />
               <b>{parseISODate(m.date).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })}</b> : {m.label}
             </li>
           ))}

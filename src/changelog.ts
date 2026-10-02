@@ -15,6 +15,18 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '2026.10.02-7',
+    date: '2026-10-02',
+    title: 'Plus lisible, au clavier comme à l\'écran',
+    items: [
+      "Gains, pertes et alertes en couleurs plus contrastées, plus faciles à lire.",
+      "Chiffres alignés en colonnes, et pourcentages à la française (« 22,3 % »).",
+      "Au clavier : lien « Aller au contenu », onglets au flèches, focus sur le titre à chaque changement d'écran, import de fichier accessible.",
+      "Le message « Annuler » reste affiché 10 secondes, et ne disparaît pas tant que la souris ou le focus est dessus.",
+      "Les animations se coupent si votre appareil demande de réduire les mouvements.",
+    ],
+  },
+  {
     version: '2026.10.02-6',
     date: '2026-10-02',
     title: 'Pécule a sa propre adresse',

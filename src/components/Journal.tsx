@@ -171,7 +171,7 @@ export const Journal: React.FC<Props> = ({ accounts, restitution, onDeleteMoveme
               </span>
             </span>
             {e.amount !== undefined && (
-              <span className={`font-mono font-bold text-sm shrink-0 ${e.amount >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>{e.amount >= 0 ? '+' : '−'}{formatEUR(Math.abs(e.amount))}</span>
+              <span className={`font-mono font-bold text-sm shrink-0 ${e.amount >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>{e.amount >= 0 ? '+' : '−'}{formatEUR(Math.abs(e.amount))}</span>
             )}
             {e.movementId && e.account && (e.kind === 'own' || e.kind === 'adjustment') && (
               <button type="button" onClick={() => onToggleAdjustment(e.account!.id, e.movementId!)}

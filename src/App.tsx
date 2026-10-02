@@ -248,11 +248,21 @@ const App: React.FC = () => {
     if (!main) return;
     main.scrollTo({ top: 0 });
     if (firstViewRef.current) { firstViewRef.current = false; return; }
-    const t = setTimeout(() => {
-      const h = main.querySelector<HTMLElement>('h2');
+    // Le titre de l'écran (h1 ou h2) ; à défaut, la zone principale elle-même. Les écrans
+    // chargés à la demande peuvent arriver après coup : on réessaie tant que le focus n'est
+    // pas posé dans le nouvel écran (1,5 s au plus).
+    let tries = 0;
+    const t = setInterval(() => {
+      tries++;
+      const h = main.querySelector<HTMLElement>('h1, h2');
       if (h) { h.tabIndex = -1; h.focus({ preventScroll: true }); }
-    }, 120);
-    return () => clearTimeout(t);
+      const settled = h && document.activeElement === h;
+      if (settled || tries >= 15) {
+        clearInterval(t);
+        if (!settled) main.focus({ preventScroll: true });
+      }
+    }, 100);
+    return () => clearInterval(t);
   }, [view, isAuthenticated]);
 
   // Les écrans sont chargés à la demande : on précharge les plus utilisés une fois connecté,
@@ -718,6 +728,10 @@ const App: React.FC = () => {
   return (
     <ToastContext.Provider value={addToast}>
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900 flex flex-col md:flex-row font-sans text-slate-900 dark:text-slate-100">
+      <a href="#contenu" onClick={e => { e.preventDefault(); mainRef.current?.focus(); }}
+        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-100 focus:px-4 focus:py-2 focus:rounded-lg focus:bg-white focus:text-slate-900 focus:font-bold focus:shadow-lg">
+        Aller au contenu
+      </a>
       <aside className="hidden md:flex bg-sapin text-white w-full md:w-64 shrink-0 flex-col">
         <div className="p-6 border-b border-white/10">
           <h1 className="text-xl font-black flex items-center gap-2"><Logo className="w-8 h-8 ring-1 ring-white/20" /> Pécule</h1>
@@ -726,7 +740,7 @@ const App: React.FC = () => {
               <div className={`w-2 h-2 rounded-full shrink-0 ${data.isOffline ? 'bg-slate-400' : data.isSaving ? 'bg-amber-500 animate-pulse' : data.syncError || data.syncConflict ? 'bg-rose-500' : 'bg-emerald-500'}`}></div>
               {data.isOffline ? 'Hors ligne' : data.isSaving ? 'Sauvegarde...' : data.syncError ? 'Erreur sync' : data.syncConflict ? 'Conflit' : data.lastSavedAt ? `Sur Drive à ${data.lastSavedAt.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}` : 'Synchronisé'}
             </div>
-            <button onClick={toggleTheme} className="text-emerald-100/70 hover:text-white" title={isDark ? 'Passer en clair' : 'Passer en sombre'}>
+            <button onClick={toggleTheme} className="text-emerald-100/70 hover:text-white" title={isDark ? 'Passer en clair' : 'Passer en sombre'} aria-label={isDark ? 'Passer en clair' : 'Passer en sombre'}>
               {isDark ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
             </button>
           </div>
@@ -763,7 +777,7 @@ const App: React.FC = () => {
         </div>
       </header>
 
-      <main ref={mainRef} id="contenu" className="flex-1 p-4 md:p-8 overflow-y-auto relative h-dvh pb-40 md:pb-24">
+      <main ref={mainRef} id="contenu" tabIndex={-1} className="outline-none flex-1 p-4 md:p-8 overflow-y-auto relative h-dvh pb-40 md:pb-24">
 
         <div className="max-w-7xl mx-auto pb-20">
             {/* --- BANNIÈRES DE SYNCHRONISATION --- */}
@@ -781,7 +795,7 @@ const App: React.FC = () => {
             {data.sessionExpired && (
               <div role="alert" className="mb-4 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-xl p-4 flex items-center justify-between gap-4">
                 <div className="flex items-center gap-2 text-amber-800 dark:text-amber-300 text-sm font-bold"><AlertTriangle className="w-5 h-5 shrink-0"/> Votre session Google a expiré. Reconnectez-vous pour continuer à sauvegarder.</div>
-                <button onClick={handleReconnect} className="bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-lg font-bold text-sm shrink-0">Se reconnecter</button>
+                <button onClick={handleReconnect} className="bg-amber-700 hover:bg-amber-800 text-white px-4 py-2 rounded-lg font-bold text-sm shrink-0">Se reconnecter</button>
               </div>
             )}
             {data.syncConflict && (
@@ -789,7 +803,7 @@ const App: React.FC = () => {
                 <div className="flex items-center gap-2 text-orange-800 dark:text-orange-300 text-sm font-bold"><AlertTriangle className="w-5 h-5 shrink-0"/> Vos données ont été modifiées sur un autre appareil. Choisissez la version à garder.</div>
                 <div className="flex items-center gap-2 shrink-0">
                   <button onClick={data.forceSaveToDrive} className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2"><Save className="w-4 h-4"/> Garder mes modifications</button>
-                  <button onClick={data.reloadFromDrive} className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2"><RotateCw className="w-4 h-4"/> Recharger l'autre version</button>
+                  <button onClick={data.reloadFromDrive} className="bg-orange-700 hover:bg-orange-800 text-white px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2"><RotateCw className="w-4 h-4"/> Recharger l'autre version</button>
                 </div>
               </div>
             )}

@@ -168,7 +168,7 @@ export const PayChecklist: React.FC<PayChecklistProps> = ({
       </div>
 
       {shortfall > 0 && (
-        <p className="mt-3 text-xs font-bold text-rose-600 flex items-center gap-1"><Info className="w-3.5 h-3.5" /> Il manque {formatEUR(shortfall)} : les virements et l'épargne prévus dépassent la paie.</p>
+        <p className="mt-3 text-xs font-bold text-rose-700 flex items-center gap-1"><Info className="w-3.5 h-3.5" /> Il manque {formatEUR(shortfall)} : les virements et l'épargne prévus dépassent la paie.</p>
       )}
       {frozen && doneCount === 0 && (
         <button type="button" onClick={() => onChange(undefined)} className="mt-3 text-xs font-bold text-indigo-600 hover:underline flex items-center gap-1">

@@ -123,13 +123,13 @@ export const RestitutionPanel: React.FC<RestitutionPanelProps> = ({ accounts, re
             {plan.rows.map(r => (
               <tr key={r.accountId}>
                 <td className="py-2 font-bold text-slate-800 dark:text-slate-100">{r.name}</td>
-                <td className="py-2 text-right font-mono font-bold text-amber-600 dark:text-amber-400 whitespace-nowrap">{fmt(r.amount)}</td>
+                <td className="py-2 text-right font-mono font-bold text-amber-700 dark:text-amber-400 whitespace-nowrap">{fmt(r.amount)}</td>
                 <td className="py-2 text-right font-mono text-slate-600 dark:text-slate-300 whitespace-nowrap">≈ {formatEUR(r.yearInterest, 0)}</td>
               </tr>
             ))}
             <tr className="font-black">
               <td className="py-2 text-slate-800 dark:text-slate-100">Total</td>
-              <td className="py-2 text-right font-mono text-amber-600 dark:text-amber-400 whitespace-nowrap">{fmt(plan.total)}</td>
+              <td className="py-2 text-right font-mono text-amber-700 dark:text-amber-400 whitespace-nowrap">{fmt(plan.total)}</td>
               <td className="py-2 text-right font-mono text-slate-700 dark:text-slate-200 whitespace-nowrap">≈ {formatEUR(plan.totalInterest, 0)}</td>
             </tr>
           </tbody>
@@ -150,7 +150,7 @@ export const RestitutionPanel: React.FC<RestitutionPanelProps> = ({ accounts, re
       )}
 
       {!confirming ? (
-        <button onClick={() => setConfirming(true)} className="w-full py-3 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-black">J'ai rendu l'argent : enregistrer la restitution</button>
+        <button onClick={() => setConfirming(true)} className="w-full py-3 rounded-lg bg-amber-700 hover:bg-amber-800 text-white font-black">J'ai rendu l'argent : enregistrer la restitution</button>
       ) : (
         <div className="p-4 rounded-xl border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 space-y-3">
           <p className="text-sm font-bold text-amber-900 dark:text-amber-200">La part de vos parents ({fmt(plan.total)}) sera retirée de chaque compte. Votre part ne change pas.</p>

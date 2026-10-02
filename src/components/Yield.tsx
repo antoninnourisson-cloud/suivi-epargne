@@ -263,13 +263,13 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig, monthPlan,
                         <div className="font-bold text-slate-800 dark:text-slate-100">{a.name}</div>
                         <div className="text-[11px] uppercase text-slate-500 dark:text-slate-400 font-bold">{a.type} · valeur {fmt(a.totalAmount)}</div>
                         {a.type === AccountType.PEA && (
-                          <div className={`text-[11px] font-bold ${(a.totalDeposits || 0) >= PEA_DEPOSIT_CEILING * 0.9 ? 'text-amber-600' : 'text-slate-500 dark:text-slate-400'}`}>
+                          <div className={`text-[11px] font-bold ${(a.totalDeposits || 0) >= PEA_DEPOSIT_CEILING * 0.9 ? 'text-amber-700' : 'text-slate-500 dark:text-slate-400'}`}>
                             Plafond de versements : {fmt(Math.max(0, PEA_DEPOSIT_CEILING - (a.totalDeposits || 0)))} restants
                           </div>
                         )}
                       </td>
                       <td className="hidden sm:table-cell px-6 py-3 text-right font-mono text-slate-600 dark:text-slate-300">{fmt(a.totalDeposits || 0)}</td>
-                      <td className={`px-3 sm:px-6 py-3 text-right font-mono font-bold ${gain >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>{gain >= 0 ? '+' : ''}{fmt(gain)}</td>
+                      <td className={`px-3 sm:px-6 py-3 text-right font-mono font-bold ${gain >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>{gain >= 0 ? '+' : ''}{fmt(gain)}</td>
                       <td className="px-3 sm:px-6 py-3 text-right">
                         {tax.known ? (
                           <>

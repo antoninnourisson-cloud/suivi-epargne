@@ -138,7 +138,7 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
                                     );
                                   })()}
                                   <div className="md:hidden mt-2 flex items-center gap-2">
-                                    {acc.parentalCapital > 0 && <span className="text-xs font-bold text-amber-600 dark:text-amber-400 flex-1">Parents : {formatEUR(acc.parentalCapital)}</span>}
+                                    {acc.parentalCapital > 0 && <span className="text-xs font-bold text-amber-700 dark:text-amber-400 flex-1">Parents : {formatEUR(acc.parentalCapital)}</span>}
                                     <span className="flex-1" />
                                     <button onClick={(e) => { e.stopPropagation(); setEditingAccount(acc); setShowForm(true); }} aria-label={`Modifier ${acc.name}`} className="p-2.5 text-indigo-600 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/40 rounded-lg"><Edit2 className="w-4 h-4"/></button>
                                     <button onClick={(e) => { e.stopPropagation(); handleDeleteAccount(acc); }} aria-label={`Supprimer ${acc.name}`} className="p-2.5 text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/40 rounded-lg"><Trash2 className="w-4 h-4"/></button>
@@ -166,7 +166,7 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
                                            {!m.grouped && !isRestitutionMovement(m) && <button onClick={()=>handleRenameMovement(acc.id, m.id, m.label)} aria-label={`Renommer « ${m.label} »`} className="p-2 -m-1 opacity-60 hover:opacity-100"><Edit2 className="w-4 h-4 text-slate-500 dark:text-slate-400"/></button>}
                                        </div>
                                        <div className="flex items-center gap-3">
-                                           <span className={`font-mono text-sm ${m.type==='IN'?'text-emerald-600 font-bold':'text-rose-600 font-bold'}`}>{m.type==='IN'?'+':'−'}{formatEUR(m.amount)}</span>
+                                           <span className={`font-mono text-sm ${m.type==='IN'?'text-emerald-700 font-bold':'text-rose-700 font-bold'}`}>{m.type==='IN'?'+':'−'}{formatEUR(m.amount)}</span>
                                            {!m.grouped && !isRestitutionMovement(m) && <button onClick={()=>handleDeleteMovement(acc.id, m.id)} aria-label={`Supprimer « ${m.label} »`} className="p-2.5 -m-1 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-sm text-slate-500 dark:text-slate-400 hover:text-rose-500"><Trash2 className="w-4 h-4"/></button>}
                                        </div>
                                      </div>

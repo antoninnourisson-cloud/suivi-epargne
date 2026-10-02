@@ -172,7 +172,7 @@ export const Donations: React.FC<DonationsProps> = ({ donations, onUpdate, picke
                   <span>{parseISODate(d.date).toLocaleDateString('fr-FR')}</span>
                   {d.receiptFileId
                     ? <a href={driveUrl(d.receiptFileId)} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline inline-flex items-center gap-0.5"><Paperclip className="w-3 h-3" /> {d.receiptFileName || 'reçu'} <ExternalLink className="w-3 h-3" /></a>
-                    : <button type="button" onClick={() => toggleReceipt(d.id)} className={`inline-flex items-center gap-0.5 ${d.receiptReceived ? 'text-emerald-600' : 'text-amber-600'}`}>
+                    : <button type="button" onClick={() => toggleReceipt(d.id)} className={`inline-flex items-center gap-0.5 ${d.receiptReceived ? 'text-emerald-700' : 'text-amber-700'}`}>
                         {d.receiptReceived ? <><CheckCircle2 className="w-3 h-3" /> reçu fiscal reçu</> : <><AlertCircle className="w-3 h-3" /> reçu à recevoir</>}
                       </button>}
                   {d.note && <span className="truncate">{d.note}</span>}

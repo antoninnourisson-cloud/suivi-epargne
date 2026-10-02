@@ -97,7 +97,7 @@ export const SavingsSplitEditor: React.FC<Props> = ({ accounts, split, from, sam
             {split!.length < eligible.length && (
               <button type="button" onClick={() => setRows([...split!, { accountId: eligible.find(a => !split!.some(r => r.accountId === a.id))!.id, pct: 0 }])} className="text-xs font-bold text-indigo-600 dark:text-indigo-300 hover:underline flex items-center gap-1"><Plus className="w-3 h-3" /> Ajouter un compte</button>
             )}
-            <span className={`text-xs font-bold ${Math.abs(total - 100) < 0.01 ? 'text-emerald-600' : 'text-amber-600'}`}>
+            <span className={`text-xs font-bold ${Math.abs(total - 100) < 0.01 ? 'text-emerald-700' : 'text-amber-700'}`}>
               Total : {total.toLocaleString('fr-FR')} %{Math.abs(total - 100) >= 0.01 && ' (ramené à 100 % dans le calcul)'}
             </span>
           </div>

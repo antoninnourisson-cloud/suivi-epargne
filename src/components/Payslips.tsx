@@ -367,9 +367,9 @@ export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, 
                     <td className="px-3 sm:px-6 py-3 text-right">
                       <div className="flex justify-end gap-1">
                         {isActive ? (
-                          <button onClick={onClearActivePayslip} className="p-2 text-amber-600 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900 rounded-lg" title="Revenir à l'estimation théorique"><Wand2 className="w-4 h-4" /></button>
+                          <button onClick={onClearActivePayslip} className="p-2 text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900 rounded-lg" title="Revenir à l'estimation théorique"><Wand2 className="w-4 h-4" /></button>
                         ) : p.extracted.grossAmount !== undefined && (
-                          <button onClick={() => onApplyToPilotage(p)} className="p-2 text-amber-600 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/40 rounded-lg" title="Utiliser pour mon Pilotage budgétaire (chiffres exacts)"><Wand2 className="w-4 h-4" /></button>
+                          <button onClick={() => onApplyToPilotage(p)} className="p-2 text-amber-700 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/40 rounded-lg" title="Utiliser pour mon Pilotage budgétaire (chiffres exacts)"><Wand2 className="w-4 h-4" /></button>
                         )}
                         <a href={`https://drive.google.com/file/d/${p.fileId}/view`} target="_blank" rel="noopener noreferrer" className="p-2 text-indigo-600 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 rounded-lg" title="Ouvrir sur Drive"><ExternalLink className="w-4 h-4" /></a>
                         <button onClick={() => removePayslip(p.id)} className="p-2 text-slate-300 dark:text-slate-600 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg" title="Retirer de la liste"><Trash2 className="w-4 h-4" /></button>

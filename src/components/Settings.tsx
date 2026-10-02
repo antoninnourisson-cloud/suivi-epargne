@@ -171,9 +171,9 @@ export const Settings: React.FC<SettingsProps> = ({ payslips = [], config, workB
           <h3 className="font-bold text-slate-800 dark:text-slate-100 mb-4 border-b border-slate-200 dark:border-slate-700 pb-2 flex items-center gap-2"><Database className="w-4 h-4 text-indigo-600" /> Sauvegarde des données</h3>
           <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
             <button onClick={onExport} className="flex items-center gap-2 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 px-4 py-2 rounded-xl font-bold text-sm"><Download className="w-4 h-4" /> Exporter (JSON)</button>
-            <label className="flex items-center gap-2 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 px-4 py-2 rounded-xl font-bold text-sm cursor-pointer">
-              <Upload className="w-4 h-4" /> Importer un fichier
-              <input type="file" accept="application/json" onChange={handleImportFile} className="hidden" />
+            <label className="flex items-center gap-2 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 px-4 py-2 rounded-xl font-bold text-sm cursor-pointer has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-indigo-600 has-[:focus-visible]:outline-offset-2">
+              <Upload className="w-4 h-4" aria-hidden="true" /> Importer un fichier
+              <input type="file" accept="application/json" onChange={handleImportFile} className="sr-only" />
             </label>
             {importMsg && <span className="text-xs font-bold text-slate-500 dark:text-slate-400">{importMsg}</span>}
           </div>

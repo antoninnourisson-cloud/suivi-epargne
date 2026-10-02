@@ -156,7 +156,7 @@ export const AccountForm: React.FC<AccountFormProps> = ({ onSave, initialData, o
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="md:col-span-2"><label htmlFor="acc-name" className="text-[11px] font-black text-slate-600 dark:text-slate-300 uppercase block mb-1">Nom du compte</label><input id="acc-name" type="text" value={name} onChange={e => setName(e.target.value)} placeholder={`${type}${institution ? ` - ${institution}` : ''}`} className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl font-bold" /></div>
           <div><label htmlFor="acc-type" className="text-[11px] font-black text-slate-600 dark:text-slate-300 uppercase block mb-1">Type</label><select id="acc-type" value={type} onChange={(e) => setType(e.target.value as AccountType)} className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl font-bold">{Object.values(AccountType).map(t => <option key={t} value={t}>{t}</option>)}</select></div>
-          <div><label htmlFor="acc-bank" className="text-[11px] font-black text-slate-600 dark:text-slate-300 uppercase block mb-1">Banque <span aria-hidden="true" className="text-rose-600">*</span></label><input id="acc-bank" type="text" value={institution} onChange={e => setInstitution(e.target.value)} className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl font-bold" required /></div>
+          <div><label htmlFor="acc-bank" className="text-[11px] font-black text-slate-600 dark:text-slate-300 uppercase block mb-1">Banque <span aria-hidden="true" className="text-rose-700">*</span></label><input id="acc-bank" type="text" value={institution} onChange={e => setInstitution(e.target.value)} className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl font-bold" required /></div>
 
           <div className="md:col-span-2 bg-indigo-50 dark:bg-indigo-950/40 p-5 rounded-2xl border border-indigo-100 dark:border-indigo-900">
             <label className="flex items-center gap-2 text-[11px] font-black text-indigo-700 dark:text-indigo-300 uppercase mb-4"><Calculator className="w-4 h-4" /> Répartition du capital</label>
@@ -200,7 +200,7 @@ export const AccountForm: React.FC<AccountFormProps> = ({ onSave, initialData, o
               <div className="col-span-2">
                 <label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase mb-1 block">Versements cumulés (€)</label>
                 <input type="text" inputMode="decimal" value={totalDeposits} onChange={e => setTotalDeposits(e.target.value)} placeholder="Inconnu" className="w-full p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-bold" />
-                {parsedDeposits === null && <p className="text-[11px] text-rose-600 mt-1">Montant non reconnu : il ne sera pas enregistré.</p>}
+                {parsedDeposits === null && <p className="text-[11px] text-rose-700 mt-1">Montant non reconnu : il ne sera pas enregistré.</p>}
                 {parsedDeposits !== null && parsedDeposits !== undefined && totalAmount > 0 && (
                   <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">Plus-value latente : <b>{formatEUR(totalAmount - parsedDeposits, 0)}</b>{type === AccountType.PEA && <> · reste {formatEUR(Math.max(0, PEA_DEPOSIT_CEILING - parsedDeposits))} de versements possibles</>}</p>
                 )}

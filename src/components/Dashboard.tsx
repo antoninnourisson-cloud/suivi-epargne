@@ -532,6 +532,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalC
 
   return (
     <div className="space-y-6">
+      <h2 className="sr-only">Accueil</h2>
       <InstallPrompt />
 
       <TodoList items={todos} />
