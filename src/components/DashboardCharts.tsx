@@ -88,10 +88,10 @@ export const InstitutionChart: React.FC<{ data: { name: string; value: number }[
           <BarChart data={dataByInstitution} layout="vertical" margin={{ right: 72 }}>
             <XAxis type="number" hide />
             <YAxis dataKey="name" type="category" width={120} tick={{ fontSize: 12, fontWeight: 600, fill: t.tick }} stroke={t.grid} />
-            <RechartsTooltip formatter={(v: number) => formatEUR(v)} cursor={{ fill: 'transparent' }} contentStyle={{ borderRadius: '12px', border: 'none', background: t.tooltipBg, color: t.tooltipText }} />
+            <RechartsTooltip formatter={(v) => formatEUR(Number(v))} cursor={{ fill: 'transparent' }} contentStyle={{ borderRadius: '12px', border: 'none', background: t.tooltipBg, color: t.tooltipText }} />
             <Bar dataKey="value" fill={t.brand} radius={[0, 4, 4, 0]} barSize={22}>
               {/* Montant à droite de la barre : lisible même pour une petite barre. */}
-              <LabelList dataKey="value" position="right" formatter={(v: number) => formatEUR(v, 0)} style={{ fill: t.tick, fontSize: 12, fontWeight: 700 }} />
+              <LabelList dataKey="value" position="right" formatter={(v) => formatEUR(Number(v), 0)} style={{ fill: t.tick, fontSize: 12, fontWeight: 700 }} />
             </Bar>
           </BarChart>
         </ResponsiveContainer>

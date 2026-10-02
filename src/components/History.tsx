@@ -90,7 +90,7 @@ export const History: React.FC<HistoryProps> = ({ history, expensesHistory, revi
                 <XAxis dataKey="label" tick={{ fontSize: 11, fill: t.tick }} stroke={t.grid} />
                 <YAxis tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 11, fill: t.tick }} stroke={t.grid} />
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={t.grid} />
-                <RechartsTooltip formatter={(v: number, name: string) => [fmt(v), name === 'totalAmount' ? 'Total' : 'Ma part']} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', background: t.tooltipBg, color: t.tooltipText }} labelStyle={{ color: t.tooltipLabel, fontWeight: 700 }} />
+                <RechartsTooltip formatter={(v, name) => [fmt(Number(v)), name === 'totalAmount' ? 'Total' : 'Ma part']} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', background: t.tooltipBg, color: t.tooltipText }} labelStyle={{ color: t.tooltipLabel, fontWeight: 700 }} />
                 <Legend formatter={(v) => (v === 'totalAmount' ? 'Total' : 'Ma part')} wrapperStyle={{ fontSize: 12 }} />
                 <Area type="monotone" dataKey="totalAmount" stroke={t.brand} fill="url(#gTotal)" strokeWidth={2} />
                 <Area type="monotone" dataKey="ownedAmount" stroke={t.gold} fill="url(#gOwned)" strokeWidth={2} />
@@ -150,7 +150,7 @@ export const History: React.FC<HistoryProps> = ({ history, expensesHistory, revi
                 <XAxis dataKey="label" tick={{ fontSize: 11, fill: t.tick }} stroke={t.grid} />
                 <YAxis tickFormatter={(v) => formatEUR(v, 0)} tick={{ fontSize: 11, fill: t.tick }} stroke={t.grid} />
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={t.grid} />
-                <RechartsTooltip formatter={(v: number) => [fmt(v), 'Charges fixes']} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', background: t.tooltipBg, color: t.tooltipText }} labelStyle={{ color: t.tooltipLabel, fontWeight: 700 }} />
+                <RechartsTooltip formatter={(v) => [fmt(Number(v)), 'Charges fixes']} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', background: t.tooltipBg, color: t.tooltipText }} labelStyle={{ color: t.tooltipLabel, fontWeight: 700 }} />
                 <Area type="monotone" dataKey="total" stroke="#ef4444" fill="url(#gCharges)" strokeWidth={2} />
               </AreaChart>
             </ResponsiveContainer>

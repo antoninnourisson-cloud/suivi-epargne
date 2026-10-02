@@ -321,7 +321,7 @@ export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, 
                 <XAxis dataKey="label" tick={{ fontSize: 11, fill: t.tick }} stroke={t.grid} />
                 <YAxis tickFormatter={(v) => formatEUR(v, 0)} tick={{ fontSize: 11, fill: t.tick }} stroke={t.grid} />
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={t.grid} />
-                <RechartsTooltip formatter={(v: number, name: string) => [fmt(v), name === 'net' ? 'Net' : 'Brut']} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', background: t.tooltipBg, color: t.tooltipText }} labelStyle={{ color: t.tooltipLabel, fontWeight: 700 }} labelFormatter={(l: string) => formatPeriod(String(l))} />
+                <RechartsTooltip formatter={(v, name) => [fmt(Number(v)), name === 'net' ? 'Net' : 'Brut']} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', background: t.tooltipBg, color: t.tooltipText }} labelStyle={{ color: t.tooltipLabel, fontWeight: 700 }} labelFormatter={(l) => formatPeriod(String(l))} />
                 <Legend formatter={(v) => (v === 'net' ? 'Net' : 'Brut')} wrapperStyle={{ fontSize: 12 }} />
                 <Area type="monotone" dataKey="net" stroke={t.brand} fill="url(#gNet)" strokeWidth={2} />
               </AreaChart>
