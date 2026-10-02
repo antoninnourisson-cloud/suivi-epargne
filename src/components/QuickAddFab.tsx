@@ -3,7 +3,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Plus } from 'lucide-react';
 
-export const QuickAddFab: React.FC<{ scrollRef: React.RefObject<HTMLElement>; resetKey: string; onClick: () => void }> = ({ scrollRef, resetKey, onClick }) => {
+export const QuickAddFab: React.FC<{ scrollRef: React.RefObject<HTMLElement | null>; resetKey: string; onClick: () => void }> = ({ scrollRef, resetKey, onClick }) => {
   const [hidden, setHidden] = useState(false);
   const last = useRef(0);
   useEffect(() => {

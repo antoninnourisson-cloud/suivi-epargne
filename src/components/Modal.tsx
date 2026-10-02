@@ -13,7 +13,7 @@ interface ModalProps {
   variant?: 'center' | 'sheet';
   className?: string;
   /** Élément à focaliser à l'ouverture (sinon le premier champ ou bouton). */
-  initialFocusRef?: React.RefObject<HTMLElement>;
+  initialFocusRef?: React.RefObject<HTMLElement | null>;
 }
 
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
