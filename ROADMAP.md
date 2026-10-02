@@ -30,6 +30,13 @@
 ## Plus tard
 
 - **App Android sur le Play Store** (Trusted Web Activity, via PWABuilder ou Bubblewrap) : la même app que pecule-app.com, en plein écran, mises à jour sans republier. À faire : `/.well-known/assetlinks.json` sur le domaine, projet Android signé, compte développeur Google Play (25 $), fiche de confidentialité et période de test fermé.
+- **Ouverture à d'autres utilisateurs, sur invitation seulement** (après l'app Android), environ 3 à 5 jours :
+  - inscription uniquement par invitation : je crée une invitation (lien à usage unique, avec une date d'expiration), le serveur remplace la liste fixe `ALLOWED_EMAILS` par les comptes invités, et je peux retirer un accès ;
+  - rappels quotidiens répartis dans une file (Cloudflare Queues) au lieu d'un seul passage, sinon on atteint la limite de 50 appels par passage vers 10 comptes ; passer à l'offre Workers à 5 $/mois quand le nombre de comptes le justifie ;
+  - accueil guidé au premier lancement, et la part des parents et la restitution facultatives, masquées par défaut ;
+  - lecture des documents par Gemini : rester sur la clé personnelle (facultatif) ou passer par le serveur ;
+  - mentions légales (LCEN : éditeur, hébergeur), contact dédié, page de confidentialité mise à jour pour plusieurs utilisateurs (RGPD) ;
+  - remontée d'erreurs anonyme, et le code de conduite si le dépôt reçoit des contributions.
 - **TypeScript 7** : à faire quand typescript-eslint le prendra en charge (aujourd'hui jusqu'à 6.0, déjà en place).
 - **Code de conduite** (`CODE_OF_CONDUCT.md`, Contributor Covenant 2.1 en français) : choisir d'abord un contact de signalement qui ne soit pas l'adresse personnelle (par exemple une adresse redirigée sur pecule-app.com).
 
