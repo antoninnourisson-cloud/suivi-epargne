@@ -17,7 +17,9 @@
 
 ## Pistes non démarrées
 
-- **TypeScript 7** : à faire quand typescript-eslint le prendra en charge (React 19, Tailwind 4, Recharts 3 et lucide 1.x sont faits).
+- **TypeScript 7** : à faire quand typescript-eslint le prendra en charge (aujourd'hui jusqu'à 6.0, déjà en place).
+- **Après la restitution (janvier 2027)** : retirer l'autorisation Gmail (`gmail.send`) de la connexion Google si plus aucun e-mail aux parents n'est utile.
+- **Nom de domaine propre** pour l'app (isole l'app des autres pages github.io) : décision et petit coût annuel.
 
 - **Préférences de notification par type** (couper par exemple le rappel « soldes non actualisés » en gardant les échéances). Aujourd'hui, c'est tout ou rien par appareil.
 - **Pré-remplissage des avantages salariaux depuis une fiche de paie**. Mis de côté : `WorkBenefits` attend des taux et des prix de base, alors que la fiche ne donne que des montants déjà calculés.
