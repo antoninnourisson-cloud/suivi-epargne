@@ -189,7 +189,7 @@ export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, 
 
   return (
     <div className="space-y-6 animate-fade-in pb-20">
-      <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col sm:flex-row justify-between gap-4 sm:items-center">
+      <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xs flex flex-col sm:flex-row justify-between gap-4 sm:items-center">
         <div>
           <h2 className="text-2xl font-black text-slate-800 dark:text-slate-100 flex items-center gap-2"><FileText className="w-6 h-6 text-indigo-600" /> Fiches de paie</h2>
           <p className="text-sm text-slate-500 dark:text-slate-400">Importez une fiche déjà présente sur votre Drive ; l'IA en extrait les montants clés.</p>
@@ -198,7 +198,7 @@ export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, 
           <button
             onClick={handlePick}
             disabled={!pickerApiKey || pickerBusy}
-            className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed text-white px-5 py-2.5 rounded-xl font-bold flex gap-2 items-center shadow-lg shadow-indigo-200 flex-shrink-0"
+            className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed text-white px-5 py-2.5 rounded-xl font-bold flex gap-2 items-center shadow-lg shadow-indigo-200 shrink-0"
           >
             {pickerBusy ? <Loader2 className="w-5 h-5 animate-spin" /> : <Upload className="w-5 h-5" />}
             Importer depuis Drive
@@ -208,7 +208,7 @@ export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, 
 
       {keysMissing && (
         <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-2xl p-5 flex items-start gap-3">
-          <KeyRound className="w-5 h-5 text-amber-700 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+          <KeyRound className="w-5 h-5 text-amber-700 dark:text-amber-400 shrink-0 mt-0.5" />
           <div className="text-sm text-amber-800 dark:text-amber-300">
             <p className="font-black mb-1">Configuration requise</p>
             <p>
@@ -223,20 +223,20 @@ export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, 
 
       {/* --- IMPORT EN COURS --- */}
       {draft && (
-        <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-indigo-200 dark:border-indigo-800 shadow-sm space-y-4">
+        <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-indigo-200 dark:border-indigo-800 shadow-xs space-y-4">
           {draft.fileName && (
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2 min-w-0">
-                <FileText className="w-4 h-4 text-indigo-600 flex-shrink-0" />
+                <FileText className="w-4 h-4 text-indigo-600 shrink-0" />
                 <span className="font-bold text-slate-800 dark:text-slate-100 truncate">{draft.fileName}</span>
               </div>
-              <button onClick={() => setDraft(null)} className="p-1.5 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-lg flex-shrink-0"><X className="w-4 h-4" /></button>
+              <button onClick={() => setDraft(null)} className="p-1.5 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-lg shrink-0"><X className="w-4 h-4" /></button>
             </div>
           )}
 
           {draft.status === 'error' && (
             <div className="text-sm text-rose-700 dark:text-rose-400 flex items-start gap-2">
-              <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
               <div>
                 {draft.error}
                 {draft.errorDetail && <p className="mt-1 text-[11px] font-mono break-all opacity-80">Détail : {draft.errorDetail}</p>}
@@ -264,7 +264,7 @@ export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, 
             <>
               {draft.error && (
                 <p className="text-xs text-amber-700 dark:text-amber-300 flex items-start gap-2 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-lg p-3">
-                  <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                  <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
                   <span>
                     {draft.error}
                     {draft.errorDetail && <span className="block mt-1 text-[11px] font-mono break-all opacity-80">Détail : {draft.errorDetail}</span>}
@@ -299,7 +299,7 @@ export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, 
               </div>
               {duplicatePeriod && (
                 <p className="mt-2 flex items-start justify-end gap-1.5 text-[11px] font-bold text-amber-700 dark:text-amber-300">
-                  <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-px" />
+                  <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-px" />
                   Une fiche existe déjà pour la période {draft?.fields.period} : les deux apparaîtront sur le graphique.
                 </p>
               )}
@@ -310,7 +310,7 @@ export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, 
 
       {/* --- ÉVOLUTION DU NET --- */}
       {chartData.length >= 2 && !draft && (
-        <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
+        <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xs">
           <h3 className="font-black text-slate-800 dark:text-slate-100 flex items-center gap-2 mb-4"><TrendingUp className="w-5 h-5 text-indigo-600" /> Évolution du net</h3>
           <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
@@ -339,9 +339,9 @@ export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, 
       )}
 
       {payslips.length > 0 && (
-        <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
+        <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xs overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm sm:min-w-[34rem]">
+            <table className="w-full text-left text-sm sm:min-w-136">
               <thead className="bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700">
                 <tr>
                   <th className="px-3 sm:px-6 py-3 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Période</th>
@@ -358,7 +358,7 @@ export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, 
                     <td className="px-3 sm:px-6 py-3">
                       <div className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
                         {p.extracted.period ? formatPeriod(p.extracted.period) : '—'}
-                        {isActive && <span className="text-[11px] font-black uppercase bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300 px-1.5 py-0.5 rounded">Référence du Pilotage</span>}
+                        {isActive && <span className="text-[11px] font-black uppercase bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300 px-1.5 py-0.5 rounded-sm">Référence du Pilotage</span>}
                       </div>
                       <div className="text-[11px] uppercase text-slate-500 dark:text-slate-400 font-bold">{p.extracted.employer || p.fileName}</div>
                     </td>

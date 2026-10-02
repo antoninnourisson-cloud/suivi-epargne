@@ -69,13 +69,13 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
   return (
 
               <div className="space-y-6 animate-fade-in">
-                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700">
+                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-xs border border-slate-200 dark:border-slate-700">
                   <div><h2 className="text-2xl font-black text-slate-800 dark:text-slate-100">Mes comptes</h2><p className="text-sm text-slate-500 dark:text-slate-400 font-medium">{data.accounts.length} compte{data.accounts.length > 1 ? 's' : ''} · <button onClick={() => setView('journal')} className="underline hover:text-indigo-700 dark:hover:text-indigo-300">voir le journal des mouvements</button></p></div>
                   {!showForm && <button onClick={() => { setEditingAccount(undefined); setShowForm(true); }} className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-xl font-bold flex gap-2 transition-colors shadow-lg shadow-indigo-200"><PlusCircle className="w-5 h-5"/> Ajouter un compte</button>}
                 </div>
                 {!showForm && <MovementSearch accounts={data.accounts} />}
                 {!showForm && data.accounts.some(a => [AccountType.LIVRET_A, AccountType.LDDS, AccountType.LEP].includes(a.type)) && (
-                  <details className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 group">
+                  <details className="bg-white dark:bg-slate-800 rounded-2xl shadow-xs border border-slate-200 dark:border-slate-700 group">
                     <summary className="list-none cursor-pointer p-4 flex items-center justify-between font-bold text-sm text-slate-800 dark:text-slate-100">
                       Mettre à jour les taux des livrets
                       <ChevronDown className="w-4 h-4 text-slate-500 transition-transform group-open:rotate-180" />
@@ -102,9 +102,9 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
                       ))}
                     </div>
                   )}
-                  <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
+                  <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xs border border-slate-200 dark:border-slate-700 overflow-hidden">
                     <div className="overflow-x-auto">
-                      <table className="w-full text-left md:min-w-[34rem]">
+                      <table className="w-full text-left md:min-w-136">
                         <thead className="bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700">
                           <tr><th className="px-6 py-4 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider">Compte</th><th className="px-6 py-4 text-[11px] text-right text-slate-500 dark:text-slate-400 uppercase tracking-wider">Ma part</th><th className="hidden md:table-cell px-6 py-4 text-[11px] text-right text-slate-500 dark:text-slate-400 uppercase tracking-wider">Parents</th><th className="hidden md:table-cell px-6 py-4 text-right"></th></tr>
                         </thead>
@@ -132,7 +132,7 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
                                     const label = maturity.regimeAfter === 'EXONERE_IR' ? 'exonéré d\'impôt' : 'impôt réduit';
                                     return (
                                       <div className="mt-1 text-[11px] font-bold text-indigo-700 dark:text-indigo-300 flex items-center gap-1">
-                                        <Clock className="w-3 h-3 flex-shrink-0" />
+                                        <Clock className="w-3 h-3 shrink-0" />
                                         {label.charAt(0).toUpperCase() + label.slice(1)} dans {maturity.monthsRemaining} mois
                                       </div>
                                     );
@@ -159,15 +159,15 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
                                    </label>
                                    <div className="max-h-60 overflow-y-auto space-y-2">
                                    {buildDisplayMovements(acc.movements).map(m => (
-                                     <div key={m.id} className={`flex justify-between items-center p-3 rounded-xl text-xs border shadow-sm ${m.grouped ? 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 italic' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700'}`}>
+                                     <div key={m.id} className={`flex justify-between items-center p-3 rounded-xl text-xs border shadow-xs ${m.grouped ? 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 italic' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700'}`}>
                                        <div className="flex items-center gap-3">
-                                           <span className="text-slate-500 dark:text-slate-400 font-mono bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded whitespace-nowrap">{m.date.split('-').reverse().join('/')}</span>
+                                           <span className="text-slate-500 dark:text-slate-400 font-mono bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded-sm whitespace-nowrap">{m.date.split('-').reverse().join('/')}</span>
                                            <span className="font-bold text-slate-700 dark:text-slate-200">{m.label}</span>
                                            {!m.grouped && !isRestitutionMovement(m) && <button onClick={()=>handleRenameMovement(acc.id, m.id, m.label)} aria-label={`Renommer « ${m.label} »`} className="p-2 -m-1 opacity-60 hover:opacity-100"><Edit2 className="w-4 h-4 text-slate-500 dark:text-slate-400"/></button>}
                                        </div>
                                        <div className="flex items-center gap-3">
                                            <span className={`font-mono text-sm ${m.type==='IN'?'text-emerald-600 font-bold':'text-rose-600 font-bold'}`}>{m.type==='IN'?'+':'−'}{formatEUR(m.amount)}</span>
-                                           {!m.grouped && !isRestitutionMovement(m) && <button onClick={()=>handleDeleteMovement(acc.id, m.id)} aria-label={`Supprimer « ${m.label} »`} className="p-2.5 -m-1 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded text-slate-500 dark:text-slate-400 hover:text-rose-500"><Trash2 className="w-4 h-4"/></button>}
+                                           {!m.grouped && !isRestitutionMovement(m) && <button onClick={()=>handleDeleteMovement(acc.id, m.id)} aria-label={`Supprimer « ${m.label} »`} className="p-2.5 -m-1 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-sm text-slate-500 dark:text-slate-400 hover:text-rose-500"><Trash2 className="w-4 h-4"/></button>}
                                        </div>
                                      </div>
                                    ))}

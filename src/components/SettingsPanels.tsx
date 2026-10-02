@@ -134,7 +134,7 @@ export const GeminiModelField: React.FC = () => {
     <div className="mt-3">
       <label htmlFor="gemini-model" className="text-[11px] font-black text-slate-600 dark:text-slate-300 uppercase flex items-center gap-1"><Bot className="w-3.5 h-3.5" aria-hidden="true" /> Modèle Gemini (facultatif)</label>
       <input id="gemini-model" value={value} placeholder={DEFAULT_GEMINI_MODEL} onChange={e => setValue(e.target.value)} onBlur={() => setGeminiModelOverride(value)}
-        className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded font-mono text-xs text-slate-800 dark:text-slate-100" />
+        className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-sm font-mono text-xs text-slate-800 dark:text-slate-100" />
       <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">Laissez vide pour le modèle par défaut. Si Google retire un modèle, son message d'erreur indique le nom du remplaçant.</p>
     </div>
   );

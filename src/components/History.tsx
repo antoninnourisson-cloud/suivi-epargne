@@ -50,7 +50,7 @@ export const History: React.FC<HistoryProps> = ({ history, expensesHistory, revi
 
   return (
     <div className="space-y-6 animate-fade-in pb-20">
-      <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
+      <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xs">
         <h2 className="text-2xl font-black text-slate-800 dark:text-slate-100 flex items-center gap-2 mb-1"><LineChartIcon className="w-6 h-6 text-indigo-600" aria-hidden="true" /> Historique du patrimoine</h2>
         <p className="text-sm text-slate-600 dark:text-slate-300">Un point est enregistré chaque mois automatiquement.</p>
       </div>
@@ -80,7 +80,7 @@ export const History: React.FC<HistoryProps> = ({ history, expensesHistory, revi
       ) : (
         <>
 
-          <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm h-96">
+          <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xs h-96">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                 <defs>
@@ -98,9 +98,9 @@ export const History: React.FC<HistoryProps> = ({ history, expensesHistory, revi
             </ResponsiveContainer>
           </div>
 
-          <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xs overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm sm:min-w-[34rem]">
+              <table className="w-full text-left text-sm sm:min-w-136">
                 <thead className="bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700">
                   <tr>
                     <th className="px-3 sm:px-6 py-3 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Mois</th>
@@ -141,7 +141,7 @@ export const History: React.FC<HistoryProps> = ({ history, expensesHistory, revi
             L'historique des charges se construit au fil des mois, à mesure que vous ajustez vos dépenses fixes.
           </div>
         ) : (
-          <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm h-96">
+          <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xs h-96">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={expensesChartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                 <defs>

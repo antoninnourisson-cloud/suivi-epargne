@@ -102,12 +102,12 @@ export const Journal: React.FC<Props> = ({ accounts, restitution, onDeleteMoveme
 
   return (
     <div className="space-y-6 animate-fade-in pb-20">
-      <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
+      <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xs">
         <h2 className="text-2xl font-black text-slate-800 dark:text-slate-100 flex items-center gap-2 mb-1"><History className="w-6 h-6 text-indigo-600" /> Journal des modifications</h2>
         <p className="text-sm text-slate-500 dark:text-slate-400">Tout ce qui a changé sur vos comptes : versements et retraits, part des parents, variations de valeur, taux. Chaque mouvement peut être supprimé (avec annulation possible).</p>
       </div>
 
-      <details className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm group" open={!!trackingStartDate}>
+      <details className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xs group" open={!!trackingStartDate}>
         <summary className="list-none cursor-pointer p-4 text-sm font-bold text-slate-800 dark:text-slate-100 flex items-center justify-between">
           {trackingStartDate ? `Suivi de l'épargne reparti du ${parseISODate(trackingStartDate).toLocaleDateString('fr-FR')}` : "Repartir de zéro pour le suivi de l'épargne"}
           <span className="text-xs text-slate-500 dark:text-slate-400 group-open:hidden">Afficher</span>
@@ -158,33 +158,33 @@ export const Journal: React.FC<Props> = ({ accounts, restitution, onDeleteMoveme
         <span className="text-xs text-slate-500 dark:text-slate-400">{shown.length} entrée{shown.length > 1 ? 's' : ''}</span>
       </div>
 
-      <ul className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm divide-y divide-slate-100 dark:divide-slate-700">
+      <ul className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xs divide-y divide-slate-100 dark:divide-slate-700">
         {shown.length === 0 && <li className="p-6 text-sm text-slate-500 dark:text-slate-400 italic">Rien à afficher.</li>}
         {shown.slice(0, limit).map(e => (
           <li key={e.key} className="flex items-center gap-3 px-4 py-3">
-            <span className="w-20 flex-shrink-0 text-xs font-bold text-slate-500 dark:text-slate-400">{parseISODate(e.date).toLocaleDateString('fr-FR')}</span>
+            <span className="w-20 shrink-0 text-xs font-bold text-slate-500 dark:text-slate-400">{parseISODate(e.date).toLocaleDateString('fr-FR')}</span>
             <span className="flex-1 min-w-0">
               <span className="block text-sm font-bold text-slate-800 dark:text-slate-100 truncate">{e.title}</span>
               <span className="flex flex-wrap items-center gap-1.5 mt-0.5">
-                <span className={`text-[11px] font-black px-1.5 py-0.5 rounded ${BADGE[e.kind].cls}`}>{BADGE[e.kind].label}</span>
+                <span className={`text-[11px] font-black px-1.5 py-0.5 rounded-sm ${BADGE[e.kind].cls}`}>{BADGE[e.kind].label}</span>
                 {e.account && <span className="text-[11px] text-slate-500 dark:text-slate-400 truncate">{e.account.name}</span>}
               </span>
             </span>
             {e.amount !== undefined && (
-              <span className={`font-mono font-bold text-sm flex-shrink-0 ${e.amount >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>{e.amount >= 0 ? '+' : '−'}{formatEUR(Math.abs(e.amount))}</span>
+              <span className={`font-mono font-bold text-sm shrink-0 ${e.amount >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>{e.amount >= 0 ? '+' : '−'}{formatEUR(Math.abs(e.amount))}</span>
             )}
             {e.movementId && e.account && (e.kind === 'own' || e.kind === 'adjustment') && (
               <button type="button" onClick={() => onToggleAdjustment(e.account!.id, e.movementId!)}
                 title={e.kind === 'adjustment' ? "Compter de nouveau comme de l'épargne" : "Ce n'est pas de l'épargne (correction) : reste dans les soldes, sort de « Placé » et des bilans"}
-                className={`px-2 py-1 rounded-md text-[11px] font-bold flex-shrink-0 ${e.kind === 'adjustment' ? 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'}`}>
+                className={`px-2 py-1 rounded-md text-[11px] font-bold shrink-0 ${e.kind === 'adjustment' ? 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'}`}>
                 {e.kind === 'adjustment' ? 'Compter comme épargne' : "Pas de l'épargne"}
               </button>
             )}
             {e.movementId && e.account && (
-              <button type="button" onClick={() => onDeleteMovement(e.account!.id, e.movementId!)} aria-label={`Supprimer « ${e.title} »`} className="p-2 text-slate-400 hover:text-rose-500 flex-shrink-0"><Trash2 className="w-4 h-4" /></button>
+              <button type="button" onClick={() => onDeleteMovement(e.account!.id, e.movementId!)} aria-label={`Supprimer « ${e.title} »`} className="p-2 text-slate-400 hover:text-rose-500 shrink-0"><Trash2 className="w-4 h-4" /></button>
             )}
             {e.kind === 'rate' && e.canRevertRate && e.account && (
-              <button type="button" onClick={() => onRevertRate(e.account!.id, e.rateEntryDate!)} title="Revenir au taux précédent" aria-label="Annuler ce changement de taux" className="p-2 text-slate-400 hover:text-indigo-600 flex-shrink-0"><Undo2 className="w-4 h-4" /></button>
+              <button type="button" onClick={() => onRevertRate(e.account!.id, e.rateEntryDate!)} title="Revenir au taux précédent" aria-label="Annuler ce changement de taux" className="p-2 text-slate-400 hover:text-indigo-600 shrink-0"><Undo2 className="w-4 h-4" /></button>
             )}
           </li>
         ))}

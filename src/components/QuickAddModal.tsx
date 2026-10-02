@@ -89,7 +89,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ open, accounts, on
             <label htmlFor={ids.amount} className={labelClass}>Montant</label>
             <NumberInput id={ids.amount} inputRef={amountRef} value={amount} onChange={setAmount} suffix="€" className={`${fieldClass} font-black text-2xl`} min={0} describedBy={tooMuch ? ids.error : undefined} invalid={tooMuch} />
             {tooMuch && <p id={ids.error} role="alert" className="text-xs font-bold text-rose-700 dark:text-rose-300 mt-1">Votre part sur ce compte est de {formatEUR(account!.ownedAmount)} : la part de vos parents ne peut pas être retirée.</p>}
-            {tip && <p className="text-xs font-bold text-amber-800 dark:text-amber-300 flex items-start gap-1 mt-1"><Lightbulb className="w-3.5 h-3.5 flex-shrink-0" aria-hidden="true" /> <span>Retiré à cette date, ce montant ne rapporte déjà plus rien depuis le {since}. En attendant le {frenchDay(parseISODate(tip.waitUntil))}, vous gardez environ {formatEUR(tip.gain, 0)} d'intérêts.</span></p>}
+            {tip && <p className="text-xs font-bold text-amber-800 dark:text-amber-300 flex items-start gap-1 mt-1"><Lightbulb className="w-3.5 h-3.5 shrink-0" aria-hidden="true" /> <span>Retiré à cette date, ce montant ne rapporte déjà plus rien depuis le {since}. En attendant le {frenchDay(parseISODate(tip.waitUntil))}, vous gardez environ {formatEUR(tip.gain, 0)} d'intérêts.</span></p>}
           </div>
 
           <div>

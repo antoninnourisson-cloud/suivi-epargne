@@ -17,8 +17,7 @@
 
 ## Pistes non démarrées
 
-- **Découper `src/lib/finance.ts`** (≈ 1 700 lignes) par domaine : impôt, intérêts, paie, dons, restitution, avec un fichier d'export commun pour ne rien casser.
-- **Montées de version majeures** (React 19, Tailwind 4, Recharts 3, lucide 1.x, TypeScript 7) : une par une, avec les tests ; Dependabot ne les propose pas d'office.
+- **TypeScript 7** : à faire quand typescript-eslint le prendra en charge (React 19, Tailwind 4, Recharts 3 et lucide 1.x sont faits).
 
 - **Préférences de notification par type** (couper par exemple le rappel « soldes non actualisés » en gardant les échéances). Aujourd'hui, c'est tout ou rien par appareil.
 - **Pré-remplissage des avantages salariaux depuis une fiche de paie**. Mis de côté : `WorkBenefits` attend des taux et des prix de base, alors que la fiche ne donne que des montants déjà calculés.

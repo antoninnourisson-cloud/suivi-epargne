@@ -29,7 +29,7 @@ export const TaxReturnHelper: React.FC<Props> = ({ data, estimatedNetTaxableBefo
     [data, year, estimatedNetTaxableBeforeAllowance, allowanceRate, allowanceCap, ceiling75, thisYear]
   );
   return (
-    <section aria-labelledby="tax-return-title" className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
+    <section aria-labelledby="tax-return-title" className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xs">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h3 id="tax-return-title" className="font-black text-slate-800 dark:text-slate-100 flex items-center gap-2"><ClipboardCheck className="w-5 h-5 text-indigo-600" aria-hidden="true" /> Déclaration de revenus</h3>
@@ -48,7 +48,7 @@ export const TaxReturnHelper: React.FC<Props> = ({ data, estimatedNetTaxableBefo
         <ul className="mt-4 divide-y divide-slate-100 dark:divide-slate-700">
           {lines.map((l, i) => (
             <li key={`${l.box}-${i}`} className="py-3 flex gap-3">
-              <span className="w-20 flex-shrink-0 font-mono text-xs font-black text-indigo-700 dark:text-indigo-300 pt-0.5">{l.box}</span>
+              <span className="w-20 shrink-0 font-mono text-xs font-black text-indigo-700 dark:text-indigo-300 pt-0.5">{l.box}</span>
               <div className="flex-1 min-w-0">
                 <div className="flex flex-wrap items-baseline justify-between gap-2">
                   <p className="text-sm font-bold text-slate-800 dark:text-slate-100">{l.label}</p>
@@ -63,7 +63,7 @@ export const TaxReturnHelper: React.FC<Props> = ({ data, estimatedNetTaxableBefo
           ))}
         </ul>
       )}
-      <p className="mt-3 text-[11px] text-slate-500 dark:text-slate-400 flex items-start gap-1"><Info className="w-3 h-3 flex-shrink-0 mt-0.5" aria-hidden="true" /> Les montants pré-remplis par l'administration font foi : cette liste aide à les contrôler, elle ne remplace pas votre déclaration.</p>
+      <p className="mt-3 text-[11px] text-slate-500 dark:text-slate-400 flex items-start gap-1"><Info className="w-3 h-3 shrink-0 mt-0.5" aria-hidden="true" /> Les montants pré-remplis par l'administration font foi : cette liste aide à les contrôler, elle ne remplace pas votre déclaration.</p>
     </section>
   );
 };

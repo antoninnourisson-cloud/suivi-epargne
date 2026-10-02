@@ -166,7 +166,7 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig, monthPlan,
 
   return (
     <div className="space-y-6 animate-fade-in pb-20">
-      <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
+      <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xs">
         <h2 className="text-2xl font-black text-slate-800 dark:text-slate-100 flex items-center gap-2 mb-1"><Coins className="w-6 h-6 text-indigo-600" /> Rendement réel</h2>
         <p className="text-sm text-slate-500 dark:text-slate-400">« Acquis » = réellement gagné depuis le 1er janvier (règle des quinzaines pour les livrets). « Attendu » = l'année complète si vos soldes ne bougent plus. « Rythme » = ce que rapporteraient vos soldes actuels sur douze mois.</p>
       </div>
@@ -193,7 +193,7 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig, monthPlan,
 
       {missed.extra > 0.5 && (
         <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-2xl p-5 flex items-start gap-3">
-          <AlertCircle className="w-5 h-5 text-amber-700 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+          <AlertCircle className="w-5 h-5 text-amber-700 dark:text-amber-400 shrink-0 mt-0.5" />
           <div className="text-sm text-amber-800 dark:text-amber-300">
             <p className="font-black mb-1">Manque à gagner détecté</p>
             <p>Vous avez <b>{fmt(missed.idleCash)}</b> sur compte courant. En plaçant <b>{fmt(missed.placeable)}</b> sur vos livrets non pleins (jusqu'à {formatRate(missed.bestRate)}), vous généreriez environ <b>{fmt(missed.extra)}/an</b> d'intérêts supplémentaires.</p>
@@ -201,9 +201,9 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig, monthPlan,
         </div>
       )}
 
-      <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
+      <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xs overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm sm:min-w-[34rem]">
+          <table className="w-full text-left text-sm sm:min-w-136">
             <thead className="bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700">
               <tr>
                 <th className="px-3 sm:px-6 py-3 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Compte</th>
@@ -240,14 +240,14 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig, monthPlan,
       <SplitProjectionCard accounts={accounts} fiscalConfig={fiscalConfig} monthPlan={monthPlan} savingsSplit={savingsSplit} restitutionInMonths={restitutionInMonths} />
 
       {(latentRows.length > 0 || missingDeposits.length > 0) && (
-        <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
+        <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xs overflow-hidden">
           <div className="p-6 border-b border-slate-100 dark:border-slate-800">
             <h3 className="font-black text-slate-800 dark:text-slate-100 flex items-center gap-2"><TrendingUp className="w-5 h-5 text-indigo-600" /> Plus-values latentes</h3>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Valeur − versements cumulés. En cas de retrait, seule cette part est imposée ; « Si tout retiré » donne ce qu'il resterait de la plus-value en vidant le compte aujourd'hui.</p>
           </div>
           {latentRows.length > 0 && (
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm sm:min-w-[34rem]">
+              <table className="w-full text-left text-sm sm:min-w-136">
                 <thead className="bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700">
                   <tr>
                     <th className="px-3 sm:px-6 py-3 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Compte</th>
@@ -286,7 +286,7 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig, monthPlan,
           )}
           {missingDeposits.length > 0 && (
             <p className="px-6 py-4 text-xs text-slate-500 dark:text-slate-400 flex items-start gap-1.5">
-              <Info className="w-3.5 h-3.5 flex-shrink-0 mt-px" />
+              <Info className="w-3.5 h-3.5 shrink-0 mt-px" />
               Versements cumulés à renseigner (fiche du compte ou Actualiser solde) : {missingDeposits.map(a => a.name).join(', ')}.
             </p>
           )}
@@ -294,13 +294,13 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig, monthPlan,
       )}
 
       {taxableRows.length > 0 && (
-        <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
+        <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xs overflow-hidden">
           <div className="p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800">
             <div>
               <h3 className="font-black text-slate-800 dark:text-slate-100 flex items-center gap-2"><Landmark className="w-5 h-5 text-indigo-600" /> Si vous retiriez vos gains de {currentYear}</h3>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1"><strong>Rien à déclarer tant que vous ne retirez rien</strong> : le PEA et l'Assurance Vie ne sont imposés qu'au moment d'un retrait (les prélèvements sociaux du fonds euros sont déjà retenus chaque année par l'assureur). Ce tableau estime le net que vous toucheriez si vous retiriez maintenant les gains acquis cette année.</p>
             </div>
-            <button onClick={exportFiscalCsv} className="flex items-center gap-2 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 px-4 py-2 rounded-xl font-bold text-sm flex-shrink-0"><FileDown className="w-4 h-4" /> Exporter (CSV)</button>
+            <button onClick={exportFiscalCsv} className="flex items-center gap-2 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 px-4 py-2 rounded-xl font-bold text-sm shrink-0"><FileDown className="w-4 h-4" /> Exporter (CSV)</button>
           </div>
 
           <div className="px-6 pt-4 flex flex-wrap gap-4">
@@ -314,13 +314,13 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig, monthPlan,
             </div>
           </div>
           <p className="px-6 pb-2 pt-1 text-[11px] text-slate-500 dark:text-slate-400 flex items-start gap-1">
-            <Info className="w-3 h-3 flex-shrink-0 mt-0.5" />
+            <Info className="w-3 h-3 shrink-0 mt-0.5" />
             Estimation simplifiée : PFU (31,4 % en 2026, 30 % sur l'assurance vie) ou régime réduit selon l'ancienneté du compte. Lors d'un vrai rachat d'Assurance Vie, l'impôt ne porte que sur la part de gains contenue dans le montant retiré, avec un abattement annuel de 4 600 € après 8 ans : le vrai net est souvent meilleur.
             {hasUnmodeled && ' Certains comptes (Immobilier, PER...) ont un régime trop spécifique pour être calculé ici : ils sont exclus du total net.'}
           </p>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm sm:min-w-[34rem]">
+            <table className="w-full text-left text-sm sm:min-w-136">
               <thead className="bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700">
                 <tr>
                   <th className="px-3 sm:px-6 py-3 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Compte</th>

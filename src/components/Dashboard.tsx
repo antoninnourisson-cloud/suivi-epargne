@@ -422,7 +422,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalC
   };
 
   const StatCard = ({ title, amount, subtext, extra, hero }: { title: string; amount: number; subtext?: string; extra?: React.ReactNode; hero?: React.ReactNode }) => (
-    <div className="bg-white dark:bg-slate-800 p-4 md:p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 min-w-0">
+    <div className="bg-white dark:bg-slate-800 p-4 md:p-6 rounded-2xl shadow-xs border border-slate-200 dark:border-slate-700 min-w-0">
       <p className="text-slate-600 dark:text-slate-300 text-xs md:text-sm font-bold">{title}</p>
       <p className={`${hero ? 'text-3xl md:text-4xl' : 'text-xl md:text-2xl'} font-black text-slate-800 dark:text-slate-100 mt-1 tabular-nums`}>{formatEUR(amount, 0)}</p>
       {subtext && <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 font-bold">{subtext}</p>}
@@ -432,14 +432,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalC
   );
 
   if (accounts.length === 0) return (
-    <section aria-labelledby="welcome-title" className="max-w-xl mx-auto bg-white dark:bg-slate-800 rounded-3xl border border-slate-200 dark:border-slate-700 p-8 mt-6 text-center shadow-sm">
+    <section aria-labelledby="welcome-title" className="max-w-xl mx-auto bg-white dark:bg-slate-800 rounded-3xl border border-slate-200 dark:border-slate-700 p-8 mt-6 text-center shadow-xs">
       <Sprout className="w-10 h-10 text-indigo-600 mx-auto mb-3" aria-hidden="true" />
       <h2 id="welcome-title" className="text-2xl font-black text-slate-800 dark:text-slate-100">Bienvenue dans Pécule</h2>
       <p className="text-slate-600 dark:text-slate-300 mt-2">Trois étapes pour faire pousser votre épargne :</p>
       <ol className="text-left mt-6 space-y-3 text-sm text-slate-700 dark:text-slate-200">
-        <li className="flex gap-3"><span className="w-6 h-6 rounded-full bg-indigo-600 text-white text-xs font-black flex items-center justify-center flex-shrink-0">1</span> Ajoutez vos comptes (Livret A, LEP, assurance vie…) avec leur solde.</li>
-        <li className="flex gap-3"><span className="w-6 h-6 rounded-full bg-indigo-600 text-white text-xs font-black flex items-center justify-center flex-shrink-0">2</span> Indiquez votre salaire et vos charges dans le Pilotage.</li>
-        <li className="flex gap-3"><span className="w-6 h-6 rounded-full bg-indigo-600 text-white text-xs font-black flex items-center justify-center flex-shrink-0">3</span> Choisissez votre jour de paie : Pécule vous dira quoi placer, et où.</li>
+        <li className="flex gap-3"><span className="w-6 h-6 rounded-full bg-indigo-600 text-white text-xs font-black flex items-center justify-center shrink-0">1</span> Ajoutez vos comptes (Livret A, LEP, assurance vie…) avec leur solde.</li>
+        <li className="flex gap-3"><span className="w-6 h-6 rounded-full bg-indigo-600 text-white text-xs font-black flex items-center justify-center shrink-0">2</span> Indiquez votre salaire et vos charges dans le Pilotage.</li>
+        <li className="flex gap-3"><span className="w-6 h-6 rounded-full bg-indigo-600 text-white text-xs font-black flex items-center justify-center shrink-0">3</span> Choisissez votre jour de paie : Pécule vous dira quoi placer, et où.</li>
       </ol>
       <div className="mt-8 flex flex-col sm:flex-row gap-2 justify-center">
         {onAddAccount && <button onClick={onAddAccount} className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-xl font-black">Ajouter mon premier compte</button>}
@@ -553,7 +553,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalC
       {/* Sur grand écran, les cartes se rangent sur deux colonnes au lieu de s'étirer. */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
       {emergency && (
-        <section aria-labelledby="emergency-title" className="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700">
+        <section aria-labelledby="emergency-title" className="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-xs border border-slate-200 dark:border-slate-700">
           <div className="flex items-baseline justify-between gap-3 mb-2">
             <h3 id="emergency-title" className="text-sm font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2"><LifeBuoy className="w-4 h-4 text-indigo-600" aria-hidden="true" /> Épargne de précaution</h3>
             <p className="text-sm font-black text-slate-700 dark:text-slate-200">{fmtEUR(emergency.current)} <span className="text-slate-500 dark:text-slate-400 font-bold">/ {fmtEUR(emergency.target)}</span></p>
@@ -576,7 +576,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalC
       )}
 
       {agendaNext.length > 0 && (
-        <section aria-labelledby="agenda-next-title" className="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700">
+        <section aria-labelledby="agenda-next-title" className="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-xs border border-slate-200 dark:border-slate-700">
           <div className="flex items-baseline justify-between gap-3 mb-2">
             <h3 id="agenda-next-title" className="text-sm font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2"><CalendarDays className="w-4 h-4 text-indigo-600" aria-hidden="true" /> Prochaines échéances</h3>
             {onNavigate && <button onClick={() => onNavigate('agenda')} className="text-xs font-bold text-indigo-700 dark:text-indigo-300 hover:underline">Tout voir</button>}
@@ -585,14 +585,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalC
             {agendaNext.map(e => (
               <li key={`${e.date}-${e.title}`} className="flex items-center justify-between gap-3 py-1.5 text-sm">
                 <span className="min-w-0 truncate text-slate-700 dark:text-slate-200 font-bold">{e.title}</span>
-                <span className="flex-shrink-0 text-xs text-slate-500 dark:text-slate-400">{frenchDay(parseISODate(e.date), true)}</span>
+                <span className="shrink-0 text-xs text-slate-500 dark:text-slate-400">{frenchDay(parseISODate(e.date), true)}</span>
               </li>
             ))}
           </ul>
         </section>
       )}
       {upcomingDebits.length > 0 && (
-        <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700">
+        <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-xs border border-slate-200 dark:border-slate-700">
           <div className="flex items-baseline justify-between gap-3 mb-2">
             <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2"><CalendarClock className="w-4 h-4 text-indigo-600" /> Prélèvements des 7 prochains jours</h3>
             <p className="text-sm font-black text-slate-700 dark:text-slate-200">{formatEUR(upcomingDebits.reduce((sum, x) => sum + x.s.amount, 0))}</p>
@@ -603,7 +603,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalC
                 <span className="min-w-0 truncate text-slate-700 dark:text-slate-200">
                   <b>{s.name}</b>{s.debitAccount && <span className="text-slate-500 dark:text-slate-400"> · {s.debitAccount}</span>}
                 </span>
-                <span className="flex-shrink-0 text-right">
+                <span className="shrink-0 text-right">
                   <span className="font-mono font-bold text-slate-700 dark:text-slate-200">{formatEUR(s.amount)}</span>
                   <span className="block text-[11px] text-slate-500 dark:text-slate-400">{inDays === 0 ? "aujourd'hui" : inDays === 1 ? 'demain' : frenchDay(date, true)}</span>
                 </span>
@@ -627,7 +627,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalC
         const maxRate = Math.max(1, ...rateHistory.map(m => Math.abs(m.rate)));
         const MONTH_INITIALS = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'];
         return (
-          <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700">
+          <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-xs border border-slate-200 dark:border-slate-700">
             <div className="flex items-baseline justify-between gap-3 mb-2">
               <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2"><PiggyBank className="w-4 h-4 text-indigo-600" /> {gaugeTitle}</h3>
               <p className="text-sm font-black text-slate-700 dark:text-slate-200">{monthSaved < 0 ? formatSignedEUR(monthSaved, 0) : fmtEUR(monthSaved)}{hasPlan && <span className="text-slate-500 dark:text-slate-400 font-bold"> / {fmtEUR(plan)}</span>}</p>
@@ -659,14 +659,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalC
                     return (
                       <button type="button" key={m.month} onClick={() => setRateMonth(rateMonth === m.month ? null : m.month)} aria-pressed={rateMonth === m.month}
                         aria-label={`${monthName}${current ? ' (en cours)' : ''} : ${Math.round(m.rate)} %, ${fmtEUR(m.saved)}${m.rate < 0 ? ', retrait net' : ''}`}
-                        className="flex-1 flex flex-col items-center justify-end h-full gap-1 rounded focus-visible:ring-2 focus-visible:ring-indigo-500">
-                        <div className={`w-full rounded-sm ${m.rate < 0 ? 'bg-rose-500' : current ? 'bg-indigo-300 dark:bg-indigo-700 bg-[repeating-linear-gradient(45deg,transparent,transparent_3px,rgba(255,255,255,.35)_3px,rgba(255,255,255,.35)_5px)]' : 'bg-indigo-600'} ${rateMonth === m.month ? 'ring-2 ring-amber-400' : ''}`} style={{ height: `${h}%` }} />
+                        className="flex-1 flex flex-col items-center justify-end h-full gap-1 rounded-sm focus-visible:ring-2 focus-visible:ring-indigo-500">
+                        <div className={`w-full rounded-xs ${m.rate < 0 ? 'bg-rose-500' : current ? 'bg-indigo-300 dark:bg-indigo-700 bg-[repeating-linear-gradient(45deg,transparent,transparent_3px,rgba(255,255,255,.35)_3px,rgba(255,255,255,.35)_5px)]' : 'bg-indigo-600'} ${rateMonth === m.month ? 'ring-2 ring-amber-400' : ''}`} style={{ height: `${h}%` }} />
                         <span className={`text-[11px] font-bold ${current ? 'text-slate-800 dark:text-slate-100 underline' : 'text-slate-500 dark:text-slate-400'}`}>{MONTH_INITIALS[Number(m.month.slice(5)) - 1]}</span>
                       </button>
                     );
                   })}
                 </div>
-                <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 min-h-[1.25rem]" aria-live="polite">
+                <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 min-h-5" aria-live="polite">
                   {(() => { const m = rateHistory.find(x => x.month === rateMonth); return m ? `${parseISODate(`${m.month}-01`).toLocaleDateString('fr-FR', { month: 'long' })} : ${Math.round(m.rate)} % de la paie, ${formatSignedEUR(m.saved, 0)}.` : `Touchez un mois pour le détail. Part de votre paie (${fmtEUR(monthlyPay)}) mise de côté ; mois en cours hachuré, retraits en rouge.`; })()}
                 </p>
               </div>
@@ -676,7 +676,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalC
       })()}
 
       {projection && (
-        <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700">
+        <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-xs border border-slate-200 dark:border-slate-700">
           <div className="flex items-center gap-2 mb-4">
             <div className="p-2 rounded-lg bg-indigo-600"><TrendingUp className="w-4 h-4 text-white" /></div>
             <div>
@@ -700,8 +700,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalC
           {projection.drift && (
             <div className={`mt-4 flex items-start gap-2 p-3 rounded-lg text-xs font-bold ${projection.drift.changeRatio < 0 ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300' : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300'}`}>
               {projection.drift.changeRatio < 0
-                ? <TrendingDown className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                : <TrendingUp className="w-4 h-4 flex-shrink-0 mt-0.5" />}
+                ? <TrendingDown className="w-4 h-4 shrink-0 mt-0.5" />
+                : <TrendingUp className="w-4 h-4 shrink-0 mt-0.5" />}
               <span>
                 Votre rythme d'épargne a {projection.drift.changeRatio < 0 ? 'ralenti' : 'accéléré'} de {Math.abs(Math.round(projection.drift.changeRatio * 100))}%
                 par rapport au trimestre précédent ({fmtEUR(projection.drift.previousMonthlyRate)}/mois → {fmtEUR(projection.monthlyRate)}/mois).
@@ -711,7 +711,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalC
         </div>
       )}
 
-      <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 xl:col-span-2">
+      <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-xs border border-slate-200 dark:border-slate-700 xl:col-span-2">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 mb-4">
           <div>
             <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">Évolution de mon épargne nette</h3>
@@ -733,7 +733,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalC
         </div>
       </div>
 
-      <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700">
+      <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-xs border border-slate-200 dark:border-slate-700">
         <h3 className="text-sm font-bold text-slate-600 dark:text-slate-300 mb-4">Par établissement</h3>
         <div style={{ height: Math.max(120, dataByInstitution.length * 44) }}>
         <Suspense fallback={<div className="h-full w-full rounded-lg bg-slate-100 dark:bg-slate-900 animate-pulse" aria-hidden />}>

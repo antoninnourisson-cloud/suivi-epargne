@@ -90,7 +90,7 @@ export const TransferManager: React.FC<TransferManagerProps> = ({ accounts, onUp
   // entièrement vide, sans explication ni porte de sortie.
   if (accounts.length === 0) {
     return (
-      <div className="text-center py-20 bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
+      <div className="text-center py-20 bg-white dark:bg-slate-800 rounded-xl shadow-xs border border-slate-200 dark:border-slate-700">
         <Wallet className="w-12 h-12 text-slate-300 dark:text-slate-600 mx-auto mb-3" />
         <h2 className="text-xl font-bold text-slate-600 dark:text-slate-300">Aucun compte pour l'instant</h2>
         <p className="text-sm text-slate-500 dark:text-slate-400 mt-2 max-w-xs mx-auto">
@@ -102,11 +102,11 @@ export const TransferManager: React.FC<TransferManagerProps> = ({ accounts, onUp
 
   return (
     <div className="space-y-4">
-    <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
+    <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xs">
       <h2 className="text-2xl font-black text-slate-800 dark:text-slate-100 flex items-center gap-2"><ArrowRightLeft className="w-6 h-6 text-indigo-600" /> Virements</h2>
       <p className="text-sm text-slate-500 dark:text-slate-400">Dépôt sur un compte, virement entre deux comptes, ou échéances qui reviennent chaque mois.</p>
     </div>
-    <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
+    <div className="bg-white dark:bg-slate-800 rounded-xl shadow-xs border border-slate-200 dark:border-slate-700 overflow-hidden">
       <div role="tablist" aria-label="Type d'opération" className="border-b border-slate-200 dark:border-slate-700 flex">
         <button role="tab" aria-selected={activeTab === 'deposit'} onClick={() => setActiveTab('deposit')} className={`flex-1 min-w-0 px-2 py-4 text-sm font-black flex items-center justify-center gap-2 ${activeTab === 'deposit' ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border-b-2 border-emerald-600' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
           <Download className="w-4 h-4 hidden sm:block" /> Dépôt
@@ -124,7 +124,7 @@ export const TransferManager: React.FC<TransferManagerProps> = ({ accounts, onUp
           <Calendar className="w-5 h-5 text-slate-500 dark:text-slate-400" />
           <div className="flex-1">
             <label htmlFor="op-date" className="text-[11px] font-black text-slate-600 dark:text-slate-300 uppercase block">Date de l'opération</label>
-            <input id="op-date" type="date" value={opDate} onChange={e => setOpDate(e.target.value)} className="w-full bg-transparent font-bold text-slate-700 dark:text-slate-200 outline-none" />
+            <input id="op-date" type="date" value={opDate} onChange={e => setOpDate(e.target.value)} className="w-full bg-transparent font-bold text-slate-700 dark:text-slate-200 outline-hidden" />
           </div>
         </div>}
 
@@ -136,7 +136,7 @@ export const TransferManager: React.FC<TransferManagerProps> = ({ accounts, onUp
 
         {formError && (
             <div role="alert" className="bg-rose-100 dark:bg-rose-950/50 text-rose-800 dark:text-rose-300 p-3 rounded-xl text-sm font-bold flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 flex-shrink-0"/> {formError}
+                <AlertCircle className="w-4 h-4 shrink-0"/> {formError}
             </div>
         )}
 
@@ -149,7 +149,7 @@ export const TransferManager: React.FC<TransferManagerProps> = ({ accounts, onUp
             </select>
             <label htmlFor="dep-amount" className="sr-only">Montant du dépôt</label>
             <input id="dep-amount" type="text" value={depositAmount} onChange={e => setDepositAmount(e.target.value)} className="w-full p-4 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 border border-slate-300 dark:border-slate-700 rounded-lg text-2xl font-black" placeholder="0,00 €" inputMode="decimal" />
-            <Button type="submit" isLoading={saveStatus === 'pending'} className="w-full !bg-emerald-600 hover:!bg-emerald-700 py-4">Valider le dépôt</Button>
+            <Button type="submit" isLoading={saveStatus === 'pending'} className="w-full bg-emerald-600! hover:bg-emerald-700! py-4">Valider le dépôt</Button>
           </form>
         ) : activeTab === 'transfer' ? (
           <form onSubmit={handleTransfer} className="space-y-4">

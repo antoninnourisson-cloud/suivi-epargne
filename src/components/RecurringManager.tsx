@@ -57,7 +57,7 @@ export const RecurringManager: React.FC<RecurringManagerProps> = ({ accounts, re
   return (
     <div className="space-y-6">
       <p className="text-xs text-slate-500 dark:text-slate-400 flex items-start gap-2">
-        <Repeat className="w-4 h-4 flex-shrink-0 mt-px text-indigo-600 dark:text-indigo-400" />
+        <Repeat className="w-4 h-4 shrink-0 mt-px text-indigo-600 dark:text-indigo-400" />
         À l'échéance, le tableau de bord vous proposera d'enregistrer le mouvement en un clic. Rien n'est jamais ajouté sans votre confirmation.
       </p>
 

@@ -32,7 +32,7 @@ export const InstallPrompt: React.FC = () => {
 
   return (
     <div className="flex items-start gap-3 p-4 rounded-xl border bg-indigo-50 dark:bg-indigo-950/40 border-indigo-200 dark:border-indigo-900 text-indigo-900 dark:text-indigo-200 text-sm">
-      <Smartphone className="w-5 h-5 flex-shrink-0 mt-0.5 text-indigo-600" />
+      <Smartphone className="w-5 h-5 shrink-0 mt-0.5 text-indigo-600" />
       <div className="flex-1 min-w-0">
         <p className="font-bold">Installez l'app sur votre téléphone</p>
         <p className="text-xs mt-0.5 opacity-90">

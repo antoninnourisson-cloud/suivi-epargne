@@ -79,7 +79,7 @@ export const TaxNoticePanel: React.FC<Props> = ({ geminiApiKey, rfrByYear, house
           <div key={y}>
             <label className="text-[11px] font-black text-slate-600 dark:text-slate-300 uppercase">RFR {y}</label>
             <NumberInput ariaLabel={`Revenu fiscal de référence ${y}`} value={rfrByYear[String(y)] ?? 0} onChange={v => onSave(y, v)} min={0} suffix="€"
-              className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded font-bold" />
+              className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-sm font-bold" />
           </div>
         ))}
       </div>

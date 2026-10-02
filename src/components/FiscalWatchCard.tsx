@@ -32,7 +32,7 @@ const hostOf = (u: string) => { try { return new URL(u).hostname.replace(/^www\.
 export const FiscalWatchCard: React.FC<Props> = ({ proposals, running, checkedAt, lastError, hasKey, onApply, onDismiss, onRun, compact }) => {
   if (compact && proposals.length === 0) return null;
   return (
-    <section aria-labelledby="fiscal-watch-title" className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-indigo-200 dark:border-indigo-900 shadow-sm">
+    <section aria-labelledby="fiscal-watch-title" className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-indigo-200 dark:border-indigo-900 shadow-xs">
       <div className="flex items-start justify-between gap-3">
         <div>
           <h3 id="fiscal-watch-title" className="font-black text-slate-800 dark:text-slate-100 flex items-center gap-2"><Radar className="w-5 h-5 text-indigo-600" aria-hidden="true" /> Veille fiscale</h3>
@@ -45,14 +45,14 @@ export const FiscalWatchCard: React.FC<Props> = ({ proposals, running, checkedAt
           {!compact && checkedAt && <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">Dernière vérification réussie : {new Date(checkedAt).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })}</p>}
           {!compact && hasKey && !running && !checkedAt && !lastError && <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">Pas encore de vérification : cliquez sur « Vérifier maintenant ».</p>}
           {!compact && lastError && !running && (
-            <p role="alert" className="text-xs font-bold text-rose-700 dark:text-rose-300 mt-2 break-words">
+            <p role="alert" className="text-xs font-bold text-rose-700 dark:text-rose-300 mt-2 wrap-break-word">
               Dernier essai en échec : {friendlyError(lastError)}
             </p>
           )}
           {!compact && running && <p role="status" className="text-xs text-slate-600 dark:text-slate-300 mt-2">Gemini cherche sur les sites officiels… (jusqu'à une minute)</p>}
         </div>
         {!compact && hasKey && (
-          <button onClick={onRun} disabled={running} className="flex-shrink-0 flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 disabled:opacity-60">
+          <button onClick={onRun} disabled={running} className="shrink-0 flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 disabled:opacity-60">
             {running ? <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" /> : <RotateCw className="w-3.5 h-3.5" aria-hidden="true" />} {running ? 'Vérification…' : 'Vérifier maintenant'}
           </button>
         )}

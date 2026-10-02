@@ -25,7 +25,7 @@ export const SoloPlanCard: React.FC<Props> = ({ accounts, fiscalConfig, monthPla
   const startYear = parseISODate(restitutionISO).getFullYear();
 
   return (
-    <section aria-labelledby="solo-plan-title" className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-4">
+    <section aria-labelledby="solo-plan-title" className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xs space-y-4">
       <div>
         <h3 id="solo-plan-title" className="font-black text-slate-800 dark:text-slate-100 flex items-center gap-2"><Sprout className="w-5 h-5 text-indigo-600" aria-hidden="true" /> Votre plan solo {startYear}-{startYear + 3}</h3>
         <p className="text-xs text-slate-600 dark:text-slate-300 mt-1">Après la restitution, vous repartez de {formatEUR(plan.startTotal, 0)} : votre part seulement. Les livrets retrouvent de la place sous leurs plafonds.</p>

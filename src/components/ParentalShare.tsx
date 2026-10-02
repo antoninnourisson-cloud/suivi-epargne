@@ -39,7 +39,7 @@ export const ParentalShare: React.FC<ParentalShareProps> = ({ accounts, restitut
 
   return (
     <div className="space-y-6 animate-fade-in pb-20">
-      <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
+      <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xs">
         <h2 className="text-2xl font-black text-slate-800 dark:text-slate-100 flex items-center gap-2 mb-1"><Users className="w-6 h-6 text-indigo-600" /> Part parentale</h2>
         <p className="text-sm text-slate-500 dark:text-slate-400">Distinguez votre capital réel de l'argent géré pour vos parents.</p>
       </div>
@@ -69,7 +69,7 @@ export const ParentalShare: React.FC<ParentalShareProps> = ({ accounts, restitut
         </div>
       </div>
 
-      <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
+      <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xs">
         <div className="flex justify-between text-xs font-bold mb-2">
           <span className="text-indigo-600">Moi {ownedPct.toFixed(0)} %</span>
           <span className="text-amber-700 dark:text-amber-400">Parents {(100 - ownedPct).toFixed(0)} %</span>
@@ -81,9 +81,9 @@ export const ParentalShare: React.FC<ParentalShareProps> = ({ accounts, restitut
         <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-2">Total géré : {fmt(grand)}</p>
       </div>
 
-      <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
+      <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xs overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm md:min-w-[34rem]">
+          <table className="w-full text-left text-sm md:min-w-136">
             <thead className="bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700">
               <tr>
                 <th className="px-6 py-3 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Compte</th>

@@ -106,10 +106,10 @@ export const Subscriptions: React.FC<SubscriptionsProps> = ({ subscriptions, onU
 
   return (
     <div className="space-y-6 animate-fade-in pb-20">
-      <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
+      <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xs">
         <h2 className="text-2xl font-black text-slate-800 dark:text-slate-100 flex items-center gap-2 mb-1"><CalendarClock className="w-6 h-6 text-indigo-600" /> Abonnements</h2>
         <p className="text-sm text-slate-500 dark:text-slate-400 flex items-start gap-1.5">
-          <BellRing className="w-4 h-4 flex-shrink-0 mt-0.5 text-indigo-600 dark:text-indigo-400" />
+          <BellRing className="w-4 h-4 shrink-0 mt-0.5 text-indigo-600 dark:text-indigo-400" />
           <span>
             Rappel la veille du prélèvement, ou une semaine avant à partir de {fmt(SUBSCRIPTION_BIG_AMOUNT)}.
             {isBackendEnabled() ? ' Les notifications doivent être activées sur l\'appareil (Paramètres).' : ' Les rappels nécessitent le serveur de notifications.'}
@@ -165,13 +165,13 @@ export const Subscriptions: React.FC<SubscriptionsProps> = ({ subscriptions, onU
       )}
 
       {review.length > 0 && (
-        <section aria-labelledby="subs-review-title" className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
+        <section aria-labelledby="subs-review-title" className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xs">
           <h3 id="subs-review-title" className="font-black text-slate-800 dark:text-slate-100 flex items-center gap-2"><ListChecks className="w-5 h-5 text-indigo-600" aria-hidden="true" /> Revue des abonnements</h3>
           <p className="text-xs text-slate-600 dark:text-slate-300 mt-1">Du plus cher au moins cher sur un an. Tous les six mois, confirmez ceux qui vous servent encore.</p>
           <ul className="mt-3 divide-y divide-slate-100 dark:divide-slate-700">
             {review.map(r => (
               <li key={r.sub.id} className="py-2.5 flex flex-wrap items-center gap-3">
-                <div className="flex-1 min-w-[12rem]">
+                <div className="flex-1 min-w-48">
                   <p className="text-sm font-bold text-slate-800 dark:text-slate-100">{r.sub.name} · {fmt(r.yearly)} par an{r.shareOfPay !== undefined && <span className="font-normal text-slate-600 dark:text-slate-300"> ({r.shareOfPay.toLocaleString('fr-FR', { maximumFractionDigits: 1 })} % de la paie)</span>}</p>
                   {r.priceIncrease && <p className="text-xs font-bold text-rose-700 dark:text-rose-300">Hausse : {fmt(r.priceIncrease.from)} → {fmt(r.priceIncrease.to)} depuis le {r.priceIncrease.date.split('-').reverse().join('/')}</p>}
                   {r.cancelBy && <p className="text-xs text-slate-600 dark:text-slate-300">Pour ne pas renouveler : résiliez avant le <b>{r.cancelBy.split('-').reverse().join('/')}</b>.</p>}
@@ -185,7 +185,7 @@ export const Subscriptions: React.FC<SubscriptionsProps> = ({ subscriptions, onU
         </section>
       )}
 
-      <form onSubmit={submit} className="space-y-3 bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
+      <form onSubmit={submit} className="space-y-3 bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xs">
         <div className="flex items-center justify-between">
           <p className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">{editingId ? 'Modifier l\'abonnement' : 'Nouvel abonnement'}</p>
           {editingId && <button type="button" onClick={cancelEdit} className="text-xs font-bold text-slate-400 hover:text-slate-600 flex items-center gap-1"><X className="w-3 h-3" /> Annuler</button>}

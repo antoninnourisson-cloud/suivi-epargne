@@ -103,7 +103,7 @@ export const AppLockScreen: React.FC<AppLockScreenProps> = ({ onUnlock, onForgot
           <>
             {failed && (
               <div className="mb-4 flex items-center gap-2 justify-center text-sm font-bold text-rose-700 dark:text-rose-400">
-                <AlertTriangle className="w-4 h-4 flex-shrink-0" /> Vérification annulée ou échouée.
+                <AlertTriangle className="w-4 h-4 shrink-0" /> Vérification annulée ou échouée.
               </div>
             )}
             <button

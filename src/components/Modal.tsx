@@ -53,7 +53,7 @@ export const Modal: React.FC<ModalProps> = ({ open, onClose, label, children, va
   const sheet = variant === 'sheet';
   return (
     <div
-      className={`fixed inset-0 z-[70] flex ${sheet ? 'items-end sm:items-center' : 'items-center p-4'} justify-center bg-slate-900/50 backdrop-blur-sm animate-fade-in`}
+      className={`fixed inset-0 z-70 flex ${sheet ? 'items-end sm:items-center' : 'items-center p-4'} justify-center bg-slate-900/50 backdrop-blur-xs animate-fade-in`}
       onClick={onClose}
     >
       <div
@@ -63,7 +63,7 @@ export const Modal: React.FC<ModalProps> = ({ open, onClose, label, children, va
         aria-label={label}
         tabIndex={-1}
         onClick={e => e.stopPropagation()}
-        className={`bg-white dark:bg-slate-800 shadow-2xl w-full outline-none ${sheet ? 'rounded-t-3xl sm:rounded-3xl max-h-[85vh] overflow-y-auto pb-[env(safe-area-inset-bottom)]' : 'rounded-2xl max-h-[90vh] overflow-y-auto'} ${className}`}
+        className={`bg-white dark:bg-slate-800 shadow-2xl w-full outline-hidden ${sheet ? 'rounded-t-3xl sm:rounded-3xl max-h-[85vh] overflow-y-auto pb-[env(safe-area-inset-bottom)]' : 'rounded-2xl max-h-[90vh] overflow-y-auto'} ${className}`}
       >
         {children}
       </div>

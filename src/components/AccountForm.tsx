@@ -132,12 +132,12 @@ export const AccountForm: React.FC<AccountFormProps> = ({ onSave, initialData, o
     });
   };
 
-  const moneyInputClass = "w-full bg-transparent font-black text-slate-800 dark:text-slate-100 text-lg rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500";
+  const moneyInputClass = "w-full bg-transparent font-black text-slate-800 dark:text-slate-100 text-lg rounded-sm focus:outline-hidden focus-visible:ring-2 focus-visible:ring-indigo-500";
 
   return (
     <div className="space-y-6">
 
-      <form onSubmit={handleSubmit} className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-700">
+      <form onSubmit={handleSubmit} className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-xs border border-slate-200 dark:border-slate-700">
         <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-2">
           {initialData ? <Save className="w-5 h-5 text-indigo-600" aria-hidden="true" /> : <PlusCircle className="w-5 h-5 text-indigo-600" aria-hidden="true" />}
           {initialData ? `Modifier « ${initialData.name} »` : 'Nouveau compte'}

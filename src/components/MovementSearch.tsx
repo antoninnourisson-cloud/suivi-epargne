@@ -54,17 +54,17 @@ export const MovementSearch: React.FC<MovementSearchProps> = ({ accounts }) => {
   const seg = (active: boolean) => `px-3 py-2 text-xs font-bold ${active ? 'bg-indigo-600 text-white' : 'bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`;
 
   return (
-    <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 space-y-3">
+    <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-xs border border-slate-200 dark:border-slate-700 space-y-3">
       <div className="flex flex-wrap items-center gap-2">
-        <label className="flex-1 min-w-[12rem] flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700">
-          <Search className="w-4 h-4 text-slate-500 dark:text-slate-400 flex-shrink-0" />
+        <label className="flex-1 min-w-48 flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700">
+          <Search className="w-4 h-4 text-slate-500 dark:text-slate-400 shrink-0" />
           <span className="sr-only">Rechercher un mouvement</span>
           <input
             type="search"
             value={query}
             onChange={e => setQuery(e.target.value)}
             placeholder="Rechercher un mouvement : libellé, montant, 09/2026…"
-            className="flex-1 min-w-0 bg-transparent outline-none text-sm font-bold text-slate-800 dark:text-slate-100"
+            className="flex-1 min-w-0 bg-transparent outline-hidden text-sm font-bold text-slate-800 dark:text-slate-100"
           />
           {query && <button type="button" onClick={() => setQuery('')} aria-label="Effacer la recherche" className="p-1 text-slate-500 dark:text-slate-400"><X className="w-4 h-4" /></button>}
         </label>
@@ -91,7 +91,7 @@ export const MovementSearch: React.FC<MovementSearchProps> = ({ accounts }) => {
                     <p className="font-bold text-slate-800 dark:text-slate-100 truncate">{m.label}{m.kind === 'valuation' && <span className="ml-1 text-[11px] font-bold text-slate-500 dark:text-slate-400">(valorisation)</span>}</p>
                     <p className="text-[11px] text-slate-500 dark:text-slate-400">{parseISODate(m.date).toLocaleDateString('fr-FR')} · {account.name}</p>
                   </div>
-                  <span className={`font-mono font-bold flex-shrink-0 ${m.type === 'IN' ? 'text-emerald-600' : 'text-rose-600'}`}>{m.type === 'IN' ? '+' : '−'}{formatEUR(m.amount)}</span>
+                  <span className={`font-mono font-bold shrink-0 ${m.type === 'IN' ? 'text-emerald-600' : 'text-rose-600'}`}>{m.type === 'IN' ? '+' : '−'}{formatEUR(m.amount)}</span>
                 </li>
               ))}
             </ul>

@@ -61,7 +61,7 @@ export const NotificationSettings: React.FC<{ paydayDay?: number; onOpenPayday?:
 
       {state === 'unsupported' && (
         <p className="text-xs font-bold text-amber-700 dark:text-amber-300 flex items-start gap-2">
-          <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+          <AlertTriangle className="w-4 h-4 shrink-0" />
           {isIosOutsideHomeScreen()
             ? 'Sur iPhone, les notifications ne fonctionnent que dans l’app installée : Partager → « Sur l’écran d’accueil », puis ouvrez-la depuis l’icône.'
             : 'Ce navigateur ne prend pas en charge les notifications push (ou l’app n’est pas encore installée comme application).'}
@@ -70,7 +70,7 @@ export const NotificationSettings: React.FC<{ paydayDay?: number; onOpenPayday?:
 
       {state === 'denied' && (
         <p className="text-xs font-bold text-amber-700 dark:text-amber-300 flex items-start gap-2">
-          <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+          <AlertTriangle className="w-4 h-4 shrink-0" />
           Les notifications sont bloquées pour ce site. Réautorisez-les dans les réglages du navigateur (icône à gauche de l’adresse), puis revenez ici.
         </p>
       )}
@@ -118,7 +118,7 @@ export const NotificationSettings: React.FC<{ paydayDay?: number; onOpenPayday?:
 
       {message && (
         <p className={`text-xs font-bold flex items-start gap-2 ${message.kind === 'ok' ? 'text-emerald-700 dark:text-emerald-300' : 'text-rose-700 dark:text-rose-300'}`}>
-          {message.kind === 'ok' ? <CheckCircle className="w-4 h-4 flex-shrink-0" /> : <AlertTriangle className="w-4 h-4 flex-shrink-0" />}
+          {message.kind === 'ok' ? <CheckCircle className="w-4 h-4 shrink-0" /> : <AlertTriangle className="w-4 h-4 shrink-0" />}
           {message.text}
         </p>
       )}

@@ -118,7 +118,7 @@ export const Donations: React.FC<DonationsProps> = ({ donations, onUpdate, picke
 
   return (
     <div className="space-y-6 animate-fade-in pb-20">
-      <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
+      <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xs">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h2 className="text-2xl font-black text-slate-800 dark:text-slate-100 flex items-center gap-2 mb-1"><HandHeart className="w-6 h-6 text-indigo-600" /> Dons et impôts</h2>
@@ -151,10 +151,10 @@ export const Donations: React.FC<DonationsProps> = ({ donations, onUpdate, picke
           </div>
         </div>
         {summary.missingReceipts.length > 0 && (
-          <p className="mt-4 text-xs font-bold text-amber-700 dark:text-amber-400 flex items-start gap-1.5"><AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-px" /> Reçu fiscal manquant : {summary.missingReceipts.map(d => d.organization).join(', ')}. Il n'est pas à envoyer, mais à garder en cas de contrôle.</p>
+          <p className="mt-4 text-xs font-bold text-amber-700 dark:text-amber-400 flex items-start gap-1.5"><AlertCircle className="w-3.5 h-3.5 shrink-0 mt-px" /> Reçu fiscal manquant : {summary.missingReceipts.map(d => d.organization).join(', ')}. Il n'est pas à envoyer, mais à garder en cas de contrôle.</p>
         )}
         <p className="mt-3 text-[11px] text-slate-500 dark:text-slate-400 flex items-start gap-1">
-          <Info className="w-3 h-3 flex-shrink-0 mt-0.5" />
+          <Info className="w-3 h-3 shrink-0 mt-0.5" />
           Estimation : 75 % jusqu'à {fmt(ceiling75 ?? DONATION_75_CEILING)} de dons aux organismes d'aide aux personnes en difficulté (l'excédent passe à 66 %), 66 % pour les autres, dans la limite de 20 % du revenu imposable. Les cases et plafonds peuvent changer chaque année : vérifiez sur impots.gouv.
         </p>
         {rows.length > 0 && (
@@ -185,7 +185,7 @@ export const Donations: React.FC<DonationsProps> = ({ donations, onUpdate, picke
         </ul>
       )}
 
-      <form onSubmit={submit} className="space-y-3 bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
+      <form onSubmit={submit} className="space-y-3 bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xs">
         <div className="flex items-center justify-between">
           <p className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">{editingId ? 'Modifier le don' : 'Nouveau don'}</p>
           {editingId && <button type="button" onClick={cancelEdit} className="text-xs font-bold text-slate-400 hover:text-slate-600 flex items-center gap-1"><X className="w-3 h-3" /> Annuler</button>}

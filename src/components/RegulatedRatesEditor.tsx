@@ -48,7 +48,7 @@ export const RegulatedRatesEditor: React.FC<Props> = ({ accounts, onApply, onDon
         const parsed = parseFrenchNumber(d.rate);
         return (
           <div key={g.key} className="flex flex-wrap items-end gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700">
-            <div className="min-w-[8rem] flex-1">
+            <div className="min-w-32 flex-1">
               <p className="font-bold text-sm text-slate-800 dark:text-slate-100 flex items-center gap-1.5"><Percent className="w-4 h-4 text-indigo-600" /> {g.label}</p>
               <p className="text-[11px] text-slate-500 dark:text-slate-400">Actuel : {current !== undefined ? formatRate(current) : '—'} · {g.accounts.map(a => a.name).join(', ')}</p>
             </div>

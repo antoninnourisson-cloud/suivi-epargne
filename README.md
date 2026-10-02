@@ -97,7 +97,7 @@ Un **petit serveur optionnel** (Cloudflare Worker, dossier [`worker/`](worker/))
 
 - **Nom** : Pécule. **Slogan** : « Faites pousser votre épargne ».
 - **Logo** : une pousse qui sort d'une pièce. La source vectorielle est dans `src/components/Logo.tsx`, et les PNG dans `public/` (192, 512, `apple-touch-icon` 180).
-- **Couleurs** : vert sapin `#14532d` (fond de marque, menu), or `#fbbf24`, crème `#fef3c7`, gris chauds (stone). Dans `tailwind.config.js`, `indigo` pointe vers l'échelle sapin, donc les classes `indigo-*` du code sont vertes.
+- **Couleurs** : vert sapin `#14532d` (fond de marque, menu), or `#fbbf24`, crème `#fef3c7`, gris chauds (stone). Dans `src/index.css` (bloc `@theme`, Tailwind 4), `indigo` pointe vers l'échelle sapin, donc les classes `indigo-*` du code sont vertes.
 - **Ton** : bienveillant et concret, en phrases simples.
 - **Noms techniques** : le dépôt (`suivi-epargne`), l'adresse GitHub Pages (`/suivi-epargne/`), le fichier Drive (`suivi_epargne.json`) et le Worker (`suivi-epargne-api`) gardent l'ancien nom pour ne rien casser.
 

@@ -183,7 +183,7 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
 
   if (accounts.length === 0) {
     return (
-      <div className="text-center py-16 px-6 bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700">
+      <div className="text-center py-16 px-6 bg-white dark:bg-slate-800 rounded-2xl shadow-xs border border-slate-200 dark:border-slate-700">
         <AlertCircle className="w-10 h-10 text-slate-500 dark:text-slate-400 mx-auto mb-3" aria-hidden="true" />
         <h2 className="text-xl font-black text-slate-800 dark:text-slate-100">Ajoutez d'abord un compte</h2>
         <p className="text-sm text-slate-600 dark:text-slate-300 mt-1">Ici, vous mettrez à jour vos soldes d'après vos relevés.</p>
@@ -205,7 +205,7 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
           </p>
         </div>
         <div className="flex flex-col items-end gap-2">
-             <Button onClick={handleSaveAll} isLoading={saveStatus === 'pending'} className="!bg-white dark:!bg-slate-800 !text-indigo-600 dark:!text-indigo-300 hover:!bg-indigo-50 dark:hover:!bg-slate-700 border-none font-black px-8 py-3 shadow-xl">
+             <Button onClick={handleSaveAll} isLoading={saveStatus === 'pending'} className="bg-white! dark:bg-slate-800! text-indigo-600! dark:text-indigo-300! hover:bg-indigo-50! dark:hover:bg-slate-700! border-none font-black px-8 py-3 shadow-xl">
                 <Save className="w-5 h-5 mr-2" /> Tout enregistrer
             </Button>
             {saveStatus === 'saved' && <span className="text-emerald-300 font-bold text-sm flex items-center gap-1"><CheckCircle className="w-4 h-4"/> Enregistré sur Drive</span>}
@@ -224,7 +224,7 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
           const isChanged = diffOwned !== 0 || diffParental !== 0 || depositsChanged;
 
           return (
-            <div key={account.id} className={`bg-white dark:bg-slate-800 p-6 rounded-2xl border transition-all ${isChanged ? 'border-indigo-400 shadow-lg ring-1 ring-indigo-400/10' : 'border-slate-200 dark:border-slate-700 shadow-sm'}`}>
+            <div key={account.id} className={`bg-white dark:bg-slate-800 p-6 rounded-2xl border transition-all ${isChanged ? 'border-indigo-400 shadow-lg ring-1 ring-indigo-400/10' : 'border-slate-200 dark:border-slate-700 shadow-xs'}`}>
               <div className="flex justify-between items-start mb-6">
                 <div>
                   <h4 className="font-black text-slate-900 dark:text-slate-100 text-lg leading-tight">{account.name}</h4>
@@ -248,7 +248,7 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
                     value={u.owned}
                     aria-label={`Ma part sur ${account.name}`}
                     onChange={(e) => handleOwnedChange(account.id, e.target.value)}
-                    className="w-full bg-transparent text-lg font-black text-indigo-900 dark:text-indigo-200 outline-none"
+                    className="w-full bg-transparent text-lg font-black text-indigo-900 dark:text-indigo-200 outline-hidden"
                   />
                   {diffOwned !== 0 && (
                     <div className={`text-[11px] mt-1 font-bold ${diffOwned > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
@@ -260,7 +260,7 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
                     const when = parseISODate(u.date || today);
                     const tip = diffOwned < 0 ? quinzaineWithdrawalTip(account, -diffOwned, when) : null;
                     const since = when.getDate() < 16 ? '1er' : '16';
-                    return tip ? <p className="text-[11px] font-bold text-amber-700 dark:text-amber-300 flex items-start gap-1 mt-1"><Lightbulb className="w-3.5 h-3.5 flex-shrink-0" /> <span>Retiré le {frenchDay(when)}, ce montant ne rapporte déjà plus rien depuis le {since}. En attendant le {frenchDay(parseISODate(tip.waitUntil))}, vous gardez ~{formatEUR(tip.gain, 0)} d'intérêts.</span></p> : null;
+                    return tip ? <p className="text-[11px] font-bold text-amber-700 dark:text-amber-300 flex items-start gap-1 mt-1"><Lightbulb className="w-3.5 h-3.5 shrink-0" /> <span>Retiré le {frenchDay(when)}, ce montant ne rapporte déjà plus rien depuis le {since}. En attendant le {frenchDay(parseISODate(tip.waitUntil))}, vous gardez ~{formatEUR(tip.gain, 0)} d'intérêts.</span></p> : null;
                   })()}
                 </div>
 
@@ -276,7 +276,7 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
                     value={u.parental}
                     aria-label={`Part des parents sur ${account.name}`}
                     onChange={(e) => handleParentalChange(account.id, e.target.value)}
-                    className="w-full bg-transparent text-lg font-black text-amber-900 dark:text-amber-200 outline-none"
+                    className="w-full bg-transparent text-lg font-black text-amber-900 dark:text-amber-200 outline-hidden"
                   />
                   {diffParental !== 0 && (
                     <div className={`text-[11px] mt-1 font-bold ${diffParental > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
@@ -295,7 +295,7 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
                       value={u.bankTotal ?? toInputAmount(newTotal)}
                       aria-label={`Total affiché par la banque pour ${account.name}`}
                       onChange={(e) => handleBankTotalChange(account.id, e.target.value)}
-                      className="w-full bg-transparent text-lg font-black text-slate-800 dark:text-slate-100 outline-none"
+                      className="w-full bg-transparent text-lg font-black text-slate-800 dark:text-slate-100 outline-hidden"
                     />
                     {u.bankTotal !== undefined && (parseFrenchNumber(u.bankTotal) ?? Infinity) < safeNumber(u.parental, 0)
                       ? <p className="text-[11px] font-bold text-rose-600">Ce total est inférieur à la part de vos parents ({formatEUR(safeNumber(u.parental, 0))}) : vérifiez la saisie.</p>
@@ -356,7 +356,7 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
                       aria-label={`Versements cumulés sur ${account.name}`}
                       onChange={(e) => handleDepositsChange(account.id, e.target.value)}
                       placeholder="Inconnu"
-                      className="w-full bg-transparent font-bold text-slate-700 dark:text-slate-200 outline-none text-sm"
+                      className="w-full bg-transparent font-bold text-slate-700 dark:text-slate-200 outline-hidden text-sm"
                     />
                     <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
                       {depositsDraft === null ? 'Montant non reconnu.'
@@ -378,7 +378,7 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
                       value={u.date}
                       aria-label={`Date du relevé de ${account.name}`}
                       onChange={(e) => handleDateChange(account.id, e.target.value)}
-                      className="w-full bg-transparent font-bold text-slate-700 dark:text-slate-200 outline-none text-sm"
+                      className="w-full bg-transparent font-bold text-slate-700 dark:text-slate-200 outline-hidden text-sm"
                     />
                   </div>
                 </div>

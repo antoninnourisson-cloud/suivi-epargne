@@ -40,7 +40,7 @@ export const TodoList: React.FC<{ items: TodoSpec[] }> = ({ items }) => {
   const toggle = () => setOpen(o => { try { localStorage.setItem('todo_open', o ? '0' : '1'); } catch { /* idem */ } return !o; });
 
   return (
-    <section aria-labelledby="todo-title" className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700">
+    <section aria-labelledby="todo-title" className="bg-white dark:bg-slate-800 rounded-2xl shadow-xs border border-slate-200 dark:border-slate-700">
       <button type="button" onClick={toggle} aria-expanded={open} className="w-full flex items-center justify-between gap-3 p-4 text-left">
         <span id="todo-title" className="text-sm font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
           <ListTodo className="w-4 h-4 text-indigo-600" aria-hidden="true" /> À faire
@@ -53,12 +53,12 @@ export const TodoList: React.FC<{ items: TodoSpec[] }> = ({ items }) => {
           {shown.map(item => (
             <li key={item.key} className={`p-3 rounded-xl border text-sm ${item.tone === 'action' ? 'bg-indigo-50/60 dark:bg-indigo-950/30 border-indigo-200 dark:border-indigo-900' : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700'}`}>
               <div className="flex flex-wrap items-start gap-3">
-                <item.icon className={`w-4 h-4 flex-shrink-0 mt-0.5 ${item.tone === 'action' ? 'text-indigo-700 dark:text-indigo-300' : 'text-slate-500 dark:text-slate-400'}`} aria-hidden="true" />
-                <div className="flex-1 min-w-[12rem] text-slate-800 dark:text-slate-100 font-bold">
+                <item.icon className={`w-4 h-4 shrink-0 mt-0.5 ${item.tone === 'action' ? 'text-indigo-700 dark:text-indigo-300' : 'text-slate-500 dark:text-slate-400'}`} aria-hidden="true" />
+                <div className="flex-1 min-w-48 text-slate-800 dark:text-slate-100 font-bold">
                   {item.text}
                   {item.detail && <span className="block font-normal text-xs mt-1 text-slate-600 dark:text-slate-300">{item.detail}</span>}
                 </div>
-                <div className="flex items-center gap-2 flex-shrink-0">
+                <div className="flex items-center gap-2 shrink-0">
                   {item.secondary && <button onClick={item.secondary.onClick} className="text-xs font-bold text-slate-600 dark:text-slate-300 underline hover:opacity-70 px-1 py-1.5">{item.secondary.label}</button>}
                   {item.snoozable && <button onClick={() => snooze(item.key)} className="text-xs font-bold text-slate-600 dark:text-slate-300 underline hover:opacity-70 px-1 py-1.5">Plus tard</button>}
                   {item.primary && <button onClick={item.primary.onClick} className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black">{item.primary.label}</button>}

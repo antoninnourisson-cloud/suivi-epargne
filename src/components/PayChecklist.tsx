@@ -101,7 +101,7 @@ export const PayChecklist: React.FC<PayChecklistProps> = ({
           disabled={invalid}
           onChange={() => (isDone ? uncheck(l) : check(l))}
           aria-label={`${l.label} : ${isDone ? 'fait' : 'à faire'}`}
-          className="w-5 h-5 flex-shrink-0 accent-emerald-600"
+          className="w-5 h-5 shrink-0 accent-emerald-600"
         />
         <div className="flex-1 min-w-0">
           <p className={`font-bold truncate ${isDone ? 'text-emerald-800 dark:text-emerald-300' : 'text-slate-700 dark:text-slate-200'}`}>{l.label}</p>
@@ -116,9 +116,9 @@ export const PayChecklist: React.FC<PayChecklistProps> = ({
           </p>
         </div>
         {isDone ? (
-          <span className="font-mono font-bold text-emerald-700 dark:text-emerald-300 flex-shrink-0">{formatEUR(entry.amount)}</span>
+          <span className="font-mono font-bold text-emerald-700 dark:text-emerald-300 shrink-0">{formatEUR(entry.amount)}</span>
         ) : (
-          <label className="flex items-center gap-1 flex-shrink-0">
+          <label className="flex items-center gap-1 shrink-0">
             <span className="sr-only">Montant réel de {l.label}</span>
             <input
               type="text"
@@ -137,7 +137,7 @@ export const PayChecklist: React.FC<PayChecklistProps> = ({
 
   const totalLines = lines.length;
   return (
-    <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm lg:col-span-2">
+    <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xs lg:col-span-2">
       <div className="flex flex-wrap items-start justify-between gap-3 mb-1">
         <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 flex items-center gap-2"><Wallet className="w-5 h-5 text-indigo-600" /> Votre paie, virement par virement</h3>
         {totalLines > 0 && (

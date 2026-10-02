@@ -157,7 +157,7 @@ export const Settings: React.FC<SettingsProps> = ({ payslips = [], config, workB
 
   return (
     <div className="space-y-6 animate-fade-in pb-20">
-      <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm flex items-center justify-between">
+      <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xs flex items-center justify-between">
         <div>
           <h2 className="text-xl font-black text-slate-800 dark:text-slate-100 flex items-center gap-2"><SettingsIcon className="w-6 h-6 text-indigo-600" /> Paramètres</h2>
           <p className="text-sm text-slate-500 dark:text-slate-400">Ajustez la fiscalité et vos avantages salariaux.</p>
@@ -181,7 +181,7 @@ export const Settings: React.FC<SettingsProps> = ({ payslips = [], config, workB
           {pendingImport && (
             <div className="mt-4 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-xl p-4">
               <p className="text-xs font-black text-rose-800 dark:text-rose-300 flex items-center gap-2 mb-2">
-                <AlertTriangle className="w-4 h-4 flex-shrink-0" /> Remplacer toutes vos données ?
+                <AlertTriangle className="w-4 h-4 shrink-0" /> Remplacer toutes vos données ?
               </p>
               <p className="text-[11px] text-rose-700 dark:text-rose-300 mb-3 leading-relaxed">
                 « {pendingImport.name} » va écraser <strong>l'intégralité</strong> de vos comptes, mouvements,
@@ -258,7 +258,7 @@ export const Settings: React.FC<SettingsProps> = ({ payslips = [], config, workB
                 </div>
             </div>
             <div className="mt-4 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-lg p-3 flex gap-2 items-start">
-                <AlertTriangle className="w-4 h-4 text-amber-700 dark:text-amber-400 mt-0.5 flex-shrink-0"/>
+                <AlertTriangle className="w-4 h-4 text-amber-700 dark:text-amber-400 mt-0.5 shrink-0"/>
                 <p className="text-xs text-amber-700 dark:text-amber-300 leading-relaxed">La clé Gemini reste sur cet appareil : elle n'est ni dans votre fichier Drive, ni dans les exports (à ressaisir sur chaque appareil). La clé Picker, publique par nature, est synchronisée. Chaque analyse utilise votre propre quota Gemini.</p>
             </div>
         </div>
@@ -279,7 +279,7 @@ export const Settings: React.FC<SettingsProps> = ({ payslips = [], config, workB
                     </div>
                     <button
                         onClick={toggleBiometric}
-                        className={`flex-shrink-0 px-4 py-2 rounded-xl font-bold text-sm ${biometricOn ? 'bg-emerald-600 hover:bg-emerald-700 text-white' : 'bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200'}`}
+                        className={`shrink-0 px-4 py-2 rounded-xl font-bold text-sm ${biometricOn ? 'bg-emerald-600 hover:bg-emerald-700 text-white' : 'bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200'}`}
                     >
                         {biometricOn ? 'Activé' : 'Désactivé'}
                     </button>
@@ -294,7 +294,7 @@ export const Settings: React.FC<SettingsProps> = ({ payslips = [], config, workB
                     </div>
                     <button
                         onClick={togglePin}
-                        className={`flex-shrink-0 px-4 py-2 rounded-xl font-bold text-sm ${pinOn ? 'bg-emerald-600 hover:bg-emerald-700 text-white' : 'bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200'}`}
+                        className={`shrink-0 px-4 py-2 rounded-xl font-bold text-sm ${pinOn ? 'bg-emerald-600 hover:bg-emerald-700 text-white' : 'bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200'}`}
                     >
                         {pinOn ? 'Activé' : 'Désactivé'}
                     </button>
@@ -330,7 +330,7 @@ export const Settings: React.FC<SettingsProps> = ({ payslips = [], config, workB
         {/* RÉGLAGES AVANCÉS : rarement modifiés, repliés par défaut */}
         <details className="lg:col-span-2 group">
           <summary className="list-none cursor-pointer bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 flex items-center gap-3">
-            <SlidersHorizontal className="w-5 h-5 text-indigo-600 flex-shrink-0" />
+            <SlidersHorizontal className="w-5 h-5 text-indigo-600 shrink-0" />
             <span className="flex-1 min-w-0">
               <span className="block font-bold text-slate-800 dark:text-slate-100">Réglages avancés</span>
               <span className="block text-xs text-slate-500 dark:text-slate-400">Avantages salariaux, fiscalité, plafonds des livrets, barème de l'impôt</span>
@@ -343,7 +343,7 @@ export const Settings: React.FC<SettingsProps> = ({ payslips = [], config, workB
            <h3 className="font-bold text-slate-800 dark:text-slate-100 mb-4 border-b border-slate-200 dark:border-slate-700 pb-2 flex items-center gap-2"><Building2 className="w-4 h-4 text-indigo-600" /> Avantages et prélèvements de l'entreprise</h3>
            {payslips.length > 0 && (
              <div className="mb-5 p-4 rounded-xl bg-indigo-50/60 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-900 flex flex-wrap items-center gap-3">
-               <p className="flex-1 min-w-[14rem] text-xs text-slate-700 dark:text-slate-200">
+               <p className="flex-1 min-w-56 text-xs text-slate-700 dark:text-slate-200">
                  Reprenez les montants réels de vos fiches de paie (moyenne des 3 dernières) : remboursement Navigo à 50 %, titres-restaurant payés à 50 % par l'employeur, part de mutuelle retenue sur la paie.
                  {benefitsMsg && <span className="block mt-1 font-bold text-indigo-800 dark:text-indigo-200" role="status">{benefitsMsg}</span>}
                </p>
@@ -357,7 +357,7 @@ export const Settings: React.FC<SettingsProps> = ({ payslips = [], config, workB
                    r.mutuelleEmployee ? `mutuelle ${formatEUR(r.mutuelleEmployee, 2)} retenue` : 'pas de mutuelle retenue',
                  ];
                  setBenefitsMsg(`D'après ${r.months} fiche${r.months > 1 ? 's' : ''} : ${parts.join(', ')} par mois.`);
-               }} className="flex-shrink-0 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black">Utiliser mes fiches de paie</button>
+               }} className="shrink-0 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black">Utiliser mes fiches de paie</button>
              </div>
            )}
            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -369,8 +369,8 @@ export const Settings: React.FC<SettingsProps> = ({ payslips = [], config, workB
                    </label>
                    {localBenefits.navigo.active && (
                        <div className="space-y-2">
-                           <div><label className="text-[11px] font-bold text-slate-500 dark:text-slate-400">Prix de base mensuel (€)</label><NumberInput ariaLabel="Prix de base mensuel (€)" value={localBenefits.navigo.basePrice} onChange={v => updateBenefit('navigo', 'basePrice', v)} className="w-full p-2 rounded border border-indigo-200 dark:border-indigo-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100" /></div>
-                           <div><label className="text-[11px] font-bold text-slate-500 dark:text-slate-400">Remboursement (%)</label><NumberInput ariaLabel="Remboursement (%)" value={localBenefits.navigo.refundRate} onChange={v => updateBenefit('navigo', 'refundRate', v)} className="w-full p-2 rounded border border-indigo-200 dark:border-indigo-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100" /></div>
+                           <div><label className="text-[11px] font-bold text-slate-500 dark:text-slate-400">Prix de base mensuel (€)</label><NumberInput ariaLabel="Prix de base mensuel (€)" value={localBenefits.navigo.basePrice} onChange={v => updateBenefit('navigo', 'basePrice', v)} className="w-full p-2 rounded-sm border border-indigo-200 dark:border-indigo-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100" /></div>
+                           <div><label className="text-[11px] font-bold text-slate-500 dark:text-slate-400">Remboursement (%)</label><NumberInput ariaLabel="Remboursement (%)" value={localBenefits.navigo.refundRate} onChange={v => updateBenefit('navigo', 'refundRate', v)} className="w-full p-2 rounded-sm border border-indigo-200 dark:border-indigo-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100" /></div>
                            <p className="text-[11px] text-emerald-700 dark:text-emerald-400 text-right mt-1">+{formatEUR(localBenefits.navigo.basePrice * localBenefits.navigo.refundRate / 100, 2)}/mois (gain)</p>
                        </div>
                    )}
@@ -384,8 +384,8 @@ export const Settings: React.FC<SettingsProps> = ({ payslips = [], config, workB
                    </label>
                    {localBenefits.mutuelle.active && (
                        <div className="space-y-2">
-                           <div><label className="text-[11px] font-bold text-slate-500 dark:text-slate-400">Coût total du contrat (€)</label><NumberInput ariaLabel="Coût total du contrat (€)" value={localBenefits.mutuelle.totalCost} onChange={v => updateBenefit('mutuelle', 'totalCost', v)} className="w-full p-2 rounded border border-rose-200 dark:border-rose-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100" /></div>
-                           <div><label className="text-[11px] font-bold text-slate-500 dark:text-slate-400">Prise en charge employeur (%)</label><NumberInput ariaLabel="Prise en charge employeur (%)" value={localBenefits.mutuelle.employerRate} onChange={v => updateBenefit('mutuelle', 'employerRate', v)} className="w-full p-2 rounded border border-rose-200 dark:border-rose-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100" /></div>
+                           <div><label className="text-[11px] font-bold text-slate-500 dark:text-slate-400">Coût total du contrat (€)</label><NumberInput ariaLabel="Coût total du contrat (€)" value={localBenefits.mutuelle.totalCost} onChange={v => updateBenefit('mutuelle', 'totalCost', v)} className="w-full p-2 rounded-sm border border-rose-200 dark:border-rose-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100" /></div>
+                           <div><label className="text-[11px] font-bold text-slate-500 dark:text-slate-400">Prise en charge employeur (%)</label><NumberInput ariaLabel="Prise en charge employeur (%)" value={localBenefits.mutuelle.employerRate} onChange={v => updateBenefit('mutuelle', 'employerRate', v)} className="w-full p-2 rounded-sm border border-rose-200 dark:border-rose-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100" /></div>
                            <p className="text-[11px] text-rose-700 dark:text-rose-400 text-right mt-1">−{formatEUR(localBenefits.mutuelle.totalCost * (1 - localBenefits.mutuelle.employerRate/100), 2)}/mois (coût)</p>
                        </div>
                    )}
@@ -400,10 +400,10 @@ export const Settings: React.FC<SettingsProps> = ({ payslips = [], config, workB
                    {localBenefits.mealVouchers.active && (
                        <div className="space-y-2">
                            <div className="grid grid-cols-2 gap-2">
-                               <div><label className="text-[11px] font-bold text-slate-500 dark:text-slate-400">Valeur (€)</label><NumberInput ariaLabel="Valeur (€)" value={localBenefits.mealVouchers.faceValue} onChange={v => updateBenefit('mealVouchers', 'faceValue', v)} className="w-full p-2 rounded border border-emerald-200 dark:border-emerald-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100" /></div>
-                               <div><label className="text-[11px] font-bold text-slate-500 dark:text-slate-400">Jours par mois</label><NumberInput ariaLabel="Jours par mois" value={localBenefits.mealVouchers.daysPerMonth} onChange={v => updateBenefit('mealVouchers', 'daysPerMonth', v)} className="w-full p-2 rounded border border-emerald-200 dark:border-emerald-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100" /></div>
+                               <div><label className="text-[11px] font-bold text-slate-500 dark:text-slate-400">Valeur (€)</label><NumberInput ariaLabel="Valeur (€)" value={localBenefits.mealVouchers.faceValue} onChange={v => updateBenefit('mealVouchers', 'faceValue', v)} className="w-full p-2 rounded-sm border border-emerald-200 dark:border-emerald-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100" /></div>
+                               <div><label className="text-[11px] font-bold text-slate-500 dark:text-slate-400">Jours par mois</label><NumberInput ariaLabel="Jours par mois" value={localBenefits.mealVouchers.daysPerMonth} onChange={v => updateBenefit('mealVouchers', 'daysPerMonth', v)} className="w-full p-2 rounded-sm border border-emerald-200 dark:border-emerald-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100" /></div>
                            </div>
-                           <div><label className="text-[11px] font-bold text-slate-500 dark:text-slate-400">Prise en charge employeur (%)</label><NumberInput ariaLabel="Prise en charge employeur (%)" value={localBenefits.mealVouchers.employerRate} onChange={v => updateBenefit('mealVouchers', 'employerRate', v)} className="w-full p-2 rounded border border-emerald-200 dark:border-emerald-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100" /></div>
+                           <div><label className="text-[11px] font-bold text-slate-500 dark:text-slate-400">Prise en charge employeur (%)</label><NumberInput ariaLabel="Prise en charge employeur (%)" value={localBenefits.mealVouchers.employerRate} onChange={v => updateBenefit('mealVouchers', 'employerRate', v)} className="w-full p-2 rounded-sm border border-emerald-200 dark:border-emerald-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100" /></div>
                            <p className="text-[11px] text-emerald-700 dark:text-emerald-400 text-right mt-1">−{formatEUR(localBenefits.mealVouchers.faceValue * localBenefits.mealVouchers.daysPerMonth * (1 - localBenefits.mealVouchers.employerRate/100), 2)}/mois (coût)</p>
                        </div>
                    )}
@@ -417,11 +417,11 @@ export const Settings: React.FC<SettingsProps> = ({ payslips = [], config, workB
           <div className="space-y-4">
             <div>
               <label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Charges salariales (ex. 0,2232)</label>
-              <NumberInput ariaLabel="Charges salariales (ex. 0,2232)" value={localFiscal.salaryChargesRate} onChange={v => handleFiscalChange('salaryChargesRate', v)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded font-bold" />
+              <NumberInput ariaLabel="Charges salariales (ex. 0,2232)" value={localFiscal.salaryChargesRate} onChange={v => handleFiscalChange('salaryChargesRate', v)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-sm font-bold" />
             </div>
             <div>
               <label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Abattement forfaitaire (ex. 0,10)</label>
-              <NumberInput ariaLabel="Abattement forfaitaire (ex. 0,10)" value={localFiscal.standardAllowance} onChange={v => handleFiscalChange('standardAllowance', v)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded font-bold" />
+              <NumberInput ariaLabel="Abattement forfaitaire (ex. 0,10)" value={localFiscal.standardAllowance} onChange={v => handleFiscalChange('standardAllowance', v)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-sm font-bold" />
             </div>
             <div className="grid grid-cols-2 gap-3">
               {([
@@ -432,30 +432,30 @@ export const Settings: React.FC<SettingsProps> = ({ payslips = [], config, workB
               ] as [keyof FiscalConfig, string, number][]).map(([field, label, value]) => (
                 <div key={field}>
                   <label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">{label}</label>
-                  <NumberInput ariaLabel={label} value={value} onChange={v => handleFiscalChange(field, v)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded font-bold" />
+                  <NumberInput ariaLabel={label} value={value} onChange={v => handleFiscalChange(field, v)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-sm font-bold" />
                 </div>
               ))}
               <div>
                 <label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Décote : montant (€)</label>
-                <NumberInput ariaLabel="Décote : montant" value={localFiscal.decote?.single ?? 897} onChange={v => handleFiscalChange('decote', { rate: 0.4525, threshold: 1982, ...localFiscal.decote, single: v })} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded font-bold" />
+                <NumberInput ariaLabel="Décote : montant" value={localFiscal.decote?.single ?? 897} onChange={v => handleFiscalChange('decote', { rate: 0.4525, threshold: 1982, ...localFiscal.decote, single: v })} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-sm font-bold" />
               </div>
               <div>
                 <label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Décote : seuil d'impôt (€)</label>
-                <NumberInput ariaLabel="Décote : seuil" value={localFiscal.decote?.threshold ?? 1982} onChange={v => handleFiscalChange('decote', { single: 897, rate: 0.4525, ...localFiscal.decote, threshold: v })} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded font-bold" />
+                <NumberInput ariaLabel="Décote : seuil" value={localFiscal.decote?.threshold ?? 1982} onChange={v => handleFiscalChange('decote', { single: 897, rate: 0.4525, ...localFiscal.decote, threshold: v })} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-sm font-bold" />
               </div>
             </div>
             <div className="grid grid-cols-3 gap-3">
               <div>
                 <label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">LEP : + par demi-part</label>
-                <NumberInput ariaLabel="Plafond LEP : ajout par demi-part" value={localFiscal.lepCeilingPerHalfPart ?? 0} onChange={v => handleFiscalChange('lepCeilingPerHalfPart', v)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded font-bold" />
+                <NumberInput ariaLabel="Plafond LEP : ajout par demi-part" value={localFiscal.lepCeilingPerHalfPart ?? 0} onChange={v => handleFiscalChange('lepCeilingPerHalfPart', v)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-sm font-bold" />
               </div>
               <div>
                 <label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Plafond RFR LEP (1 part)</label>
-                <NumberInput ariaLabel="Plafond RFR LEP (1 part)" value={localFiscal.lepIncomeCeiling ?? 0} onChange={v => handleFiscalChange('lepIncomeCeiling', v)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded font-bold" />
+                <NumberInput ariaLabel="Plafond RFR LEP (1 part)" value={localFiscal.lepIncomeCeiling ?? 0} onChange={v => handleFiscalChange('lepIncomeCeiling', v)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-sm font-bold" />
               </div>
               <div>
                 <label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Parts fiscales</label>
-                <NumberInput ariaLabel="Parts fiscales" value={localFiscal.lepHouseholdParts ?? 1} onChange={v => handleFiscalChange('lepHouseholdParts', v)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded font-bold" />
+                <NumberInput ariaLabel="Parts fiscales" value={localFiscal.lepHouseholdParts ?? 1} onChange={v => handleFiscalChange('lepHouseholdParts', v)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-sm font-bold" />
               </div>
             </div>
             <p className="text-[11px] text-slate-500 dark:text-slate-400 -mt-2">
@@ -467,8 +467,8 @@ export const Settings: React.FC<SettingsProps> = ({ payslips = [], config, workB
         <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700">
           <h3 className="font-bold text-slate-800 dark:text-slate-100 mb-4 border-b border-slate-200 dark:border-slate-700 pb-2 flex items-center gap-2"><PiggyBank className="w-4 h-4 text-indigo-600" /> Plafonds des livrets (€)</h3>
           <div className="grid grid-cols-2 gap-4">
-              <div><label className="text-[11px] text-indigo-600 dark:text-indigo-300 font-black uppercase">Livret A</label><NumberInput ariaLabel="Livret A" value={localFiscal.ceilings.livretA} onChange={v => handleCeilingChange('livretA', v)} className="w-full p-2 bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900 rounded font-bold text-slate-800 dark:text-slate-100" /></div>
-              <div><label className="text-[11px] text-rose-700 dark:text-rose-300 font-black uppercase">LEP</label><NumberInput ariaLabel="LEP" value={localFiscal.ceilings.lep} onChange={v => handleCeilingChange('lep', v)} className="w-full p-2 bg-rose-50 dark:bg-rose-950/40 border border-rose-100 dark:border-rose-900 rounded font-bold text-slate-800 dark:text-slate-100" /></div>
+              <div><label className="text-[11px] text-indigo-600 dark:text-indigo-300 font-black uppercase">Livret A</label><NumberInput ariaLabel="Livret A" value={localFiscal.ceilings.livretA} onChange={v => handleCeilingChange('livretA', v)} className="w-full p-2 bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900 rounded-sm font-bold text-slate-800 dark:text-slate-100" /></div>
+              <div><label className="text-[11px] text-rose-700 dark:text-rose-300 font-black uppercase">LEP</label><NumberInput ariaLabel="LEP" value={localFiscal.ceilings.lep} onChange={v => handleCeilingChange('lep', v)} className="w-full p-2 bg-rose-50 dark:bg-rose-950/40 border border-rose-100 dark:border-rose-900 rounded-sm font-bold text-slate-800 dark:text-slate-100" /></div>
           </div>
         </div>
 
@@ -476,7 +476,7 @@ export const Settings: React.FC<SettingsProps> = ({ payslips = [], config, workB
         <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 lg:col-span-2">
           <div className="flex justify-between items-center mb-4 border-b border-slate-200 dark:border-slate-700 pb-2">
             <h3 className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2"><Landmark className="w-4 h-4 text-indigo-600" /> Barème de l'impôt sur le revenu</h3>
-            <button onClick={addBracket} className="text-xs flex items-center gap-1 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 px-2 py-1 rounded hover:bg-slate-200 dark:hover:bg-slate-600"><Plus className="w-3 h-3"/> Ajouter tranche</button>
+            <button onClick={addBracket} className="text-xs flex items-center gap-1 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 px-2 py-1 rounded-sm hover:bg-slate-200 dark:hover:bg-slate-600"><Plus className="w-3 h-3"/> Ajouter tranche</button>
           </div>
           <div className="mb-4 flex flex-wrap items-center gap-3 text-sm">
             <span className="font-bold text-slate-700 dark:text-slate-200">{identifyTaxScale(localFiscal.taxBrackets)?.label ?? 'Barème personnalisé'}</span>
@@ -505,17 +505,17 @@ export const Settings: React.FC<SettingsProps> = ({ payslips = [], config, workB
                 <div key={index} className="flex items-center gap-4">
                     <div className="flex-1">
                         <label className="text-[11px] uppercase font-bold text-slate-500 dark:text-slate-400">Limite haute (€)</label>
-                        <NumberInput ariaLabel="Limite haute (€)" value={bracket.limit === Infinity ? 999999999 : bracket.limit} onChange={v => updateBracket(index, 'limit', v)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded text-sm text-slate-800 dark:text-slate-100" />
+                        <NumberInput ariaLabel="Limite haute (€)" value={bracket.limit === Infinity ? 999999999 : bracket.limit} onChange={v => updateBracket(index, 'limit', v)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-sm text-sm text-slate-800 dark:text-slate-100" />
                     </div>
                     <div className="w-32">
                         <label className="text-[11px] uppercase font-bold text-slate-500 dark:text-slate-400">Taux (ex. 0,11)</label>
-                        <NumberInput ariaLabel="Taux (ex. 0,11)" value={bracket.rate} onChange={v => updateBracket(index, 'rate', v)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded text-sm font-bold text-indigo-600 dark:text-indigo-300" />
+                        <NumberInput ariaLabel="Taux (ex. 0,11)" value={bracket.rate} onChange={v => updateBracket(index, 'rate', v)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-sm text-sm font-bold text-indigo-600 dark:text-indigo-300" />
                     </div>
                     <button onClick={() => removeBracket(index)} className="mt-4 p-2 text-slate-500 dark:text-slate-400 hover:text-rose-500"><Trash2 className="w-4 h-4" /></button>
                 </div>
             ))}
             <div className="bg-amber-50 dark:bg-amber-950/40 p-3 rounded-lg flex gap-2 items-start mt-4">
-                <AlertTriangle className="w-4 h-4 text-amber-700 dark:text-amber-400 mt-1 flex-shrink-0"/>
+                <AlertTriangle className="w-4 h-4 text-amber-700 dark:text-amber-400 mt-1 shrink-0"/>
                 <p className="text-xs text-amber-700 dark:text-amber-300 leading-relaxed">Les tranches doivent être ordonnées. Mettez 999999999 pour l'infini.</p>
             </div>
           </div>

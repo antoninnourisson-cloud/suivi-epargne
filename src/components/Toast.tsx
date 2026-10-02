@@ -36,7 +36,7 @@ export const ToastContainer: React.FC<{ toasts: ToastItem[]; onDismiss: (id: str
   // La zone existe toujours (même vide) : les lecteurs d'écran n'annoncent que ce qui
   // apparaît dans une zone « live » déjà présente. Sur mobile, au-dessus de la barre du bas.
   return (
-    <div role="status" aria-live="polite" className="fixed bottom-[calc(5.5rem+env(safe-area-inset-bottom))] md:bottom-4 left-1/2 -translate-x-1/2 md:left-auto md:right-4 md:translate-x-0 z-[60] flex flex-col gap-2 w-[calc(100%-2rem)] max-w-sm pointer-events-none">
+    <div role="status" aria-live="polite" className="fixed bottom-[calc(5.5rem+env(safe-area-inset-bottom))] md:bottom-4 left-1/2 -translate-x-1/2 md:left-auto md:right-4 md:translate-x-0 z-60 flex flex-col gap-2 w-[calc(100%-2rem)] max-w-sm pointer-events-none">
       {toasts.map(t => (
         <div
           key={t.id}
@@ -45,17 +45,17 @@ export const ToastContainer: React.FC<{ toasts: ToastItem[]; onDismiss: (id: str
             t.kind === 'error' ? 'bg-rose-600 text-white' : 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900'
           }`}
         >
-          {t.kind === 'error' ? <AlertCircle className="w-4 h-4 flex-shrink-0" /> : <CheckCircle2 className="w-4 h-4 flex-shrink-0 text-emerald-400" />}
+          {t.kind === 'error' ? <AlertCircle className="w-4 h-4 shrink-0" /> : <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />}
           <span className="flex-1">{t.message}</span>
           {t.action && (
             <button
               onClick={() => { t.action!.onClick(); onDismiss(t.id); }}
-              className="text-indigo-300 dark:text-indigo-600 hover:underline flex-shrink-0"
+              className="text-indigo-300 dark:text-indigo-600 hover:underline shrink-0"
             >
               {t.action.label}
             </button>
           )}
-          <button onClick={() => onDismiss(t.id)} aria-label="Fermer la notification" className="p-2 -m-1 opacity-60 hover:opacity-100 flex-shrink-0"><X className="w-4 h-4" /></button>
+          <button onClick={() => onDismiss(t.id)} aria-label="Fermer la notification" className="p-2 -m-1 opacity-60 hover:opacity-100 shrink-0"><X className="w-4 h-4" /></button>
         </div>
       ))}
     </div>
