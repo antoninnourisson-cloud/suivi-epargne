@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pécule — Faites pousser votre épargne</title>
+<meta name="description" content="Pécule est une application web gratuite de suivi de l'épargne personnelle, calibrée pour la fiscalité française. Vos données restent sur votre propre Google Drive.">
+<link rel="icon" type="image/png" href="pwa-192x192.png">
+<link rel="canonical" href="https://pecule-app.com/presentation.html">
+<style>
+  :root { --bg: #fef9ec; --card: #ffffff; --text: #1c1917; --muted: #57534e; --line: #e7e5e4; --accent: #14532d; --accent-ink: #ffffff; --gold: #b45309; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #0c0a09; --card: #1c1917; --text: #f5f5f4; --muted: #a8a29e; --line: #292524; --accent: #8cc2a3; --accent-ink: #0a1f15; --gold: #fcd34d; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 40px 16px 64px; }
+  header { display: flex; align-items: center; gap: 16px; margin-bottom: 8px; }
+  header img { width: 64px; height: 64px; border-radius: 16px; }
+  h1 { font-size: 34px; margin: 0; line-height: 1.1; }
+  .tagline { margin: 4px 0 0; color: var(--gold); font-weight: 600; }
+  .lead { font-size: 18px; color: var(--muted); margin: 20px 0 24px; }
+  .cta { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 32px; }
+  .btn { display: inline-block; padding: 12px 20px; border-radius: 12px; font-weight: 700; text-decoration: none; }
+  .btn-primary { background: var(--accent); color: var(--accent-ink); }
+  .btn-secondary { border: 1px solid var(--line); color: var(--text); background: var(--card); }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 20px; margin-bottom: 16px; }
+  h2 { font-size: 19px; margin: 0 0 8px; }
+  p, li { color: var(--muted); }
+  ul { padding-left: 20px; margin: 8px 0 0; }
+  li + li { margin-top: 4px; }
+  strong { color: var(--text); }
+  a { color: var(--accent); }
+  footer { margin-top: 32px; font-size: 14px; color: var(--muted); }
+  footer a { margin-right: 16px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <img src="pwa-192x192.png" alt="Logo de Pécule : une pousse qui sort d'une pièce" width="64" height="64">
+    <div>
+      <h1>Pécule</h1>
+      <p class="tagline">Faites pousser votre épargne.</p>
+    </div>
+  </header>
+
+  <p class="lead">Pécule est une application web gratuite pour suivre son épargne personnelle : livrets, assurance vie, PEA, épargne salariale. Elle est calibrée pour la fiscalité française. Il n'y a ni base de données ni compte à créer : vos données restent dans <strong>un seul fichier, sur votre propre Google Drive</strong>.</p>
+
+  <div class="cta">
+    <a class="btn btn-primary" href="./">Ouvrir l'app</a>
+    <a class="btn btn-secondary" href="confidentialite.html">Règles de confidentialité</a>
+  </div>
+
+  <section>
+    <h2>Ce que fait Pécule</h2>
+    <ul>
+      <li><strong>Tous vos comptes d'épargne</strong> au même endroit, avec leurs plafonds, leurs taux et leurs intérêts réellement acquis (règle des quinzaines).</li>
+      <li><strong>Combien placer chaque mois, et où</strong>, d'après votre paie, vos charges fixes et vos objectifs.</li>
+      <li><strong>Fiscalité</strong> : impôt sur le revenu estimé, net d'un retrait (PFU, maturité de l'assurance vie et du PEA), éligibilité au LEP, aide à la déclaration de revenus.</li>
+      <li><strong>Agenda et rappels</strong> : jour de paie, révision des taux réglementés, échéances, avec des notifications facultatives.</li>
+      <li><strong>Historique et bilans</strong> : évolution de l'épargne, taux d'épargne mois par mois, bilan annuel.</li>
+      <li>Application installable sur téléphone et ordinateur (PWA), utilisable hors ligne.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Pourquoi l'app demande l'accès à Google Drive</h2>
+    <p>Pécule n'a pas de serveur de données : elle enregistre vos informations dans un fichier <code>suivi_epargne.json</code> sur votre Google Drive. Elle utilise pour cela l'autorisation Google la plus restreinte, <strong>« drive.file »</strong> : l'app ne peut voir et modifier que les fichiers qu'elle a créés elle-même, ou ceux que vous choisissez de lui ouvrir (par exemple une fiche de paie). <strong>Elle n'a aucun accès au reste de votre Drive.</strong></p>
+    <p>Votre adresse e-mail Google sert uniquement à vous identifier sur le petit serveur qui maintient votre connexion et envoie les notifications. Pécule n'envoie aucun e-mail, n'affiche aucune publicité et ne revend aucune donnée.</p>
+  </section>
+
+  <section>
+    <h2>Gratuit et ouvert</h2>
+    <p>Pécule est un projet personnel, non commercial. Son code source est public, sous licence libre <a href="https://github.com/antoninnourisson-cloud/suivi-epargne/blob/main/LICENSE">AGPL v3</a> : <a href="https://github.com/antoninnourisson-cloud/suivi-epargne">github.com/antoninnourisson-cloud/suivi-epargne</a>.</p>
+    <p>Pécule n'est pas un conseiller financier : ses calculs sont des estimations à vérifier auprès des sources officielles.</p>
+  </section>
+
+  <footer>
+    <a href="./">Ouvrir l'app</a>
+    <a href="confidentialite.html">Confidentialité</a>
+    <a href="https://github.com/antoninnourisson-cloud/suivi-epargne/issues">Nous contacter</a>
+  </footer>
+</main>
+</body>
+</html>
