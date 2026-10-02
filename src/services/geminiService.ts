@@ -142,8 +142,8 @@ export const extractPayslipData = async (
       let r: Response;
       try {
         r = await callModel(model, apiKey, body, timeoutMs);
-      } catch (e: any) {
-        if (e?.name === 'AbortError') { lastFailure = `${model} : délai dépassé`; continue; }
+      } catch (e: unknown) {
+        if ((e as { name?: string } | null)?.name === 'AbortError') { lastFailure = `${model} : délai dépassé`; continue; }
         throw e; // réseau coupé : inutile d'insister
       }
       if (r.ok) { res = r; break outer; }
@@ -167,7 +167,7 @@ export const extractPayslipData = async (
   const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
   if (!text) throw new GeminiError('RÉPONSE_GEMINI_VIDE');
 
-  let parsed: any;
+  let parsed: Record<string, unknown>;
   try {
     parsed = JSON.parse(text);
   } catch {
@@ -176,8 +176,8 @@ export const extractPayslipData = async (
 
   // Filtrage défensif : ne garder que des nombres finis / chaînes non vides, même si le
   // modèle a respecté le schéma — jamais de NaN ou de chaîne vide propagés dans l'état.
-  const num = (v: any): number | undefined => (typeof v === 'number' && Number.isFinite(v) ? v : undefined);
-  const str = (v: any): string | undefined => (typeof v === 'string' && v.trim() ? v.trim() : undefined);
+  const num = (v: unknown): number | undefined => (typeof v === 'number' && Number.isFinite(v) ? v : undefined);
+  const str = (v: unknown): string | undefined => (typeof v === 'string' && v.trim() ? v.trim() : undefined);
 
   const result: PayslipExtractedData = {
     employer: str(parsed.employer),

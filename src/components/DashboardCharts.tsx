@@ -12,8 +12,11 @@ import { SavingsAccount } from '../types';
 import { formatEUR } from '../lib/format';
 import { useIsDark, chartTheme } from '../lib/chartTheme';
 
+// Un point du graphique empilé : la date, puis le solde de chaque compte (clé = id du compte).
+export type StackedPoint = { date: string; displayDate: string; total?: number; [accountId: string]: string | number | undefined };
+
 interface StackedProps {
-  stackedData: any[];
+  stackedData: StackedPoint[];
   accounts: SavingsAccount[];
   getAccountColor: (id: string) => string;
   isConstrainedAccount: (type: SavingsAccount['type']) => boolean;

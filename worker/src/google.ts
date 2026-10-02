@@ -37,7 +37,7 @@ const postToken = async (params: Record<string, string>): Promise<TokenResponse>
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams(params),
   });
-  const json: any = await res.json().catch(() => ({}));
+  const json = await res.json<{ error?: string; error_description?: string }>().catch(() => ({} as { error?: string; error_description?: string }));
   if (!res.ok) throw new GoogleAuthError(json.error || `HTTP_${res.status}`, json.error_description || 'Google token endpoint error');
   return json as TokenResponse;
 };

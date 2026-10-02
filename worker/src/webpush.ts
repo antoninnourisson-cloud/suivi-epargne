@@ -63,7 +63,8 @@ export const encryptPushPayload = async (
   }
 
   const uaKey = await crypto.subtle.importKey('raw', uaPublic, { name: 'ECDH', namedCurve: 'P-256' }, false, []);
-  const ecdhSecret = new Uint8Array(await crypto.subtle.deriveBits({ name: 'ECDH', public: uaKey } as any, asPrivateKey, 256));
+  // Les types Workers nomment la clé `$public`, mais le runtime attend bien `public`.
+  const ecdhSecret = new Uint8Array(await crypto.subtle.deriveBits({ name: 'ECDH', public: uaKey } as SubtleCryptoDeriveKeyAlgorithm, asPrivateKey, 256));
 
   // HKDF (extract + expand sur un seul bloc, les sorties faisant <= 32 octets).
   // IKM = HKDF(auth_secret, ecdh_secret, "WebPush: info" || 0x00 || ua_public || as_public, 32)

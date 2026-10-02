@@ -12,7 +12,46 @@ const CLIENT_ID = '763862877733-hl1an9vcn0ibnoq2iq035927528mimd5.apps.googleuser
 const SCOPES = 'https://www.googleapis.com/auth/drive.file';
 const FILE_NAME = 'suivi_epargne.json';
 
-let tokenClient: any;
+// Types minimaux des SDK Google chargés par <script> (gapi, GIS, Picker) : uniquement ce
+// que l'app utilise.
+interface TokenResponse { access_token?: string; expires_in?: number; error?: string }
+type TokenCallback = ((resp: TokenResponse) => void) | '';
+interface TokenClient { callback: TokenCallback; requestAccessToken: (opts: { prompt: string }) => void }
+interface Gapi {
+  load: (lib: string, cb: (() => void) | { callback: () => void; onerror: (e?: unknown) => void }) => void;
+  client: { init: (opts: { discoveryDocs: string[] }) => Promise<void>; setToken: (token: string) => void };
+}
+interface PickerCallbackData { action: string; docs?: { id: string; name: string; mimeType: string }[] }
+interface PickerDocsView {
+  setMimeTypes: (types: string) => PickerDocsView;
+  setIncludeFolders: (on: boolean) => PickerDocsView;
+  setSelectFolderEnabled: (on: boolean) => PickerDocsView;
+}
+interface PickerBuilder {
+  addView: (view: PickerDocsView) => PickerBuilder;
+  setOAuthToken: (token: string) => PickerBuilder;
+  setAppId: (id: string) => PickerBuilder;
+  setDeveloperKey: (key: string) => PickerBuilder;
+  setCallback: (cb: (data: PickerCallbackData) => void) => PickerBuilder;
+  build: () => { setVisible: (on: boolean) => void };
+}
+interface PickerApi {
+  DocsView: new (viewId: string) => PickerDocsView;
+  ViewId: { DOCS: string };
+  PickerBuilder: new () => PickerBuilder;
+  Action: { PICKED: string; CANCEL: string };
+}
+interface GoogleSdk {
+  accounts: { oauth2: {
+    initTokenClient: (opts: { client_id: string; scope: string; callback: TokenCallback; include_granted_scopes?: boolean }) => TokenClient;
+    revoke: (token: string, done: () => void) => void;
+  } };
+  picker: PickerApi;
+}
+interface GoogleGlobals { gapi: Gapi; google: GoogleSdk }
+const googleWindow = () => window as unknown as Partial<GoogleGlobals>;
+
+let tokenClient: TokenClient | undefined;
 let gapiInited = false;
 let gisInited = false;
 
@@ -34,13 +73,13 @@ export const setOnAuthLost = (cb: (() => void) | null) => { onAuthLost = cb; };
  */
 const SDK_WAIT_TIMEOUT_MS = 20_000;
 
-const waitForGlobal = (name: string, timeoutMs: number): Promise<any> =>
+const waitForGlobal = <K extends keyof GoogleGlobals>(name: K, timeoutMs: number): Promise<GoogleGlobals[K]> =>
   new Promise((resolve, reject) => {
-    const existing = (window as any)[name];
+    const existing = googleWindow()[name];
     if (existing) { resolve(existing); return; }
     const startedAt = Date.now();
     const timer = setInterval(() => {
-      const value = (window as any)[name];
+      const value = googleWindow()[name];
       if (value) { clearInterval(timer); resolve(value); return; }
       if (Date.now() - startedAt >= timeoutMs) {
         clearInterval(timer);
@@ -57,16 +96,18 @@ export const initGoogleApi = async (): Promise<void> => {
 
   if (!gapiInited) {
     await new Promise<void>((resolve, reject) => {
-      gapi.load('client', async () => {
-        try {
-          await gapi.client.init({
-            discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'],
-          });
-          gapiInited = true;
-          resolve();
-        } catch (e) {
-          reject(e);
-        }
+      gapi.load('client', () => {
+        void (async () => {
+          try {
+            await gapi.client.init({
+              discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'],
+            });
+            gapiInited = true;
+            resolve();
+          } catch (e) {
+            reject(e);
+          }
+        })();
       });
     });
   }
@@ -75,6 +116,9 @@ export const initGoogleApi = async (): Promise<void> => {
     tokenClient = google.accounts.oauth2.initTokenClient({
       client_id: CLIENT_ID,
       scope: SCOPES,
+      // Seulement drive.file : sans ça, Google rajoute les autorisations accordées autrefois
+      // (gmail.send) et affiche « Google n'a pas validé cette application ».
+      include_granted_scopes: false,
       callback: '',
     });
     gisInited = true;
@@ -82,7 +126,7 @@ export const initGoogleApi = async (): Promise<void> => {
 };
 
 // --- GESTION DU TOKEN ---
-const storeToken = (resp: any) => {
+const storeToken = (resp: TokenResponse) => {
   localStorage.setItem('google_token', JSON.stringify(resp));
   // Les expires_in de GIS valent ~3600s ; on garde une marge.
   const ttl = (resp.expires_in ? resp.expires_in : 3500) * 1000;
@@ -113,7 +157,7 @@ const requestToken = (prompt: '' | 'none' | 'consent'): Promise<void> =>
       settled = true;
       reject(new Error('TOKEN_REQUEST_TIMEOUT'));
     }, TOKEN_TIMEOUT_MS);
-    tokenClient.callback = (resp: any) => {
+    tokenClient.callback = (resp: TokenResponse) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
@@ -222,8 +266,8 @@ const fetchWithTimeout = async (url: string, options: RequestInit = {}): Promise
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
     return await fetch(url, { ...options, signal: controller.signal });
-  } catch (e: any) {
-    if (e?.name === 'AbortError') throw new TypeError('NETWORK_TIMEOUT');
+  } catch (e: unknown) {
+    if ((e as { name?: string } | null)?.name === 'AbortError') throw new TypeError('NETWORK_TIMEOUT');
     throw e;
   } finally {
     clearTimeout(timer);
@@ -270,9 +314,9 @@ export const handleSignOut = async () => {
   try {
     if (stored) {
       const token = JSON.parse(stored).access_token;
-      (window as any).google?.accounts?.oauth2?.revoke(token, () => {});
+      googleWindow().google?.accounts?.oauth2?.revoke(token, () => {});
     }
-    (window as any).gapi?.client?.setToken('');
+    googleWindow().gapi?.client?.setToken('');
   } catch { /* no-op */ }
 };
 
@@ -301,7 +345,7 @@ export const findConfigFile = async (): Promise<string | null> => {
   return data.files && data.files.length > 0 ? data.files[0].id : null;
 };
 
-export const readConfigFile = async (fileId: string): Promise<any> => {
+export const readConfigFile = async (fileId: string): Promise<unknown> => {
   const res = await authedFetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`);
   return await res.json();
 };
@@ -360,7 +404,7 @@ export class ConflictError extends Error {
  */
 export const updateConfigFile = async (
   fileId: string,
-  data: any,
+  data: unknown,
   expectedRevision?: string | null
 ): Promise<string> => {
   if (expectedRevision != null && expectedRevision !== '') {
@@ -427,7 +471,7 @@ export const writeMonthlyBackup = async (monthKey: string, data: unknown): Promi
 // pas besoin de rouvrir le Picker à chaque session pour un même fichier déjà choisi).
 let pickerApiLoaded = false;
 
-const loadPickerApi = async (): Promise<any> => {
+const loadPickerApi = async (): Promise<PickerApi> => {
   const gapi = await waitForGlobal('gapi', SDK_WAIT_TIMEOUT_MS);
   if (!pickerApiLoaded) {
     await new Promise<void>((resolve, reject) => {
@@ -435,7 +479,7 @@ const loadPickerApi = async (): Promise<any> => {
     });
     pickerApiLoaded = true;
   }
-  return (window as any).google.picker;
+  return googleWindow().google!.picker;
 };
 
 export interface PickedDriveFile {
@@ -471,7 +515,7 @@ export const openDrivePicker = async (pickerApiKey: string): Promise<PickedDrive
       // échoue avec un 404 "fileId" alors que le fichier existe bel et bien.
       .setAppId(CLIENT_ID.split('-')[0])
       .setDeveloperKey(pickerApiKey)
-      .setCallback((data: any) => {
+      .setCallback((data: PickerCallbackData) => {
         if (data.action === picker.Action.PICKED) {
           const doc = data.docs?.[0];
           resolve(doc ? { id: doc.id, name: doc.name, mimeType: doc.mimeType } : null);

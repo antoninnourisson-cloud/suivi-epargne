@@ -4,7 +4,7 @@
 // pas été validé (voir src/services/appLockService.ts pour la nature exacte — et les
 // limites — de ce verrou).
 // ================================================
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Fingerprint, Loader2, AlertTriangle, Delete } from 'lucide-react';
 import { isBiometricEnabled, isPinEnabled, verifyBiometric, verifyPin, resetAllLocks, getPinCooldownSeconds } from '../services/appLockService';
 
@@ -39,7 +39,9 @@ export const AppLockScreen: React.FC<AppLockScreenProps> = ({ onUnlock, onForgot
   // Tentative automatique à l'affichage si la biométrie est configurée : Face ID/Touch ID
   // se déclenchent immédiatement la plupart du temps, évitant un clic superflu. Le PIN
   // reste disponible en repli si elle échoue ou est annulée.
-  useEffect(() => { if (biometricOn) void attemptBiometric(); }, []);
+  // Valeurs du premier rendu figées dans une ref : la tentative n'a lieu qu'au montage.
+  const autoAttemptRef = useRef(biometricOn ? attemptBiometric : null);
+  useEffect(() => { if (autoAttemptRef.current) void autoAttemptRef.current(); }, []);
 
   const [cooldown, setCooldown] = useState(0);
 

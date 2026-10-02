@@ -189,13 +189,14 @@ const App: React.FC = () => {
   );
 
   // Objectif du mois pour la jauge « Placé ce mois-ci » : même montant que le rappel de paie.
+  const { buildData, setLastView, loadDemoData } = data;
   const monthPlan = useMemo(
-    () => data.paydayAmount ?? computeMonthlySavingsCapacity(data.buildData()),
-    [data.paydayAmount, data.buildData]
+    () => data.paydayAmount ?? computeMonthlySavingsCapacity(buildData()),
+    [data.paydayAmount, buildData]
   );
-  const monthlyPay = useMemo(() => computeMonthlyPay(data.buildData()), [data.buildData]);
+  const monthlyPay = useMemo(() => computeMonthlyPay(buildData()), [buildData]);
   // Instantané complet des données (agenda, bilan annuel).
-  const fullData = useMemo(() => data.buildData(), [data.buildData]);
+  const fullData = useMemo(() => buildData(), [buildData]);
   const agendaNext = useMemo(() => buildAgenda(fullData).events.slice(0, 3), [fullData]);
   const lepTimeline = useMemo(() => lepTimelineFromData(fullData), [fullData]);
   // Épargne de précaution : charges fixes + argent plaisir, multipliés par le nombre de mois choisi.
@@ -303,16 +304,16 @@ const App: React.FC = () => {
     return () => navigator.serviceWorker.removeEventListener('message', onMessage);
   }, []);
 
-  // Sync view from data (au premier chargement)
+  // Sync view from data (au premier chargement). Mise à jour fonctionnelle : on lit l'écran
+  // courant sans dépendre de `view`, sinon revenir au tableau de bord relancerait l'effet
+  // (avec l'ancien `lastView`) et renverrait aussitôt vers l'écran précédent.
   useEffect(() => {
-      if (data.lastView && view === 'dashboard' && !deepLinkedRef.current) {
-          if (VALID_VIEWS.includes(data.lastView as View)) {
-              setView(data.lastView as View);
-          }
-      }
+    const last = data.lastView;
+    if (!last || deepLinkedRef.current || !VALID_VIEWS.includes(last as View)) return;
+    setView(v => (v === 'dashboard' ? last as View : v));
   }, [data.lastView]);
 
-  useEffect(() => { data.setLastView(view); }, [view]);
+  useEffect(() => { setLastView(view); }, [view, setLastView]);
 
   // Toast discret de confirmation quand une sauvegarde vient de réussir.
   // On se cale sur `lastSavedAt`, qui n'est posé QU'APRÈS une écriture Drive confirmée :
@@ -330,7 +331,7 @@ const App: React.FC = () => {
       addToast({ message: 'Enregistré', kind: 'success', durationMs: 1500 });
     }
     lastToastedSaveRef.current = ts;
-  }, [data.lastSavedAt]);
+  }, [data.lastSavedAt, addToast]);
 
   // Init Google API — une seule fois par chargement de page : en développement, React
   // (StrictMode) rejoue les effets de montage, ce qui lançait deux initialisations
@@ -349,7 +350,7 @@ const App: React.FC = () => {
     initStartedRef.current = true;
     // Mode démo (développement uniquement) : données fictives, sans Google.
     if (import.meta.env.DEV && new URLSearchParams(window.location.search).has('demo')) {
-      import('./dev/demoData').then(({ DEMO_DATA }) => { setIsApiLoaded(true); setIsAuthenticated(true); data.loadDemoData(DEMO_DATA); }).catch(console.error);
+      import('./dev/demoData').then(({ DEMO_DATA }) => { setIsApiLoaded(true); setIsAuthenticated(true); loadDemoData(DEMO_DATA); }).catch(console.error);
       return;
     }
     initGoogleApi()
@@ -366,7 +367,7 @@ const App: React.FC = () => {
               setIsAuthenticated(true);
               setLoadRequested(true);
             }
-          } catch (e: any) {
+          } catch (e) {
             if (e instanceof TypeError) {
               // Serveur injoignable : on garde la session, l'utilisateur pourra réessayer.
               addToast({ message: 'Serveur injoignable — vérifiez votre connexion puis rechargez.', kind: 'error' });
@@ -402,7 +403,7 @@ const App: React.FC = () => {
         console.error("Erreur init Google API", err);
         setApiError(true);
       });
-  }, []);
+  }, [addToast, loadDemoData]);
 
   const handleLogin = async () => {
     try {
@@ -696,7 +697,11 @@ const App: React.FC = () => {
             <button onClick={handleLogin} className="w-full flex justify-center gap-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 py-4 rounded-xl font-bold hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 transition-colors">Continuer avec Google</button>
           }
         </div>
-        <p className="mt-4 text-[11px] font-bold text-emerald-100/70">version {LATEST_VERSION}</p>
+        <p className="mt-4 text-xs font-bold text-emerald-50/85 flex gap-4 justify-center">
+          <a href="presentation.html" className="underline underline-offset-2 hover:text-white">Découvrir Pécule</a>
+          <a href="confidentialite.html" className="underline underline-offset-2 hover:text-white">Confidentialité</a>
+        </p>
+        <p className="mt-2 text-[11px] font-bold text-emerald-100/70">version {LATEST_VERSION}</p>
       </div>
     );
   }

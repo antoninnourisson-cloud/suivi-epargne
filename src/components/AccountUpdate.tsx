@@ -29,7 +29,9 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
   // `dirty` : saisi par l'utilisateur. Les brouillons NON modifiés suivent les comptes en
   // direct (un ajout rapide fait pendant que l'écran est ouvert n'est plus écrasé par un
   // ancien solde au moment d'enregistrer).
-  type Draft = { owned: string, parental: string, date: string, deposits: string, cashFlow: number, bankTotal?: string, touched?: string[] };
+  type DraftField = 'owned' | 'parental' | 'date' | 'deposits' | 'cashFlow' | 'bankTotal';
+  type Draft = { owned: string, parental: string, date: string, deposits: string, cashFlow: number, bankTotal?: string, touched?: DraftField[] };
+  const copyField = <K extends DraftField>(to: Draft, from: Draft, k: K) => { to[k] = from[k]; };
   const draftFrom = (account: SavingsAccount): Draft => ({
     owned: toInputAmount(account.ownedAmount),
     parental: toInputAmount(account.parentalCapital),
@@ -42,7 +44,7 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
   // Toute modification passe par ici : on retient CHAMP PAR CHAMP ce que l'utilisateur a
   // saisi. Les champs non touchés suivent les comptes en direct (changer seulement la date
   // n'empêche plus un ajout rapide d'être pris en compte).
-  const FIELDS = ['owned', 'parental', 'date', 'deposits', 'cashFlow', 'bankTotal'] as const;
+  const FIELDS: readonly DraftField[] = ['owned', 'parental', 'date', 'deposits', 'cashFlow', 'bankTotal'];
   const setUpdates = (fn: (prev: Record<string, Draft>) => Record<string, Draft>) =>
     setUpdatesRaw(prev => {
       const next = fn(prev);
@@ -59,7 +61,7 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
       const d = prev[a.id];
       if (!d?.touched?.length) return [a.id, fresh];
       const merged: Draft = { ...fresh, touched: d.touched };
-      for (const f of d.touched) (merged as any)[f] = (d as any)[f];
+      for (const f of d.touched) copyField(merged, d, f);
       return [a.id, merged];
     })));
     // eslint-disable-next-line react-hooks/exhaustive-deps

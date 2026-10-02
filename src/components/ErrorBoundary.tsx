@@ -38,6 +38,8 @@ export class ErrorBoundary extends React.Component<{ children: React.ReactNode; 
  * resté ouvert sur l'ancienne version), on réessaie une fois, puis on recharge la page une
  * seule fois pour récupérer la nouvelle version.
  */
+// Même contrainte que React.lazy (ComponentType<any>) : tout autre type perd les props des écrans.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const lazyWithRetry = <T extends React.ComponentType<any>>(factory: () => Promise<{ default: T }>) =>
   React.lazy(async () => {
     try {

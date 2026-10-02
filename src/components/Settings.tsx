@@ -15,6 +15,9 @@ import { LATEST_TAX_SCALE } from '../constants';
 import { parseISODate } from '../lib/dates';
 import { ChangelogHistory } from './WhatsNew';
 
+// Champs numériques de la configuration fiscale (ceux de la grille de saisie générique).
+type NumericFiscalField = { [K in keyof FiscalConfig]-?: FiscalConfig[K] extends number | undefined ? K : never }[keyof FiscalConfig];
+
 interface SettingsProps {
   payslips?: PayslipRecord[];
   config: FiscalConfig;
@@ -128,7 +131,7 @@ export const Settings: React.FC<SettingsProps> = ({ payslips = [], config, workB
     setSettingPin(true);
   };
 
-  const handleFiscalChange = (field: keyof FiscalConfig, value: any) => {
+  const handleFiscalChange = <K extends keyof FiscalConfig>(field: K, value: FiscalConfig[K]) => {
     setLocalFiscal(prev => ({ ...prev, [field]: value }));
   };
 
@@ -145,7 +148,7 @@ export const Settings: React.FC<SettingsProps> = ({ payslips = [], config, workB
   const addBracket = () => handleFiscalChange('taxBrackets', [...localFiscal.taxBrackets, { limit: 0, rate: 0 }]);
   const removeBracket = (index: number) => handleFiscalChange('taxBrackets', localFiscal.taxBrackets.filter((_, i) => i !== index));
 
-  const updateBenefit = (category: keyof WorkBenefits, field: string, value: any) => {
+  const updateBenefit = <C extends keyof WorkBenefits, F extends keyof WorkBenefits[C]>(category: C, field: F, value: WorkBenefits[C][F]) => {
     setLocalBenefits(prev => ({
         ...prev,
         [category]: { ...prev[category], [field]: value }
@@ -403,7 +406,7 @@ export const Settings: React.FC<SettingsProps> = ({ payslips = [], config, workB
                 ['socialChargesLifeInsurance', 'Prélèv. sociaux AV (ex. 0,172)', localFiscal.socialChargesLifeInsurance ?? 0.172],
                 ['standardAllowanceCap', 'Abattement 10 % : plafond (€)', localFiscal.standardAllowanceCap ?? 0],
                 ['standardAllowanceMin', 'Abattement 10 % : minimum (€)', localFiscal.standardAllowanceMin ?? 0],
-              ] as [keyof FiscalConfig, string, number][]).map(([field, label, value]) => (
+              ] as [NumericFiscalField, string, number][]).map(([field, label, value]) => (
                 <div key={field}>
                   <label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">{label}</label>
                   <NumberInput ariaLabel={label} value={value} onChange={v => handleFiscalChange(field, v)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-sm font-bold" />

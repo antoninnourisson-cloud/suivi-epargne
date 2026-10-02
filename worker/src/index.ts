@@ -179,7 +179,9 @@ const handleAuthStart = async (req: Request, env: Env, url: URL): Promise<Respon
     // offline + consent : garantit la délivrance d'un refresh token à chaque connexion.
     access_type: 'offline',
     prompt: 'consent',
-    include_granted_scopes: 'true',
+    // Pas d'include_granted_scopes : Google rajouterait les autorisations accordées
+    // autrefois (gmail.send), donc l'écran « application non validée ».
+    include_granted_scopes: 'false',
     state: signed,
   });
   // Le nonce du state est aussi posé en cookie : un state intercepté ne peut pas être

@@ -15,6 +15,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '2026.10.02-9',
+    date: '2026-10-02',
+    title: 'Connexion Google sans avertissement',
+    items: [
+      "La connexion ne redemande plus d'anciennes autorisations : Google n'affiche plus « application non validée ».",
+      "L'écran de connexion mène à la présentation de Pécule et aux règles de confidentialité.",
+    ],
+  },
+  {
     version: '2026.10.02-8',
     date: '2026-10-02',
     title: "Plus d'e-mails, plus de garde-fous",

@@ -27,8 +27,8 @@ export const NotificationSettings: React.FC<{ paydayDay?: number; onOpenPayday?:
     try {
       await action();
       if (okText) setMessage({ kind: 'ok', text: okText });
-    } catch (e: any) {
-      const code = e?.message;
+    } catch (e) {
+      const code = (e as { message?: unknown } | null | undefined)?.message;
       setMessage({
         kind: 'error',
         text: code === 'PERMISSION_DENIED'

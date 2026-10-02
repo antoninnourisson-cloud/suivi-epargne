@@ -34,7 +34,7 @@ const isSupported = () =>
 
 /** Sur iPhone, la Push API n'existe que dans l'app installée sur l'écran d'accueil. */
 export const isIosOutsideHomeScreen = (): boolean =>
-  /iPhone|iPad|iPod/.test(navigator.userAgent) && !(window.navigator as any).standalone;
+  /iPhone|iPad|iPod/.test(navigator.userAgent) && !(window.navigator as Navigator & { standalone?: boolean }).standalone;
 
 const getRegistration = async (): Promise<ServiceWorkerRegistration | undefined> => {
   // `serviceWorker.ready` ne se résout JAMAIS sans service worker (ex. `npm run dev`) :

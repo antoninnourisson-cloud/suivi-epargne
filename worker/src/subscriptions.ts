@@ -46,11 +46,12 @@ const decodedLength = (s: unknown, max = MAX_KEY_LENGTH): number => {
  * Abonnement reconstruit champ par champ ({endpoint, keys:{p256dh, auth}}), ou `null` s'il
  * est invalide. Rien d'autre que ces trois chaînes n'est jamais stocké.
  */
-export const parseSubscription = (raw: any): PushSubscriptionJSON | null => {
+export const parseSubscription = (raw: unknown): PushSubscriptionJSON | null => {
   if (!raw || typeof raw !== 'object') return null;
-  const { endpoint, keys } = raw;
+  const { endpoint, keys } = raw as { endpoint?: unknown; keys?: unknown };
   if (!isAllowedPushEndpoint(endpoint) || !keys || typeof keys !== 'object') return null;
-  const { p256dh, auth } = keys;
+  const { p256dh, auth } = keys as { p256dh?: unknown; auth?: unknown };
+  if (typeof p256dh !== 'string' || typeof auth !== 'string') return null; // (déjà exclu par decodedLength)
   if (decodedLength(p256dh) !== 65 || b64urlDecode(p256dh)[0] !== 0x04) return null; // point P-256 non compressé
   if (decodedLength(auth) !== 16) return null;
   return { endpoint, keys: { p256dh, auth } };

@@ -33,7 +33,7 @@ export const promptInstall = async (): Promise<boolean> => {
 };
 
 export const isStandalone = () =>
-  window.matchMedia?.('(display-mode: standalone)').matches || (navigator as any).standalone === true;
+  window.matchMedia?.('(display-mode: standalone)').matches || (navigator as Navigator & { standalone?: boolean }).standalone === true;
 
 export const mobilePlatform = (): 'ios' | 'android' | null => {
   const ua = navigator.userAgent;

@@ -116,7 +116,7 @@ export const MAX_BODY_BYTES = 4096;
 export class BodyTooLargeError extends Error { constructor() { super('BODY_TOO_LARGE'); } }
 
 /** JSON du corps, ou `{}` s'il est vide ou invalide. Lève BodyTooLargeError au-delà de `max`. */
-export const readJsonBody = async (req: Request, max = MAX_BODY_BYTES): Promise<any> => {
+export const readJsonBody = async (req: Request, max = MAX_BODY_BYTES): Promise<Record<string, unknown>> => {
   const declared = Number(req.headers.get('Content-Length') || '0');
   if (declared > max) throw new BodyTooLargeError();
   const text = await req.text();

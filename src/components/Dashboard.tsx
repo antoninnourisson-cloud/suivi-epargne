@@ -1,4 +1,5 @@
-import React, { useState, useMemo, useEffect, Suspense } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, Suspense } from 'react';
+import type { StackedPoint } from './DashboardCharts';
 
 // Graphiques chargés à part (recharts) : les cartes s'affichent sans les attendre.
 const StackedSavingsChart = lazyWithRetry(() => import('./DashboardCharts').then(m => ({ default: m.StackedSavingsChart })));
@@ -66,7 +67,7 @@ interface DashboardProps {
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalConfig, onDeleteAccount, recurringMovements = [], onRecordRecurring, monthPlan, monthlyPay = 0, paydayDay, trackingStartDate, subscriptions = [], onUpdateFiscalConfig, onOpenSettings, onUpdateAccounts, payRaise, onAcceptPayRaise, onDismissPayRaise, onNavigate, onAddAccount, lastExportAt, onExport, emergency, onSetEmergencyMonths, agendaNext = [], lepTimeline }) => {
-  const [dateRange, setDateRange] = useState(() => {
+  const [dateRange, setDateRange] = useState<{ start: string; end: string }>(() => {
     try {
         const stored = localStorage.getItem('dashboard_date_range');
         if (stored) return JSON.parse(stored);
@@ -151,7 +152,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalC
   // Les seuils de maturité viennent de fiscalConfig.legalMaturity (comme lib/finance.ts et
   // l'Horloge fiscale) : ils étaient codés en dur ici (5/8), seul écran incapable de suivre
   // la config — trois réponses différentes possibles pour le même compte.
-  const getAccountStatus = (account: SavingsAccount): 'AVAILABLE' | 'TAX_LOCKED' | 'HARD_LOCKED' => {
+  const getAccountStatus = useCallback((account: SavingsAccount): 'AVAILABLE' | 'TAX_LOCKED' | 'HARD_LOCKED' => {
     const { pea, assuranceVie, pee } = fiscalConfig.legalMaturity;
     if (account.type === AccountType.PEE) {
         const now = new Date();
@@ -171,7 +172,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalC
     if (account.type === AccountType.PEA) return ageInYears < pea ? 'TAX_LOCKED' : 'AVAILABLE';
     if (account.type === AccountType.ASSURANCE_VIE) return ageInYears < assuranceVie ? 'TAX_LOCKED' : 'AVAILABLE';
     return 'AVAILABLE';
-  };
+  }, [fiscalConfig]);
 
   const availabilityStats = useMemo(() => {
     let available = 0; let taxLocked = 0; let hardLocked = 0;
@@ -183,7 +184,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalC
       else hardLocked += owned;
     });
     return { available, taxLocked, hardLocked };
-  }, [accounts, fiscalConfig]);
+  }, [accounts, getAccountStatus]);
 
   const unlockCost = useMemo(() => computeUnlockCost(accounts, fiscalConfig), [accounts, fiscalConfig]);
   const fiscalReview = useMemo(() => findFiscalReview(fiscalConfig), [fiscalConfig]);
@@ -212,7 +213,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalC
 
   // --- LOGIQUE CORRIGÉE : GESTION DU FUTUR ---
   const stackedData = useMemo(() => {
-    const data: any[] = [];
+    const data: StackedPoint[] = [];
     // parseISODate (minuit LOCAL) et non `new Date('YYYY-MM-DD')` (minuit UTC) : l'ancien
     // mélange UTC-parse + `setDate` local faisait SAUTER le jour du passage à l'heure
     // d'hiver (reproduit : le 26/10/2025 n'était jamais généré), donc les mouvements de ce
@@ -251,7 +252,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalC
     for (let d = new Date(endDate); d >= effectiveStart; d.setDate(d.getDate() - 1)) {
       const dateStr = formatISODay(d);
 
-      const daySnapshot: any = {
+      const daySnapshot: StackedPoint = {
         date: dateStr,
         displayDate: d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })
       };
@@ -719,9 +720,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalC
             {accounts.some(a => isConstrainedAccount(a.type)) && <p className="text-[11px] text-slate-500 dark:text-slate-400">Zones hachurées : épargne disponible seulement avec impôt ou bloquée.</p>}
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <input type="date" value={dateRange.start} onChange={(e) => setDateRange((prev: any) => ({ ...prev, start: e.target.value }))} aria-label="Début de la période" className="bg-slate-50 dark:bg-slate-900 text-sm border border-slate-200 dark:border-slate-700 p-2 rounded-lg" />
+            <input type="date" value={dateRange.start} onChange={(e) => setDateRange((prev) => ({ ...prev, start: e.target.value }))} aria-label="Début de la période" className="bg-slate-50 dark:bg-slate-900 text-sm border border-slate-200 dark:border-slate-700 p-2 rounded-lg" />
             <span className="text-slate-500 dark:text-slate-400 text-sm">à</span>
-            <input type="date" value={dateRange.end} onChange={(e) => setDateRange((prev: any) => ({ ...prev, end: e.target.value }))} aria-label="Fin de la période" className="bg-slate-50 dark:bg-slate-900 text-sm border border-slate-200 dark:border-slate-700 p-2 rounded-lg" />
+            <input type="date" value={dateRange.end} onChange={(e) => setDateRange((prev) => ({ ...prev, end: e.target.value }))} aria-label="Fin de la période" className="bg-slate-50 dark:bg-slate-900 text-sm border border-slate-200 dark:border-slate-700 p-2 rounded-lg" />
             <Button onClick={exportSession} variant="secondary" className="text-xs h-9 gap-2">
               <Save className="w-4 h-4 text-indigo-600" /> Export CSV
             </Button>
