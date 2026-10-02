@@ -49,6 +49,8 @@ export default defineConfig({
       // worker généré plutôt que de réécrire toute la stratégie de cache à la main.
       workbox: {
         importScripts: ['push-sw.js'],
+        // La police est servie avec l'app : précachée pour l'affichage hors ligne.
+        globPatterns: ['**/*.{js,css,html,png,woff2}'],
       },
       // Seules les icônes réellement présentes dans public/ (les anciennes entrées
       // favicon.ico / apple-touch-icon.png / mask-icon.svg pointaient vers des fichiers absents).

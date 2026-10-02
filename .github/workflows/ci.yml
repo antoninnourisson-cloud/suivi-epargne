@@ -83,8 +83,12 @@ jobs:
             echo "Total \`dist/\` : $(du -sk dist | cut -f1) Ko"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Audit des dépendances de production
+      - name: Audit des dépendances (app et serveur, outils de développement compris)
         # Informatif : une faille publiée dans une dépendance ne doit pas bloquer un
         # déploiement urgent. Le résultat reste visible (étape en orange dans le journal).
+        # Les outils de développement sont audités aussi : une faille de Vitest ou de Vite
+        # peut exposer les fichiers du poste de développement.
         continue-on-error: true
-        run: npm audit --omit=dev --audit-level=high
+        run: |
+          npm audit --audit-level=moderate
+          npm audit --prefix worker --audit-level=moderate

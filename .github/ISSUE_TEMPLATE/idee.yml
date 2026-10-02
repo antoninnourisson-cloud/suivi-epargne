@@ -1,0 +1,16 @@
+name: Idée
+description: Proposer une fonctionnalité ou une amélioration
+labels: [idée]
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: Le besoin
+      description: Quel problème cela résoudrait-il ? Dans quelle situation ?
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: L'idée
+      description: Comment l'imaginez-vous dans l'app ?

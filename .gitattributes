@@ -1,0 +1,8 @@
+# Fins de ligne LF dans le dépôt et sur le disque, quel que soit le système.
+* text=auto eol=lf
+
+*.png   binary
+*.jpg   binary
+*.ico   binary
+*.woff2 binary
+*.pdf   binary

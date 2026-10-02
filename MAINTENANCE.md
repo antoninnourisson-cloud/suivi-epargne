@@ -13,7 +13,7 @@ Voir aussi : [README.md](README.md) (fonctionnement général), [worker/README.m
   - `valuation` : variation de valeur (intérêts, plus-values) ;
   - `parental` : part des parents (ajout, correction, restitution) ;
   - `adjustment` : correction, « Pas de l'épargne ».
-- **`isSavingsFlow`** ([`src/lib/finance.ts`](src/lib/finance.ts)) décide de ce qui compte comme épargne : seulement les mouvements sans `kind`, hors solde initial, et postérieurs à `config.trackingStartDate` (« Repartir de zéro »). « Placé », le taux d'épargne, la projection et les bilans en dépendent : tout nouveau calcul d'épargne doit passer par cette fonction.
+- **`isSavingsFlow`** ([`src/lib/finance/savings.ts`](src/lib/finance/savings.ts)) décide de ce qui compte comme épargne : seulement les mouvements sans `kind`, hors solde initial, et postérieurs à `config.trackingStartDate` (« Repartir de zéro »). « Placé », le taux d'épargne, la projection et les bilans en dépendent : tout nouveau calcul d'épargne doit passer par cette fonction.
 - Un mouvement de restitution (`isRestitutionMovement`) ne se supprime ni ne se renomme à la main.
 
 ### Capital des parents
@@ -25,7 +25,7 @@ Voir aussi : [README.md](README.md) (fonctionnement général), [worker/README.m
 - **Un seul point d'entrée : `migrate()`** dans [`src/lib/schema.ts`](src/lib/schema.ts). Tout ce qui entre dans l'app (chargement Drive, import, restauration locale, synchronisation entre onglets, lecture par le Worker) passe par lui. Une nouvelle forme de données = une migration dans `migrate()`, nulle part ailleurs.
 - **`APP_SCHEMA_VERSION`** : à augmenter **seulement** quand un changement rend le fichier dangereux pour une ancienne version de l'app (par exemple un champ dont le sens change). Les anciens clients refusent alors d'écrire et demandent une mise à jour. Ajouter un champ facultatif ne demande pas d'augmenter la version.
 - **Les champs inconnus sont conservés** : `migrate()` garde tout ce qu'il ne connaît pas (`...rest`). Une version de l'app ne doit jamais effacer ce qu'une version plus récente a ajouté. Ne pas réécrire le fichier à partir d'une liste blanche de champs.
-- **La clé Gemini reste sur l'appareil** : `stripDeviceSecrets()` la retire de tout ce qui sort (fichier Drive, export, sauvegarde) et `canonicalize()` l'ignore. Ne jamais l'écrire sur Drive ni l'envoyer au Worker.
+- **La clé Gemini reste sur l'appareil** : `withoutDeviceOnlyFields()` la retire de tout ce qui sort (fichier Drive, export, sauvegarde) et `canonicalize()` l'ignore. Ne jamais l'écrire sur Drive ni l'envoyer au Worker.
 
 ### Divers
 - Ne jamais révoquer le jeton Google côté navigateur en mode serveur (cela déconnecterait tous les appareils, voir ROADMAP).

@@ -1,0 +1,29 @@
+name: Bug
+description: Quelque chose ne marche pas comme prévu
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: "N'indiquez aucune donnée réelle (montants, documents). Pour une faille de sécurité, suivez plutôt SECURITY.md."
+  - type: textarea
+    id: what
+    attributes:
+      label: Ce qui se passe
+      description: Ce que vous avez fait, ce que vous attendiez, ce qui s'est passé.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Pour reproduire
+      placeholder: "1. Ouvrir…\n2. Cliquer sur…"
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: "Paramètres → Quoi de neuf (ex. 2026.10.02-6)"
+  - type: input
+    id: device
+    attributes:
+      label: Appareil et navigateur
+      placeholder: "ex. iPhone 15, app installée ; Windows 11, Chrome"

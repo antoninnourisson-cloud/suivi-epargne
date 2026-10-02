@@ -6,9 +6,9 @@
 <title>Pécule — Confidentialité</title>
 <meta name="description" content="Règles de confidentialité de l'application personnelle Pécule (anciennement Suivi Épargne).">
 <style>
-  :root { --bg: #f8fafc; --card: #ffffff; --text: #0f172a; --muted: #475569; --line: #e2e8f0; --accent: #4f46e5; }
+  :root { --bg: #f8fafc; --card: #ffffff; --text: #0f172a; --muted: #475569; --line: #e2e8f0; --accent: #2a6b4b; }
   @media (prefers-color-scheme: dark) {
-    :root { --bg: #0f172a; --card: #1e293b; --text: #e2e8f0; --muted: #94a3b8; --line: #334155; --accent: #818cf8; }
+    :root { --bg: #0f172a; --card: #1e293b; --text: #e2e8f0; --muted: #94a3b8; --line: #334155; --accent: #8cc2a3; }
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif; }
@@ -30,12 +30,12 @@
   <section>
     <h2>Où sont vos données</h2>
     <p>Toutes les données de l'application (comptes, mouvements, objectifs, réglages) sont enregistrées dans un fichier unique sur <strong>votre propre Google Drive</strong>. L'application n'a accès qu'aux fichiers qu'elle a elle-même créés (autorisation Google « drive.file ») : elle ne voit pas le reste de votre Drive.</p>
-    <p>Une <strong>copie locale</strong> de ces données est aussi gardée sur chaque appareil où vous utilisez l'application (stockage du navigateur), pour qu'elle s'ouvre vite et fonctionne hors ligne. Elle reste sur l'appareil ; la déconnexion ou l'effacement des données du site la supprime.</p>
+    <p>Une <strong>copie locale</strong> de ces données est aussi gardée sur chaque appareil où vous utilisez l'application (stockage du navigateur), pour qu'elle s'ouvre vite et fonctionne hors ligne. Elle est <strong>chiffrée</strong> (AES-GCM, clé non exportable propre à l'appareil) et reste sur l'appareil ; la déconnexion ou l'effacement des données du site la supprime.</p>
   </section>
 
   <section>
     <h2>Le serveur de l'application</h2>
-    <p>Un petit serveur (Cloudflare Workers) sert uniquement à maintenir votre connexion Google et à envoyer des rappels. Voici <strong>exactement</strong> ce qu'il conserve :</p>
+    <p>Un petit serveur (Cloudflare Workers) a trois rôles : maintenir votre connexion Google, envoyer des rappels, et lire chaque semaine des pages publiques de service-public.gouv.fr pour la veille fiscale (aucune donnée vous concernant n'y circule). Voici <strong>exactement</strong> ce qu'il conserve :</p>
     <ul>
       <li><strong>Un jeton Google de longue durée</strong> (« refresh token »), chiffré (AES-256-GCM) avec une clé gardée à part, pour vous éviter de vous reconnecter à chaque ouverture ;</li>
       <li><strong>Votre adresse e-mail et votre identifiant Google</strong>, pour savoir à quel compte appartient ce jeton ;</li>
@@ -57,8 +57,13 @@
     <h2>Services tiers</h2>
     <ul>
       <li><strong>Google Drive et Gmail</strong> : stockage des données, et envoi d'un e-mail récapitulatif à l'adresse que vous configurez vous-même (fonction facultative).</li>
-      <li><strong>Google Gemini</strong> (facultatif) : si vous importez une fiche de paie, le document est envoyé à l'API Gemini avec votre propre clé pour en extraire les montants. Une fiche de paie contient des <strong>informations personnelles</strong> (nom, adresse, numéro de sécurité sociale, employeur, salaire). Avec l'offre gratuite de Gemini, Google peut utiliser les contenus envoyés pour <strong>améliorer ses modèles</strong>, et des personnes peuvent les relire : n'importez une fiche que si cela vous convient, ou utilisez une clé d'une offre payante.</li>
-      <li><strong>Google Fonts</strong> : les polices de caractères de l'application sont chargées depuis les serveurs de Google, qui reçoivent donc votre adresse IP à l'ouverture.</li>
+      <li><strong>Google Gemini</strong> (facultatif), toujours avec votre propre clé, gardée sur l'appareil seulement :
+        <ul>
+          <li><strong>fiches de paie</strong> : le document est envoyé pour en extraire les montants. Il contient des informations personnelles (nom, adresse, numéro de sécurité sociale, employeur, salaire) ;</li>
+          <li><strong>avis d'imposition</strong> : le document est envoyé pour en relever le revenu fiscal de référence et le nombre de parts. Il contient aussi des informations personnelles (nom, adresse, numéro fiscal, revenus du foyer) ;</li>
+          <li><strong>veille fiscale</strong> : seuls le texte de pages publiques de service-public.gouv.fr et les valeurs fiscales actuelles de l'application sont envoyés, aucune donnée personnelle.</li>
+        </ul>
+        Avec l'offre gratuite de Gemini, Google peut utiliser les contenus envoyés pour <strong>améliorer ses modèles</strong>, et des personnes peuvent les relire : n'importez un document que si cela vous convient, ou utilisez une clé d'une offre payante. Rien n'est envoyé sans une action de votre part.</li>
       <li><strong>Services de notification</strong> (Google, Apple, Mozilla, Microsoft, selon l'appareil) : ils acheminent les notifications chiffrées sans pouvoir les lire.</li>
     </ul>
     <p>Aucune publicité, aucun outil de mesure d'audience, aucune revente de données.</p>

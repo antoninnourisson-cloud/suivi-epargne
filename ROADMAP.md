@@ -14,15 +14,22 @@
 - **Restitution du capital parental**, agenda des douze mois, bilan annuel, répartition personnalisée de l'épargne, taux datés, journal des modifications, corrections « Pas de l'épargne » et point de départ du suivi.
 - **Quoi de neuf** : historique des mises à jour en dur (`src/changelog.ts`), affiché une fois après chaque mise à jour.
 - **Déploiement automatique du Worker** depuis GitHub Actions (`.github/workflows/worker.yml`), à chaque push qui touche le code du serveur ou ce qu'il partage avec l'app. Actif dès que les deux secrets du dépôt `CLOUDFLARE_API_TOKEN` et `CLOUDFLARE_ACCOUNT_ID` existent ; d'ici là, le job est sauté et `npm run deploy` reste possible à la main.
+- **Préférences de notification par type**, **avantages salariaux d'après les fiches de paie**, **LEP : alerte avant fermeture et lecture de l'avis d'imposition**, **veille fiscale hebdomadaire** (Gemini propose, vous validez).
 
-## Pistes non démarrées
+## En cours : plan d'action de l'audit 360° (octobre 2026)
+
+1. **Corrections immédiates** : confidentialité (avis d'imposition), historique daté, documentation, licence AGPL v3, CONTRIBUTING, SECURITY, police Inter hébergée avec l'app, Vitest 5.
+2. **Accessibilité urgente** (WCAG 2.2 AA) : contrastes, lien d'évitement, titres d'écran, toast « Annuler », champs, import de fichier, mouvement réduit.
+3. **Filet de sécurité** : couverture de tests avec seuils, tests de bout en bout en mode démo, lint strict, contrôles sur les virements et l'ajout rapide, validation par schéma aux entrées.
+4. **Design system et refonte** : jetons sémantiques, composants `ui/`, graphiques SVG maison, refonte Accueil, Pilotage et Actualiser.
+5. **Produit** : point de paie (bilan calé sur le 27), jalons et séries (gamification sobre), contrôle des fiches de paie, puis simulateur « Et si… » et alertes unifiées.
+6. **Architecture** : commandes sorties d'`App.tsx`, store et moteur de synchronisation, montants en centimes, paquet `domain/` partagé avec le serveur.
+7. **Hébergement** : origine dédiée (domaine ou Cloudflare Pages), en-têtes de sécurité HTTP.
+
+## Plus tard
 
 - **TypeScript 7** : à faire quand typescript-eslint le prendra en charge (aujourd'hui jusqu'à 6.0, déjà en place).
 - **Après la restitution (janvier 2027)** : retirer l'autorisation Gmail (`gmail.send`) de la connexion Google si plus aucun e-mail aux parents n'est utile.
-- **Nom de domaine propre** pour l'app (isole l'app des autres pages github.io) : décision et petit coût annuel.
-
-- **Préférences de notification par type** (couper par exemple le rappel « soldes non actualisés » en gardant les échéances). Aujourd'hui, c'est tout ou rien par appareil.
-- **Pré-remplissage des avantages salariaux depuis une fiche de paie**. Mis de côté : `WorkBenefits` attend des taux et des prix de base, alors que la fiche ne donne que des montants déjà calculés.
 
 ## Notes techniques à ne pas perdre
 
@@ -30,5 +37,5 @@
 - **Modèles Gemini** : Google les déprécie régulièrement. Le modèle principal et les modèles de repli sont des constantes en tête de `src/services/geminiService.ts`. Un modèle retiré (404) est sauté automatiquement.
 - **Onglets PWA restés ouverts** : un onglet qui exécute une ancienne version peut effacer des champs récents du fichier Drive. L'app se recharge donc dès qu'un nouveau service worker prend le contrôle de la page (`src/index.tsx`).
 - **Session du serveur** : l'écran de consentement OAuth doit rester « En production ». En mode test, Google fait expirer les refresh tokens au bout de 7 jours.
-- **Mouvements `kind`** : `valuation` (variation de valeur), `parental` (part des parents), `adjustment` (correction, pas de l'épargne). Seuls les mouvements sans `kind`, hors solde initial et après `config.trackingStartDate`, comptent comme épargne (`isSavingsFlow` dans `src/lib/finance.ts`). Tout changement de solde passe par `src/lib/accountOps.ts`.
+- **Mouvements `kind`** : `valuation` (variation de valeur), `parental` (part des parents), `adjustment` (correction, pas de l'épargne). Seuls les mouvements sans `kind`, hors solde initial et après `config.trackingStartDate`, comptent comme épargne (`isSavingsFlow` dans `src/lib/finance/savings.ts`). Tout changement de solde passe par `src/lib/accountOps.ts`.
 - **Déconnexion en mode serveur** : ne jamais révoquer le jeton Google côté navigateur. La révocation annule tout l'accord, refresh token du serveur compris, et déconnecterait tous les appareils.

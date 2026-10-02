@@ -15,8 +15,8 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
-    version: '2026.10.04',
-    date: '2026-10-04',
+    version: '2026.10.02-5',
+    date: '2026-10-02',
     title: 'Chiffres réels et réglages fins',
     items: [
       "Avantages salariaux : bouton « Utiliser mes fiches de paie » (Navigo et titres-restaurant à 50 %, mutuelle retenue sur la paie).",
@@ -26,8 +26,8 @@ export const CHANGELOG: ChangelogEntry[] = [
     ],
   },
   {
-    version: '2026.10.03-2',
-    date: '2026-10-03',
+    version: '2026.10.02-4',
+    date: '2026-10-02',
     title: 'LEP : alerte avant fermeture',
     items: [
       "Pécule vous prévient si vos revenus dépassent le plafond du LEP, et annonce la date de fermeture probable (deux années de suite au-dessus du plafond).",
@@ -36,8 +36,8 @@ export const CHANGELOG: ChangelogEntry[] = [
     ],
   },
   {
-    version: '2026.10.03',
-    date: '2026-10-03',
+    version: '2026.10.02-3',
+    date: '2026-10-02',
     title: 'Veille fiscale plus fiable',
     items: [
       "Veille fiscale : la réponse de Gemini est mieux comprise, et en cas d'échec la raison s'affiche (clé refusée, quota, recherche indisponible…).",
