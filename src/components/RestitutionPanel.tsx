@@ -2,23 +2,22 @@
 // FILE: src/components/RestitutionPanel.tsx
 // Restitution du capital parental : date conseillée (le 1er janvier garde toute l'année
 // d'intérêts), montants par compte, effet sur le plan de placement, puis enregistrement
-// en un clic avec récapitulatif aux parents, relevé exportable et annulation.
+// en un clic avec relevé exportable et annulation.
 // ================================================
 import React, { useMemo, useState } from 'react';
 import { SavingsAccount, ParentalRestitution, AccountType } from '../types';
 import { computeRestitutionPlan, suggestedRestitutionDate } from '../lib/finance';
 import { formatEUR, frenchDay } from '../lib/format';
 import { parseISODate, localTodayISO } from '../lib/dates';
-import { HandCoins, CalendarCheck, Lightbulb, CheckCircle2, FileDown, RotateCcw, Mail } from 'lucide-react';
+import { HandCoins, CalendarCheck, Lightbulb, CheckCircle2, FileDown, RotateCcw } from 'lucide-react';
 
 interface RestitutionPanelProps {
   accounts: SavingsAccount[];
   restitution?: ParentalRestitution;
   monthPlan?: number;          // épargne prévue par mois (rappel de paie / capacité)
-  canEmailParents: boolean;
   hasCustomSplit?: boolean;
   onPlan: (date: string | undefined) => void;
-  onRestitute: (date: string, sendMail: boolean) => void;
+  onRestitute: (date: string) => void;
   onUndo: () => void;
 }
 
@@ -28,12 +27,11 @@ const dayLabel = (iso: string) => {
   return `${frenchDay(d)} ${d.getFullYear()}`;
 };
 
-export const RestitutionPanel: React.FC<RestitutionPanelProps> = ({ accounts, restitution, monthPlan, canEmailParents, hasCustomSplit, onPlan, onRestitute, onUndo }) => {
+export const RestitutionPanel: React.FC<RestitutionPanelProps> = ({ accounts, restitution, monthPlan, hasCustomSplit, onPlan, onRestitute, onUndo }) => {
   const suggested = suggestedRestitutionDate();
   const [date, setDate] = useState(restitution?.plannedDate || suggested);
   const [confirming, setConfirming] = useState(false);
   const [withdrawDate, setWithdrawDate] = useState(localTodayISO());
-  const [sendMail, setSendMail] = useState(canEmailParents);
 
   const plan = useMemo(() => computeRestitutionPlan(accounts, date || suggested), [accounts, date, suggested]);
 
@@ -58,7 +56,7 @@ export const RestitutionPanel: React.FC<RestitutionPanelProps> = ({ accounts, re
     return (
       <div className="bg-emerald-50 dark:bg-emerald-950/30 p-6 rounded-2xl border border-emerald-200 dark:border-emerald-900 space-y-3">
         <h3 className="font-black text-emerald-800 dark:text-emerald-300 flex items-center gap-2"><CheckCircle2 className="w-5 h-5" /> Restitution effectuée le {dayLabel(done.date)}</h3>
-        <p className="text-sm text-emerald-900 dark:text-emerald-200">{fmt(total)} rendus à vos parents{done.emailed ? ', récapitulatif envoyé par e-mail' : ''}. Votre part n'a pas bougé.</p>
+        <p className="text-sm text-emerald-900 dark:text-emerald-200">{fmt(total)} rendus à vos parents. Votre part n'a pas bougé.</p>
         <ul className="text-sm space-y-1">
           {done.accounts.map(a => <li key={a.accountId} className="flex justify-between gap-3"><span>{a.name}</span><span className="font-mono font-bold">{fmt(a.amount)}</span></li>)}
         </ul>
@@ -158,16 +156,8 @@ export const RestitutionPanel: React.FC<RestitutionPanelProps> = ({ accounts, re
             <span className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Date du retrait réel</span>
             <input type="date" value={withdrawDate} onChange={e => setWithdrawDate(e.target.value)} className="block p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold text-slate-800 dark:text-slate-100" />
           </label>
-          {canEmailParents ? (
-            <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
-              <input type="checkbox" checked={sendMail} onChange={e => setSendMail(e.target.checked)} />
-              <Mail className="w-4 h-4" /> Envoyer le récapitulatif à mes parents par e-mail
-            </label>
-          ) : (
-            <p className="text-xs text-slate-500 dark:text-slate-400">Pour leur envoyer un récapitulatif, renseignez leur adresse dans Paramètres → Notification aux parents.</p>
-          )}
           <div className="flex gap-2">
-            <button onClick={() => { onRestitute(withdrawDate, sendMail && canEmailParents); setConfirming(false); }} className="flex-1 py-2.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-black text-sm">Confirmer la restitution</button>
+            <button onClick={() => { onRestitute(withdrawDate); setConfirming(false); }} className="flex-1 py-2.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-black text-sm">Confirmer la restitution</button>
             <button onClick={() => setConfirming(false)} className="px-4 py-2.5 rounded-lg text-sm font-bold text-slate-600 dark:text-slate-300">Annuler</button>
           </div>
         </div>

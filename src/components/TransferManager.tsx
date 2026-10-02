@@ -10,11 +10,13 @@ import { localTodayISO } from '../lib/dates';
 import { depositsAfterCashFlow } from '../lib/finance';
 import { formatEUR } from '../lib/format';
 import { onTablistKeyDown } from '../lib/tablist';
+import { canWithdrawOwn } from '../lib/accountOps';
 
 interface TransferManagerProps {
   accounts: SavingsAccount[];
   onUpdateAccountsComplex: (updates: { account: SavingsAccount, date: string, cashFlow?: number }[]) => void;
-  onLinkedTransfer: (sourceId: string, destId: string, amount: number, date: string) => void;
+  /** `false` si le virement est refusé (part des parents, compte introuvable). */
+  onLinkedTransfer: (sourceId: string, destId: string, amount: number, date: string) => boolean;
   // Horodatage de la dernière écriture Drive CONFIRMÉE (voir useSaveFeedback).
   lastSavedAt?: Date | null;
   recurringMovements: RecurringMovement[];
@@ -77,13 +79,16 @@ export const TransferManager: React.FC<TransferManagerProps> = ({ accounts, onUp
     if (!sourceAcc) { setFormError('Le compte source est introuvable.'); return; }
 
     // Part propre seulement : le capital des parents n'est pas mobilisable.
-    if (sourceAcc.ownedAmount + 0.004 < amount) {
+    if (!canWithdrawOwn(sourceAcc, amount)) {
       setFormError(`Fonds insuffisants : votre part sur ${sourceAcc.name} n'est que de ${formatEUR(sourceAcc.ownedAmount)}.`);
       return;
     }
 
+    if (!onLinkedTransfer(sourceAccountId, destAccountId, amount, opDate)) {
+      setFormError('Virement refusé : il entamerait la part de vos parents.');
+      return;
+    }
     markPending();
-    onLinkedTransfer(sourceAccountId, destAccountId, amount, opDate);
     setTransferAmount('');
   };
 

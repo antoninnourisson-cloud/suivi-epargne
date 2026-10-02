@@ -5,7 +5,7 @@
 // 1. SESSION PERSISTANTE — le flux OAuth « code » de Google délivre un refresh token
 //    longue durée, impossible à obtenir côté navigateur. Il est chiffré et gardé ici ;
 //    l'app échange sa session contre des jetons d'accès courts (1 h) et continue de
-//    parler DIRECTEMENT à Drive/Gmail. Les données financières ne transitent pas ici.
+//    parler DIRECTEMENT à Drive. Les données financières ne transitent pas ici.
 //
 // 2. NOTIFICATIONS PUSH — une tâche quotidienne relit le fichier Drive (lecture seule)
 //    pour calculer les rappels (échéances, révision des taux, intérêts de décembre...)

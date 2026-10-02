@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { applyMovement, balanceChangeMovements, snapshotBalances, restoreBalances, isRestitutionMovement, findCancellingGroups } from './accountOps';
+import { applyMovement, canWithdrawOwn, balanceChangeMovements, snapshotBalances, restoreBalances, isRestitutionMovement, findCancellingGroups } from './accountOps';
 import { AccountType, SavingsAccount, AccountMovement } from '../types';
 
 const acc = (over: Partial<SavingsAccount> = {}): SavingsAccount => ({
@@ -82,5 +82,24 @@ describe('balanceChangeMovements', () => {
   });
   it('ne crée rien sans changement', () => {
     expect(balanceChangeMovements(base, { ...base }, '2026-10-02', { ownLabel: 'X' })).toEqual([]);
+  });
+});
+
+describe('canWithdrawOwn (capital des parents intouchable)', () => {
+  const acc = { ownedAmount: 8200 };
+  it("autorise un retrait jusqu'à la part propre, au demi-centime près", () => {
+    expect(canWithdrawOwn(acc, 8200)).toBe(true);
+    expect(canWithdrawOwn(acc, 8200.004)).toBe(true);
+    expect(canWithdrawOwn(acc, 100)).toBe(true);
+  });
+  it('refuse ce qui entamerait la part des parents', () => {
+    expect(canWithdrawOwn(acc, 8200.01)).toBe(false);
+    expect(canWithdrawOwn(acc, 9000)).toBe(false);
+  });
+  it('refuse les montants nuls, négatifs ou invalides', () => {
+    expect(canWithdrawOwn(acc, 0)).toBe(false);
+    expect(canWithdrawOwn(acc, -5)).toBe(false);
+    expect(canWithdrawOwn(acc, Number.NaN)).toBe(false);
+    expect(canWithdrawOwn(acc, Number.POSITIVE_INFINITY)).toBe(false);
   });
 });

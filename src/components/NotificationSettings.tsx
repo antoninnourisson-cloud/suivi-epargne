@@ -17,7 +17,7 @@ export const NotificationSettings: React.FC<{ paydayDay?: number; onOpenPayday?:
   const [message, setMessage] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
 
   const refresh = () => getPushState().then(setState).catch(() => setState('unsupported'));
-  useEffect(() => { refresh(); }, []);
+  useEffect(() => { void refresh(); }, []);
 
   if (!isBackendEnabled()) return null;
 
@@ -39,7 +39,7 @@ export const NotificationSettings: React.FC<{ paydayDay?: number; onOpenPayday?:
       });
     } finally {
       setBusy(false);
-      refresh();
+      void refresh();
     }
   };
 

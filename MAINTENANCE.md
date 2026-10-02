@@ -19,7 +19,7 @@ Voir aussi : [README.md](README.md) (fonctionnement général), [worker/README.m
 ### Capital des parents
 - **Le capital des parents est intouchable** : il n'est jamais proposé comme source d'un retrait ni compté dans l'épargne de l'utilisateur.
 - **Ses intérêts appartiennent à l'utilisateur** : les parents les lui offrent en fin d'année. Les calculs d'intérêts (`computeParentalInterest`, `computeAccruedParentalInterest`) distinguent la part produite par ce capital, mais elle revient à l'utilisateur.
-- **Restitution prévue vers le 1er janvier 2027** (le 1er janvier garde toute l'année d'intérêts). Une fois enregistrée, l'app passe en **mode solo** : plus de part parentale, plus d'e-mails aux parents. Le code lié aux parents doit continuer à fonctionner sans erreur quand le capital parental vaut zéro partout.
+- **Restitution prévue vers le 1er janvier 2027** (le 1er janvier garde toute l'année d'intérêts). Une fois enregistrée, l'app passe en **mode solo** : plus de part parentale. Le code lié aux parents doit continuer à fonctionner sans erreur quand le capital parental vaut zéro partout.
 
 ### Fichier de données
 - **Un seul point d'entrée : `migrate()`** dans [`src/lib/schema.ts`](src/lib/schema.ts). Tout ce qui entre dans l'app (chargement Drive, import, restauration locale, synchronisation entre onglets, lecture par le Worker) passe par lui. Une nouvelle forme de données = une migration dans `migrate()`, nulle part ailleurs.
@@ -111,8 +111,8 @@ Au-delà, Cloudflare refuse les requêtes jusqu'au lendemain : l'app retombe sur
 ## 7. Statut de l'application OAuth Google
 
 - **En production**, **non validée** par Google, **un seul utilisateur** (le serveur n'accepte que `ALLOWED_EMAILS`). Elle doit rester « En production » : en mode test, les refresh tokens expirent au bout de 7 jours.
-- À la connexion, Google affiche « application non validée » : c'est normal (Paramètres avancés → Accéder à…).
-- Portées : `drive.file` (non sensible, uniquement les fichiers créés par l'app) et **`gmail.send`**, une portée **sensible**, utilisée seulement pour les e-mails aux parents. **Après la restitution (2027), elle pourra être retirée** (`SCOPES` dans `src/services/googleDriveService.ts` et la liste des API dans la console Google), ce qui réduit les droits accordés. Cela demande une reconnexion sur chaque appareil.
+- À la connexion, Google affiche « application non validée » tant que la marque n'est pas validée (Paramètres avancés → Accéder à…).
+- Portées : `openid`, `email` (identité, côté serveur) et `drive.file` (non sensible, uniquement les fichiers créés par l'app). **Aucune portée sensible** : l'envoi d'e-mails (`gmail.send`) a été retiré, ce qui permet de demander la validation de la marque sans examen de sécurité. Les portées sont dans `SCOPES` (`src/services/googleDriveService.ts`) et `OAUTH_SCOPES` (`worker/src/google.ts`) : les deux listes doivent garder les mêmes droits Google (le serveur ajoute seulement `openid` et `email`), déclarés aussi dans la console Google.
 
 ## 8. Nom de domaine
 

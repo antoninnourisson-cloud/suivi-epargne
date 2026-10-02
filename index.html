@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <!--
       CSP : seule défense possible sur GitHub Pages (pas d'en-têtes serveur configurables).
-      L'app stocke un token OAuth Drive+Gmail en localStorage : limiter les origines de
+      L'app stocke un token OAuth Drive en localStorage : limiter les origines de
       scripts/connexions réduit drastiquement ce qu'un script injecté pourrait exfiltrer.
       Aucun script intégré n'est autorisé (la page n'en contient pas) ; 'unsafe-inline'
       (style) reste nécessaire à GIS, au Picker et aux styles en ligne de React.
@@ -14,7 +14,7 @@
     <meta http-equiv="Content-Security-Policy" content="
       default-src 'self';
       script-src 'self' https://accounts.google.com https://apis.google.com;
-      connect-src 'self' __BACKEND_ORIGIN__ ws://localhost:5173 ws://127.0.0.1:5173 https://www.googleapis.com https://content.googleapis.com https://accounts.google.com https://oauth2.googleapis.com https://gmail.googleapis.com https://generativelanguage.googleapis.com;
+      connect-src 'self' __BACKEND_ORIGIN__ ws://localhost:5173 ws://127.0.0.1:5173 https://www.googleapis.com https://content.googleapis.com https://accounts.google.com https://oauth2.googleapis.com https://generativelanguage.googleapis.com;
       img-src 'self' data: https://*.googleusercontent.com https://ssl.gstatic.com https://www.gstatic.com;
       style-src 'self' 'unsafe-inline' https://accounts.google.com;
       font-src 'self';

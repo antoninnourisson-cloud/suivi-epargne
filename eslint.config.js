@@ -27,6 +27,17 @@ export default tseslint.config(
       'jsx-a11y/label-has-associated-control': 'off',
     },
   },
+  // Règles qui lisent les types : une promesse oubliée (ni attendue ni rattrapée) est le
+  // bug typique d'une synchronisation, une erreur réseau passerait alors en silence.
+  {
+    files: ['src/**/*.{ts,tsx}', 'worker/src/**/*.ts'],
+    languageOptions: { parserOptions: { projectService: true, tsconfigRootDir: import.meta.dirname } },
+    rules: {
+      '@typescript-eslint/no-floating-promises': 'error',
+      '@typescript-eslint/no-misused-promises': ['error', { checksVoidReturn: { attributes: false } }],
+      '@typescript-eslint/await-thenable': 'error',
+    },
+  },
   { files: ['**/*.{js,mjs,cjs}'], languageOptions: { globals: { ...globals.node } } },
   { files: ['**/*.test.ts', '**/*.test.tsx', 'worker/test/**'], rules: { '@typescript-eslint/no-explicit-any': 'off' } },
 );

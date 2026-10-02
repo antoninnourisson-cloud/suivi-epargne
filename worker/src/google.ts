@@ -9,11 +9,13 @@
 // drive.file reste limité aux fichiers créés par l'app : le serveur ne voit rien d'autre
 // sur le Drive. Le client OAuth doit être LE MÊME que celui de l'app, sinon drive.file ne
 // donnerait pas accès au fichier existant.
+import type { GlobalAppData } from '../../src/types';
+import { migrate } from '../../src/lib/schema';
+
 export const OAUTH_SCOPES = [
   'openid',
   'email',
   'https://www.googleapis.com/auth/drive.file',
-  'https://www.googleapis.com/auth/gmail.send',
 ].join(' ');
 
 export interface TokenResponse {
@@ -87,17 +89,19 @@ export const revokeToken = (token: string) =>
 const DATA_FILE_NAME = 'suivi_epargne.json';
 
 /** Lit le fichier de données de l'utilisateur (même recherche que l'app). `null` si absent. */
-export const readDataFile = async (accessToken: string): Promise<any | null> => {
+/** Fichier de données de l'utilisateur, passé par `migrate()` comme dans l'app : un ancien
+ *  format ou un fichier abîmé ne fausse pas les rappels. `null` s'il n'existe pas. */
+export const readDataFile = async (accessToken: string): Promise<GlobalAppData | null> => {
   const q = encodeURIComponent(`name = '${DATA_FILE_NAME}' and trashed = false`);
   const list = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)&orderBy=createdTime`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   if (!list.ok) throw new Error(`DRIVE_LIST_${list.status}`);
-  const files = ((await list.json()) as any).files || [];
+  const files = ((await list.json()) as { files?: { id: string }[] }).files || [];
   if (files.length === 0) return null;
   const res = await fetch(`https://www.googleapis.com/drive/v3/files/${files[0].id}?alt=media`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   if (!res.ok) throw new Error(`DRIVE_READ_${res.status}`);
-  return res.json();
+  return migrate(await res.json());
 };

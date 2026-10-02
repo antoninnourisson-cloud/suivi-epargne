@@ -8,6 +8,7 @@
 import { GlobalAppData } from '../types';
 import { DEFAULT_FISCAL_CONFIG, DEFAULT_WORK_BENEFITS } from '../constants';
 import { normalizeAccounts, dedupeMonthlySnapshots, migrateFiscalConfig } from './finance';
+import { round2 } from './money';
 
 /**
  * Version du format. À augmenter quand un changement rend le fichier illisible pour une
@@ -24,7 +25,6 @@ export const DEFAULT_CONFIG: GlobalAppData['config'] = {
   navigoRate: 67.24,
   taxRateManual: 0,
   extraMonthlyIncome: 0,
-  parentsEmail: '',
 };
 
 /** Données d'un tout premier lancement. */
@@ -47,6 +47,44 @@ export const emptyData = (): GlobalAppData => ({
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
 const arr = <T,>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : []);
 
+/** Nombre fini, y compris écrit en texte (« 12.5 ») ; sinon `undefined`. */
+const finite = (v: unknown): number | undefined => {
+  const n = typeof v === 'number' ? v : typeof v === 'string' && v.trim() !== '' ? Number(v) : Number.NaN;
+  return Number.isFinite(n) ? n : undefined;
+};
+const OPTIONAL_ACCOUNT_NUMBERS = ['totalDeposits', 'interestRate', 'ceiling'] as const;
+
+/**
+ * Remet un compte d'aplomb sans rien inventer : montants illisibles (texte, NaN, Infinity)
+ * reconstitués quand c'est possible, total = part propre + part des parents au centime,
+ * mouvements illisibles écartés (les soldes, eux, sont stockés à part et ne bougent pas).
+ * Un fichier abîmé ne propage donc jamais de NaN dans les calculs.
+ */
+const sanitizeAccount = (a: Record<string, unknown>): Record<string, unknown> => {
+  const parental = Math.max(0, finite(a.parentalCapital) ?? 0);
+  const total = finite(a.totalAmount);
+  const owned = finite(a.ownedAmount) ?? (total !== undefined ? total - parental : 0);
+  const out: Record<string, unknown> = {
+    ...a,
+    name: typeof a.name === 'string' ? a.name : String(a.name ?? 'Compte'),
+    institution: typeof a.institution === 'string' ? a.institution : '',
+    ownedAmount: round2(owned),
+    parentalCapital: round2(parental),
+    totalAmount: round2(owned + parental),
+  };
+  for (const k of OPTIONAL_ACCOUNT_NUMBERS) {
+    if (a[k] === undefined) continue;
+    const n = finite(a[k]);
+    if (n === undefined) delete out[k]; else out[k] = n;
+  }
+  out.movements = arr<unknown>(a.movements).flatMap(m => {
+    if (!isObj(m) || (m.type !== 'IN' && m.type !== 'OUT') || typeof m.date !== 'string') return [];
+    const amount = finite(m.amount);
+    return amount === undefined || amount < 0 ? [] : [{ ...m, amount }];
+  });
+  return out;
+};
+
 /** Le fichier a été écrit par une version plus récente de l'app que celle-ci. */
 export const isFromNewerApp = (raw: unknown): boolean =>
   isObj(raw) && typeof raw.schemaVersion === 'number' && raw.schemaVersion > APP_SCHEMA_VERSION;
@@ -68,7 +106,7 @@ export const migrate = (raw: unknown): GlobalAppData => {
   return {
     ...rest,
     schemaVersion: APP_SCHEMA_VERSION,
-    accounts: normalizeAccounts(arr<GlobalAppData['accounts'][number]>(r.accounts)),
+    accounts: normalizeAccounts(arr<unknown>(r.accounts).filter(isObj).map(sanitizeAccount) as unknown as GlobalAppData['accounts']),
     expenses: arr(r.expenses),
     history: dedupeMonthlySnapshots(arr(r.history)),
     expensesHistory: dedupeMonthlySnapshots(arr(r.expensesHistory)),

@@ -81,7 +81,7 @@ d'accueil (Partager → *Sur l'écran d'accueil*).
 ## Sécurité : ce qu'il faut savoir
 
 - **Ce que détient le serveur** : ton refresh token Google (portée : fichiers créés par l'app
-  sur Drive + envoi de mails), chiffré en AES-256-GCM avec une clé stockée à part, dans les
+  sur Drive), chiffré en AES-256-GCM avec une clé stockée à part, dans les
   secrets Cloudflare ; ton e-mail et ton identifiant Google ; les empreintes des sessions ; les
   abonnements push ; des marqueurs « déjà envoyé » (~400 jours) ; l'état de la tâche
   quotidienne. Pour les notifications, il lit ton fichier de données une fois par jour et n'en

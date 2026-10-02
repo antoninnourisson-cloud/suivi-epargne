@@ -25,12 +25,11 @@ import { TaxNoticePanel } from './components/TaxNoticePanel';
 // Importé ici (et pas dans l'écran, chargé à la demande) pour capter l'invitation d'installation dès le démarrage.
 import './services/installPrompt';
 import { computeBadgeCount, detectPayRaise } from './lib/projection';
-import { balanceChangeMovements, applyMovement, snapshotBalances, restoreBalances, isRestitutionMovement, round2 as round2Cents } from './lib/accountOps';
+import { balanceChangeMovements, applyMovement, snapshotBalances, restoreBalances, isRestitutionMovement, round2 as round2Cents, canWithdrawOwn } from './lib/accountOps';
 import { WhatsNewModal } from './components/WhatsNew';
 import { MovedNotice } from './components/MovedNotice';
 import { Logo } from './components/Logo';
 import { LATEST_VERSION } from './changelog';
-import { buildRestitutionMail } from './lib/mailTemplates';
 import { ErrorBoundary, lazyWithRetry } from './components/ErrorBoundary';
 import { NAV_ITEMS, NAV_SECTIONS, VIEWS, View, navLabel } from './navigation';
 import { QuickAddFab } from './components/QuickAddFab';
@@ -170,8 +169,8 @@ const App: React.FC = () => {
     <FiscalWatchCard compact={compact} proposals={fiscalWatch.proposals} running={fiscalWatch.running} checkedAt={fiscalWatch.checkedAt}
       lastError={fiscalWatch.lastError} hasKey={fiscalWatch.hasKey} onApply={applyFiscalProposal} onDismiss={fiscalWatch.dismiss} onRun={fiscalWatch.run} />
   );
-  const askConfirm = (title: string, message: string, onConfirm: () => void, danger = false) =>
-    setDialog({ open: true, kind: 'confirm', title, message, danger, confirmLabel: 'Confirmer', onConfirm: () => onConfirm() });
+  const askConfirm = (title: string, message: string, onConfirm: () => void | Promise<void>, danger = false) =>
+    setDialog({ open: true, kind: 'confirm', title, message, danger, confirmLabel: 'Confirmer', onConfirm: () => { void onConfirm(); } });
 
   // Mois avant la restitution prévue du capital parental (pour la projection).
   const restitutionInMonths = useMemo(() => {
@@ -270,8 +269,10 @@ const App: React.FC = () => {
   useEffect(() => {
     if (!isAuthenticated) return;
     const t = setTimeout(() => {
-      import('./components/AccountUpdate'); import('./components/AssistantPilot');
-      import('./components/TransferManager'); import('./components/Yield');
+      // Préchargement facultatif : un échec (hors ligne) sera rejoué à l'ouverture de l'écran.
+      for (const load of [() => import('./components/AccountUpdate'), () => import('./components/AssistantPilot'), () => import('./components/TransferManager'), () => import('./components/Yield')]) {
+        load().catch(() => undefined);
+      }
     }, 1500);
     return () => clearTimeout(t);
   }, [isAuthenticated]);
@@ -338,7 +339,7 @@ const App: React.FC = () => {
   // est affiché, rien de financier n'est lu ni gardé en mémoire.
   const [loadRequested, setLoadRequested] = useState(false);
   useEffect(() => {
-    if (loadRequested && !locked) { setLoadRequested(false); data.loadDriveData(); }
+    if (loadRequested && !locked) { setLoadRequested(false); void data.loadDriveData(); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadRequested, locked]);
 
@@ -348,7 +349,7 @@ const App: React.FC = () => {
     initStartedRef.current = true;
     // Mode démo (développement uniquement) : données fictives, sans Google.
     if (import.meta.env.DEV && new URLSearchParams(window.location.search).has('demo')) {
-      import('./dev/demoData').then(({ DEMO_DATA }) => { setIsApiLoaded(true); setIsAuthenticated(true); data.loadDemoData(DEMO_DATA); });
+      import('./dev/demoData').then(({ DEMO_DATA }) => { setIsApiLoaded(true); setIsAuthenticated(true); data.loadDemoData(DEMO_DATA); }).catch(console.error);
       return;
     }
     initGoogleApi()
@@ -407,7 +408,7 @@ const App: React.FC = () => {
     try {
       await handleAuthClick(false);
       setIsAuthenticated(true);
-      data.loadDriveData();
+      void data.loadDriveData();
     } catch (error) {
       addToast({ message: 'Échec de la connexion à Google Drive.', kind: 'error' });
     }
@@ -435,7 +436,6 @@ const App: React.FC = () => {
 
   const handleSaveAccount = (acc: SavingsAccount) => {
     const today = localTodayISO();
-    const existing = data.accounts.find(a => a.id === acc.id);
 
     // Garde-fou d'invariant : totalAmount DOIT valoir ownedAmount + parentalCapital.
     // Le formulaire pouvait le rompre (saisir une part personnelle supérieure au total
@@ -453,15 +453,7 @@ const App: React.FC = () => {
 
     // Un changement de solde par le formulaire d'édition doit laisser la même trace qu'une
     // actualisation ou un ajout rapide : sans ça, l'historique des mouvements ne totalisait
-    // plus le solde, et les parents n'étaient pas prévenus d'un mouvement sur Livret A/LEP
-    // alors qu'ils l'étaient pour la même opération saisie par les deux autres chemins.
-    const ownedDiff = existing ? normalized.ownedAmount - existing.ownedAmount : 0;
-    const parentalDiff = existing ? normalized.parentalCapital - existing.parentalCapital : 0;
-    // Parents prévenus aussi quand c'est LEUR part qui change (comme dans Actualiser).
-    if (existing && (Math.abs(ownedDiff) > 0.001 || Math.abs(parentalDiff) > 0.001)) {
-      data.notifyParentsIfNeeded([{ account: normalized, date: today }]);
-    }
-
+    // plus le solde.
     data.setAccounts(prev => {
       const isNew = !prev.find(a => a.id === normalized.id);
       if (isNew) {
@@ -603,17 +595,11 @@ const App: React.FC = () => {
     if (!account) return undefined;
     amount = round2(amount);
     // Garde-fou : un retrait ne peut pas entamer la part des parents.
-    if (type === 'OUT' && amount > account.ownedAmount + 0.004) {
+    if (type === 'OUT' && !canWithdrawOwn(account, amount)) {
       addToast({ message: `Retrait impossible : votre part sur ${account.name} n'est que de ${formatEUR(account.ownedAmount)}.`, kind: 'error' });
       return undefined;
     }
     const movement: AccountMovement = { id: crypto.randomUUID(), date, amount, label, type };
-    const after = applyMovement(account, movement, 1, { trackDeposits: true });
-
-    // Notifie les parents AVANT la mise à jour d'état (le hook compare à l'état courant).
-    // L'e-mail est rattaché au mouvement : décocher ce versement l'annule, lui seul.
-    data.notifyParentsIfNeeded([{ account: after, date }], movement.id);
-
     data.setAccounts(prev => prev.map(a => (a.id === accountId ? applyMovement(a, movement, 1, { trackDeposits: true }) : a)));
 
     addToast({ message: `${label} — ${account.name}`, kind: 'success' });
@@ -627,8 +613,8 @@ const App: React.FC = () => {
 
   // --- RESTITUTION DU CAPITAL PARENTAL ---
   // Retire la part des parents de chaque compte (la part propre ne bouge pas), garde un
-  // relevé (montants, intérêts offerts chaque année) et prévient les parents si demandé.
-  const handleRestitution = (date: string, sendMail: boolean) => {
+  // relevé (montants, intérêts offerts chaque année).
+  const handleRestitution = (date: string) => {
     const plan = computeRestitutionPlan(data.accounts, date);
     if (plan.total <= 0) return;
     // Seule l'année de la restitution est chiffrée avec certitude : les années précédentes
@@ -637,11 +623,6 @@ const App: React.FC = () => {
       ? [{ year: plan.interestYear, amount: round2(plan.totalInterest) }] : [];
     const previous = data.parentalRestitution;
     const snap = snapshotBalances(data.accounts, plan.rows.map(r => r.accountId));
-    let emailed = false;
-    if (sendMail) {
-      emailed = data.queueParentsMail('restitution', 'Restitution de votre capital',
-        buildRestitutionMail(parseISODate(date).toLocaleDateString('fr-FR'), plan.rows, plan.total, 0));
-    }
     const after = accountsAfterRestitution(data.accounts, date);
     const createdIds = after.flatMap(a => (a.movements || []).filter(m => isRestitutionMovement(m) && m.date === date).map(m => m.id));
     data.setAccounts(prev => accountsAfterRestitution(prev, date).map(a => {
@@ -651,13 +632,12 @@ const App: React.FC = () => {
     }));
     data.setParentalRestitution({
       ...previous,
-      done: { date, accounts: plan.rows.map(r => ({ accountId: r.accountId, name: r.name, amount: r.amount })), interestsOffered, emailed: emailed || undefined },
+      done: { date, accounts: plan.rows.map(r => ({ accountId: r.accountId, name: r.name, amount: r.amount })), interestsOffered },
     });
     addToast({
-      message: `Restitution enregistrée : ${formatEUR(plan.total)}${emailed ? ' · récapitulatif envoyé après la sauvegarde' : ''}`,
+      message: `Restitution enregistrée : ${formatEUR(plan.total)}`,
       kind: 'success',
       action: { label: 'Annuler', onClick: () => {
-        data.cancelQueuedParentsMail('restitution');
         data.setAccounts(prev => restoreBalances(prev, snap, createdIds));
         data.setParentalRestitution(previous);
       } },
@@ -668,7 +648,6 @@ const App: React.FC = () => {
   // ce qui rend leur part aux parents.
   const handleUndoRestitution = () => {
     if (!data.parentalRestitution?.done) return;
-    data.cancelQueuedParentsMail('restitution');
     data.setAccounts(prev => prev.map(a => (a.movements || [])
       .filter(isRestitutionMovement)
       .reduce((cur, m) => applyMovement(cur, m, -1), a)));
@@ -679,7 +658,6 @@ const App: React.FC = () => {
   // Annule un versement enregistré depuis la liste des virements de paie : retire le
   // mouvement et rétablit solde et versements cumulés.
   const handleCancelPayDeposit = (accountId: string, movementId: string) => {
-    data.cancelQueuedParentsMail(movementId);
     data.setAccounts(prev => prev.map(a => {
       if (a.id !== accountId) return a;
       const m = (a.movements || []).find(x => x.id === movementId);
@@ -773,7 +751,7 @@ const App: React.FC = () => {
             </span>
           </div>
           <button onClick={toggleTheme} className="p-2.5 -m-1 text-slate-400" title="Thème" aria-label="Changer de thème">{isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}</button>
-          <button onClick={() => setDialog({ open: true, kind: 'confirm', title: 'Se déconnecter ?', message: 'Les données restent sur votre Drive ; il faudra vous reconnecter avec Google.', confirmLabel: 'Se déconnecter', onConfirm: () => handleLogout() })} className="p-2.5 -m-1 text-rose-300" aria-label="Se déconnecter"><LogOut className="w-4 h-4" /></button>
+          <button onClick={() => setDialog({ open: true, kind: 'confirm', title: 'Se déconnecter ?', message: 'Les données restent sur votre Drive ; il faudra vous reconnecter avec Google.', confirmLabel: 'Se déconnecter', onConfirm: () => { void handleLogout(); } })} className="p-2.5 -m-1 text-rose-300" aria-label="Se déconnecter"><LogOut className="w-4 h-4" /></button>
         </div>
       </header>
 
@@ -811,12 +789,6 @@ const App: React.FC = () => {
               <div role="alert" className="mb-4 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-xl p-3 text-rose-700 dark:text-rose-300 text-sm font-bold flex items-center justify-between gap-3">
                 <span className="flex items-center gap-2"><AlertTriangle className="w-4 h-4 shrink-0"/> La dernière sauvegarde a échoué.</span>
                 <button onClick={data.forceSaveToDrive} className="bg-rose-600 hover:bg-rose-700 text-white px-3 py-1.5 rounded-lg font-bold text-xs shrink-0">Réessayer</button>
-              </div>
-            )}
-            {data.mailError && (
-              <div className="mb-4 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div className="flex items-center gap-2 text-amber-800 dark:text-amber-300 text-sm font-bold"><AlertTriangle className="w-5 h-5 shrink-0"/> L'email d'alerte n'a pas pu être envoyé à {data.mailError}. Le mouvement est bien enregistré, mais vos parents n'ont pas été prévenus.</div>
-                <button onClick={data.dismissMailError} className="bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 px-4 py-2 rounded-lg font-bold text-sm shrink-0">J'ai compris</button>
               </div>
             )}
             {data.localBackup && (
@@ -931,7 +903,6 @@ const App: React.FC = () => {
                 restitution={data.parentalRestitution}
                 monthPlan={monthPlan}
                 hasCustomSplit={!!data.savingsSplit?.length}
-                canEmailParents={!!data.parentsEmail}
                 onPlanRestitution={(date) => data.setParentalRestitution(prev => ({ ...prev, plannedDate: date }))}
                 onRestitute={handleRestitution}
                 onUndoRestitution={handleUndoRestitution}
@@ -950,7 +921,6 @@ const App: React.FC = () => {
                     onChangeNotificationPrefs={p => data.patchConfig({ notificationPrefs: p })}
                     config={data.fiscalConfig}
                     workBenefits={data.workBenefits}
-                    parentsEmail={data.parentsEmail}
                     geminiApiKey={data.geminiApiKey}
                     pickerApiKey={data.pickerApiKey}
                     onExport={() => { data.exportData(); data.patchConfig({ lastExportAt: localTodayISO() }); }}
@@ -964,10 +934,9 @@ const App: React.FC = () => {
                       onSignedOutEverywhere={() => { setIsAuthenticated(false); data.resetData(); addToast({ message: 'Tous les appareils sont déconnectés', kind: 'success' }); }} />}
                     paydayDay={data.paydayDay}
                     onOpenPayday={() => setView('pilot')}
-                    onSave={(newFiscal, newBenefits, newEmail, newGeminiKey, newPickerKey) => {
+                    onSave={(newFiscal, newBenefits, newGeminiKey, newPickerKey) => {
                        data.setFiscalConfig(newFiscal);
                        data.setWorkBenefits(newBenefits);
-                       data.setParentsEmail(newEmail);
                        data.setGeminiApiKey(newGeminiKey);
                        data.setPickerApiKey(newPickerKey);
                        if (newBenefits.navigo.active) {

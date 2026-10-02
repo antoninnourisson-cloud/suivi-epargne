@@ -7,7 +7,7 @@
 // ================================================
 import { AccountMovement, SavingsAccount } from '../types';
 import { depositsAfterCashFlow, tracksDeposits } from './finance';
-import { round2, signedAmount } from './money';
+import { EPS, round2, signedAmount } from './money';
 
 export { round2 };
 
@@ -46,6 +46,14 @@ export const balanceChangeMovements = (
 /** Mouvement de restitution aux parents : ne se supprime ni ne se renomme à la main. */
 export const isRestitutionMovement = (m: AccountMovement) =>
   m.tag === 'restitution' || (m.kind === 'parental' && m.label === 'Restitution aux parents');
+
+/**
+ * Règle du capital des parents : un retrait ne peut porter que sur la part propre. Seule
+ * source de cette règle pour l'interface (ajout rapide, virements) comme pour les
+ * commandes : `true` si `amount` peut sortir de la part propre (au demi-centime près).
+ */
+export const canWithdrawOwn = (acc: Pick<SavingsAccount, 'ownedAmount'>, amount: number): boolean =>
+  Number.isFinite(amount) && amount > 0 && amount <= acc.ownedAmount + EPS;
 
 /**
  * Applique (`sign` = 1) ou retire (`sign` = -1) un mouvement :

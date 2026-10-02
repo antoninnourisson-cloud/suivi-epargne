@@ -14,6 +14,7 @@
 - **Restitution du capital parental**, agenda des douze mois, bilan annuel, répartition personnalisée de l'épargne, taux datés, journal des modifications, corrections « Pas de l'épargne » et point de départ du suivi.
 - **Quoi de neuf** : historique des mises à jour en dur (`src/changelog.ts`), affiché une fois après chaque mise à jour.
 - **Déploiement automatique du Worker** depuis GitHub Actions (`.github/workflows/worker.yml`), à chaque push qui touche le code du serveur ou ce qu'il partage avec l'app. Actif dès que les deux secrets du dépôt `CLOUDFLARE_API_TOKEN` et `CLOUDFLARE_ACCOUNT_ID` existent ; d'ici là, le job est sauté et `npm run deploy` reste possible à la main.
+- **Plus aucun envoi d'e-mail** : l'autorisation Gmail (`gmail.send`) est retirée de la connexion Google, qui ne demande plus aucune portée sensible.
 - **Préférences de notification par type**, **avantages salariaux d'après les fiches de paie**, **LEP : alerte avant fermeture et lecture de l'avis d'imposition**, **veille fiscale hebdomadaire** (Gemini propose, vous validez).
 
 ## En cours : plan d'action de l'audit 360° (octobre 2026)
@@ -29,7 +30,7 @@
 ## Plus tard
 
 - **TypeScript 7** : à faire quand typescript-eslint le prendra en charge (aujourd'hui jusqu'à 6.0, déjà en place).
-- **Après la restitution (janvier 2027)** : retirer l'autorisation Gmail (`gmail.send`) de la connexion Google si plus aucun e-mail aux parents n'est utile.
+- **Code de conduite** (`CODE_OF_CONDUCT.md`, Contributor Covenant 2.1 en français) : choisir d'abord un contact de signalement qui ne soit pas l'adresse personnelle (par exemple une adresse redirigée sur pecule-app.com).
 
 ## Notes techniques à ne pas perdre
 

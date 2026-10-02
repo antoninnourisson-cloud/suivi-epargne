@@ -1,6 +1,6 @@
 // ================================================
 // FILE: src/services/googleDriveService.ts
-// Version web-only (PWA). Auth Google Identity Services + Drive/Gmail via fetch.
+// Version web-only (PWA). Auth Google Identity Services + Drive via fetch.
 // ================================================
 
 import {
@@ -9,7 +9,7 @@ import {
 } from './backendService';
 
 const CLIENT_ID = '763862877733-hl1an9vcn0ibnoq2iq035927528mimd5.apps.googleusercontent.com';
-const SCOPES = 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/gmail.send';
+const SCOPES = 'https://www.googleapis.com/auth/drive.file';
 const FILE_NAME = 'suivi_epargne.json';
 
 let tokenClient: any;
@@ -161,7 +161,7 @@ export const completeBackendLoginIfPresent = async (): Promise<boolean> => {
 };
 
 // Rafraîchissement mutualisé : plusieurs appels concurrents (ex. une sauvegarde Drive et
-// un envoi Gmail qui partent ensemble sur un token expiré) doivent partager UNE seule
+// une lecture qui partent ensemble sur un token expiré) doivent partager UNE seule
 // requête en vol, sinon ils s'écrasent mutuellement le callback ci-dessus.
 let refreshInFlight: Promise<void> | null = null;
 const refreshTokenSilently = (): Promise<void> => {
@@ -416,44 +416,6 @@ export const writeMonthlyBackup = async (monthKey: string, data: unknown): Promi
     }).catch(() => { /* une copie de trop n'est pas grave */ });
   }
   return true;
-};
-
-// --- GMAIL ---
-/**
- * Envoie le mail d'alerte aux parents. Lève en cas d'échec : avaler l'erreur ici
- * rendait un envoi raté (quota Gmail, scope révoqué, réseau) indiscernable d'un
- * succès — personne, ni l'utilisateur ni les parents, ne pouvait savoir qu'aucune
- * notification n'était partie. C'est à l'appelant de décider comment le signaler.
- */
-// Base64 UTF-8 via TextEncoder (l'idiome unescape/encodeURIComponent est déprécié).
-const utf8ToBase64 = (s: string): string => {
-  const bytes = new TextEncoder().encode(s);
-  let binary = '';
-  const CHUNK = 0x8000;
-  for (let i = 0; i < bytes.length; i += CHUNK) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
-  }
-  return btoa(binary);
-};
-
-export const sendGmail = async (to: string, subject: string, body: string): Promise<void> => {
-  // Le destinataire est du texte libre venant des Paramètres (et du JSON importable) : il
-  // est concaténé dans les EN-TÊTES du message. Sans validation, un CR/LF glissé dedans
-  // injecte des en-têtes arbitraires (Bcc:, From:...) dans chaque mail d'alerte.
-  const cleanTo = to.trim();
-  if (/[\r\n]/.test(cleanTo) || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanTo)) {
-    throw new Error('INVALID_RECIPIENT');
-  }
-  const utf8Subject = `=?utf-8?B?${utf8ToBase64(subject.replace(/[\r\n]/g, ' '))}?=`;
-  // \r\n : séparateur d'en-têtes exigé par la RFC 5322 (\n seul est toléré par Gmail mais
-  // non conforme).
-  const message = [`To: ${cleanTo}`, 'Content-Type: text/html; charset=utf-8', 'MIME-Version: 1.0', `Subject: ${utf8Subject}`, '', body].join('\r\n');
-  const raw = utf8ToBase64(message).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-  await authedFetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ raw }),
-  });
 };
 
 // --- GOOGLE PICKER (sélection de fichiers existants sur le Drive de l'utilisateur) ---

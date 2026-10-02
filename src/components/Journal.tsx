@@ -82,7 +82,7 @@ export const Journal: React.FC<Props> = ({ accounts, restitution, onDeleteMoveme
     }
     if (restitution?.done) {
       const total = restitution.done.accounts.reduce((s, x) => s + x.amount, 0);
-      out.push({ key: 'restitution', date: restitution.done.date, kind: 'restitution', title: `Restitution du capital de vos parents${restitution.done.emailed ? ' (récapitulatif envoyé)' : ''}`, amount: -total });
+      out.push({ key: 'restitution', date: restitution.done.date, kind: 'restitution', title: 'Restitution du capital de vos parents', amount: -total });
     }
     return out.sort((x, y) => y.date.localeCompare(x.date) || x.key.localeCompare(y.key));
   }, [accounts, restitution]);

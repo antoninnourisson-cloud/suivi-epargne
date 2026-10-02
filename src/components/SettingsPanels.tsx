@@ -22,7 +22,7 @@ const monthLabel = (m: string) => {
 export const DriveBackupsPanel: React.FC<{
   list: () => Promise<DriveBackup[]>;
   restore: (id: string) => Promise<void>;
-  confirm: (title: string, message: string, onOk: () => void) => void;
+  confirm: (title: string, message: string, onOk: () => void | Promise<void>) => void;
 }> = ({ list, restore, confirm }) => {
   const toast = useToast();
   const [items, setItems] = useState<DriveBackup[] | null>(null);
@@ -60,7 +60,7 @@ export const DriveBackupsPanel: React.FC<{
 export const ServerSecurityPanel: React.FC<{
   discreet: boolean;
   onToggleDiscreet: (v: boolean) => void;
-  confirm: (title: string, message: string, onOk: () => void, danger?: boolean) => void;
+  confirm: (title: string, message: string, onOk: () => void | Promise<void>, danger?: boolean) => void;
   onSignedOutEverywhere: () => void;
 }> = ({ discreet, onToggleDiscreet, confirm, onSignedOutEverywhere }) => {
   const toast = useToast();

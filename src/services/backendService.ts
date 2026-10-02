@@ -8,7 +8,7 @@
 //
 // La session est un jeton opaque stocké localement. Il ne donne accès à AUCUNE donnée par
 // lui-même : il permet seulement de demander au Worker un jeton d'accès Google court (1 h),
-// que l'app utilise ensuite directement auprès de Drive et Gmail.
+// que l'app utilise ensuite directement auprès de Drive.
 // ================================================
 
 export const BACKEND_URL: string = (import.meta.env.VITE_BACKEND_URL || '').replace(/\/+$/, '');

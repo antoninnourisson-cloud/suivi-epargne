@@ -4,7 +4,7 @@
 import React, { useEffect, useState } from 'react';
 import { FiscalConfig, PayslipRecord, TaxBracket, WorkBenefits } from '../types';
 import { benefitsFromPayslips } from '../lib/planning';
-import { Save, AlertTriangle, Settings as SettingsIcon, Plus, Trash2, Mail, Download, Upload, Database, KeyRound, FileText, Fingerprint, Hash , SlidersHorizontal, ChevronDown, Building2, Scale, PiggyBank, Landmark } from 'lucide-react';
+import { Save, AlertTriangle, Settings as SettingsIcon, Plus, Trash2, Download, Upload, Database, KeyRound, FileText, Fingerprint, Hash , SlidersHorizontal, ChevronDown, Building2, Scale, PiggyBank, Landmark } from 'lucide-react';
 import { isLockAvailable, isBiometricEnabled, isPinEnabled, enableLock, disableBiometric, enablePin, disablePin } from '../services/appLockService';
 import { NotificationSettings } from './NotificationSettings';
 import { GeminiModelField } from './SettingsPanels';
@@ -19,10 +19,9 @@ interface SettingsProps {
   payslips?: PayslipRecord[];
   config: FiscalConfig;
   workBenefits: WorkBenefits;
-  parentsEmail: string; // <--- Prop
   geminiApiKey: string;
   pickerApiKey: string;
-  onSave: (newConfig: FiscalConfig, newBenefits: WorkBenefits, newEmail: string, newGeminiKey: string, newPickerKey: string) => void;
+  onSave: (newConfig: FiscalConfig, newBenefits: WorkBenefits, newGeminiKey: string, newPickerKey: string) => void;
   onExport: () => void;
   onImport: (file: File) => Promise<boolean>;
   // Panneaux composés par App (sauvegardes Drive, veille fiscale, appareils et confidentialité).
@@ -36,7 +35,7 @@ interface SettingsProps {
   onOpenPayday?: () => void;
 }
 
-export const Settings: React.FC<SettingsProps> = ({ payslips = [], config, workBenefits, parentsEmail, geminiApiKey, pickerApiKey, onSave, onExport, onImport, paydayDay, onOpenPayday, backupSlot, fiscalWatchSlot, securitySlot, taxNoticeSlot, notificationPrefs, onChangeNotificationPrefs }) => {
+export const Settings: React.FC<SettingsProps> = ({ payslips = [], config, workBenefits, geminiApiKey, pickerApiKey, onSave, onExport, onImport, paydayDay, onOpenPayday, backupSlot, fiscalWatchSlot, securitySlot, taxNoticeSlot, notificationPrefs, onChangeNotificationPrefs }) => {
   const [importMsg, setImportMsg] = useState<string | null>(null);
   // L'import écrase TOUT (comptes, mouvements, objectifs, fiches de paie, réglages) puis
   // resynchronise sur Drive : il faut une confirmation explicite, la boîte de sélection de
@@ -61,26 +60,24 @@ export const Settings: React.FC<SettingsProps> = ({ payslips = [], config, workB
 
   const [localFiscal, setLocalFiscal] = useState<FiscalConfig>(config);
   const [localBenefits, setLocalBenefits] = useState<WorkBenefits>(workBenefits);
-  const [localEmail, setLocalEmail] = useState<string>(parentsEmail || '');
   const [localGeminiKey, setLocalGeminiKey] = useState<string>(geminiApiKey || '');
   const [localPickerKey, setLocalPickerKey] = useState<string>(pickerApiKey || '');
   const [benefitsMsg, setBenefitsMsg] = useState<string | null>(null);
 
   // Enregistrement automatique, comme partout ailleurs dans l'app (plus de bouton « Tout
-  // enregistrer » à ne pas oublier). Une adresse e-mail incomplète n'est pas enregistrée.
-  const emailValid = localEmail.trim() === '' || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(localEmail.trim());
+  // enregistrer » à ne pas oublier).
   const [savedHint, setSavedHint] = useState(false);
-  const dirty = JSON.stringify([localFiscal, localBenefits, localEmail.trim(), localGeminiKey.trim(), localPickerKey.trim()])
-    !== JSON.stringify([config, workBenefits, parentsEmail || '', geminiApiKey || '', pickerApiKey || '']);
+  const dirty = JSON.stringify([localFiscal, localBenefits, localGeminiKey.trim(), localPickerKey.trim()])
+    !== JSON.stringify([config, workBenefits, geminiApiKey || '', pickerApiKey || '']);
   useEffect(() => {
-    if (!dirty || !emailValid) return;
+    if (!dirty) return;
     const t = setTimeout(() => {
-      onSave(localFiscal, localBenefits, localEmail.trim(), localGeminiKey.trim(), localPickerKey.trim());
+      onSave(localFiscal, localBenefits, localGeminiKey.trim(), localPickerKey.trim());
       setSavedHint(true);
     }, 700);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [localFiscal, localBenefits, localEmail, localGeminiKey, localPickerKey]);
+  }, [localFiscal, localBenefits, localGeminiKey, localPickerKey]);
 
   // Verrou (biométrie et/ou PIN) : réglage 100% local à cet appareil (localStorage), donc
   // en dehors du circuit onSave/Drive utilisé par le reste de cet écran — une empreinte ou
@@ -88,7 +85,7 @@ export const Settings: React.FC<SettingsProps> = ({ payslips = [], config, workB
   const [lockAvailable, setLockAvailable] = useState(false);
   const [biometricOn, setBiometricOn] = useState(isBiometricEnabled());
   const [lockError, setLockError] = useState<string | null>(null);
-  useEffect(() => { isLockAvailable().then(setLockAvailable); }, []);
+  useEffect(() => { isLockAvailable().then(setLockAvailable).catch(() => setLockAvailable(false)); }, []);
 
   const toggleBiometric = async () => {
     setLockError(null);
@@ -195,35 +192,12 @@ export const Settings: React.FC<SettingsProps> = ({ payslips = [], config, workB
             </div>
           )}
 
-          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-3">Un export télécharge une copie locale de toutes vos données (sans votre clé Gemini). L'import remplace les données actuelles puis les resynchronise sur Drive ; l'adresse e-mail de vos parents n'est jamais reprise d'un fichier importé.</p>
+          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-3">Un export télécharge une copie locale de toutes vos données (sans votre clé Gemini). L'import remplace les données actuelles puis les resynchronise sur Drive.</p>
           {backupSlot}
         </div>
 
         {fiscalWatchSlot && <div className="lg:col-span-2">{fiscalWatchSlot}</div>}
         {taxNoticeSlot && <div className="lg:col-span-2">{taxNoticeSlot}</div>}
-
-        {/* SECTION EMAIL */}
-        <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 lg:col-span-2">
-            <h3 className="font-bold text-slate-800 dark:text-slate-100 mb-4 border-b border-slate-200 dark:border-slate-700 pb-2 flex items-center gap-2"><Mail className="w-4 h-4 text-indigo-600"/> Notification aux parents</h3>
-            <div className="bg-slate-50 dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-700">
-                <label htmlFor="parents-email" className="text-[11px] font-black text-slate-600 dark:text-slate-300 uppercase block mb-2">E-mail destinataire (récapitulatifs Livret A et LEP)</label>
-                <input 
-                    id="parents-email"
-                    aria-invalid={!emailValid || undefined}
-                    aria-describedby={!emailValid ? 'parents-email-error' : undefined}
-                    type="email" 
-                    value={localEmail} 
-                    onChange={e => setLocalEmail(e.target.value)} 
-                    placeholder="parents@exemple.com"
-                    className="w-full p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl font-bold text-slate-800 dark:text-slate-100"
-                />
-                {!emailValid && <p id="parents-email-error" role="alert" className="text-xs font-bold text-rose-700 dark:text-rose-300 mt-2">Adresse incomplète : elle sera enregistrée dès qu'elle sera valide.</p>}
-                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-2 flex items-start gap-1">
-                    <span className="text-indigo-700 dark:text-indigo-300 font-bold">Note :</span>
-                    Un email récapitulatif sera envoyé automatiquement depuis votre compte Gmail à cette adresse uniquement lorsqu'un mouvement est détecté sur un Livret A ou un LEP.
-                </p>
-            </div>
-        </div>
 
         {/* SECTION FICHES DE PAIE (IA) */}
         <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 lg:col-span-2">

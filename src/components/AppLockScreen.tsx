@@ -30,7 +30,7 @@ export const AppLockScreen: React.FC<AppLockScreenProps> = ({ onUnlock, onForgot
   const attemptBiometric = async () => {
     setCheckingBiometric(true);
     setFailed(false);
-    const ok = await verifyBiometric();
+    const ok = await verifyBiometric().catch(() => false);
     setCheckingBiometric(false);
     if (ok) onUnlock();
     else setFailed(true);
@@ -39,14 +39,14 @@ export const AppLockScreen: React.FC<AppLockScreenProps> = ({ onUnlock, onForgot
   // Tentative automatique à l'affichage si la biométrie est configurée : Face ID/Touch ID
   // se déclenchent immédiatement la plupart du temps, évitant un clic superflu. Le PIN
   // reste disponible en repli si elle échoue ou est annulée.
-  useEffect(() => { if (biometricOn) attemptBiometric(); }, []);
+  useEffect(() => { if (biometricOn) void attemptBiometric(); }, []);
 
   const [cooldown, setCooldown] = useState(0);
 
   const submitPin = async (value: string) => {
     setCheckingPin(true);
     setPinError(false);
-    const ok = await verifyPin(value);
+    const ok = await verifyPin(value).catch(() => false);
     setCheckingPin(false);
     if (ok) { onUnlock(); return; }
     setPinError(true);
@@ -68,7 +68,7 @@ export const AppLockScreen: React.FC<AppLockScreenProps> = ({ onUnlock, onForgot
     setPinError(false);
   };
   const pressBackspace = () => setPin(p => p.slice(0, -1));
-  const pressValidate = () => { if (pin.length >= 4) submitPin(pin); };
+  const pressValidate = () => { if (pin.length >= 4) void submitPin(pin); };
 
   // Clavier physique : chiffres, retour arrière, Entrée.
   useEffect(() => {

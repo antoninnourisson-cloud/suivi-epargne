@@ -191,7 +191,6 @@ export interface ParentalRestitution {
     date: string;                                                     // date du retrait réel
     accounts: { accountId: string; name: string; amount: number }[];  // capital rendu par compte
     interestsOffered: { year: number; amount: number }[];             // intérêts de leur capital, offerts
-    emailed?: boolean;
   };
 }
 
@@ -298,7 +297,6 @@ export interface GlobalAppData {
     navigoRate?: number; // Gardé pour rétrocompatibilité
     taxRateManual: number;
     extraMonthlyIncome: number;
-    parentsEmail?: string; // <--- NOUVEAU CHAMP
     // Clés API saisies par l'utilisateur, stockées en clair dans son propre fichier Drive
     // (même logique de confiance que le CLIENT_ID applicatif) : jamais transmises ailleurs
     // qu'à l'API du fournisseur concerné (Google Picker / Gemini) depuis le navigateur.

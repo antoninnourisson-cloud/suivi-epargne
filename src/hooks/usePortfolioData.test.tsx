@@ -29,7 +29,6 @@ vi.mock('../services/googleDriveService', () => {
       drive.revision += 1;
       return String(drive.revision);
     },
-    sendGmail: async () => {},
     writeMonthlyBackup: async (month: string) => { drive.backups.push(month); return true; },
     listBackups: async () => [],
   };
@@ -43,7 +42,7 @@ const baseFile = () => ({
   accounts: [{ id: 'a', name: 'Livret A', institution: 'B', type: 'Livret A', totalAmount: 100, ownedAmount: 100, parentalCapital: 0, movements: [] }],
   expenses: [], history: [{ date: `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-01`, totalAmount: 100, ownedAmount: 100 }],
   expensesHistory: [{ date: `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-01`, total: 0 }],
-  config: { grossAnnual: 30000, leisureBudget: 200, projectSavings: 0, taxRateManual: 0, extraMonthlyIncome: 0, parentsEmail: '' },
+  config: { grossAnnual: 30000, leisureBudget: 200, projectSavings: 0, taxRateManual: 0, extraMonthlyIncome: 0 },
 });
 
 const load = async () => {
@@ -120,16 +119,60 @@ describe('synchronisation Drive', () => {
     expect((drive.writes[0] as { config: Record<string, unknown> }).config.geminiApiKey).toBeUndefined();
   });
 
-  it("refuse un import invalide et ne reprend jamais l'adresse des parents d'un fichier", async () => {
-    drive.file = { ...baseFile(), config: { ...baseFile().config, parentsEmail: 'parents@exemple.fr' } };
+  it('refuse un import invalide et accepte un fichier valide', async () => {
     const { result } = await load();
     const bad = new File(['{"accounts": "nope"}'], 'x.json');
     let ok = true;
     await act(async () => { ok = await result.current.importData(bad); });
     expect(ok).toBe(false);
-    const evil = new File([JSON.stringify({ ...baseFile(), config: { ...baseFile().config, parentsEmail: 'pirate@exemple.com' } })], 'y.json');
-    await act(async () => { ok = await result.current.importData(evil); });
+    const good = new File([JSON.stringify({ ...baseFile(), config: { ...baseFile().config, leisureBudget: 444 } })], 'y.json');
+    await act(async () => { ok = await result.current.importData(good); });
     expect(ok).toBe(true);
-    expect(result.current.parentsEmail).toBe('parents@exemple.fr');
+    expect(result.current.leisureBudget).toBe(444);
+  });
+
+  it("lit un ancien fichier (adresse des parents, restitution « emailed ») sans réécrire ni perdre ces champs", async () => {
+    const restitution = { done: { date: '2027-01-01', accounts: [], interestsOffered: [], emailed: true } };
+    drive.file = { ...baseFile(), parentalRestitution: restitution, config: { ...baseFile().config, parentsEmail: 'parents@exemple.fr' } };
+    const { result } = await load();
+    await flushSave();
+    expect(drive.writes).toHaveLength(0);
+    act(() => result.current.setLeisureBudget(321));
+    await flushSave();
+    await waitFor(() => expect(drive.writes.length).toBe(1));
+    const written = drive.writes[0] as { config: Record<string, unknown>; parentalRestitution: unknown };
+    expect(written.config.parentsEmail).toBe('parents@exemple.fr');
+    expect(written.parentalRestitution).toEqual(restitution);
+  });
+});
+
+describe('virement interne lié', () => {
+  const twoAccounts = () => ({
+    ...baseFile(),
+    accounts: [
+      { id: 'a', name: 'Livret A', institution: 'B', type: 'Livret A', totalAmount: 1000, ownedAmount: 300, parentalCapital: 700, movements: [] },
+      { id: 'b', name: 'LDDS', institution: 'B', type: 'LDDS', totalAmount: 0, ownedAmount: 0, parentalCapital: 0, movements: [] },
+    ],
+  });
+
+  it('déplace la part propre et garde les totaux', async () => {
+    drive.file = twoAccounts();
+    const { result } = await load();
+    let ok = false;
+    act(() => { ok = result.current.executeLinkedTransfer('a', 'b', 300, '2026-10-02'); });
+    expect(ok).toBe(true);
+    const [a, b] = result.current.accounts;
+    expect(a.ownedAmount).toBe(0); expect(a.parentalCapital).toBe(700); expect(a.totalAmount).toBe(700);
+    expect(b.ownedAmount).toBe(300); expect(b.totalAmount).toBe(300);
+  });
+
+  it("refuse un virement qui entamerait la part des parents, sans rien modifier", async () => {
+    drive.file = twoAccounts();
+    const { result } = await load();
+    let ok = true;
+    act(() => { ok = result.current.executeLinkedTransfer('a', 'b', 301, '2026-10-02'); });
+    expect(ok).toBe(false);
+    expect(result.current.accounts[0].ownedAmount).toBe(300);
+    expect(result.current.accounts[1].ownedAmount).toBe(0);
   });
 });

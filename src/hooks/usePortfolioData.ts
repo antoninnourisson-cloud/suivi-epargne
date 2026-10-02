@@ -5,14 +5,13 @@
 // exposés pour les écrans.
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { tracksDeposits, totalFixedCharges } from '../lib/finance';
-import { applyMovement, balanceChangeMovements } from '../lib/accountOps';
+import { applyMovement, balanceChangeMovements, canWithdrawOwn } from '../lib/accountOps';
 import { migrate, canonicalize, emptyData, isFromNewerApp, withoutDeviceOnlyFields, validateImport, APP_SCHEMA_VERSION } from '../lib/schema';
-import { buildAccountsUpdateMail } from '../lib/mailTemplates';
 import { sealJSON, openJSON } from '../services/localVault';
 import { localTodayISO } from '../lib/dates';
 import { GlobalAppData, SavingsAccount, AccountMovement, PortfolioSnapshot, ExpenseSnapshot } from '../types';
 import {
-  findConfigFile, createConfigFile, readConfigFile, updateConfigFile, sendGmail,
+  findConfigFile, createConfigFile, readConfigFile, updateConfigFile,
   getFileRevision, setOnAuthLost, ConflictError, ApiError, writeMonthlyBackup, listBackups, DriveBackup,
 } from '../services/googleDriveService';
 
@@ -70,7 +69,6 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   const [localBackup, setLocalBackup] = useState<StoredSnapshot | null>(null);
-  const [mailError, setMailError] = useState<string | null>(null);
 
   const driveRevisionRef = useRef<string | null>(null);
   const driveFileIdRef = useRef<string | null>(null);
@@ -233,7 +231,6 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
       setNavigoRate: cfg('navigoRate') as (u: Updater<number>) => void,
       setTaxRateManual: cfg('taxRateManual'),
       setExtraMonthlyIncome: cfg('extraMonthlyIncome'),
-      setParentsEmail: cfg('parentsEmail') as (u: Updater<string>) => void,
       setPickerApiKey: cfg('pickerApiKey') as (u: Updater<string>) => void,
       setPaydayDay: cfg('paydayDay'),
       setPaydayAmount: cfg('paydayAmount'),
@@ -257,19 +254,16 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
   }, [buildData]);
 
   /**
-   * Import d'un fichier local. Le fichier est contrôlé avant de remplacer quoi que ce soit,
-   * et l'adresse e-mail des parents n'est JAMAIS reprise d'un fichier (un fichier piégé
-   * pourrait sinon détourner les récapitulatifs vers un inconnu).
+   * Import d'un fichier local. Le fichier est contrôlé avant de remplacer quoi que ce soit.
    */
   const importData = useCallback(async (file: File): Promise<boolean> => {
     try {
       const parsed: unknown = JSON.parse(await file.text());
       const errors = validateImport(parsed);
       if (errors.length > 0) { console.error('Import refusé', errors); return false; }
-      const keepEmail = docRef.current.config.parentsEmail;
       const keepPicker = docRef.current.config.pickerApiKey;
       applyData(parsed);
-      setDoc(d => ({ ...d, config: { ...d.config, parentsEmail: keepEmail, pickerApiKey: d.config.pickerApiKey || keepPicker } }));
+      setDoc(d => ({ ...d, config: { ...d.config, pickerApiKey: d.config.pickerApiKey || keepPicker } }));
       return true;
     } catch (e) {
       console.error('Import échoué', e);
@@ -283,37 +277,11 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
     lsDel(BACKUP_KEY);
     setLocalBackup(null);
     setSyncConflict(false);
-    loadDriveData();
+    void loadDriveData();
   }, [loadDriveData]);
 
   const announceSave = (fileId: string, revision: string | null) =>
     lsSet(LAST_SAVE_KEY, JSON.stringify({ fileId, revision, at: Date.now() }));
-
-  // --- MAIL PARENTS DIFFÉRÉ ---
-  // Expédié seulement après une écriture Drive CONFIRMÉE : jamais pour un mouvement qui
-  // n'a pas persisté. File par opération (`opId`) pour pouvoir annuler la sienne.
-  const pendingParentMailRef = useRef<{ opId: string; to: string; subject: string; body: string }[]>([]);
-  const flushPendingParentMail = useCallback(() => {
-    const mails = pendingParentMailRef.current;
-    if (mails.length === 0) return;
-    pendingParentMailRef.current = [];
-    setMailError(null);
-    for (const mail of mails) {
-      sendGmail(mail.to, mail.subject, mail.body).catch(err => {
-        console.error('Envoi du mail aux parents échoué', err);
-        setMailError(mail.to);
-      });
-    }
-  }, []);
-  const cancelQueuedParentsMail = useCallback((opId: string) => {
-    pendingParentMailRef.current = pendingParentMailRef.current.filter(m => m.opId !== opId);
-  }, []);
-  const queueParentsMail = useCallback((opId: string, subject: string, htmlBody: string): boolean => {
-    const to = docRef.current.config.parentsEmail;
-    if (!to) return false;
-    pendingParentMailRef.current = [...pendingParentMailRef.current.filter(m => m.opId !== opId), { opId, to, subject, body: htmlBody }];
-    return true;
-  }, []);
 
   /** Copie mensuelle sur Drive, à la première sauvegarde réussie du mois (non bloquante). */
   const maybeMonthlyBackup = (data: GlobalAppData) => {
@@ -328,7 +296,6 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
     driveRevisionRef.current = revision;
     markPersisted(saved);
     announceSave(fileId, revision);
-    flushPendingParentMail();
     setSyncError(false);
     setLastSavedAt(new Date());
     lsDel(BACKUP_KEY);
@@ -391,8 +358,9 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
         if (canonicalize(remote) !== canonicalize(docRef.current)) applyData(remote);
       } catch { /* annonce illisible ou lecture ratée : le conflit naturel jouera */ }
     };
-    window.addEventListener('storage', onStorage);
-    return () => window.removeEventListener('storage', onStorage);
+    const listener = (e: StorageEvent) => { void onStorage(e); };
+    window.addEventListener('storage', listener);
+    return () => window.removeEventListener('storage', listener);
   }, [applyData]);
 
   // --- MIROIR LOCAL (seulement tant que Drive n'est pas à jour) ---
@@ -419,7 +387,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
 
     setIsSaving(true);
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-    saveTimeoutRef.current = setTimeout(async () => {
+    saveTimeoutRef.current = setTimeout(() => void (async () => {
       const data = buildData();
       try {
         const newRevision = await runExclusive(async () => {
@@ -458,7 +426,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
       } finally {
         setIsSaving(false);
       }
-    }, 2000);
+    })(), 2000);
     return () => clearTimeout(saveTimeoutRef.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [doc, isAuthenticated, driveFileId, isLoadingData, buildData, syncConflict, sessionExpired, appOutdated, isOffline, runExclusive]);
@@ -504,20 +472,9 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
     });
   }, [doc.expenses, doc.subscriptions, monthTick]);
 
-  /** Met en attente le récapitulatif aux parents si le Livret A ou le LEP change. */
-  const notifyParentsIfNeeded = useCallback((updates: { account: SavingsAccount; date: string }[], opId: string = crypto.randomUUID()) => {
-    // docRef : l'état le plus récent, même si un setAccounts vient d'être appelé dans le même tour.
-    const body = buildAccountsUpdateMail(docRef.current.accounts, updates);
-    if (!body) return;
-    if (!queueParentsMail(opId, 'Pécule : mise à jour des comptes', body)) {
-      console.warn('Mouvement sur un livret, mais aucune adresse e-mail des parents configurée.');
-    }
-  }, [queueParentsMail]);
-
   // `cashFlow` : argent réellement versé (+) ou retiré (−) sur un compte qui suit ses
   // versements (PEA, AV…). Le reste de l'écart est une variation de valeur.
   const updateAccountsWithMovements = useCallback((updates: { account: SavingsAccount; date: string; cashFlow?: number }[]) => {
-    notifyParentsIfNeeded(updates);
     setters.setAccounts(prev => {
       const next = [...prev];
       for (const upd of updates) {
@@ -532,19 +489,24 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
       }
       return next;
     });
-  }, [notifyParentsIfNeeded, setters]);
+  }, [setters]);
 
-  const executeLinkedTransfer = useCallback((sourceId: string, destId: string, amount: number, date: string) => {
+  /** Virement interne lié (sortie + entrée). Refusé (`false`) s'il entamerait la part des
+   *  parents du compte source : la règle vaut pour tout appelant, pas seulement l'écran. */
+  const executeLinkedTransfer = useCallback((sourceId: string, destId: string, amount: number, date: string): boolean => {
+    const current = docRef.current.accounts.find(a => a.id === sourceId);
+    if (!current || sourceId === destId || !canWithdrawOwn(current, amount)) return false;
     const linkId = crypto.randomUUID();
     setters.setAccounts(prev => {
       const source = prev.find(a => a.id === sourceId);
       const dest = prev.find(a => a.id === destId);
-      if (!source || !dest) return prev;
+      if (!source || !dest || !canWithdrawOwn(source, amount)) return prev;
       const moveOut: AccountMovement = { id: crypto.randomUUID(), date, amount, label: `Virement vers ${dest.name}`, type: 'OUT', linkId };
       const moveIn: AccountMovement = { id: crypto.randomUUID(), date, amount, label: `Virement de ${source.name}`, type: 'IN', linkId };
       return prev.map(a => a.id === sourceId ? applyMovement(a, moveOut, 1, { trackDeposits: true })
         : a.id === destId ? applyMovement(a, moveIn, 1, { trackDeposits: true }) : a);
     });
+    return true;
   }, [setters]);
 
   // --- COPIES MENSUELLES DRIVE ---
@@ -600,7 +562,6 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
     navigoRate: c.navigoRate ?? 67.24,
     taxRateManual: c.taxRateManual,
     extraMonthlyIncome: c.extraMonthlyIncome,
-    parentsEmail: c.parentsEmail ?? '',
     pickerApiKey: c.pickerApiKey ?? '',
     paydayDay: c.paydayDay,
     paydayAmount: c.paydayAmount,
@@ -610,8 +571,6 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
     config: c,
     geminiApiKey, setGeminiApiKey,
     ...setters,
-    queueParentsMail,
-    cancelQueuedParentsMail,
     buildData,
     lastView, setLastView,
 
@@ -625,8 +584,6 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
     localBackup,
     lastSavedAt,
     isOffline,
-    mailError,
-    dismissMailError: () => setMailError(null),
 
     // Actions
     loadDriveData,
@@ -636,7 +593,6 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
     restoreLocalBackup,
     dismissLocalBackup,
     updateAccountsWithMovements,
-    notifyParentsIfNeeded,
     executeLinkedTransfer,
     exportData,
     importData,

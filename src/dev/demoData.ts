@@ -32,6 +32,6 @@ export const DEMO_DATA: GlobalAppData = {
     { id: 's1', name: 'Musique', amount: 10.99, debitAccount: 'Carte', frequency: 'monthly', anchorDate: d(25), active: true },
   ],
   donations: [{ id: 'd1', date: d(100), amount: 120, organization: 'Association démo', rate: 66, receiptReceived: true }],
-  config: { grossAnnual: 32000, leisureBudget: 250, projectSavings: 100, taxRateManual: 0, extraMonthlyIncome: 0, parentsEmail: '', paydayDay: 27 },
+  config: { grossAnnual: 32000, leisureBudget: 250, projectSavings: 100, taxRateManual: 0, extraMonthlyIncome: 0, paydayDay: 27 },
   parentalRestitution: { plannedDate: '2027-01-01' },
 };

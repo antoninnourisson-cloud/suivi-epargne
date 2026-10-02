@@ -45,7 +45,7 @@ export const useFiscalWatch = (geminiApiKey: string, fiscal: FiscalConfig | unde
   }, [geminiApiKey, running]);
 
   useEffect(() => {
-    if (enabled && geminiApiKey && isWatchDue(stored.checkedAt)) run();
+    if (enabled && geminiApiKey && isWatchDue(stored.checkedAt)) void run();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, geminiApiKey]);
 

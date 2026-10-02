@@ -95,8 +95,7 @@ Pécule (anciennement *Suivi Épargne*) est une application web installable (PWA
 - **Agenda des douze mois** : paies, prélèvements, révisions de taux, rendez-vous fiscaux, maturités, fermeture du LEP, restitution.
 - **Bilan du mois** (le 1er) et **bilan annuel** (début janvier) : épargne, taux, intérêts, meilleur mois, dons, abonnements.
 - **Abonnements** : rappel avant prélèvement, revue annuelle (coût, hausses, date limite de résiliation).
-- **Restitution du capital parental** : date conseillée (le 1er janvier garde toute l'année d'intérêts), montants par compte, rappels, enregistrement en un clic, récapitulatif aux parents et relevé exportable, puis **mode solo** et **plan solo 2027-2030**.
-- **E-mail récapitulatif aux parents** (Gmail) lors des mouvements sur Livret A / LEP, seulement après une sauvegarde confirmée.
+- **Restitution du capital parental** : date conseillée (le 1er janvier garde toute l'année d'intérêts), montants par compte, rappels, enregistrement en un clic et relevé exportable, puis **mode solo** et **plan solo 2027-2030**.
 
 ### Notifications, sécurité et données
 - **Notifications push** appareil par appareil (avec le serveur), **activables type par type** : jour de paie, abonnements, échéances, soldes, taux, LEP, impôts, parents, bilans. Mode **discret** sans aucun montant.
@@ -118,7 +117,6 @@ flowchart LR
   end
 
   Drive[(Google Drive<br/>suivi_epargne.json)]
-  Gmail[Gmail API<br/>e-mail aux parents]
   Gemini[Gemini API<br/>fiches de paie, avis d'imposition,<br/>veille fiscale]
   SP[service-public.gouv.fr]
 
@@ -133,7 +131,6 @@ flowchart LR
   end
 
   Hook <-->|lecture et écriture directes| Drive
-  UI -->|gmail.send| Gmail
   UI -->|clé de l'appareil| Gemini
   UI <-->|session| Auth
   UI -->|textes officiels| FS
@@ -167,7 +164,7 @@ Liste complète et raisons : [MAINTENANCE.md §1](MAINTENANCE.md#1-invariants-à
 
 ## Sécurité et confidentialité
 
-- **Moindre privilège Google** : `drive.file` (uniquement les fichiers créés par l'app) et `gmail.send` (e-mails aux parents, retirable après la restitution).
+- **Moindre privilège Google** : `drive.file` uniquement (les fichiers créés par l'app), plus `openid` et `email` côté serveur pour l'identité. Aucune portée sensible, aucun envoi d'e-mail.
 - **CSP stricte** dans [`index.html`](index.html) : aucun script intégré, origines limitées à Google et à l'origine **exacte** du Worker (injectée au build par `vite.config.ts`).
 - **Serveur** :
   - refresh token chiffré en AES-256-GCM ;
@@ -212,7 +209,7 @@ VITE_BACKEND_URL=http://localhost:8787
 **Configuration Google Cloud** (client OAuth « Application Web », identifiant dans `src/services/googleDriveService.ts`) :
 - origines JavaScript : `https://pecule-app.com` et `http://localhost:5173` ;
 - URI de redirection (mode serveur) : `https://<worker>.workers.dev/auth/callback` ;
-- API activées : Google Drive, Gmail, Google Picker ;
+- API activées : Google Drive, Google Picker ;
 - écran de consentement **« En production »** (en mode test, les sessions expirent après 7 jours) ;
 - une clé API pour le Picker, saisie dans Paramètres (à restreindre par référent HTTP).
 
@@ -250,7 +247,7 @@ Avant chaque mise à jour visible, ajoute une entrée **en tête** de [`src/chan
 │   │   ├── schema.ts       migrate(), version du format, canonicalize
 │   │   ├── fiscalWatch.ts  veille fiscale (propositions bornées et sourcées)
 │   │   ├── lep.ts · notificationPrefs.ts · agenda.ts · planning.ts · projection.ts …
-│   ├── services/           Google (Drive, Gmail, Picker), Gemini, serveur, push, verrou, coffre local
+│   ├── services/           Google (Drive, Picker), Gemini, serveur, push, verrou, coffre local
 │   ├── dev/                données du mode démo
 │   ├── changelog.ts        historique des mises à jour (« Quoi de neuf », Releases)
 │   ├── constants.ts · types.ts · navigation.ts · App.tsx · index.tsx · index.css (@theme Tailwind 4)

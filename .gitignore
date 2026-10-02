@@ -28,3 +28,8 @@ dist-ssr
 worker/.dev.vars
 worker/node_modules
 worker/.wrangler
+
+# Tests
+coverage/
+test-results/
+playwright-report/

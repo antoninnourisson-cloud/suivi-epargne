@@ -15,6 +15,16 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '2026.10.02-8',
+    date: '2026-10-02',
+    title: "Plus d'e-mails, plus de garde-fous",
+    items: [
+      "Pécule n'envoie plus aucun e-mail : la connexion Google ne demande plus que l'accès à Drive. Reconnectez-vous une fois sur chaque appareil.",
+      "Un virement entre vos comptes ne peut plus jamais entamer la part de vos parents, quel que soit l'écran d'où il part.",
+      "Un fichier de données abîmé est réparé à l'ouverture (montants illisibles, mouvements incomplets) au lieu de fausser les calculs, y compris pour les notifications.",
+    ],
+  },
+  {
     version: '2026.10.02-7',
     date: '2026-10-02',
     title: 'Plus lisible, au clavier comme à l\'écran',

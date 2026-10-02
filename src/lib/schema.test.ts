@@ -59,3 +59,53 @@ describe('garde-fous', () => {
     expect(stableStringify({ b: 1, a: undefined })).toBe('{"b":1}');
   });
 });
+
+describe('migrate : fichier abîmé', () => {
+  const acc = (over: Record<string, unknown>) => ({ id: 'a', name: 'Livret A', institution: 'B', type: 'Livret A', ...over });
+
+  it('reconstitue un montant illisible et garde total = part propre + parents', () => {
+    const [a] = migrate({ accounts: [acc({ totalAmount: 1000, ownedAmount: 'abc', parentalCapital: 400 })] }).accounts;
+    expect(a.ownedAmount).toBe(600);
+    expect(a.totalAmount).toBe(1000);
+  });
+
+  it('accepte un montant écrit en texte et recalcule un total incohérent', () => {
+    const [a] = migrate({ accounts: [acc({ totalAmount: 5, ownedAmount: '12.5', parentalCapital: 0 })] }).accounts;
+    expect(a.ownedAmount).toBe(12.5);
+    expect(a.totalAmount).toBe(12.5);
+  });
+
+  it('ne laisse passer aucun NaN ni Infinity', () => {
+    const [a] = migrate({ accounts: [acc({ ownedAmount: Number.NaN, parentalCapital: Number.POSITIVE_INFINITY, interestRate: 'x', ceiling: 22950 })] }).accounts;
+    expect(a.ownedAmount).toBe(0);
+    expect(a.parentalCapital).toBe(0);
+    expect(a.totalAmount).toBe(0);
+    expect(a.interestRate).toBeUndefined();
+    expect(a.ceiling).toBe(22950);
+  });
+
+  it('écarte les mouvements illisibles et garde les autres, champs inconnus compris', () => {
+    const movements = [
+      { id: '1', date: '2026-01-02', amount: 50, type: 'IN', futur: 'x' },
+      { id: '2', date: '2026-01-03', amount: 'NaN', type: 'IN' },
+      { id: '3', date: '2026-01-04', amount: 10, type: 'AUTRE' },
+      { id: '4', amount: 10, type: 'OUT' },
+      null,
+      { id: '5', date: '2026-01-05', amount: '20', type: 'OUT' },
+    ];
+    const [a] = migrate({ accounts: [acc({ ownedAmount: 30, parentalCapital: 0, movements })] }).accounts;
+    expect(a.movements!.map(m => m.id)).toEqual(['1', '5']);
+    expect(a.movements![1].amount).toBe(20);
+    expect((a.movements![0] as unknown as Record<string, unknown>).futur).toBe('x');
+  });
+
+  it('ignore les entrées de comptes qui ne sont pas des objets', () => {
+    const accounts = migrate({ accounts: [null, 'x', acc({ ownedAmount: 1, parentalCapital: 0 })] }).accounts;
+    expect(accounts).toHaveLength(1);
+  });
+
+  it("est stable : migrer deux fois donne le même résultat (pas d'écriture inutile à l'ouverture)", () => {
+    const raw = { accounts: [acc({ totalAmount: 1000, ownedAmount: 'abc', parentalCapital: 400, movements: [{ id: '1', date: '2026-01-02', amount: '5', type: 'IN' }] })] };
+    expect(canonicalize(migrate(raw))).toBe(canonicalize(raw));
+  });
+});

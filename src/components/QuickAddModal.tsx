@@ -7,6 +7,7 @@ import { localTodayISO, parseISODate } from '../lib/dates';
 import { quinzaineWithdrawalTip } from '../lib/finance';
 import { formatEUR, frenchDay } from '../lib/format';
 import { Modal } from './Modal';
+import { canWithdrawOwn } from '../lib/accountOps';
 
 interface QuickAddModalProps {
   open: boolean;
@@ -46,7 +47,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ open, accounts, on
   const account = accounts.find(a => a.id === accountId);
   const tip = open && type === 'OUT' && account ? quinzaineWithdrawalTip(account, amount, parseISODate(date)) : null;
   const since = parseISODate(date).getDate() < 16 ? '1er' : '16';
-  const tooMuch = type === 'OUT' && !!account && amount > account.ownedAmount + 0.004;
+  const tooMuch = type === 'OUT' && !!account && amount > 0 && !canWithdrawOwn(account, amount);
   const canSubmit = !!accountId && amount > 0 && !tooMuch;
 
   const submit = (e: React.FormEvent) => {
