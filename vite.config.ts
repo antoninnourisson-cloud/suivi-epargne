@@ -31,8 +31,8 @@ const backendOriginPlugin = (): Plugin => {
 };
 
 export default defineConfig({
-  // Base relative : fonctionne aussi bien sur un user page (username.github.io)
-  // que sur un project page (username.github.io/nom-du-repo/), sans configuration
+  // Base relative : fonctionne à la racine du domaine (pecule-app.com) comme sous un chemin
+  // (ancienne adresse github.io/suivi-epargne/), sans configuration
   // supplémentaire ni connaissance du nom du repo au moment du build.
   base: './',
   // Commit du build (7 caractères), fourni par GitHub Actions ; « dev » en local.

@@ -25,7 +25,7 @@ Seule la version en ligne (dernière version de `main`) est maintenue : l'app se
 
 ## Les protections en place
 
-Résumé ici, détail dans le README (section *Sécurité et confidentialité*) et sur la [page de confidentialité](https://antoninnourisson-cloud.github.io/suivi-epargne/confidentialite.html) :
+Résumé ici, détail dans le README (section *Sécurité et confidentialité*) et sur la [page de confidentialité](https://pecule-app.com/confidentialite.html) :
 
 - accès Google limité aux fichiers créés par l'app (`drive.file`) ;
 - serveur réservé à une liste d'adresses e-mail, sessions signées et expirées après 30 jours d'inactivité (60 jours au plus), limitation du débit des requêtes ;

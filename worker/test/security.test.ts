@@ -44,6 +44,27 @@ describe('safeReturnUrl', () => {
   });
 });
 
+describe('déménagement vers un domaine propre (LEGACY_APP_URL)', () => {
+  const moved = { APP_URL: 'https://pecule.example/', LEGACY_APP_URL: 'https://owner.github.io/suivi-epargne/' };
+
+  it("accepte la nouvelle adresse et l'ancienne, avec son chemin", () => {
+    expect(safeReturnUrl('https://pecule.example/?x=1', moved)).toBe('https://pecule.example/?x=1');
+    expect(safeReturnUrl('https://owner.github.io/suivi-epargne/', moved)).toBe('https://owner.github.io/suivi-epargne/');
+    expect(isOriginAcceptable('https://pecule.example', moved)).toBe(true);
+    expect(isOriginAcceptable('https://owner.github.io', moved)).toBe(true);
+  });
+
+  it("garde le contrôle du chemin sur l'ancienne origine partagée", () => {
+    expect(safeReturnUrl('https://owner.github.io/autre-projet/', moved)).toBe(moved.APP_URL);
+  });
+
+  it("refuse l'ancienne adresse une fois LEGACY_APP_URL retiré", () => {
+    const after = { APP_URL: moved.APP_URL };
+    expect(isOriginAcceptable('https://owner.github.io', after)).toBe(false);
+    expect(safeReturnUrl('https://owner.github.io/suivi-epargne/', after)).toBe(after.APP_URL);
+  });
+});
+
 describe('state OAuth signé', () => {
   const secret = b64urlEncode(crypto.getRandomValues(new Uint8Array(32)));
 

@@ -15,6 +15,17 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '2026.10.02-6',
+    date: '2026-10-02',
+    title: 'Pécule a sa propre adresse',
+    items: [
+      "Pécule déménage sur pecule-app.com. Vos données restent sur votre Google Drive : il suffit de vous reconnecter.",
+      "Sur chaque appareil, réactivez ensuite les notifications, le verrou et la clé Gemini, et réinstallez l'app sur téléphone.",
+      "La police de l'app est maintenant incluse : affichage plus net, même hors ligne.",
+      "Confidentialité : la page détaille aussi ce qui est envoyé à Gemini pour l'avis d'imposition et la veille fiscale.",
+    ],
+  },
+  {
     version: '2026.10.02-5',
     date: '2026-10-02',
     title: 'Chiffres réels et réglages fins',

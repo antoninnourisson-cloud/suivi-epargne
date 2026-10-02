@@ -13,7 +13,7 @@ Sans base de données : vos données restent dans **un seul fichier, sur votre p
 [![Déploiement GitHub Pages](https://github.com/antoninnourisson-cloud/suivi-epargne/actions/workflows/deploy.yml/badge.svg)](https://github.com/antoninnourisson-cloud/suivi-epargne/actions/workflows/deploy.yml)
 [![Déploiement du serveur](https://github.com/antoninnourisson-cloud/suivi-epargne/actions/workflows/worker.yml/badge.svg)](https://github.com/antoninnourisson-cloud/suivi-epargne/actions/workflows/worker.yml)
 [![Licence : AGPL v3](https://img.shields.io/badge/licence-AGPL%20v3-blue)](LICENSE)
-[![PWA](https://img.shields.io/badge/PWA-installable-14532d?logo=pwa)](https://antoninnourisson-cloud.github.io/suivi-epargne/)
+[![PWA](https://img.shields.io/badge/PWA-installable-14532d?logo=pwa)](https://pecule-app.com/)
 
 [![React](https://img.shields.io/badge/React-19-61dafb?logo=react&logoColor=white)](https://react.dev/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-6-3178c6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
@@ -24,8 +24,8 @@ Sans base de données : vos données restent dans **un seul fichier, sur votre p
 [![Node.js](https://img.shields.io/badge/Node.js-22-5fa04e?logo=nodedotjs&logoColor=white)](.nvmrc)
 [![Cloudflare Workers](https://img.shields.io/badge/serveur-Cloudflare%20Workers-f38020?logo=cloudflare&logoColor=white)](worker/)
 
-[**Ouvrir l'app**](https://antoninnourisson-cloud.github.io/suivi-epargne/) ·
-[Confidentialité](https://antoninnourisson-cloud.github.io/suivi-epargne/confidentialite.html) ·
+[**Ouvrir l'app**](https://pecule-app.com/) ·
+[Confidentialité](https://pecule-app.com/confidentialite.html) ·
 [Nouveautés](https://github.com/antoninnourisson-cloud/suivi-epargne/releases) ·
 [Maintenance](MAINTENANCE.md) ·
 [Feuille de route](ROADMAP.md)
@@ -108,7 +108,7 @@ Pécule (anciennement *Suivi Épargne*) est une application web installable (PWA
 
 ```mermaid
 flowchart LR
-  subgraph Navigateur["Navigateur : PWA React (GitHub Pages)"]
+  subgraph Navigateur["Navigateur : PWA React (pecule-app.com, GitHub Pages)"]
     UI[Écrans React]
     Hook[usePortfolioData<br/>synchronisation et quarantaine]
     Lib[src/lib<br/>calculs purs et testés]
@@ -180,7 +180,7 @@ Liste complète et raisons : [MAINTENANCE.md §1](MAINTENANCE.md#1-invariants-à
   - push chiffré de bout en bout (RFC 8291).
 - **Sur l'appareil** : verrou biométrique ou PIN, copie locale chiffrée par une clé non exportable, clé Gemini propre à l'appareil.
 - **Tout révoquer** : « Déconnecter tous les appareils » et « Supprimer mes données serveur » dans Paramètres, ou myaccount.google.com/permissions.
-- **Tiers** : les fiches de paie et l'avis d'imposition envoyés à Gemini contiennent des données personnelles. Avec une clé gratuite, Google peut s'en servir. Voir les [règles de confidentialité](https://antoninnourisson-cloud.github.io/suivi-epargne/confidentialite.html).
+- **Tiers** : les fiches de paie et l'avis d'imposition envoyés à Gemini contiennent des données personnelles. Avec une clé gratuite, Google peut s'en servir. Voir les [règles de confidentialité](https://pecule-app.com/confidentialite.html).
 
 Signaler une faille : voir [SECURITY.md](SECURITY.md).
 
@@ -210,7 +210,7 @@ VITE_BACKEND_URL=http://localhost:8787
 ```
 
 **Configuration Google Cloud** (client OAuth « Application Web », identifiant dans `src/services/googleDriveService.ts`) :
-- origines JavaScript : `https://antoninnourisson-cloud.github.io` et `http://localhost:5173` ;
+- origines JavaScript : `https://pecule-app.com` et `http://localhost:5173` ;
 - URI de redirection (mode serveur) : `https://<worker>.workers.dev/auth/callback` ;
 - API activées : Google Drive, Gmail, Google Picker ;
 - écran de consentement **« En production »** (en mode test, les sessions expirent après 7 jours) ;

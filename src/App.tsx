@@ -27,6 +27,7 @@ import './services/installPrompt';
 import { computeBadgeCount, detectPayRaise } from './lib/projection';
 import { balanceChangeMovements, applyMovement, snapshotBalances, restoreBalances, isRestitutionMovement, round2 as round2Cents } from './lib/accountOps';
 import { WhatsNewModal } from './components/WhatsNew';
+import { MovedNotice } from './components/MovedNotice';
 import { Logo } from './components/Logo';
 import { LATEST_VERSION } from './changelog';
 import { buildRestitutionMail } from './lib/mailTemplates';
@@ -1007,6 +1008,7 @@ const App: React.FC = () => {
 
       {/* Une fois après chaque mise à jour : ce qui a changé. */}
       <WhatsNewModal isNewUser={data.accounts.length === 0} />
+      <MovedNotice />
 
       <Dialog state={dialog} onClose={closeDialog} />
     </div>

@@ -48,7 +48,8 @@ export interface Env {
   VAPID_PUBLIC_KEY: string;      // secret — point P-256 non compressé, base64url
   VAPID_PRIVATE_KEY: string;     // secret — scalaire d, base64url
   VAPID_SUBJECT: string;
-  APP_URL: string;               // ex : https://<user>.github.io/suivi-epargne/
+  APP_URL: string;               // ex : https://pecule-app.com/
+  LEGACY_APP_URL?: string;       // ancienne adresse, acceptée pendant le déménagement
   EXTRA_ORIGINS?: string;        // origines supplémentaires autorisées (dev local uniquement, [env.dev])
   ALLOWED_EMAILS?: string;       // secret — comptes Google autorisés, séparés par des virgules
   AUTH_LIMITER?: RateLimit;      // binding [[ratelimits]] — /auth/*, /account/delete
@@ -92,7 +93,7 @@ const htmlPage = (env: Env, title: string, message: string, status = 400): Respo
 <main style="max-width:420px;background:#1e293b;padding:28px;border-radius:20px">
 <h1 style="font-size:20px;margin:0 0 12px">${escapeHtml(title)}</h1>
 <p style="line-height:1.5;color:#94a3b8">${escapeHtml(message)}</p>
-<a href="${escapeHtml(env.APP_URL)}" style="display:inline-block;margin-top:12px;background:#4f46e5;color:white;padding:10px 16px;border-radius:10px;text-decoration:none;font-weight:600">Retour à l'app</a>
+<a href="${escapeHtml(env.APP_URL)}" style="display:inline-block;margin-top:12px;background:#14532d;color:white;padding:10px 16px;border-radius:10px;text-decoration:none;font-weight:600">Retour à l'app</a>
 </main></body></html>`,
     { status, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } }
   );

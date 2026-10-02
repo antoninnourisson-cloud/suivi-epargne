@@ -11,10 +11,13 @@ compatibility_date = "2025-06-01"
 # Client OAuth : DOIT être le même que celui de l'app (src/services/googleDriveService.ts),
 # sinon le scope drive.file ne donne pas accès au fichier de données déjà créé.
 GOOGLE_CLIENT_ID = "763862877733-hl1an9vcn0ibnoq2iq035927528mimd5.apps.googleusercontent.com"
-APP_URL = "https://antoninnourisson-cloud.github.io/suivi-epargne/"
+APP_URL = "https://pecule-app.com/"
+# Ancienne adresse (avant octobre 2026), acceptée le temps que les apps installées depuis
+# github.io déménagent (écran « Pécule a déménagé »). À retirer début 2027.
+LEGACY_APP_URL = "https://antoninnourisson-cloud.github.io/suivi-epargne/"
 # Contact exigé par le protocole VAPID. Une URL https est acceptée (RFC 8292) : évite de
 # publier une adresse e-mail dans ce fichier, visible dans le dépôt.
-VAPID_SUBJECT = "https://antoninnourisson-cloud.github.io/suivi-epargne/"
+VAPID_SUBJECT = "https://pecule-app.com/"
 # Pas d'EXTRA_ORIGINS en production : localhost n'est autorisé qu'en local, par `npm run dev`
 # (= wrangler dev --var EXTRA_ORIGINS:http://localhost:5173, voir package.json).
 

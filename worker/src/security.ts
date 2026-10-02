@@ -7,12 +7,16 @@
 // ================================================
 import { b64urlDecode, b64urlEncode, randomToken, utf8 } from './crypto';
 
-export interface OriginConfig { APP_URL: string; EXTRA_ORIGINS?: string }
+export interface OriginConfig { APP_URL: string; LEGACY_APP_URL?: string; EXTRA_ORIGINS?: string }
 
 const extraOrigins = (env: OriginConfig): string[] =>
   (env.EXTRA_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean);
 
-export const allowedOrigins = (env: OriginConfig): string[] => [new URL(env.APP_URL).origin, ...extraOrigins(env)];
+/** L'app, puis son ancienne adresse pendant le déménagement (origine ET chemin, comme APP_URL). */
+const appUrls = (env: OriginConfig): URL[] =>
+  [env.APP_URL, env.LEGACY_APP_URL].filter((u): u is string => !!u).map(u => new URL(u));
+
+export const allowedOrigins = (env: OriginConfig): string[] => [...appUrls(env).map(u => u.origin), ...extraOrigins(env)];
 
 /** `true` si l'en-tête Origin est absent (client non navigateur) ou autorisé. */
 export const isOriginAcceptable = (origin: string | null, env: OriginConfig): boolean =>
@@ -20,10 +24,9 @@ export const isOriginAcceptable = (origin: string | null, env: OriginConfig): bo
 
 /** Bases d'URL de retour : l'app (origine ET chemin, ex. /suivi-epargne/), et les origines de dev. */
 const returnBases = (env: OriginConfig): { origin: string; prefix: string }[] => {
-  const app = new URL(env.APP_URL);
   const withSlash = (p: string) => (p.endsWith('/') ? p : `${p}/`);
   return [
-    { origin: app.origin, prefix: withSlash(app.pathname) },
+    ...appUrls(env).map(app => ({ origin: app.origin, prefix: withSlash(app.pathname) })),
     ...extraOrigins(env).map(o => ({ origin: new URL(o).origin, prefix: '/' })),
   ];
 };

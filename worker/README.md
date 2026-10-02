@@ -97,7 +97,8 @@ d'accueil (Partager → *Sur l'écran d'accueil*).
   effacé dès l'échange.
 - **Origines** : seule l'app (`APP_URL`) est autorisée en production ; une requête venant d'une
   autre origine est refusée (403) avant toute lecture du stockage. L'URL de retour après
-  connexion doit commencer par `APP_URL` (origine **et** chemin `/suivi-epargne/`).
+  connexion doit commencer par `APP_URL` (origine **et** chemin). Pendant le déménagement
+  vers pecule-app.com, `LEGACY_APP_URL` (l'ancienne adresse github.io) est aussi acceptée.
 - **Notifications** : chiffrées de bout en bout (RFC 8291). Seuls les services de push des
   navigateurs sont acceptés (FCM, Mozilla, Apple, Windows), 10 appareils au plus. Chaque
   abonnement appartient à la session qui l'a créé et disparaît avec elle. Si le fichier de

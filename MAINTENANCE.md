@@ -113,3 +113,11 @@ Au-delà, Cloudflare refuse les requêtes jusqu'au lendemain : l'app retombe sur
 - **En production**, **non validée** par Google, **un seul utilisateur** (le serveur n'accepte que `ALLOWED_EMAILS`). Elle doit rester « En production » : en mode test, les refresh tokens expirent au bout de 7 jours.
 - À la connexion, Google affiche « application non validée » : c'est normal (Paramètres avancés → Accéder à…).
 - Portées : `drive.file` (non sensible, uniquement les fichiers créés par l'app) et **`gmail.send`**, une portée **sensible**, utilisée seulement pour les e-mails aux parents. **Après la restitution (2027), elle pourra être retirée** (`SCOPES` dans `src/services/googleDriveService.ts` et la liste des API dans la console Google), ce qui réduit les droits accordés. Cela demande une reconnexion sur chaque appareil.
+
+## 8. Nom de domaine
+
+- **pecule-app.com**, acheté chez Cloudflare (registrar et DNS). Renouvellement automatique : vérifier une fois par an que le moyen de paiement est valide (Cloudflare → Domain Registration).
+- L'app est servie par **GitHub Pages** (Settings → Pages → Custom domain), via les enregistrements A/AAAA de GitHub dans le DNS Cloudflare, en mode « DNS only ». Le domaine est vérifié dans les paramètres GitHub du compte (enregistrement TXT `_github-pages-challenge-…`) : personne d'autre ne peut le rattacher à un autre dépôt.
+- L'ancienne adresse `antoninnourisson-cloud.github.io/suivi-epargne/` redirige vers le domaine. Une app installée depuis l'ancienne adresse affiche « Pécule a déménagé » (`src/components/MovedNotice.tsx`).
+- **Début 2027** : retirer `LEGACY_APP_URL` de `worker/wrangler.toml`, l'origine `https://antoninnourisson-cloud.github.io` du client OAuth Google et de la clé du Picker.
+
