@@ -14,8 +14,9 @@ import {
 } from './finance';
 import { DEFAULT_FISCAL_CONFIG } from '../constants';
 import { signedAmount } from './money';
+import { lepTimelineFromData } from './lep';
 
-export type AgendaKind = 'payday' | 'subscription' | 'recurring' | 'rates' | 'restitution' | 'fiscal' | 'statement' | 'donations' | 'review' | 'maturity';
+export type AgendaKind = 'payday' | 'subscription' | 'recurring' | 'rates' | 'restitution' | 'fiscal' | 'statement' | 'donations' | 'review' | 'maturity' | 'lep';
 
 export interface AgendaEvent {
   date: string;      // 'YYYY-MM-DD'
@@ -82,6 +83,16 @@ export const buildAgenda = (data: GlobalAppData, asOfDate: Date = new Date(), mo
   for (let y = today.getFullYear(); y <= horizon.getFullYear(); y++) {
     push(new Date(y, 1, 1), { kind: 'rates', title: 'Révision des taux réglementés', detail: 'Livret A, LDDS, LEP : reportez les nouveaux taux', view: 'accounts' });
     push(new Date(y, 7, 1), { kind: 'rates', title: 'Révision des taux réglementés', detail: 'Livret A, LDDS, LEP : reportez les nouveaux taux', view: 'accounts' });
+  }
+
+  // Fermeture probable du LEP (revenus au-dessus du plafond deux années de suite).
+  const lep = lepTimelineFromData(data, asOfDate);
+  if (lep?.closeBy && (lep.status === 'closing' || lep.status === 'one-over')) {
+    push(parseISODate(lep.closeBy), {
+      kind: 'lep', title: lep.status === 'closing' ? 'Fermeture probable de votre LEP' : 'Fermeture possible de votre LEP',
+      detail: lep.status === 'closing' ? 'Revenus au-dessus du plafond deux années de suite' : `Si vos revenus ${lep.overYear! + 1} dépassent aussi le plafond`,
+      view: 'accounts',
+    });
   }
 
   // Restitution du capital parental.

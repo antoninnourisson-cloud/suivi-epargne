@@ -230,3 +230,65 @@ export const askGeminiWithSearch = async (apiKey: string, prompt: string, timeou
   }
   throw new GeminiError(`Gemini indisponible (dernier échec : ${lastFailure})`, 'OVERLOADED');
 };
+
+// --- Avis d'imposition ---
+
+export interface TaxNoticeData {
+  incomeYear?: number;   // année des revenus (avis 2026 = revenus 2025)
+  rfr?: number;          // revenu fiscal de référence
+  parts?: number;        // nombre de parts
+  netTax?: number;       // impôt net
+}
+
+const TAX_NOTICE_SCHEMA = {
+  type: 'OBJECT',
+  properties: {
+    incomeYear: { type: 'INTEGER', description: "Année des REVENUS déclarés (ex. un avis 2026 porte sur les revenus 2025)" },
+    rfr: { type: 'NUMBER', description: 'Revenu fiscal de référence, en euros' },
+    parts: { type: 'NUMBER', description: 'Nombre de parts du foyer fiscal' },
+    netTax: { type: 'NUMBER', description: "Impôt sur le revenu net à payer (ou 0), en euros" },
+  },
+};
+
+const TAX_NOTICE_PROMPT = `Ce document est un avis d'impôt sur le revenu français (ou un avis de situation déclarative). Relève l'année des revenus, le revenu fiscal de référence, le nombre de parts et l'impôt net. N'invente rien : omets un champ illisible ou absent.`;
+
+/** Lit un avis d'imposition (PDF ou photo). Même chaîne de modèles et reprises que les fiches de paie. */
+export const extractTaxNotice = async (apiKey: string, base64Data: string, mimeType: string): Promise<TaxNoticeData> => {
+  if (!apiKey) throw new GeminiError('GEMINI_API_KEY_MISSING', 'AUTH');
+  const body = JSON.stringify({
+    contents: [{ parts: [{ text: TAX_NOTICE_PROMPT }, { inline_data: { mime_type: mimeType, data: base64Data } }] }],
+    generationConfig: { responseMimeType: 'application/json', responseSchema: TAX_NOTICE_SCHEMA },
+  });
+  let lastFailure = '';
+  for (const model of modelChain()) {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (attempt > 0) await sleep(attempt * 3_000);
+      let r: Response;
+      try { r = await callModel(model, apiKey, body, 60_000); }
+      catch (e: unknown) {
+        if ((e as { name?: string })?.name === 'AbortError') { lastFailure = `${model} : délai dépassé`; continue; }
+        throw e;
+      }
+      if (r.ok) {
+        const data = await r.json();
+        const parts: { text?: string; thought?: boolean }[] = data?.candidates?.[0]?.content?.parts || [];
+        const text = parts.filter(p => !p.thought).map(p => p.text || '').join('');
+        let parsed: Record<string, unknown>;
+        try { parsed = JSON.parse(text); } catch { throw new GeminiError('RÉPONSE_GEMINI_ILLISIBLE'); }
+        const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : undefined);
+        const year = num(parsed.incomeYear);
+        return {
+          incomeYear: year && year > 2000 && year < 2100 ? Math.round(year) : undefined,
+          rfr: num(parsed.rfr) !== undefined && num(parsed.rfr)! >= 0 ? Math.round(num(parsed.rfr)!) : undefined,
+          parts: num(parsed.parts) && num(parsed.parts)! > 0 && num(parsed.parts)! < 20 ? num(parsed.parts) : undefined,
+          netTax: num(parsed.netTax),
+        };
+      }
+      const t = await r.text().catch(() => '');
+      lastFailure = `${model} : HTTP ${r.status} — ${t.slice(0, 200)}`;
+      if (r.status === 404) break;
+      if (!RETRYABLE_STATUS.has(r.status)) throw new GeminiError(`Gemini API ${r.status} — ${t.slice(0, 300)}`, r.status === 401 || r.status === 403 ? 'AUTH' : undefined);
+    }
+  }
+  throw new GeminiError(`Gemini indisponible (dernier échec : ${lastFailure})`, 'OVERLOADED');
+};

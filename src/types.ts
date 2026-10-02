@@ -315,6 +315,9 @@ export interface GlobalAppData {
     discreetNotifications?: boolean;
     // Épargne de précaution : nombre de mois de dépenses à garder sur les livrets.
     emergencyMonths?: number;
+    // Revenu fiscal de référence relevé sur les avis d'imposition, par année de revenus
+    // (éligibilité au LEP). Absent = estimé à partir des fiches de paie ou du salaire.
+    rfrByYear?: Record<string, number>;
     // Dernier export JSON téléchargé (rappel trimestriel).
     lastExportAt?: string;
   };

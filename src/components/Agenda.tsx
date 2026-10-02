@@ -10,6 +10,7 @@ import { buildAgenda, AgendaEvent, AgendaKind } from '../lib/agenda';
 import { formatEUR, formatSignedEUR, frenchDay } from '../lib/format';
 import { parseISODate, daysBetween } from '../lib/dates';
 import { CalendarDays, Wallet, CalendarClock, Repeat, Percent, HandCoins, Landmark, FileText, HandHeart, Sparkles, Hourglass, ChevronRight } from 'lucide-react';
+import { ShieldAlert } from 'lucide-react';
 
 interface AgendaProps {
   data: GlobalAppData;
@@ -17,10 +18,11 @@ interface AgendaProps {
 }
 
 const ICONS: Record<AgendaKind, React.ComponentType<{ className?: string }>> = {
-  payday: Wallet, subscription: CalendarClock, recurring: Repeat, rates: Percent, restitution: HandCoins,
+  lep: ShieldAlert, payday: Wallet, subscription: CalendarClock, recurring: Repeat, rates: Percent, restitution: HandCoins,
   fiscal: Landmark, statement: FileText, donations: HandHeart, review: Sparkles, maturity: Hourglass,
 };
 const COLORS: Record<AgendaKind, string> = {
+  lep: 'bg-rose-600',
   payday: 'bg-emerald-600', subscription: 'bg-rose-500', recurring: 'bg-violet-600', rates: 'bg-amber-500', restitution: 'bg-amber-600',
   fiscal: 'bg-indigo-600', statement: 'bg-slate-500', donations: 'bg-pink-600', review: 'bg-indigo-500', maturity: 'bg-teal-600',
 };

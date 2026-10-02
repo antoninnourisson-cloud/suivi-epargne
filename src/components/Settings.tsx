@@ -27,11 +27,12 @@ interface SettingsProps {
   backupSlot?: React.ReactNode;
   fiscalWatchSlot?: React.ReactNode;
   securitySlot?: React.ReactNode;
+  taxNoticeSlot?: React.ReactNode;
   paydayDay?: number;
   onOpenPayday?: () => void;
 }
 
-export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parentsEmail, geminiApiKey, pickerApiKey, onSave, onExport, onImport, paydayDay, onOpenPayday, backupSlot, fiscalWatchSlot, securitySlot }) => {
+export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parentsEmail, geminiApiKey, pickerApiKey, onSave, onExport, onImport, paydayDay, onOpenPayday, backupSlot, fiscalWatchSlot, securitySlot, taxNoticeSlot }) => {
   const [importMsg, setImportMsg] = useState<string | null>(null);
   // L'import écrase TOUT (comptes, mouvements, objectifs, fiches de paie, réglages) puis
   // resynchronise sur Drive : il faut une confirmation explicite, la boîte de sélection de
@@ -194,6 +195,7 @@ export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parent
         </div>
 
         {fiscalWatchSlot && <div className="lg:col-span-2">{fiscalWatchSlot}</div>}
+        {taxNoticeSlot && <div className="lg:col-span-2">{taxNoticeSlot}</div>}
 
         {/* SECTION EMAIL */}
         <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 lg:col-span-2">

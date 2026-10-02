@@ -3,6 +3,7 @@ import React, { useState, useMemo, useEffect, Suspense } from 'react';
 // Graphiques chargés à part (recharts) : les cartes s'affichent sans les attendre.
 const StackedSavingsChart = lazyWithRetry(() => import('./DashboardCharts').then(m => ({ default: m.StackedSavingsChart })));
 const InstitutionChart = lazyWithRetry(() => import('./DashboardCharts').then(m => ({ default: m.InstitutionChart })));
+import { describeLepTimeline, LepTimeline } from '../lib/lep';
 import { accountColor } from '../lib/chartTheme';
 import { TodoList, TodoSpec } from './TodoList';
 import type { View } from '../navigation';
@@ -12,7 +13,7 @@ import { Sprout, LifeBuoy, Download, CalendarDays } from 'lucide-react';
 import { lazyWithRetry } from './ErrorBoundary';
 import { SavingsAccount, PortfolioSnapshot, AccountType, Expense, FiscalConfig, WorkBenefits, RecurringMovement, Subscription } from '../types';
 import { Landmark, CalendarClock, Save, AlertTriangle, Trash2, Clock, TrendingUp, TrendingDown, PiggyBank, Percent, ShieldAlert, Repeat } from 'lucide-react';
-import { computeAccruedParentalInterest, computeRecentSavingsRate, computeAccountBalanceAtDate, findStaleRegulatedRates, computeLepEligibility, computeIncome, findDueRecurring, computeMonthSavedAmount, computeSavedSince, payPeriodOf, computeSavingsRateHistory, computeUnlockCost, findFiscalReview, applyTaxScale, nextSubscriptionDate, findAvRateUpdatesDue } from '../lib/finance';
+import { computeAccruedParentalInterest, computeRecentSavingsRate, computeAccountBalanceAtDate, findStaleRegulatedRates, findDueRecurring, computeMonthSavedAmount, computeSavedSince, payPeriodOf, computeSavingsRateHistory, computeUnlockCost, findFiscalReview, applyTaxScale, nextSubscriptionDate, findAvRateUpdatesDue } from '../lib/finance';
 import { parseISODate, formatISODay, daysBetween, localTodayISO } from '../lib/dates';
 import { Button } from './Button';
 import { formatEUR, formatSignedEUR, frenchDay, formatPeriod } from '../lib/format';
@@ -61,9 +62,10 @@ interface DashboardProps {
   emergency?: EmergencyFund | null;
   onSetEmergencyMonths?: (m: number) => void;
   agendaNext?: AgendaEvent[];
+  lepTimeline?: LepTimeline | null;
 }
 
-export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalConfig, workBenefits, onDeleteAccount, config, recurringMovements = [], onRecordRecurring, monthPlan, monthlyPay = 0, paydayDay, trackingStartDate, subscriptions = [], onUpdateFiscalConfig, onOpenSettings, onUpdateAccounts, payRaise, onAcceptPayRaise, onDismissPayRaise, onNavigate, onAddAccount, lastExportAt, onExport, emergency, onSetEmergencyMonths, agendaNext = [] }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalConfig, onDeleteAccount, recurringMovements = [], onRecordRecurring, monthPlan, monthlyPay = 0, paydayDay, trackingStartDate, subscriptions = [], onUpdateFiscalConfig, onOpenSettings, onUpdateAccounts, payRaise, onAcceptPayRaise, onDismissPayRaise, onNavigate, onAddAccount, lastExportAt, onExport, emergency, onSetEmergencyMonths, agendaNext = [], lepTimeline }) => {
   const [dateRange, setDateRange] = useState(() => {
     try {
         const stored = localStorage.getItem('dashboard_date_range');
@@ -352,15 +354,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalC
   // --- ÉLIGIBILITÉ LEP ---
   // Le plafond porte sur le Revenu Fiscal de Référence du foyer ; on ne dispose ici que du
   // net imposable du salaire, d'où une ESTIMATION clairement présentée comme telle.
-  const lepStatus = useMemo(() => {
-    if (!workBenefits) return null;
-    const breakdown = computeIncome(
-      { grossAnnual: config.grossAnnual, extraMonthlyIncome: 0, navigoBase: config.navigoBase, navigoRate: config.navigoRate, taxRateManual: config.taxRateManual },
-      fiscalConfig,
-      workBenefits
-    );
-    return computeLepEligibility(accounts, breakdown.netTaxableYear, fiscalConfig);
-  }, [accounts, config, fiscalConfig, workBenefits]);
 
   // --- ÉCHÉANCES RÉCURRENTES À ENREGISTRER ---
   // « Pas ce mois-ci » est mémorisé localement par mois : la même échéance revient
@@ -468,12 +461,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalC
     primary: { label: 'Enregistrer', onClick: () => onRecordRecurring(r, dueDate) },
     secondary: { label: 'Pas ce mois-ci', onClick: () => skipRecurring(r.id) },
   });
-  if (lepStatus && lepStatus.status !== 'ok') todos.push({
-    key: `lep-${lepStatus.status}`, icon: ShieldAlert, tone: 'info', snoozable: true,
-    text: lepStatus.status === 'exceeded'
-      ? <>Votre revenu estimé ({fmtEUR(lepStatus.estimatedRfr)}) dépasse le plafond du LEP ({fmtEUR(lepStatus.ceiling)}) : votre banque pourrait ne pas le reconduire.</>
-      : <>Votre revenu estimé ({fmtEUR(lepStatus.estimatedRfr)}) approche du plafond du LEP ({fmtEUR(lepStatus.ceiling)}) : il reste {lepStatus.marginPct.toLocaleString('fr-FR', { maximumFractionDigits: lepStatus.marginPct < 1 ? 1 : 0 })} % de marge.</>,
-    detail: 'Estimation depuis votre salaire. Le vrai critère est le revenu fiscal de référence de votre avis d\'imposition.',
+  const lepText = describeLepTimeline(lepTimeline ?? null);
+  if (lepTimeline && lepText) todos.push({
+    key: `lep-${lepTimeline.status}-${lepTimeline.closeBy ?? lepTimeline.overYear ?? ''}`, icon: ShieldAlert,
+    tone: lepTimeline.status === 'closing' || lepTimeline.status === 'closed-due' ? 'action' : 'info',
+    snoozable: lepTimeline.status !== 'closed-due',
+    text: lepText.title,
+    detail: lepText.detail,
+    primary: onNavigate ? { label: lepTimeline.estimated ? 'Importer mon avis' : 'Voir mes comptes', onClick: () => onNavigate(lepTimeline.estimated ? 'settings' : 'accounts') } : undefined,
   });
   if (showRateReminder && staleRates) todos.push({
     key: 'rates', icon: Percent, tone: 'action',

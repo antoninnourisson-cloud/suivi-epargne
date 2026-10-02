@@ -30,6 +30,7 @@ import { computeYearReview } from '../../src/lib/agenda';
 import { formatISODay } from '../../src/lib/dates';
 import { frenchDay } from '../../src/lib/format';
 import { DEFAULT_FISCAL_CONFIG } from '../../src/constants';
+import { lepTimelineFromData, describeLepTimeline } from '../../src/lib/lep';
 import type { PushMessage } from './webpush';
 
 export interface Reminder {
@@ -331,6 +332,16 @@ export const computeReminders = (data: GlobalAppData, today: CivilDate | Date, a
     });
   }
 
+
+  // 10 bis. LEP : éligibilité perdue ou menacée (une notification par nouvel état).
+  const lep = lepTimelineFromData(data, now);
+  const lepText = describeLepTimeline(lep);
+  if (lep && lepText && lep.status !== 'watch') {
+    out.push({
+      key: `lep:${lep.status}:${lep.closeBy ?? lep.overYear}`,
+      message: { title: lepText.title, body: lepText.detail.split(' (estimation')[0], url: link('dashboard'), tag: 'lep' },
+    });
+  }
 
   // 11. Restitution du capital parental : préparation début décembre, puis le jour J.
   const restitution = data.parentalRestitution;

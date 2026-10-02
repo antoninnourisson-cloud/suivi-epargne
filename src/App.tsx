@@ -20,6 +20,8 @@ import { computeIncome, totalFixedCharges, computeMonthlySavingsCapacity, subscr
 import { localTodayISO, parseISODate } from './lib/dates';
 import { formatEUR } from './lib/format';
 import { AccountsView } from './components/AccountsView';
+import { lepTimelineFromData } from './lib/lep';
+import { TaxNoticePanel } from './components/TaxNoticePanel';
 // Importé ici (et pas dans l'écran, chargé à la demande) pour capter l'invitation d'installation dès le démarrage.
 import './services/installPrompt';
 import { computeBadgeCount, detectPayRaise } from './lib/projection';
@@ -195,6 +197,7 @@ const App: React.FC = () => {
   // Instantané complet des données (agenda, bilan annuel).
   const fullData = useMemo(() => data.buildData(), [data.buildData]);
   const agendaNext = useMemo(() => buildAgenda(fullData).events.slice(0, 3), [fullData]);
+  const lepTimeline = useMemo(() => lepTimelineFromData(fullData), [fullData]);
   // Épargne de précaution : charges fixes + argent plaisir, multipliés par le nombre de mois choisi.
   const emergency = useMemo(
     () => computeEmergencyFund(data.accounts, totalFixedCharges(data.expenses, data.subscriptions) + (data.leisureBudget || 0), data.config.emergencyMonths ?? DEFAULT_EMERGENCY_MONTHS),
@@ -814,7 +817,7 @@ const App: React.FC = () => {
             <ErrorBoundary resetKey={view}>
             <Suspense fallback={<ViewLoader />}>
             {view === 'dashboard' && fiscalWatch.proposals.length > 0 && <div className="mb-6">{fiscalWatchCard(true)}</div>}
-            {view === 'dashboard' && <Dashboard accounts={data.accounts} history={data.history} expenses={allCharges} fiscalConfig={data.fiscalConfig} workBenefits={data.workBenefits} onDeleteAccount={handleDeleteAccount} config={dashboardConfig} monthPlan={monthPlan} monthlyPay={monthlyPay} paydayDay={data.paydayDay} trackingStartDate={data.trackingStartDate} payRaise={payRaise && !payRaiseHandled ? { delta: payRaise.delta, period: payRaise.latest.extracted.period || '', hasFixedAmount: data.paydayAmount !== undefined } : null} onAcceptPayRaise={acceptPayRaise} onDismissPayRaise={dismissPayRaise} subscriptions={data.subscriptions} onUpdateFiscalConfig={data.setFiscalConfig} onUpdateAccounts={data.setAccounts} onOpenSettings={() => setView('settings')} recurringMovements={data.recurringMovements} onRecordRecurring={(r, date) => handleQuickAdd(r.accountId, r.amount, r.type, r.label, date)} onNavigate={setView} onAddAccount={() => { setView('accounts'); setEditingAccount(undefined); setShowForm(true); }} lastExportAt={data.config.lastExportAt} onExport={() => { data.exportData(); data.patchConfig({ lastExportAt: localTodayISO() }); }} emergency={emergency} onSetEmergencyMonths={m => data.patchConfig({ emergencyMonths: m })} agendaNext={agendaNext} />}
+            {view === 'dashboard' && <Dashboard accounts={data.accounts} history={data.history} expenses={allCharges} fiscalConfig={data.fiscalConfig} workBenefits={data.workBenefits} onDeleteAccount={handleDeleteAccount} config={dashboardConfig} monthPlan={monthPlan} monthlyPay={monthlyPay} paydayDay={data.paydayDay} trackingStartDate={data.trackingStartDate} payRaise={payRaise && !payRaiseHandled ? { delta: payRaise.delta, period: payRaise.latest.extracted.period || '', hasFixedAmount: data.paydayAmount !== undefined } : null} onAcceptPayRaise={acceptPayRaise} onDismissPayRaise={dismissPayRaise} subscriptions={data.subscriptions} onUpdateFiscalConfig={data.setFiscalConfig} onUpdateAccounts={data.setAccounts} onOpenSettings={() => setView('settings')} recurringMovements={data.recurringMovements} onRecordRecurring={(r, date) => handleQuickAdd(r.accountId, r.amount, r.type, r.label, date)} onNavigate={setView} onAddAccount={() => { setView('accounts'); setEditingAccount(undefined); setShowForm(true); }} lastExportAt={data.config.lastExportAt} onExport={() => { data.exportData(); data.patchConfig({ lastExportAt: localTodayISO() }); }} emergency={emergency} onSetEmergencyMonths={m => data.patchConfig({ emergencyMonths: m })} agendaNext={agendaNext} lepTimeline={lepTimeline} />}
 
             {view === 'pilot' && <AssistantPilot
                 accounts={data.accounts}
@@ -936,6 +939,9 @@ const App: React.FC = () => {
                     onImport={data.importData}
                     backupSlot={<DriveBackupsPanel list={data.listDriveBackups} restore={data.restoreDriveBackup} confirm={(t, m, ok) => askConfirm(t, m, ok, true)} />}
                     fiscalWatchSlot={fiscalWatchCard(false)}
+                    taxNoticeSlot={<TaxNoticePanel geminiApiKey={data.geminiApiKey} rfrByYear={data.config.rfrByYear || {}} householdParts={data.fiscalConfig.lepHouseholdParts}
+                      onSave={(y, v) => data.patchConfig({ rfrByYear: { ...(data.config.rfrByYear || {}), [String(y)]: v } })}
+                      onSetParts={parts => data.setFiscalConfig(prev => ({ ...prev, lepHouseholdParts: parts }))} />}
                     securitySlot={<ServerSecurityPanel discreet={!!data.config.discreetNotifications} onToggleDiscreet={v => data.patchConfig({ discreetNotifications: v || undefined })} confirm={askConfirm}
                       onSignedOutEverywhere={() => { setIsAuthenticated(false); data.resetData(); addToast({ message: 'Tous les appareils sont déconnectés', kind: 'success' }); }} />}
                     paydayDay={data.paydayDay}
