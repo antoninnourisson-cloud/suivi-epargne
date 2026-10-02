@@ -214,8 +214,9 @@ export const askGeminiWithSearch = async (apiKey: string, prompt: string, timeou
       }
       if (r.ok) {
         const data = await r.json();
-        const parts: { text?: string }[] = data?.candidates?.[0]?.content?.parts || [];
-        const text = parts.map(p => p.text || '').join('');
+        // Les parties « réflexion » (modèles qui raisonnent) ne sont pas la réponse.
+        const parts: { text?: string; thought?: boolean }[] = data?.candidates?.[0]?.content?.parts || [];
+        const text = parts.filter(p => !p.thought).map(p => p.text || '').join('');
         if (!text) throw new GeminiError('RÉPONSE_GEMINI_VIDE');
         return text;
       }

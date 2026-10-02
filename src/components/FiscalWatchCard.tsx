@@ -17,6 +17,16 @@ interface Props {
   compact?: boolean;
 }
 
+// Message compréhensible à partir de l'erreur technique (le détail reste affiché entre parenthèses).
+const friendlyError = (e: string): string => {
+  if (/API_KEY_INVALID|API key not valid|401|403/i.test(e)) return `clé Gemini refusée : vérifiez-la dans Paramètres (${e.slice(0, 120)})`;
+  if (/429|quota|RESOURCE_EXHAUSTED/i.test(e)) return `quota Gemini dépassé, réessayez plus tard (${e.slice(0, 120)})`;
+  if (/google_search|tool|grounding|Search/i.test(e) && /400/.test(e)) return `la recherche Google n'est pas disponible avec ce modèle ou cette clé (${e.slice(0, 160)})`;
+  if (/illisible/i.test(e)) return 'Gemini a répondu, mais pas dans le format attendu. Réessayez.';
+  if (/Failed to fetch|NetworkError|TypeError/i.test(e)) return 'connexion impossible (réseau ou bloqueur).';
+  return e.slice(0, 200);
+};
+
 const hostOf = (u: string) => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return u; } };
 
 export const FiscalWatchCard: React.FC<Props> = ({ proposals, running, checkedAt, lastError, hasKey, onApply, onDismiss, onRun, compact }) => {
@@ -32,7 +42,14 @@ export const FiscalWatchCard: React.FC<Props> = ({ proposals, running, checkedAt
               : !hasKey ? 'Ajoutez une clé Gemini ci-dessous : Pécule vérifiera chaque semaine les taux, plafonds et barèmes officiels.'
               : 'Chaque semaine, Gemini vérifie sur les sites officiels les taux des livrets, plafonds, prélèvements sociaux, décote et barème.'}
           </p>
-          {!compact && checkedAt && <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">Dernière vérification : {new Date(checkedAt).toLocaleDateString('fr-FR')}{lastError ? ' (échec, nouvel essai demain)' : ''}</p>}
+          {!compact && checkedAt && <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">Dernière vérification réussie : {new Date(checkedAt).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })}</p>}
+          {!compact && hasKey && !running && !checkedAt && !lastError && <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">Pas encore de vérification : cliquez sur « Vérifier maintenant ».</p>}
+          {!compact && lastError && !running && (
+            <p role="alert" className="text-xs font-bold text-rose-700 dark:text-rose-300 mt-2 break-words">
+              Dernier essai en échec : {friendlyError(lastError)}
+            </p>
+          )}
+          {!compact && running && <p role="status" className="text-xs text-slate-600 dark:text-slate-300 mt-2">Gemini cherche sur les sites officiels… (jusqu'à une minute)</p>}
         </div>
         {!compact && hasKey && (
           <button onClick={onRun} disabled={running} className="flex-shrink-0 flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 disabled:opacity-60">

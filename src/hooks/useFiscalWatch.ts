@@ -7,7 +7,7 @@ import { diffFiscalWatch, FiscalProposal, FiscalWatchResult, isWatchDue, parseFi
 import { askGeminiWithSearch } from '../services/geminiService';
 
 const KEY = 'fiscal_watch';
-interface Stored { checkedAt?: string; result?: FiscalWatchResult; dismissed?: string[]; lastError?: string }
+interface Stored { checkedAt?: string; result?: FiscalWatchResult; dismissed?: string[]; lastError?: string; lastSuccessAt?: string; lastAttemptAt?: string }
 
 const read = (): Stored => { try { return JSON.parse(localStorage.getItem(KEY) || '{}'); } catch { return {}; } };
 const write = (s: Stored) => { try { localStorage.setItem(KEY, JSON.stringify(s)); } catch { /* non mémorisé */ } };
@@ -25,12 +25,14 @@ export const useFiscalWatch = (geminiApiKey: string, fiscal: FiscalConfig | unde
     try {
       const text = await askGeminiWithSearch(geminiApiKey, FISCAL_WATCH_PROMPT);
       const result = parseFiscalWatch(text);
-      if (!result) throw new Error('Réponse de Gemini illisible');
-      update({ checkedAt: new Date().toISOString(), result, lastError: undefined });
+      if (!result) { console.warn('Veille fiscale : réponse illisible', text.slice(0, 500)); throw new Error('Réponse de Gemini illisible'); }
+      const now = new Date().toISOString();
+      update({ checkedAt: now, lastSuccessAt: now, lastAttemptAt: now, result, lastError: undefined });
     } catch (e) {
       // Échec : on retentera à la prochaine ouverture, au plus tôt dans un jour.
       const retryAt = new Date(Date.now() - 6 * 86_400_000).toISOString();
-      update({ checkedAt: retryAt, lastError: e instanceof Error ? e.message : String(e) });
+      console.warn('Veille fiscale : échec', e);
+      update({ checkedAt: retryAt, lastAttemptAt: new Date().toISOString(), lastError: e instanceof Error ? e.message : String(e) });
     } finally {
       setRunning(false);
     }
@@ -50,5 +52,5 @@ export const useFiscalWatch = (geminiApiKey: string, fiscal: FiscalConfig | unde
 
   const dismiss = (p: FiscalProposal) => update({ dismissed: [...(stored.dismissed || []), signature(p)] });
 
-  return { proposals, running, run, dismiss, checkedAt: stored.checkedAt, lastError: stored.lastError, hasKey: !!geminiApiKey };
+  return { proposals, running, run, dismiss, checkedAt: stored.lastSuccessAt, lastAttemptAt: stored.lastAttemptAt, lastError: stored.lastError, hasKey: !!geminiApiKey };
 };

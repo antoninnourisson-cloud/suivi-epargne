@@ -15,6 +15,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '2026.10.03',
+    date: '2026-10-03',
+    title: 'Veille fiscale plus fiable',
+    items: [
+      "Veille fiscale : la réponse de Gemini est mieux comprise, et en cas d'échec la raison s'affiche (clé refusée, quota, recherche indisponible…).",
+      "Paramètres : la date de la dernière vérification réussie est affichée, avec un message pendant la recherche.",
+    ],
+  },
+  {
     version: '2026.10.02-2',
     date: '2026-10-02',
     title: 'Accueil repensé et nouveaux outils',

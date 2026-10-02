@@ -45,3 +45,15 @@ describe('veille fiscale', () => {
     expect(isWatchDue('2026-10-03T11:00:00', now)).toBe(true);
   });
 });
+
+describe('lecture robuste de la réponse', () => {
+  it('accepte un bloc ```json, des citations [1] et une virgule finale', () => {
+    const txt = 'Voici les valeurs :\n```json\n{"lepRate": {"value": 2.5, "source": "https://x.gouv.fr"} [1], "livretARate": {"value": 1.7},}\n```\nSources : {voir ci-dessus}';
+    const r = parseFiscalWatch(txt);
+    expect(r?.lepRate?.value).toBe(2.5);
+    expect(r?.livretARate?.value).toBe(1.7);
+  });
+  it('prend le premier objet équilibré même avec du texte après', () => {
+    expect(parseFiscalWatch('{"lepRate":{"value":2.5,"source":"https://a.fr/{x}"}} puis {autre}')?.lepRate?.value).toBe(2.5);
+  });
+});

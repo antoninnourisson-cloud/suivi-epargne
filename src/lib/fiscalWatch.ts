@@ -50,9 +50,26 @@ const effectiveOr = (d?: string) => (d && /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : lo
 
 /** Lit une réponse de Gemini (texte brut, éventuellement entouré de ```json). */
 export const parseFiscalWatch = (text: string): FiscalWatchResult | null => {
-  const m = text.match(/\{[\s\S]*\}/);
-  if (!m) return null;
-  try { return JSON.parse(m[0]) as FiscalWatchResult; } catch { return null; }
+  const tryParse = (t: string): FiscalWatchResult | null => {
+    // Virgules finales et citations « [1] » ajoutées par la recherche : tolérées.
+    const cleaned = t.replace(/\[\d+(?:,\s*\d+)*\]/g, '').replace(/,\s*([}\]])/g, '$1');
+    try { const v = JSON.parse(cleaned); return v && typeof v === 'object' && !Array.isArray(v) ? v as FiscalWatchResult : null; } catch { return null; }
+  };
+  // 1. bloc ```json … ```
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fenced) { const r = tryParse(fenced[1]); if (r) return r; }
+  // 2. premier objet { … } équilibré (le texte peut contenir d'autres accolades après)
+  const start = text.indexOf('{');
+  if (start < 0) return null;
+  let depth = 0, inStr = false, esc = false;
+  for (let i = start; i < text.length; i++) {
+    const c = text[i];
+    if (inStr) { if (esc) esc = false; else if (c === '\\') esc = true; else if (c === '"') inStr = false; continue; }
+    if (c === '"') inStr = true;
+    else if (c === '{') depth++;
+    else if (c === '}' && --depth === 0) return tryParse(text.slice(start, i + 1));
+  }
+  return null;
 };
 
 export const diffFiscalWatch = (r: FiscalWatchResult, fiscal: FiscalConfig, accounts: SavingsAccount[]): FiscalProposal[] => {
