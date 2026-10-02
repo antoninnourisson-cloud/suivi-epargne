@@ -142,6 +142,7 @@ npm install
 npm run dev        # http://localhost:5173
 npm test           # tests unitaires (app + serveur)
 npm run typecheck  # vérification des types (app + serveur)
+npm run lint       # ESLint (erreurs bloquantes en CI)
 npm run build
 ```
 

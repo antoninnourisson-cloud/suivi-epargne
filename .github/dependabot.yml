@@ -1,6 +1,7 @@
 # Mises à jour des dépendances, une fois par mois, regroupées pour limiter le bruit.
-# Les montées de version majeure des briques structurantes (React, Tailwind, Vite, Vitest,
-# Recharts) se font à la main : elles demandent souvent des changements de code.
+# Seules les versions mineures et correctives sont proposées automatiquement : une version
+# majeure demande souvent des changements de code et se fait à la main (voir MAINTENANCE.md).
+# Les correctifs de sécurité restent proposés quelle que soit la version.
 version: 2
 updates:
   - package-ecosystem: npm
@@ -12,17 +13,7 @@ updates:
       app-minor-patch:
         update-types: [minor, patch]
     ignore:
-      - dependency-name: react
-        update-types: ['version-update:semver-major']
-      - dependency-name: react-dom
-        update-types: ['version-update:semver-major']
-      - dependency-name: tailwindcss
-        update-types: ['version-update:semver-major']
-      - dependency-name: vite
-        update-types: ['version-update:semver-major']
-      - dependency-name: vitest
-        update-types: ['version-update:semver-major']
-      - dependency-name: recharts
+      - dependency-name: '*'
         update-types: ['version-update:semver-major']
 
   - package-ecosystem: npm
@@ -33,6 +24,9 @@ updates:
     groups:
       worker-minor-patch:
         update-types: [minor, patch]
+    ignore:
+      - dependency-name: '*'
+        update-types: ['version-update:semver-major']
 
   - package-ecosystem: github-actions
     directory: /

@@ -7,8 +7,9 @@
 // ================================================
 import { AccountMovement, SavingsAccount } from '../types';
 import { depositsAfterCashFlow, tracksDeposits } from './finance';
+import { round2, signedAmount } from './money';
 
-export const round2 = (n: number) => Math.round(n * 100) / 100;
+export { round2 };
 
 /**
  * Mouvements qui expliquent le passage d'un solde à un autre (fiche modifiée, actualisation) :
@@ -60,7 +61,7 @@ export const applyMovement = (
   sign: 1 | -1,
   opts: { trackDeposits?: boolean } = {}
 ): SavingsAccount => {
-  const flow = (m.type === 'IN' ? m.amount : -m.amount) * sign;
+  const flow = (signedAmount(m)) * sign;
   let ownedAmount = acc.ownedAmount;
   let parentalCapital = acc.parentalCapital;
   let totalDeposits = acc.totalDeposits;
@@ -130,7 +131,7 @@ export const findCancellingGroups = (accounts: SavingsAccount[]): CancellingGrou
     }
     for (const [date, list] of byDate) {
       if (list.length < 2) continue;
-      const net = list.reduce((s, m) => s + (m.type === 'IN' ? m.amount : -m.amount), 0);
+      const net = list.reduce((s, m) => s + (signedAmount(m)), 0);
       if (Math.abs(net) < 0.005 && list.some(m => m.type === 'IN') && list.some(m => m.type === 'OUT')) {
         out.push({ accountId: a.id, accountName: a.name, date, movements: list });
       }

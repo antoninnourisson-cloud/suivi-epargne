@@ -18,6 +18,7 @@ import { Button } from './Button';
 import { formatEUR, formatSignedEUR, frenchDay, formatPeriod } from '../lib/format';
 import { InstallPrompt } from './InstallPrompt';
 import { RegulatedRatesEditor } from './RegulatedRatesEditor';
+import { signedAmount, round2 } from '../lib/money';
 
 interface DashboardProps {
   accounts: SavingsAccount[];
@@ -88,7 +89,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalC
     const today = localTodayISO();
     let balance = acc.ownedAmount;
     (acc.movements || []).forEach(m => {
-      if (m.date > today && m.kind !== 'parental') balance -= m.type === 'IN' ? m.amount : -m.amount;
+      if (m.date > today && m.kind !== 'parental') balance -= signedAmount(m);
     });
     return balance;
   };
@@ -235,7 +236,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalC
       const byDate = new Map<string, number>();
       (acc.movements || []).forEach(m => {
         if (m.kind === 'parental') return; // part des parents : hors de « mon épargne »
-        const flow = m.type === 'IN' ? m.amount : -m.amount;
+        const flow = signedAmount(m);
         if (m.date > endDateStr) balanceAtEndDate -= flow; // annule le mouvement futur
         else byDate.set(m.date, (byDate.get(m.date) || 0) + flow);
       });
@@ -255,7 +256,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalC
 
       let dailyTotal = 0;
       currentBalances.forEach((amount, id) => {
-        const safeAmount = Math.round(amount * 100) / 100;
+        const safeAmount = round2(amount);
         daySnapshot[id] = safeAmount;
         dailyTotal += safeAmount;
       });

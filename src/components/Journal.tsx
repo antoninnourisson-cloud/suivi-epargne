@@ -12,6 +12,7 @@ import { parseISODate, formatISODay as formatISODayLocal } from '../lib/dates';
 import { History, Trash2, Undo2 } from 'lucide-react';
 import { isRestitutionMovement, findCancellingGroups, CancellingGroup } from '../lib/accountOps';
 import { isInitialBalance } from '../lib/finance';
+import { signedAmount } from '../lib/money';
 
 type Filter = 'all' | 'own' | 'parental' | 'valuation' | 'rates';
 
@@ -66,7 +67,7 @@ export const Journal: React.FC<Props> = ({ accounts, restitution, onDeleteMoveme
         // Les mouvements de restitution s'annulent depuis Part parentale (sinon le relevé
         // de restitution resterait affiché alors que le capital serait rétabli).
         const isRestitution = isRestitutionMovement(m);
-        out.push({ key: `m-${a.id}-${m.id}`, date: m.date, account: a, kind, title: m.label, amount: m.type === 'IN' ? m.amount : -m.amount, movementId: isRestitution ? undefined : m.id });
+        out.push({ key: `m-${a.id}-${m.id}`, date: m.date, account: a, kind, title: m.label, amount: signedAmount(m), movementId: isRestitution ? undefined : m.id });
       }
       // Historique des taux : une entrée { date, rate } = « rate » courait jusqu'à « date ».
       const hist = [...(a.rateHistory || [])].sort((x, y) => x.date.localeCompare(y.date));

@@ -6,6 +6,7 @@
 import { FiscalConfig, TaxBracket, WorkBenefits, RateChange, AccountType, AccountMovement, RecurringMovement, SavingsAccount, GlobalAppData, PayslipExtractedData, Subscription, Expense, Donation, PayChecklistLine } from '../types';
 import { DEFAULT_STANDARD_ALLOWANCE_CAP, DEFAULT_STANDARD_ALLOWANCE_MIN, DEFAULT_DECOTE, SOCIAL_CHARGES_LIFE_INSURANCE, DEFAULT_FISCAL_CONFIG, DEFAULT_WORK_BENEFITS, TAX_SCALES, LATEST_TAX_SCALE, TaxScale } from '../constants';
 import { MS_PER_DAY, formatISODay, parseISODate, daysBetween } from './dates';
+import { round2, signedAmount } from './money';
 
 export interface IncomeInput {
   grossAnnual: number;
@@ -459,7 +460,7 @@ const accountBalanceBefore = (
   const key = formatISODay(date);
   let balance = account.totalAmount;
   (account.movements || []).forEach(m => {
-    if (m.date >= key) balance -= m.type === 'IN' ? m.amount : -m.amount;
+    if (m.date >= key) balance -= signedAmount(m);
   });
   return balance;
 };
@@ -560,7 +561,7 @@ export const computeAccruedInterest = (
     const at = parseISODate(m.date);
     if (at >= end) break;
     accrue(cursor, at, balance);
-    balance += m.type === 'IN' ? m.amount : -m.amount;
+    balance += signedAmount(m);
     cursor = at;
   }
   accrue(cursor, end, balance);
@@ -1122,7 +1123,7 @@ export const computeMonthSavedAmount = (
     if (a.type === AccountType.COMPTE_COURANT || a.type === AccountType.IMMOBILIER) continue;
     for (const m of a.movements || []) {
       if (!isSavingsFlow(m, trackingStartISO) || !m.date.startsWith(monthKey) || m.date > todayKey) continue;
-      total += m.type === 'IN' ? m.amount : -m.amount;
+      total += signedAmount(m);
     }
   }
   return total;
@@ -1191,18 +1192,18 @@ export const findDueSubscriptions = (subs: Subscription[], asOfDate: Date = new 
 };
 
 /**
- * Versements cumulés après un mouvement d'argent réel (versement si `signedAmount` > 0,
+ * Versements cumulés après un mouvement d'argent réel (versement si `flowAmount` > 0,
  * retrait sinon). Inchangés (undefined) si le compte ne les suit pas.
  */
 export const depositsAfterCashFlow = (
   account: { totalDeposits?: number; totalAmount: number },
-  signedAmount: number
+  flowAmount: number
 ): number | undefined => {
   if (account.totalDeposits === undefined) return undefined;
-  const next = signedAmount >= 0
-    ? account.totalDeposits + signedAmount
-    : depositsAfterWithdrawal(account.totalDeposits, account.totalAmount, -signedAmount);
-  return Math.round(next * 100) / 100;
+  const next = flowAmount >= 0
+    ? account.totalDeposits + flowAmount
+    : depositsAfterWithdrawal(account.totalDeposits, account.totalAmount, -flowAmount);
+  return round2(next);
 };
 
 /** Seuls ces abonnements reviennent chaque mois : les autres ne font que déclencher un rappel. */
@@ -1497,9 +1498,9 @@ export const dedupeMonthlySnapshots = <T extends { date: string }>(snapshots: T[
 
 /** Virements sortants puis versements d'épargne, dans l'ordre de la liste à cocher. */
 export const buildPayLines = (transfers: PayTransfer[], steps: PlacementStep[]): PayChecklistLine[] => [
-  ...transfers.map(t => ({ key: t.key, label: t.label, amount: Math.round(t.amount * 100) / 100, kind: 'transfer' as const })),
+  ...transfers.map(t => ({ key: t.key, label: t.label, amount: round2(t.amount), kind: 'transfer' as const })),
   ...steps.filter(st => !st.alert && st.accountId).map(st => ({
-    key: `s:${st.accountId}`, label: st.accountName, amount: Math.round(st.fillAmount * 100) / 100, kind: 'saving' as const,
+    key: `s:${st.accountId}`, label: st.accountName, amount: round2(st.fillAmount), kind: 'saving' as const,
     accountId: st.accountId,
     detail: `${st.type}${st.rate ? ` · ${st.rate.toLocaleString('fr-FR', { maximumFractionDigits: 2 })} %` : ''}`,
   })),
@@ -1616,9 +1617,9 @@ export const accountsAfterRestitution = <T extends { ownedAmount: number; parent
   accounts.map(a => ({
     ...a,
     parentalCapital: 0,
-    totalAmount: Math.round(a.ownedAmount * 100) / 100,
+    totalAmount: round2(a.ownedAmount),
     movements: dateISO && a.parentalCapital > 0
-      ? [...(a.movements || []), { id: `restitution-${dateISO}-${Math.random().toString(36).slice(2, 8)}`, date: dateISO, amount: Math.round(a.parentalCapital * 100) / 100, label: RESTITUTION_LABEL, type: 'OUT' as const, kind: 'parental' as const, tag: 'restitution' as const }]
+      ? [...(a.movements || []), { id: `restitution-${dateISO}-${Math.random().toString(36).slice(2, 8)}`, date: dateISO, amount: round2(a.parentalCapital), label: RESTITUTION_LABEL, type: 'OUT' as const, kind: 'parental' as const, tag: 'restitution' as const }]
       : a.movements,
   }));
 
@@ -1713,7 +1714,7 @@ export const computeSavedSince = (
     if (a.type === AccountType.COMPTE_COURANT || a.type === AccountType.IMMOBILIER) continue;
     for (const m of a.movements || []) {
       if (!isSavingsFlow(m, trackingStartISO) || m.date < fromISO || m.date > todayKey) continue;
-      total += m.type === 'IN' ? m.amount : -m.amount;
+      total += signedAmount(m);
     }
   }
   return total;

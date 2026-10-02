@@ -13,6 +13,7 @@ import {
   computeAccruedParentalInterest, effectivePayday, subscriptionMonthlyCost,
 } from './finance';
 import { DEFAULT_FISCAL_CONFIG } from '../constants';
+import { signedAmount } from './money';
 
 export type AgendaKind = 'payday' | 'subscription' | 'recurring' | 'rates' | 'restitution' | 'fiscal' | 'statement' | 'donations' | 'review' | 'maturity';
 
@@ -73,7 +74,7 @@ export const buildAgenda = (data: GlobalAppData, asOfDate: Date = new Date(), mo
     for (let k = 0; k < 3; k++) {
       const y = today.getFullYear(), m = today.getMonth() + k;
       const d = new Date(y, m, Math.min(Math.max(1, Math.round(r.dayOfMonth)), new Date(y, m + 1, 0).getDate()));
-      if (d >= today && d <= shortHorizon) push(d, { kind: 'recurring', title: r.label, detail: account?.name, amount: r.type === 'IN' ? r.amount : -r.amount, view: 'dashboard' });
+      if (d >= today && d <= shortHorizon) push(d, { kind: 'recurring', title: r.label, detail: account?.name, amount: signedAmount(r), view: 'dashboard' });
     }
   }
 
@@ -176,7 +177,7 @@ export const computeYearReview = (data: GlobalAppData, year: number, asOfDate: D
     : `${year - 1}-12-31`;
   const flowsSinceStart = accounts.reduce((sum, a) => sum + (a.movements || [])
     .filter(m => m.kind !== 'valuation' && m.kind !== 'parental' && m.kind !== 'adjustment' && m.label !== 'Solde initial' && m.date > flowsFrom && m.date <= endISO)
-    .reduce((t, m) => t + (m.type === 'IN' ? m.amount : -m.amount), 0), 0);
+    .reduce((t, m) => t + (signedAmount(m)), 0), 0);
   const gap = (netEnd - netStart) - flowsSinceStart;
   const restitutionThisYear = done && (done.date.startsWith(`${year}-`) || done.date === `${year + 1}-01-01`)
     ? { date: done.date, amount: done.accounts.reduce((s, a) => s + a.amount, 0) } : undefined;
