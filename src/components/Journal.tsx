@@ -176,7 +176,7 @@ export const Journal: React.FC<Props> = ({ accounts, restitution, onDeleteMoveme
               <button type="button" onClick={() => onToggleAdjustment(e.account!.id, e.movementId!)}
                 title={e.kind === 'adjustment' ? "Compter de nouveau comme de l'épargne" : "Ce n'est pas de l'épargne (correction) : reste dans les soldes, sort de « Placé » et des bilans"}
                 className={`px-2 py-1 rounded-md text-[11px] font-bold flex-shrink-0 ${e.kind === 'adjustment' ? 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'}`}>
-                {e.kind === 'adjustment' ? 'Épargne ?' : "Pas de l'épargne"}
+                {e.kind === 'adjustment' ? 'Compter comme épargne' : "Pas de l'épargne"}
               </button>
             )}
             {e.movementId && e.account && (

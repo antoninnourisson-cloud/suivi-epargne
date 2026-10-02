@@ -15,6 +15,18 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '2026.10.02-2',
+    date: '2026-10-02',
+    title: 'Accueil repensé et nouveaux outils',
+    items: [
+      "Accueil : un « À faire » plus clair (les 3 plus importants, une action, « Plus tard »), l'épargne de précaution, les prochaines échéances et des chiffres plus lisibles.",
+      "Plan solo 2027-2030 (Part parentale) : votre épargne année par année après la restitution, avec les étapes clés.",
+      "Dons et impôts : aide à la déclaration case par case (1AJ, 8HV, 7UD, 7UF…).",
+      "Abonnements : revue annuelle (coût, hausses de prix, date limite de résiliation, « toujours utile ? »).",
+      "Menus regroupés par thème, mode sombre corrigé partout, saisie au clavier et lecteurs d'écran mieux pris en charge.",
+    ],
+  },
+  {
     version: '2026.10.02',
     date: '2026-10-02',
     title: 'Sécurité, impôts 2026 et veille fiscale',

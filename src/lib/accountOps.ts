@@ -10,6 +10,38 @@ import { depositsAfterCashFlow, tracksDeposits } from './finance';
 
 export const round2 = (n: number) => Math.round(n * 100) / 100;
 
+/**
+ * Mouvements qui expliquent le passage d'un solde à un autre (fiche modifiée, actualisation) :
+ * - variation de VOTRE part : un mouvement « {ownLabel} » ; sur un placement qui suit ses
+ *   versements, l'argent versé/retiré (`cashFlow`) et la variation de valeur (`valuation`)
+ *   sont séparés ;
+ * - variation de la part des parents : un mouvement `parental` à part.
+ * Un seul calcul, utilisé par la fiche de compte et par « Actualiser les soldes ».
+ */
+export const balanceChangeMovements = (
+  old: SavingsAccount,
+  next: SavingsAccount,
+  date: string,
+  opts: { ownLabel: string; cashFlow?: number; splitValuation?: boolean },
+): AccountMovement[] => {
+  const out: AccountMovement[] = [];
+  const push = (amount: number, label: string, kind?: 'valuation' | 'parental') => {
+    const a = round2(amount);
+    if (Math.abs(a) <= 0.001) return;
+    out.push({ id: crypto.randomUUID(), date, amount: Math.abs(a), label: `${label} (${a > 0 ? '+' : '-'})`, type: a > 0 ? 'IN' : 'OUT', ...(kind ? { kind } : {}) });
+  };
+  const ownDiff = next.ownedAmount - old.ownedAmount;
+  if (opts.splitValuation) {
+    const cash = opts.cashFlow ?? 0;
+    push(cash, cash > 0 ? 'Versement' : 'Retrait');
+    push(ownDiff - cash, 'Valorisation', 'valuation');
+  } else {
+    push(ownDiff, opts.ownLabel);
+  }
+  push(next.parentalCapital - old.parentalCapital, 'Part des parents', 'parental');
+  return out;
+};
+
 /** Mouvement de restitution aux parents : ne se supprime ni ne se renomme à la main. */
 export const isRestitutionMovement = (m: AccountMovement) =>
   m.tag === 'restitution' || (m.kind === 'parental' && m.label === 'Restitution aux parents');

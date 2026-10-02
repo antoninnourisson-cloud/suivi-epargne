@@ -13,11 +13,11 @@
 - **Versements cumulés** (PEA, AV…) : plus-values latentes, impôt exact d'un retrait, plafond PEA ; « Placé ce mois-ci » ; meilleur compte à ponctionner ; abonnements avec rappels.
 - **Restitution du capital parental**, agenda des douze mois, bilan annuel, répartition personnalisée de l'épargne, taux datés, journal des modifications, corrections « Pas de l'épargne » et point de départ du suivi.
 - **Quoi de neuf** : historique des mises à jour en dur (`src/changelog.ts`), affiché une fois après chaque mise à jour.
+- **Déploiement automatique du Worker** depuis GitHub Actions (`.github/workflows/worker.yml`), à chaque push qui touche le code du serveur ou ce qu'il partage avec l'app. Actif dès que les deux secrets du dépôt `CLOUDFLARE_API_TOKEN` et `CLOUDFLARE_ACCOUNT_ID` existent ; d'ici là, le job est sauté et `npm run deploy` reste possible à la main.
 
 ## Pistes non démarrées
 
 - **Préférences de notification par type** (couper par exemple le rappel « soldes non actualisés » en gardant les échéances). Aujourd'hui, c'est tout ou rien par appareil.
-- **Déploiement automatique du Worker** depuis GitHub Actions. Il faut ajouter un jeton d'API Cloudflare aux secrets du dépôt ; aujourd'hui, `npm run deploy` se lance à la main.
 - **Pré-remplissage des avantages salariaux depuis une fiche de paie**. Mis de côté : `WorkBenefits` attend des taux et des prix de base, alors que la fiche ne donne que des montants déjà calculés.
 
 ## Notes techniques à ne pas perdre

@@ -8,7 +8,7 @@
 import React, { useEffect, useState } from 'react';
 import { PayChecklist as PayChecklistData, PayChecklistLine } from '../types';
 import { PayTransfer, PlacementStep, buildPayLines, payPeriodOf } from '../lib/finance';
-import { formatEUR, toInputAmount, formatRate } from '../lib/format';
+import { formatEUR, toInputAmount } from '../lib/format';
 import { parseFrenchNumber } from '../lib/numbers';
 import { Wallet, Info, CheckCircle2, RotateCcw, PiggyBank } from 'lucide-react';
 
@@ -28,7 +28,6 @@ interface PayChecklistProps {
 }
 
 const MONTHS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
-const monthKeyOf = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 
 export const PayChecklist: React.FC<PayChecklistProps> = ({
   superNet, transfers, steps, totalToInvest, shortfall, checklist, onChange, onRecordDeposit, onCancelDeposit, children, paydayDay,

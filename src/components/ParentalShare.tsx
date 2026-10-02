@@ -14,11 +14,12 @@ interface ParentalShareProps {
   onPlanRestitution: (date: string | undefined) => void;
   onRestitute: (date: string, sendMail: boolean) => void;
   onUndoRestitution: () => void;
+  soloPlanSlot?: React.ReactNode;
 }
 
 const fmt = (n: number) => formatEUR(n);
 
-export const ParentalShare: React.FC<ParentalShareProps> = ({ accounts, restitution, monthPlan, hasCustomSplit, canEmailParents, onPlanRestitution, onRestitute, onUndoRestitution }) => {
+export const ParentalShare: React.FC<ParentalShareProps> = ({ accounts, restitution, monthPlan, hasCustomSplit, canEmailParents, onPlanRestitution, onRestitute, onUndoRestitution, soloPlanSlot }) => {
   const { totalOwned, totalParental, rows } = useMemo(() => {
     const rows = accounts
       .filter(a => a.parentalCapital > 0 || a.ownedAmount > 0)
@@ -53,6 +54,8 @@ export const ParentalShare: React.FC<ParentalShareProps> = ({ accounts, restitut
         onRestitute={onRestitute}
         onUndo={onUndoRestitution}
       />
+
+      {soloPlanSlot}
 
       {!noParental && <>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

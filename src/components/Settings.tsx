@@ -3,10 +3,8 @@
 // ================================================
 import React, { useEffect, useState } from 'react';
 import { FiscalConfig, TaxBracket, WorkBenefits } from '../types';
-import { Button } from './Button';
 import { Save, AlertTriangle, Settings as SettingsIcon, Plus, Trash2, Mail, Download, Upload, Database, KeyRound, FileText, Fingerprint, Hash , SlidersHorizontal, ChevronDown, Building2, Scale, PiggyBank, Landmark } from 'lucide-react';
 import { isLockAvailable, isBiometricEnabled, isPinEnabled, enableLock, disableBiometric, enablePin, disablePin } from '../services/appLockService';
-import { safeNumber } from '../lib/numbers';
 import { NotificationSettings } from './NotificationSettings';
 import { GeminiModelField } from './SettingsPanels';
 import { formatEUR } from '../lib/format';
@@ -487,7 +485,7 @@ export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parent
                         <label className="text-[11px] uppercase font-bold text-slate-500 dark:text-slate-400">Taux (ex. 0,11)</label>
                         <NumberInput ariaLabel="Taux (ex. 0,11)" value={bracket.rate} onChange={v => updateBracket(index, 'rate', v)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded text-sm font-bold text-indigo-600 dark:text-indigo-300" />
                     </div>
-                    <button onClick={() => removeBracket(index)} className="mt-4 p-2 text-slate-300 hover:text-rose-500"><Trash2 className="w-4 h-4" /></button>
+                    <button onClick={() => removeBracket(index)} className="mt-4 p-2 text-slate-500 dark:text-slate-400 hover:text-rose-500"><Trash2 className="w-4 h-4" /></button>
                 </div>
             ))}
             <div className="bg-amber-50 dark:bg-amber-950/40 p-3 rounded-lg flex gap-2 items-start mt-4">

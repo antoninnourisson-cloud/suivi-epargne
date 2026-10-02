@@ -8,7 +8,7 @@ import { parseISODate } from '../lib/dates';
 import { parseFrenchNumber, safeNumber } from '../lib/numbers';
 import { NumberInput } from './NumberInput';
 import { isBackendEnabled } from '../services/backendService';
-import { Calculator, TrendingUp, Target, Lock, Unlock, Info, Plus, Trash2, Hourglass, Coins, BarChart3, X, Check, FileCheck2, Wand2, BellRing, Wallet } from 'lucide-react';
+import { Calculator, TrendingUp, Lock, Unlock, Info, Plus, Trash2, Hourglass, Coins, BarChart3, X, Check, FileCheck2, Wand2, BellRing } from 'lucide-react';
 import { formatEUR, formatPeriod } from '../lib/format';
 import { useUndoableRemove } from './Toast';
 
@@ -56,8 +56,8 @@ interface AssistantPilotProps {
 export const AssistantPilot: React.FC<AssistantPilotProps> = ({
   accounts, expenses, onUpdateExpenses,
   grossAnnual, setGrossAnnual, leisureBudget, setLeisureBudget, projectSavings, setProjectSavings,
-  navigoBase, setNavigoBase, navigoRate, setNavigoRate, taxRateManual, setTaxRateManual,
-  extraMonthlyIncome, setExtraMonthlyIncome, fiscalConfig, workBenefits, activePayslip, onClearActivePayslip,
+  navigoBase, navigoRate, taxRateManual, setTaxRateManual,
+  extraMonthlyIncome, fiscalConfig, workBenefits, activePayslip, onClearActivePayslip,
   subscriptions, onOpenSubscriptions, savingsSplit, savingsSplitFrom, onSavingsSplitChange, payChecklist, onPayChecklistChange, onRecordPayDeposit, onCancelPayDeposit, paydayDay, setPaydayDay, paydayAmount, setPaydayAmount
 }) => {
   const [showDetails, setShowDetails] = useState(false);
@@ -250,9 +250,9 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
     const months = Math.floor(totalMonths % 12);
     const days = Math.floor((totalMonths * 30) % 30);
 
-    let color = 'text-emerald-600'; let border = 'border-emerald-200'; let bg = 'bg-emerald-50';
-    if (totalMonths < 3) { color = 'text-rose-600'; border = 'border-rose-200'; bg = 'bg-rose-50'; }
-    else if (totalMonths < 6) { color = 'text-orange-600'; border = 'border-orange-200'; bg = 'bg-orange-50'; }
+    let color = 'text-emerald-700 dark:text-emerald-300'; let border = 'border-emerald-200 dark:border-emerald-900'; let bg = 'bg-emerald-50 dark:bg-emerald-950/30';
+    if (totalMonths < 3) { color = 'text-rose-700 dark:text-rose-300'; border = 'border-rose-200 dark:border-rose-900'; bg = 'bg-rose-50 dark:bg-rose-950/30'; }
+    else if (totalMonths < 6) { color = 'text-orange-700 dark:text-orange-300'; border = 'border-orange-200 dark:border-orange-900'; bg = 'bg-orange-50 dark:bg-orange-950/30'; }
 
     return { infinite: false, years, months, days, color, border, bg, monthlyBurn, totalMonths };
   }, [accounts, budgetData.totalFixed]);
@@ -293,9 +293,9 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
 
   return (
     <div className="space-y-8 animate-fade-in pb-20">
-      <div className="flex gap-4 border-b border-slate-200 dark:border-slate-700">
-        <button onClick={() => setActiveTab('budget')} className={`pb-2 px-4 font-bold text-sm ${activeTab === 'budget' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-500 dark:text-slate-400'}`}>Pilotage budgétaire</button>
-        <button onClick={() => setActiveTab('fiscal')} className={`pb-2 px-4 font-bold text-sm ${activeTab === 'fiscal' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-500 dark:text-slate-400'}`}>Horloge fiscale</button>
+      <div role="tablist" aria-label="Pilotage" className="flex gap-4 border-b border-slate-200 dark:border-slate-700">
+        <button role="tab" aria-selected={activeTab === 'budget'} onClick={() => setActiveTab('budget')} className={`pb-2 px-4 font-bold text-sm ${activeTab === 'budget' ? 'text-indigo-700 dark:text-indigo-300 border-b-2 border-indigo-600' : 'text-slate-600 dark:text-slate-300'}`}>Pilotage budgétaire</button>
+        <button role="tab" aria-selected={activeTab === 'fiscal'} onClick={() => setActiveTab('fiscal')} className={`pb-2 px-4 font-bold text-sm ${activeTab === 'fiscal' ? 'text-indigo-700 dark:text-indigo-300 border-b-2 border-indigo-600' : 'text-slate-600 dark:text-slate-300'}`}>Horloge fiscale</button>
       </div>
 
       {activeTab === 'budget' && (
@@ -335,7 +335,8 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
                   : <NumberInput value={Math.round(autoValues.netBeforeTax * 100)/100} onChange={updateFromNet} min={0} className="w-full bg-transparent font-black text-indigo-700 dark:text-indigo-300 text-lg outline-none" />}
               </div>
               <div className="bg-emerald-50 dark:bg-emerald-950/40 p-3 rounded-xl border border-emerald-100 dark:border-emerald-900 relative">
-                <label className="text-[11px] font-black text-emerald-700 dark:text-emerald-400 uppercase flex items-center gap-1">{activePayslip ? 'Net réel perçu' : 'Super net (Poche)'} <Info className="w-3 h-3 cursor-pointer" onClick={() => setShowDetails(!showDetails)}/></label>
+                <label className="text-[11px] font-black text-emerald-700 dark:text-emerald-400 uppercase flex items-center gap-1">{activePayslip ? 'Net réel perçu' : 'Reste à vivre'}</label>
+                <button type="button" onClick={() => setShowDetails(!showDetails)} aria-expanded={showDetails} className="absolute top-2 right-2 text-[11px] font-bold text-emerald-800 dark:text-emerald-300 underline flex items-center gap-1"><Info className="w-3 h-3" aria-hidden="true" /> {showDetails ? 'Masquer' : 'Voir le détail'}</button>
                 <p className="font-black text-emerald-700 dark:text-emerald-300 text-2xl">{showEUR(effectiveSuperNet)}</p>
               </div>
             </div>
@@ -343,13 +344,13 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
             {showDetails && (
               <div className="bg-white dark:bg-slate-800 p-4 rounded-xl text-xs space-y-3 border border-slate-200 dark:border-slate-700 animate-in slide-in-from-top-2 shadow-inner mb-4">
                  <div className="flex justify-between font-bold border-b pb-1"><span>Salaire brut mensuel</span> <span>{showEUR(display.grossMonth)}</span></div>
-                 <div className="flex justify-between text-rose-500"><span>Charges salariales{!activePayslip && ` (${(fiscalConfig.salaryChargesRate*100).toFixed(2)}%)`}</span> <span>- {showEUR(display.socialCharges)}</span></div>
+                 <div className="flex justify-between text-rose-700 dark:text-rose-300"><span>Charges salariales{!activePayslip && ` (${(fiscalConfig.salaryChargesRate*100).toFixed(2)}%)`}</span> <span>- {showEUR(display.socialCharges)}</span></div>
                  <div className="flex justify-between text-emerald-700 dark:text-emerald-400"><span>Remboursement Navigo</span> <span>+ {showEUR(display.navigoGain)}</span></div>
-                 {(activePayslip ? display.mutuelleCost !== undefined : workBenefits.mutuelle.active) && <div className="flex justify-between text-rose-500"><span>Mutuelle (part salarié)</span><span>- {showEUR(display.mutuelleCost)}</span></div>}
-                 {(activePayslip ? display.swileCost !== undefined : workBenefits.mealVouchers.active) && <div className="flex justify-between text-rose-500"><span>Titres-restaurant (part salarié)</span><span>- {showEUR(display.swileCost)}</span></div>}
-                 <div className="flex justify-between font-bold text-indigo-700 pt-1 border-t border-slate-100 dark:border-slate-800"><span>= Net cash avant impôt</span> <span>{showEUR(display.superNetRaw)}</span></div>
-                 <div className="bg-amber-50 p-2 rounded-lg border border-amber-100">
-                    <div className="flex justify-between items-center mb-2"><span className="text-amber-800 font-bold">{activePayslip ? 'Impôt réellement prélevé' : 'Impôt à la source'}</span><span className="text-amber-700 dark:text-amber-400 font-mono font-black">- {showEUR(display.effectiveMonthlyTax)}</span></div>
+                 {(activePayslip ? display.mutuelleCost !== undefined : workBenefits.mutuelle.active) && <div className="flex justify-between text-rose-700 dark:text-rose-300"><span>Mutuelle (part salarié)</span><span>- {showEUR(display.mutuelleCost)}</span></div>}
+                 {(activePayslip ? display.swileCost !== undefined : workBenefits.mealVouchers.active) && <div className="flex justify-between text-rose-700 dark:text-rose-300"><span>Titres-restaurant (part salarié)</span><span>- {showEUR(display.swileCost)}</span></div>}
+                 <div className="flex justify-between font-bold text-indigo-700 dark:text-indigo-300 pt-1 border-t border-slate-100 dark:border-slate-800"><span>= Net cash avant impôt</span> <span>{showEUR(display.superNetRaw)}</span></div>
+                 <div className="bg-amber-50 dark:bg-amber-950/30 p-2 rounded-lg border border-amber-100 dark:border-amber-900">
+                    <div className="flex justify-between items-center mb-2"><span className="text-amber-800 dark:text-amber-300 font-bold">{activePayslip ? 'Impôt réellement prélevé' : 'Impôt à la source'}</span><span className="text-amber-700 dark:text-amber-400 font-mono font-black">- {showEUR(display.effectiveMonthlyTax)}</span></div>
                     {activePayslip ? (
                       <p className="text-[11px] text-slate-500 dark:text-slate-400">Taux réel constaté : <strong>{display.autoRate !== undefined ? `${display.autoRate.toFixed(1)}%` : '—'}</strong> (montant tel que retenu sur la fiche, pas une estimation)</p>
                     ) : (
@@ -373,12 +374,12 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
               
               {/* Formulaire Ajout Rapide */}
               {isAddingExpense && (
-                  <div className="bg-indigo-50 p-2 rounded-lg mb-2 flex flex-col gap-2">
-                      <input type="text" placeholder="Nom..." className="p-1 rounded text-xs border border-indigo-100" value={newExpenseName} onChange={e => setNewExpenseName(e.target.value)} autoFocus />
+                  <div className="bg-indigo-50 dark:bg-indigo-950/30 p-2 rounded-lg mb-2 flex flex-col gap-2">
+                      <input type="text" aria-label="Nom de la charge" placeholder="Loyer" className="p-2 rounded text-sm border border-indigo-100 dark:border-indigo-900 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100" value={newExpenseName} onChange={e => setNewExpenseName(e.target.value)} autoFocus />
                       <div className="flex gap-1">
-                          <input type="text" inputMode="decimal" placeholder="€..." className="p-1 rounded text-xs border border-indigo-100 w-20" value={newExpenseAmount} onChange={e => setNewExpenseAmount(e.target.value)} />
-                          <button onClick={handleAddExpense} className="flex-1 bg-indigo-600 text-white rounded flex items-center justify-center"><Check className="w-3 h-3"/></button>
-                          <button onClick={() => setIsAddingExpense(false)} className="bg-slate-300 text-white rounded p-1"><X className="w-3 h-3"/></button>
+                          <input type="text" inputMode="decimal" aria-label="Montant mensuel" placeholder="750" className="p-2 rounded text-sm border border-indigo-100 dark:border-indigo-900 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 w-24" value={newExpenseAmount} onChange={e => setNewExpenseAmount(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') handleAddExpense(); }} />
+                          <button onClick={handleAddExpense} aria-label="Ajouter la charge" className="flex-1 bg-indigo-600 text-white rounded flex items-center justify-center"><Check className="w-4 h-4"/></button>
+                          <button onClick={() => setIsAddingExpense(false)} aria-label="Annuler" className="bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded px-2"><X className="w-4 h-4"/></button>
                       </div>
                   </div>
               )}
@@ -441,20 +442,21 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
                   <div><label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Épargne projets</label><NumberInput ariaLabel="Épargne projets" value={projectSavings} onChange={setProjectSavings} min={0} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
               </div>
 
-              <div className="bg-slate-900 p-6 rounded-2xl shadow-lg text-white grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+              <div className="bg-sapin p-6 rounded-2xl shadow-lg text-white grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
                   <div>
-                      <p className="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase mb-2">Capacité d'Épargne Réelle</p>
+                      <label htmlFor="savings-capacity" className="text-emerald-100/80 text-xs font-bold uppercase mb-2 block">Capacité d'épargne réelle</label>
                       <div className="flex items-baseline gap-2">
-                          <input type="text" inputMode="decimal" value={manualSavingsCapacity !== null ? manualSavingsCapacity : String(Math.round(paydayAmount ?? budgetData.theoreticalCapacity))} onChange={(e) => setManualSavingsCapacity(e.target.value)} className="bg-transparent text-5xl font-black text-emerald-400 w-40 outline-none border-b border-slate-700 focus:border-emerald-400" />
+                          <input id="savings-capacity" type="text" inputMode="decimal" value={manualSavingsCapacity !== null ? manualSavingsCapacity : String(Math.round(paydayAmount ?? budgetData.theoreticalCapacity))} onChange={(e) => setManualSavingsCapacity(e.target.value)} className="bg-transparent text-5xl font-black text-creme w-40 outline-none border-b border-white/30 focus:border-amber-300" />
                           <span className="text-xl">€</span>
                       </div>
                       {paydayAmount !== undefined && manualSavingsCapacity === null && (
-                        <p className="text-[11px] text-slate-400 mt-1">Montant fixé dans le rappel de paie (capacité calculée : {formatEUR(budgetData.theoreticalCapacity, 0)}).</p>
+                        <p className="text-[11px] text-emerald-100/80 mt-1">Montant fixé dans le rappel de paie (capacité calculée : {formatEUR(budgetData.theoreticalCapacity, 0)}).</p>
                       )}
                   </div>
-                  <div className="bg-slate-800 p-4 rounded-xl border border-slate-700">
-                      <label className="text-[11px] font-black text-indigo-300 uppercase flex items-center gap-2"><Coins className="w-3 h-3"/> Ajout d'une somme externe</label>
-                      <NumberInput ariaLabel="Ajout d'une somme externe" value={externalSavings} onChange={setExternalSavings} className="w-full bg-slate-900 border border-slate-600 rounded-lg p-2 mt-2 text-white font-bold focus:ring-2 focus:ring-indigo-500 outline-none" />
+                  <div className="bg-white/10 p-4 rounded-xl border border-white/15">
+                      <label className="text-[11px] font-black text-amber-200 uppercase flex items-center gap-2"><Coins className="w-3 h-3" aria-hidden="true" /> Somme en plus à placer ce mois-ci</label>
+                      <NumberInput ariaLabel="Somme en plus à placer ce mois-ci (prime, cadeau…)" value={externalSavings} onChange={setExternalSavings} className="w-full bg-black/20 border border-white/20 rounded-lg p-2 mt-2 text-white font-bold focus:ring-2 focus:ring-amber-300 outline-none" />
+                      <p className="text-[11px] text-emerald-100/80 mt-1">Prime, cadeau, remboursement… ajouté au plan de placement.</p>
                   </div>
               </div>
             </div>
@@ -527,9 +529,9 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
           </div>
 
           <div className={`p-8 rounded-3xl border-2 shadow-sm text-center transition-colors ${survival.bg} ${survival.border}`}>
-            <h3 className="text-sm font-black uppercase tracking-widest opacity-60 mb-4 flex justify-center items-center gap-2"><Hourglass className="w-4 h-4" /> Durée de Survie</h3>
-            <div className={`text-6xl font-black ${survival.color} mb-2`}>{survival.infinite ? '∞' : <>{survival.years > 0 && <span>{survival.years}a </span>}{survival.months}m {survival.days}j</>}</div>
-            <p className={`font-bold ${survival.color} opacity-80`}>{survival.infinite ? 'Aucune charge fixe renseignée' : `Avec ${formatEUR(survival.monthlyBurn)} de charges fixes / mois`}</p>
+            <h3 className="text-sm font-black uppercase tracking-widest opacity-60 mb-4 flex justify-center items-center gap-2"><Hourglass className="w-4 h-4" /> Durée de survie</h3>
+            <div className={`text-6xl font-black ${survival.color} mb-2`}>{survival.infinite ? '∞' : <>{survival.years > 0 && <span>{survival.years} an{survival.years > 1 ? 's' : ''} </span>}{survival.months} mois{survival.years === 0 && survival.days > 0 && <span className="text-3xl"> {survival.days} j</span>}</>}</div>
+            <p className={`font-bold ${survival.color} opacity-80`}>{survival.infinite ? 'Aucune charge fixe renseignée' : `Sans revenu, avec ${formatEUR(survival.monthlyBurn)} de charges fixes par mois`}</p>
           </div>
         </>
       )}
@@ -553,7 +555,7 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
                 </div>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {fiscalClock.map((item: any) => (<div key={item.id} className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm relative overflow-hidden"><div className={`absolute top-0 right-0 p-16 opacity-5 rounded-full -mr-8 -mt-8 ${item.isAvailable ? 'bg-emerald-500' : 'bg-indigo-500'}`}></div><div className="flex justify-between items-start mb-4"><div className={`p-3 rounded-xl ${item.isAvailable ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}>{item.isAvailable ? <Unlock className="w-6 h-6" /> : <Lock className="w-6 h-6" />}</div><span className="text-[11px] font-black uppercase bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded text-slate-500 dark:text-slate-400">{item.type}</span></div><h4 className="font-bold text-slate-800 dark:text-slate-100 text-lg mb-1">{item.name}</h4><div className="border-t border-slate-100 dark:border-slate-800 pt-4 mt-4"><div className="flex justify-between items-end"><div><p className="text-[11px] text-slate-500 dark:text-slate-400 uppercase font-bold">Échéance</p><p className="font-bold text-slate-700 dark:text-slate-200">{item.date}</p></div><div className={`text-right font-black text-xl ${item.isAvailable ? 'text-emerald-500' : 'text-indigo-600'}`}>{item.timeLeft}</div></div></div></div>))}
+                {fiscalClock.map((item: any) => (<div key={item.id} className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm relative overflow-hidden"><div className={`absolute top-0 right-0 p-16 opacity-5 rounded-full -mr-8 -mt-8 ${item.isAvailable ? 'bg-emerald-500' : 'bg-indigo-500'}`}></div><div className="flex justify-between items-start mb-4"><div className={`p-3 rounded-xl ${item.isAvailable ? 'bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}>{item.isAvailable ? <Unlock className="w-6 h-6" /> : <Lock className="w-6 h-6" />}</div><span className="text-[11px] font-black uppercase bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded text-slate-500 dark:text-slate-400">{item.type}</span></div><h4 className="font-bold text-slate-800 dark:text-slate-100 text-lg mb-1">{item.name}</h4><div className="border-t border-slate-100 dark:border-slate-800 pt-4 mt-4"><div className="flex justify-between items-end"><div><p className="text-[11px] text-slate-500 dark:text-slate-400 uppercase font-bold">Échéance</p><p className="font-bold text-slate-700 dark:text-slate-200">{item.date}</p></div><div className={`text-right font-black text-xl ${item.isAvailable ? 'text-emerald-500' : 'text-indigo-600'}`}>{item.timeLeft}</div></div></div></div>))}
               </div>
             </>
           ) : (

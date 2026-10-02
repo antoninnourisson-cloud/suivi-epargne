@@ -57,7 +57,7 @@ export const ChangelogHistory: React.FC = () => (
   <details className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 lg:col-span-2 group">
     <summary className="list-none cursor-pointer font-bold text-slate-800 dark:text-slate-100 flex items-center justify-between">
       <span className="flex items-center gap-2"><Sparkles className="w-4 h-4 text-indigo-600" /> Historique des mises à jour</span>
-      <span className="text-xs font-bold text-slate-500 dark:text-slate-400">version {LATEST_VERSION}</span>
+      <span className="text-xs font-bold text-slate-500 dark:text-slate-400">version {LATEST_VERSION}{typeof __BUILD_SHA__ !== "undefined" && __BUILD_SHA__ !== "dev" ? ` (${__BUILD_SHA__})` : ""}</span>
     </summary>
     <div className="mt-4 space-y-5">{CHANGELOG.map(e => <EntryBlock key={e.version} e={e} />)}</div>
   </details>

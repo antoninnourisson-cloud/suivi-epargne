@@ -141,6 +141,12 @@ export interface Subscription {
   frequency: SubscriptionFrequency;
   anchorDate: string; // 'YYYY-MM-DD' d'un prélèvement connu : les suivants en découlent
   active: boolean;
+  // Anciens prix (le plus récent en dernier) : repère les hausses.
+  priceHistory?: { date: string; amount: number }[];
+  // Dernière confirmation « toujours utile » (revue tous les 6 mois).
+  reviewedAt?: string;
+  // Préavis de résiliation en jours (abonnements trimestriels, semestriels, annuels).
+  noticeDays?: number;
 }
 
 // Don à une association, noté pour la déclaration de revenus (réduction d'impôt).

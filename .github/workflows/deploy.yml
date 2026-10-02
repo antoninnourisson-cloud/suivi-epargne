@@ -1,5 +1,8 @@
 name: Déploiement GitHub Pages
 
+# checks (ci.yml) → build → deploy → release.
+# Le déploiement ne part que si les vérifications passent. Après un déploiement réussi,
+# la version en tête de src/changelog.ts est publiée comme tag + GitHub Release (une fois).
 on:
   push:
     branches: [main]
@@ -7,52 +10,115 @@ on:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
   group: pages
-  cancel-in-progress: true
+  # Ne jamais interrompre un déploiement Pages en cours (recommandation GitHub) : le
+  # suivant attend son tour.
+  cancel-in-progress: false
 
 jobs:
+  checks:
+    name: Vérifications
+    uses: ./.github/workflows/ci.yml
+
   build:
+    name: Build
+    needs: checks
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout du code
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
 
       - name: Installation de Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
-          node-version: 20
+          node-version-file: .nvmrc
+          cache: npm
 
       - name: Installation des dépendances
-        # npm ci : installation exacte d'après package-lock.json (reproductible).
         run: npm ci
 
-      # Garde-fous : un déploiement ne part jamais si les calculs (fiscalité, quinzaines,
-      # chiffrement des notifications...) ou le typage sont cassés.
-      - name: Tests
-        run: npm test
-
-      - name: Vérification des types (app)
-        run: npx tsc --noEmit
-
       - name: Build de production
+        # GITHUB_SHA est lu par vite.config.ts (__BUILD_SHA__).
         run: npm run build
 
       - name: Préparation de l'artifact Pages
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5
         with:
           path: ./dist
 
   deploy:
+    name: Déploiement
     needs: build
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Déploiement sur GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5
+
+  release:
+    name: Release
+    needs: deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout du code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Installation de Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version-file: .nvmrc
+
+      - name: Lecture de la dernière version du changelog
+        id: changelog
+        # Version = première occurrence de version: '...' dans le fichier (l'entrée en tête).
+        # Les puces viennent du vrai tableau CHANGELOG : Node 22 retire les types TypeScript
+        # à la volée, ce qui évite de parser des chaînes JS (apostrophes, guillemets) à la main.
+        run: |
+          VERSION=$(grep -m1 -oP "version:\s*'\K[^']+" src/changelog.ts)
+          if [ -z "$VERSION" ]; then echo "::error::Aucune version trouvée dans src/changelog.ts"; exit 1; fi
+          export VERSION
+          node --experimental-strip-types --no-warnings -e '
+            import("./src/changelog.ts").then(({ CHANGELOG }) => {
+              const fs = require("fs");
+              const e = CHANGELOG.find(x => x.version === process.env.VERSION);
+              if (!e) { console.error("Entrée " + process.env.VERSION + " introuvable"); process.exit(1); }
+              fs.writeFileSync("release-notes.md", e.items.map(i => "- " + i).join("\n") + "\n");
+              fs.appendFileSync(process.env.GITHUB_OUTPUT, "version=" + e.version + "\ntitle=" + e.title + "\n");
+            });
+          '
+          cat release-notes.md
+
+      - name: Tag et GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.changelog.outputs.version }}
+          TITLE: ${{ steps.changelog.outputs.title }}
+        run: |
+          tag="v${VERSION}"
+          if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${tag}" --silent 2>/dev/null; then
+            echo "Le tag ${tag} existe déjà : rien à publier."
+            exit 0
+          fi
+          # gh crée le tag sur le commit déployé, puis la Release avec les notes du changelog.
+          gh release create "${tag}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --target "${GITHUB_SHA}" \
+            --title "${VERSION} · ${TITLE}" \
+            --notes-file release-notes.md

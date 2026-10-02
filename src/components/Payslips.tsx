@@ -12,6 +12,7 @@ import { extractPayslipData, GeminiError } from '../services/geminiService';
 import { parseFrenchNumber } from '../lib/numbers';
 import { FileText, Upload, Sparkles, Trash2, ExternalLink, AlertTriangle, Check, X, Loader2, KeyRound, TrendingUp, Wand2 } from 'lucide-react';
 import { formatEUR, formatPeriod } from '../lib/format';
+import { useIsDark, chartTheme } from '../lib/chartTheme';
 
 interface PayslipsProps {
   payslips: PayslipRecord[];
@@ -90,6 +91,7 @@ const describeError = (e: unknown, blocked: string[]): string => {
 };
 
 export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, geminiApiKey, pickerApiKey, onApplyToPilotage, activePayslipId, onClearActivePayslip }) => {
+  const t = chartTheme(useIsDark());
   const [draft, setDraft] = useState<DraftPayslip | null>(null);
   const [pickerBusy, setPickerBusy] = useState(false);
 
@@ -314,14 +316,14 @@ export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, 
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                 <defs>
-                  <linearGradient id="gNet" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#10b981" stopOpacity={0.6} /><stop offset="95%" stopColor="#10b981" stopOpacity={0.05} /></linearGradient>
+                  <linearGradient id="gNet" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={t.brand} stopOpacity={0.6} /><stop offset="95%" stopColor={t.brand} stopOpacity={0.05} /></linearGradient>
                 </defs>
-                <XAxis dataKey="label" tick={{ fontSize: 11 }} />
-                <YAxis tickFormatter={(v) => formatEUR(v, 0)} tick={{ fontSize: 11 }} />
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f5f5f4" />
-                <RechartsTooltip formatter={(v: number, name: string) => [fmt(v), name === 'net' ? 'Net' : 'Brut']} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', background: '#1c1917', color: '#f5f5f4' }} labelStyle={{ color: '#f5f5f4', fontWeight: 700 }} labelFormatter={(l: string) => formatPeriod(String(l))} />
+                <XAxis dataKey="label" tick={{ fontSize: 11, fill: t.tick }} stroke={t.grid} />
+                <YAxis tickFormatter={(v) => formatEUR(v, 0)} tick={{ fontSize: 11, fill: t.tick }} stroke={t.grid} />
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={t.grid} />
+                <RechartsTooltip formatter={(v: number, name: string) => [fmt(v), name === 'net' ? 'Net' : 'Brut']} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', background: t.tooltipBg, color: t.tooltipText }} labelStyle={{ color: t.tooltipLabel, fontWeight: 700 }} labelFormatter={(l: string) => formatPeriod(String(l))} />
                 <Legend formatter={(v) => (v === 'net' ? 'Net' : 'Brut')} wrapperStyle={{ fontSize: 12 }} />
-                <Area type="monotone" dataKey="net" stroke="#10b981" fill="url(#gNet)" strokeWidth={2} />
+                <Area type="monotone" dataKey="net" stroke={t.brand} fill="url(#gNet)" strokeWidth={2} />
               </AreaChart>
             </ResponsiveContainer>
           </div>

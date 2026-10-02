@@ -1,0 +1,90 @@
+name: Vérifications
+
+# Garde-fous de l'app ET du serveur : types, tests, build, audit des dépendances.
+# - sur chaque pull request et chaque push sur main ;
+# - chaque lundi à 6 h UTC : une partie de la logique dépend de la date du jour (quinzaines,
+#   révisions de taux, restitution, échéances), et de nouvelles failles peuvent être publiées
+#   sans que le code change ;
+# - appelé par deploy.yml (workflow_call) : un déploiement ne part jamais si ces vérifications
+#   échouent.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # Quand ce workflow est appelé par deploy.yml, github.workflow est le nom de l'appelant :
+  # le préfixe « ci- » évite toute collision avec le groupe « pages » du déploiement.
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  checks:
+    name: Types, tests, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout du code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Installation de Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            worker/package-lock.json
+
+      - name: Installation des dépendances (app)
+        # npm ci : installation exacte d'après package-lock.json (reproductible).
+        run: npm ci
+
+      - name: Installation des dépendances (serveur)
+        # Nécessaire à la vérification des types du Worker (@cloudflare/workers-types).
+        run: npm ci --prefix worker
+
+      - name: Lint (ESLint)
+        run: npm run lint
+
+      - name: Vérification des types (app + serveur)
+        run: npm run typecheck
+
+      - name: Tests (app + serveur)
+        run: npm test
+
+      - name: Build de production
+        run: npm run build
+
+      - name: Taille du build
+        run: |
+          kb() { awk -v b="$1" 'BEGIN { printf "%.1f", b / 1024 }'; }
+          {
+            echo '### Taille du build (`dist/assets`)'
+            echo
+            echo '| Fichier | Taille | gzip |'
+            echo '|---|---:|---:|'
+            for f in $(ls -S dist/assets); do
+              p="dist/assets/$f"
+              raw=$(stat -c %s "$p")
+              gz=$(gzip -9 -c "$p" | wc -c)
+              echo "| \`$f\` | $(kb "$raw") Ko | $(kb "$gz") Ko |"
+            done
+            echo
+            echo "Total \`dist/\` : $(du -sk dist | cut -f1) Ko"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Audit des dépendances de production
+        # Informatif : une faille publiée dans une dépendance ne doit pas bloquer un
+        # déploiement urgent. Le résultat reste visible (étape en orange dans le journal).
+        continue-on-error: true
+        run: npm audit --omit=dev --audit-level=high

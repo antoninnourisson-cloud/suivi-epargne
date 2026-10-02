@@ -28,6 +28,11 @@ export default defineConfig({
   // que sur un project page (username.github.io/nom-du-repo/), sans configuration
   // supplémentaire ni connaissance du nom du repo au moment du build.
   base: './',
+  // Commit du build (7 caractères), fourni par GitHub Actions ; « dev » en local.
+  // Déclaration de type : `declare const __BUILD_SHA__: string;` dans src/vite-env.d.ts.
+  define: {
+    __BUILD_SHA__: JSON.stringify((process.env.GITHUB_SHA || 'dev').slice(0, 7)),
+  },
   plugins: [
     react(),
     backendOriginPlugin(),

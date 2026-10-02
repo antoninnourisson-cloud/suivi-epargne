@@ -15,6 +15,8 @@ import { formatEUR } from '../lib/format';
 import { useUndoableRemove } from './Toast';
 
 interface DonationsProps {
+  // Aide à la déclaration (composée par App).
+  taxHelper?: React.ReactNode;
   taxEstimate?: { taxDue: number; taxableIncome: number };
   ceiling75?: number;
   donations: Donation[];
@@ -28,7 +30,7 @@ const driveUrl = (id: string) => `https://drive.google.com/file/d/${encodeURICom
 type Draft = { date: string; amount: string; organization: string; rate: 66 | 75; receiptReceived: boolean; receiptFileId?: string; receiptFileName?: string; note: string };
 const emptyDraft = (): Draft => ({ date: localTodayISO(), amount: '', organization: '', rate: 66, receiptReceived: false, note: '' });
 
-export const Donations: React.FC<DonationsProps> = ({ donations, onUpdate, pickerApiKey, taxEstimate, ceiling75 }) => {
+export const Donations: React.FC<DonationsProps> = ({ donations, onUpdate, pickerApiKey, taxEstimate, ceiling75, taxHelper }) => {
   const thisYear = new Date().getFullYear();
   // Jusqu'en juin, c'est l'année écoulée qu'on déclare : on l'affiche par défaut.
   const [year, setYear] = useState(() => new Date().getMonth() < 6 && donations.some(d => d.date.startsWith(`${thisYear - 1}-`)) ? thisYear - 1 : thisYear);
@@ -119,7 +121,7 @@ export const Donations: React.FC<DonationsProps> = ({ donations, onUpdate, picke
       <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h2 className="text-2xl font-black text-slate-800 dark:text-slate-100 flex items-center gap-2 mb-1"><HandHeart className="w-6 h-6 text-indigo-600" /> Dons</h2>
+            <h2 className="text-2xl font-black text-slate-800 dark:text-slate-100 flex items-center gap-2 mb-1"><HandHeart className="w-6 h-6 text-indigo-600" /> Dons et impôts</h2>
             <p className="text-sm text-slate-500 dark:text-slate-400">Notez vos dons au fil de l'année : au printemps, tout est prêt pour la déclaration. Rappel début avril.</p>
           </div>
           <select value={year} onChange={e => setYear(Number(e.target.value))} aria-label="Année" className="p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold text-slate-700 dark:text-slate-200">
@@ -220,6 +222,7 @@ export const Donations: React.FC<DonationsProps> = ({ donations, onUpdate, picke
           <Plus className="w-4 h-4" /> {editingId ? 'Enregistrer' : 'Ajouter le don'}
         </button>
       </form>
+      {taxHelper}
     </div>
   );
 };

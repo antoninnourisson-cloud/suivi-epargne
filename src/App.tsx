@@ -1,7 +1,7 @@
 // ================================================
 // FILE: src/App.tsx
 // ================================================
-import React, { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useMemo, useRef, Suspense } from 'react';
 import { SavingsAccount, AccountMovement, PayslipRecord } from './types';
 import { usePortfolioData } from './hooks/usePortfolioData';
 import { useTheme } from './hooks/useTheme';
@@ -17,7 +17,7 @@ import {
 import { isBackendEnabled, hasBackendSession } from './services/backendService';
 import { disablePush } from './services/pushService';
 import { isLockEnabled } from './services/appLockService';
-import { computeIncome, computeMaturityCountdown, depositsAfterCashFlow, computeMonthlySavingsCapacity, subscriptionsAsExpenses, computeMonthlyPay, computeRestitutionPlan, accountsAfterRestitution, REGULATED_RATE_GROUPS } from './lib/finance';
+import { computeIncome, totalFixedCharges, computeMaturityCountdown, computeMonthlySavingsCapacity, subscriptionsAsExpenses, computeMonthlyPay, computeRestitutionPlan, accountsAfterRestitution, REGULATED_RATE_GROUPS } from './lib/finance';
 import { localTodayISO, parseISODate } from './lib/dates';
 import { formatEUR, formatSignedEUR } from './lib/format';
 import { MovementSearch } from './components/MovementSearch';
@@ -27,7 +27,7 @@ import './services/installPrompt';
 import { RegulatedRatesEditor } from './components/RegulatedRatesEditor';
 import { AccountType } from './types';
 import { computeBadgeCount, detectPayRaise } from './lib/projection';
-import { applyMovement, snapshotBalances, restoreBalances, isRestitutionMovement, round2 as round2Cents } from './lib/accountOps';
+import { balanceChangeMovements, applyMovement, snapshotBalances, restoreBalances, isRestitutionMovement, round2 as round2Cents } from './lib/accountOps';
 import { WhatsNewModal } from './components/WhatsNew';
 import { Logo } from './components/Logo';
 import { LATEST_VERSION } from './changelog';
@@ -39,11 +39,14 @@ import { useFiscalWatch } from './hooks/useFiscalWatch';
 import { FiscalWatchCard } from './components/FiscalWatchCard';
 import type { FiscalProposal } from './lib/fiscalWatch';
 import { DriveBackupsPanel, ServerSecurityPanel } from './components/SettingsPanels';
+import { computeEmergencyFund, DEFAULT_EMERGENCY_MONTHS } from './lib/planning';
+import { buildAgenda } from './lib/agenda';
+import { TaxReturnHelper } from './components/TaxReturnHelper';
+import { SoloPlanCard } from './components/SoloPlanCard';
 import {
-  LayoutDashboard, Wallet, Trash2, Edit2, ShieldCheck,
-  ArrowRightLeft, RefreshCcw, PlusCircle, Cloud, LogOut,
+  Trash2, Edit2, PlusCircle, LogOut,
   Loader2, Settings as SettingsIcon, AlertTriangle, RotateCw,
-  Coins, LineChart, Users, Sun, Moon, Zap, Tag, Save, WifiOff, FileText, Clock, CalendarClock, HandHeart, CalendarDays, ChevronDown, ScrollText
+  Sun, Moon, Tag, Save, WifiOff, Clock, ChevronDown
 } from 'lucide-react';
 
 // Code-splitting : les vues lourdes (recharts, etc.) sont chargées à la demande.
@@ -61,8 +64,13 @@ const History = lazyWithRetry(() => import('./components/History').then(m => ({ 
 const ParentalShare = lazyWithRetry(() => import('./components/ParentalShare').then(m => ({ default: m.ParentalShare })));
 const Payslips = lazyWithRetry(() => import('./components/Payslips').then(m => ({ default: m.Payslips })));
 
+// Squelette pendant le chargement d'un écran : la mise en page ne saute pas.
 const ViewLoader = () => (
-  <div className="flex justify-center items-center py-20"><Loader2 className="animate-spin w-8 h-8 text-indigo-600" /></div>
+  <div className="space-y-4 animate-pulse" aria-busy="true" aria-label="Chargement">
+    <div className="h-24 rounded-2xl bg-slate-200/70 dark:bg-slate-800" />
+    <div className="grid grid-cols-2 gap-4"><div className="h-28 rounded-2xl bg-slate-200/70 dark:bg-slate-800" /><div className="h-28 rounded-2xl bg-slate-200/70 dark:bg-slate-800" /></div>
+    <div className="h-64 rounded-2xl bg-slate-200/70 dark:bg-slate-800" />
+  </div>
 );
 
 const NavButton = ({ active, onClick, icon: Icon, label }: { active: boolean; onClick: () => void; icon: React.ComponentType<{ className?: string }>; label: string }) => (
@@ -179,7 +187,7 @@ const App: React.FC = () => {
   const taxEstimate = useMemo(() => {
     if (!data.workBenefits || !(data.grossAnnual > 0)) return undefined;
     const b = computeIncome({ ...dashboardConfig, extraMonthlyIncome: 0 }, data.fiscalConfig, data.workBenefits);
-    return { taxDue: b.taxAmount, taxableIncome: b.netTaxableYear };
+    return { taxDue: b.taxAmount, taxableIncome: b.netTaxableYear, beforeAllowance: b.netTaxableBeforeAllowance };
   }, [dashboardConfig, data.fiscalConfig, data.workBenefits, data.grossAnnual]);
 
   // Veille fiscale hebdomadaire (Gemini + recherche web) : propositions à valider.
@@ -221,6 +229,12 @@ const App: React.FC = () => {
   const monthlyPay = useMemo(() => computeMonthlyPay(data.buildData()), [data.buildData]);
   // Instantané complet des données (agenda, bilan annuel).
   const fullData = useMemo(() => data.buildData(), [data.buildData]);
+  const agendaNext = useMemo(() => buildAgenda(fullData).events.slice(0, 3), [fullData]);
+  // Épargne de précaution : charges fixes + argent plaisir, multipliés par le nombre de mois choisi.
+  const emergency = useMemo(
+    () => computeEmergencyFund(data.accounts, totalFixedCharges(data.expenses, data.subscriptions) + (data.leisureBudget || 0), data.config.emergencyMonths ?? DEFAULT_EMERGENCY_MONTHS),
+    [data.accounts, data.expenses, data.subscriptions, data.leisureBudget, data.config.emergencyMonths]
+  );
 
   // Pastille sur l'icône de l'app installée : nombre de choses à faire.
   useEffect(() => {
@@ -481,20 +495,8 @@ const App: React.FC = () => {
       // en fin de liste, réordonnant l'affichage à chaque modification.
       return prev.map(a => {
         if (a.id !== normalized.id) return a;
-        // Part des parents corrigée dans la fiche : mouvement « part des parents » tracé.
-        const parentalMoves = (old: SavingsAccount): AccountMovement[] => {
-          const d = Math.round((normalized.parentalCapital - old.parentalCapital) * 100) / 100;
-          return Math.abs(d) > 0.001 ? [{ id: crypto.randomUUID(), date: today, amount: Math.abs(d), label: `Part des parents (${d > 0 ? '+' : '-'})`, type: d > 0 ? 'IN' : 'OUT', kind: 'parental' }] : [];
-        };
-        if (Math.abs(ownedDiff) <= 0.001) return { ...normalized, movements: [...(a.movements || []), ...parentalMoves(a)] };
-        const movement: AccountMovement = {
-          id: crypto.randomUUID(),
-          date: today,
-          amount: Math.abs(ownedDiff),
-          label: ownedDiff > 0 ? 'Correction de solde (+)' : 'Correction de solde (-)',
-          type: ownedDiff > 0 ? 'IN' : 'OUT',
-        };
-        return { ...normalized, movements: [...(a.movements || []), movement, ...parentalMoves(a)] };
+        // Mêmes mouvements que dans « Actualiser » : correction de votre part, et part des parents à part.
+        return { ...normalized, movements: [...(a.movements || []), ...balanceChangeMovements(a, normalized, today, { ownLabel: 'Correction de solde' })] };
       });
     });
     setShowForm(false);
@@ -733,7 +735,7 @@ const App: React.FC = () => {
               <p className="text-xs text-rose-700 dark:text-rose-400 mb-3">Vérifiez votre connexion (ou un bloqueur de scripts) puis réessayez.</p>
               <button onClick={() => window.location.reload()} className="w-full py-2.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-sm font-black">Recharger l'application</button>
             </div>
-          ) : !isApiLoaded ? <div className="flex justify-center gap-2 text-indigo-600 font-bold"><Loader2 className="animate-spin"/> Chargement API...</div> :
+          ) : !isApiLoaded ? <div className="flex justify-center gap-2 text-indigo-600 font-bold"><Loader2 className="animate-spin" aria-hidden="true"/> Connexion à Google…</div> :
             <button onClick={handleLogin} className="w-full flex justify-center gap-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 py-4 rounded-xl font-bold hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 transition-colors">Continuer avec Google</button>
           }
         </div>
@@ -773,7 +775,7 @@ const App: React.FC = () => {
         </nav>
         <div className="p-4 border-t border-white/10">
             <button onClick={handleLogout} className="w-full flex items-center gap-3 px-4 py-3 text-rose-300 hover:bg-white/10 rounded-xl font-bold text-sm transition-colors"><LogOut className="w-5 h-5"/> Déconnexion</button>
-            <button onClick={() => setView('settings')} className="w-full mt-1 px-4 text-left text-[11px] font-bold text-emerald-100/60 hover:text-white" title="Historique des mises à jour dans Paramètres">Pécule · version {LATEST_VERSION}</button>
+            <button onClick={() => setView('settings')} className="w-full mt-1 px-4 text-left text-[11px] font-bold text-emerald-100/60 hover:text-white" title="Historique des mises à jour dans Paramètres">Pécule · version {LATEST_VERSION}{typeof __BUILD_SHA__ !== "undefined" && __BUILD_SHA__ !== "dev" ? ` · ${__BUILD_SHA__}` : ""}</button>
         </div>
       </aside>
 
@@ -788,7 +790,7 @@ const App: React.FC = () => {
             </span>
           </div>
           <button onClick={toggleTheme} className="p-2.5 -m-1 text-slate-400" title="Thème" aria-label="Changer de thème">{isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}</button>
-          <button onClick={handleLogout} className="p-2.5 -m-1 text-rose-400" title="Déconnexion" aria-label="Se déconnecter"><LogOut className="w-4 h-4" /></button>
+          <button onClick={() => setDialog({ open: true, kind: 'confirm', title: 'Se déconnecter ?', message: 'Les données restent sur votre Drive ; il faudra vous reconnecter avec Google.', confirmLabel: 'Se déconnecter', onConfirm: () => handleLogout() })} className="p-2.5 -m-1 text-rose-300" aria-label="Se déconnecter"><LogOut className="w-4 h-4" /></button>
         </div>
       </header>
 
@@ -797,9 +799,8 @@ const App: React.FC = () => {
         <div className="max-w-7xl mx-auto pb-20">
             {/* --- BANNIÈRES DE SYNCHRONISATION --- */}
             {data.isOffline && (
-              <div className="mb-4 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4 flex items-center gap-3">
-                <WifiOff className="w-5 h-5 flex-shrink-0 text-slate-500 dark:text-slate-400" />
-                <div className="text-slate-600 dark:text-slate-300 text-sm font-bold">Pas de connexion. Vos modifications sont enregistrées sur cet appareil et seront envoyées sur Drive dès le retour du réseau.</div>
+              <div role="status" className="mb-4 inline-flex items-center gap-2 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-full px-3 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-200">
+                <WifiOff className="w-4 h-4 flex-shrink-0" aria-hidden="true" /> Hors ligne : vos modifications partiront sur Drive au retour du réseau.
               </div>
             )}
             {data.appOutdated && (
@@ -848,7 +849,7 @@ const App: React.FC = () => {
             <ErrorBoundary resetKey={view}>
             <Suspense fallback={<ViewLoader />}>
             {view === 'dashboard' && fiscalWatch.proposals.length > 0 && <div className="mb-6">{fiscalWatchCard(true)}</div>}
-            {view === 'dashboard' && <Dashboard accounts={data.accounts} history={data.history} expenses={allCharges} fiscalConfig={data.fiscalConfig} workBenefits={data.workBenefits} onDeleteAccount={handleDeleteAccount} config={dashboardConfig} monthPlan={monthPlan} monthlyPay={monthlyPay} paydayDay={data.paydayDay} trackingStartDate={data.trackingStartDate} payRaise={payRaise && !payRaiseHandled ? { delta: payRaise.delta, period: payRaise.latest.extracted.period || '', hasFixedAmount: data.paydayAmount !== undefined } : null} onAcceptPayRaise={acceptPayRaise} onDismissPayRaise={dismissPayRaise} subscriptions={data.subscriptions} onUpdateFiscalConfig={data.setFiscalConfig} onUpdateAccounts={data.setAccounts} onOpenSettings={() => setView('settings')} recurringMovements={data.recurringMovements} onRecordRecurring={(r, date) => handleQuickAdd(r.accountId, r.amount, r.type, r.label, date)} />}
+            {view === 'dashboard' && <Dashboard accounts={data.accounts} history={data.history} expenses={allCharges} fiscalConfig={data.fiscalConfig} workBenefits={data.workBenefits} onDeleteAccount={handleDeleteAccount} config={dashboardConfig} monthPlan={monthPlan} monthlyPay={monthlyPay} paydayDay={data.paydayDay} trackingStartDate={data.trackingStartDate} payRaise={payRaise && !payRaiseHandled ? { delta: payRaise.delta, period: payRaise.latest.extracted.period || '', hasFixedAmount: data.paydayAmount !== undefined } : null} onAcceptPayRaise={acceptPayRaise} onDismissPayRaise={dismissPayRaise} subscriptions={data.subscriptions} onUpdateFiscalConfig={data.setFiscalConfig} onUpdateAccounts={data.setAccounts} onOpenSettings={() => setView('settings')} recurringMovements={data.recurringMovements} onRecordRecurring={(r, date) => handleQuickAdd(r.accountId, r.amount, r.type, r.label, date)} onNavigate={setView} onAddAccount={() => { setView('accounts'); setEditingAccount(undefined); setShowForm(true); }} lastExportAt={data.config.lastExportAt} onExport={() => { data.exportData(); data.patchConfig({ lastExportAt: localTodayISO() }); }} emergency={emergency} onSetEmergencyMonths={m => data.patchConfig({ emergencyMonths: m })} agendaNext={agendaNext} />}
 
             {view === 'pilot' && <AssistantPilot
                 accounts={data.accounts}
@@ -888,7 +889,7 @@ const App: React.FC = () => {
             />}
 
             {view === 'transfers' && <TransferManager accounts={data.accounts} onUpdateAccountsComplex={data.updateAccountsWithMovements} onLinkedTransfer={data.executeLinkedTransfer} lastSavedAt={data.lastSavedAt} recurringMovements={data.recurringMovements} onUpdateRecurring={data.setRecurringMovements} />}
-            {view === 'update' && <AccountUpdate accounts={data.accounts} onUpdateAccountsComplex={data.updateAccountsWithMovements} lastSavedAt={data.lastSavedAt} />}
+            {view === 'update' && <AccountUpdate accounts={data.accounts} onUpdateAccountsComplex={data.updateAccountsWithMovements} lastSavedAt={data.lastSavedAt} onAddAccount={() => { setView('accounts'); setEditingAccount(undefined); setShowForm(true); }} />}
 
             {view === 'yield' && <Yield accounts={data.accounts} fiscalConfig={data.fiscalConfig} monthPlan={monthPlan} savingsSplit={data.savingsSplit} restitutionInMonths={restitutionInMonths} />}
             {view === 'history' && <History history={data.history} expensesHistory={data.expensesHistory} reviewData={fullData} />}
@@ -951,9 +952,12 @@ const App: React.FC = () => {
                 onPlanRestitution={(date) => data.setParentalRestitution(prev => ({ ...prev, plannedDate: date }))}
                 onRestitute={handleRestitution}
                 onUndoRestitution={handleUndoRestitution}
+                soloPlanSlot={data.parentalRestitution?.plannedDate && !data.parentalRestitution.done
+                  ? <SoloPlanCard accounts={data.accounts} fiscalConfig={data.fiscalConfig} monthPlan={monthPlan} restitutionISO={data.parentalRestitution.plannedDate} split={data.savingsSplit} emergencyTarget={emergency?.target} />
+                  : undefined}
             />}
-            {view === 'donations' && <Donations donations={data.donations} onUpdate={data.setDonations} pickerApiKey={data.pickerApiKey} taxEstimate={taxEstimate} ceiling75={data.fiscalConfig.donation75Ceiling} />}
-            {view === 'subscriptions' && <Subscriptions subscriptions={data.subscriptions} onUpdate={data.setSubscriptions} />}
+            {view === 'donations' && <Donations donations={data.donations} onUpdate={data.setDonations} pickerApiKey={data.pickerApiKey} taxEstimate={taxEstimate} ceiling75={data.fiscalConfig.donation75Ceiling} taxHelper={<TaxReturnHelper data={fullData} estimatedNetTaxableBeforeAllowance={taxEstimate?.beforeAllowance} allowanceRate={data.fiscalConfig.standardAllowance} allowanceCap={data.fiscalConfig.standardAllowanceCap} ceiling75={data.fiscalConfig.donation75Ceiling} />} />}
+            {view === 'subscriptions' && <Subscriptions subscriptions={data.subscriptions} onUpdate={data.setSubscriptions} monthlyPay={monthlyPay} />}
             {view === 'payslips' && <Payslips payslips={data.payslips} onUpdatePayslips={data.setPayslips} geminiApiKey={data.geminiApiKey} pickerApiKey={data.pickerApiKey} onApplyToPilotage={handleApplyPayslipToPilotage} activePayslipId={data.activePayslipId} onClearActivePayslip={handleClearActivePayslip} />}
 
             {view === 'settings' && (
@@ -988,7 +992,7 @@ const App: React.FC = () => {
             {view === 'accounts' && (
               <div className="space-y-6 animate-fade-in">
                 <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700">
-                  <div><h2 className="text-2xl font-black text-slate-800 dark:text-slate-100">Mes comptes</h2><p className="text-sm text-slate-500 dark:text-slate-400 font-medium">{data.accounts.length} comptes actifs</p></div>
+                  <div><h2 className="text-2xl font-black text-slate-800 dark:text-slate-100">Mes comptes</h2><p className="text-sm text-slate-500 dark:text-slate-400 font-medium">{data.accounts.length} compte{data.accounts.length > 1 ? 's' : ''} · <button onClick={() => setView('journal')} className="underline hover:text-indigo-700 dark:hover:text-indigo-300">voir le journal des mouvements</button></p></div>
                   {!showForm && <button onClick={() => { setEditingAccount(undefined); setShowForm(true); }} className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-xl font-bold flex gap-2 transition-colors shadow-lg shadow-indigo-200"><PlusCircle className="w-5 h-5"/> Ajouter un compte</button>}
                 </div>
                 {!showForm && <MovementSearch accounts={data.accounts} />}
@@ -1029,9 +1033,12 @@ const App: React.FC = () => {
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                           {filteredAccounts.map(acc => (
                             <React.Fragment key={acc.id}>
-                              <tr onClick={() => setEditingAccount(editingAccount?.id === acc.id ? undefined : acc)} className="hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer group transition-colors">
+                              <tr className="hover:bg-slate-50 dark:hover:bg-slate-800 group transition-colors">
                                 <td className="px-4 md:px-6 py-4">
-                                  <div className="font-bold text-slate-800 dark:text-slate-100">{acc.name}</div>
+                                  <button type="button" onClick={() => setEditingAccount(editingAccount?.id === acc.id ? undefined : acc)} aria-expanded={editingAccount?.id === acc.id && !showForm}
+                                    className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-1 text-left hover:text-indigo-700 dark:hover:text-indigo-300">
+                                    {acc.name} <ChevronDown className={`w-4 h-4 text-slate-500 transition-transform ${editingAccount?.id === acc.id && !showForm ? 'rotate-180' : ''}`} aria-hidden="true" /><span className="sr-only">: voir les mouvements</span>
+                                  </button>
                                   <div className="text-[11px] uppercase text-slate-500 dark:text-slate-400 font-bold">{acc.institution}</div>
                                   {acc.tags && acc.tags.length > 0 && (
                                     <div className="flex flex-wrap gap-1 mt-1">
@@ -1044,12 +1051,11 @@ const App: React.FC = () => {
                                     // ne jamais annoncer un régime différent d'un écran à l'autre.
                                     const maturity = computeMaturityCountdown(acc, data.fiscalConfig);
                                     if (!maturity) return null;
-                                    const label = maturity.regimeAfter === 'EXONERE_IR' ? "exonération d'IR" : 'taux réduit (7,5%)';
+                                    const label = maturity.regimeAfter === 'EXONERE_IR' ? 'exonéré d\'impôt' : 'impôt réduit';
                                     return (
-                                      <div className="mt-1 text-[11px] font-bold text-indigo-500 dark:text-indigo-400 flex items-center gap-1">
+                                      <div className="mt-1 text-[11px] font-bold text-indigo-700 dark:text-indigo-300 flex items-center gap-1">
                                         <Clock className="w-3 h-3 flex-shrink-0" />
-                                        Passe en {label} dans {maturity.monthsRemaining} mois
-                                        {maturity.annualTaxSaving > 1 && ` (≈ ${formatEUR(maturity.annualTaxSaving, 0)} d'impôt en moins par année de gains, au retrait)`}
+                                        {label.charAt(0).toUpperCase() + label.slice(1)} dans {maturity.monthsRemaining} mois
                                       </div>
                                     );
                                   })()}
@@ -1060,11 +1066,11 @@ const App: React.FC = () => {
                                     <button onClick={(e) => { e.stopPropagation(); handleDeleteAccount(acc); }} aria-label={`Supprimer ${acc.name}`} className="p-2.5 text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/40 rounded-lg"><Trash2 className="w-4 h-4"/></button>
                                   </div>
                                 </td>
-                                <td className="px-4 md:px-6 py-4 text-right align-top"><div className="font-black text-indigo-600 text-lg whitespace-nowrap">{formatEUR(acc.ownedAmount)}</div><AccountTotal account={acc} /></td>
+                                <td className="px-4 md:px-6 py-4 text-right align-top"><div className="font-black text-indigo-700 dark:text-indigo-300 text-lg whitespace-nowrap">{formatEUR(acc.ownedAmount)}</div><AccountTotal account={acc} /></td>
                                 <td className="hidden md:table-cell px-6 py-4 text-right font-bold text-amber-700 dark:text-amber-400">{formatEUR(acc.parentalCapital)}</td>
-                                <td className="hidden md:table-cell px-6 py-4 text-right"><div className="flex justify-end gap-2 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
-                                   <button onClick={(e) => { e.stopPropagation(); setEditingAccount(acc); setShowForm(true); }} className="p-2 text-indigo-600 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/40 rounded-lg hover:bg-indigo-100 dark:hover:bg-indigo-900"><Edit2 className="w-4 h-4"/></button>
-                                   <button onClick={(e) => { e.stopPropagation(); handleDeleteAccount(acc); }} className="p-2 text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/40 rounded-lg hover:bg-rose-100 dark:hover:bg-rose-900"><Trash2 className="w-4 h-4"/></button>
+                                <td className="hidden md:table-cell px-6 py-4 text-right"><div className="flex justify-end gap-2 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100 transition-opacity">
+                                   <button onClick={(e) => { e.stopPropagation(); setEditingAccount(acc); setShowForm(true); }} aria-label={`Modifier ${acc.name}`} className="p-2 text-indigo-600 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/40 rounded-lg hover:bg-indigo-100 dark:hover:bg-indigo-900"><Edit2 className="w-4 h-4"/></button>
+                                   <button onClick={(e) => { e.stopPropagation(); handleDeleteAccount(acc); }} aria-label={`Supprimer ${acc.name}`} className="p-2 text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/40 rounded-lg hover:bg-rose-100 dark:hover:bg-rose-900"><Trash2 className="w-4 h-4"/></button>
                                 </div></td>
                               </tr>
                               {editingAccount?.id === acc.id && !showForm && (

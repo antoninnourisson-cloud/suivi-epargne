@@ -107,14 +107,14 @@ export const TransferManager: React.FC<TransferManagerProps> = ({ accounts, onUp
       <p className="text-sm text-slate-500 dark:text-slate-400">Dépôt sur un compte, virement entre deux comptes, ou échéances qui reviennent chaque mois.</p>
     </div>
     <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
-      <div className="border-b border-slate-200 dark:border-slate-700 flex">
-        <button onClick={() => setActiveTab('deposit')} className={`flex-1 min-w-0 px-2 py-4 text-sm font-black flex items-center justify-center gap-2 ${activeTab === 'deposit' ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border-b-2 border-emerald-600' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
+      <div role="tablist" aria-label="Type d'opération" className="border-b border-slate-200 dark:border-slate-700 flex">
+        <button role="tab" aria-selected={activeTab === 'deposit'} onClick={() => setActiveTab('deposit')} className={`flex-1 min-w-0 px-2 py-4 text-sm font-black flex items-center justify-center gap-2 ${activeTab === 'deposit' ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border-b-2 border-emerald-600' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
           <Download className="w-4 h-4 hidden sm:block" /> Dépôt
         </button>
-        <button onClick={() => setActiveTab('transfer')} className={`flex-1 min-w-0 px-2 py-4 text-sm font-black flex items-center justify-center gap-2 ${activeTab === 'transfer' ? 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-400 border-b-2 border-indigo-600' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
+        <button role="tab" aria-selected={activeTab === 'transfer'} onClick={() => setActiveTab('transfer')} className={`flex-1 min-w-0 px-2 py-4 text-sm font-black flex items-center justify-center gap-2 ${activeTab === 'transfer' ? 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-400 border-b-2 border-indigo-600' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
           <ArrowRightLeft className="w-4 h-4 hidden sm:block" /> Virement
         </button>
-        <button onClick={() => setActiveTab('recurring')} className={`flex-1 min-w-0 px-2 py-4 text-sm font-black flex items-center justify-center gap-2 ${activeTab === 'recurring' ? 'bg-violet-50 dark:bg-violet-950/40 text-violet-700 dark:text-violet-400 border-b-2 border-violet-600' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
+        <button role="tab" aria-selected={activeTab === 'recurring'} onClick={() => setActiveTab('recurring')} className={`flex-1 min-w-0 px-2 py-4 text-sm font-black flex items-center justify-center gap-2 ${activeTab === 'recurring' ? 'bg-violet-50 dark:bg-violet-950/40 text-violet-700 dark:text-violet-400 border-b-2 border-violet-600' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
           <Repeat className="w-4 h-4 hidden sm:block" /> Récurrents
         </button>
       </div>
@@ -123,45 +123,50 @@ export const TransferManager: React.FC<TransferManagerProps> = ({ accounts, onUp
         {activeTab !== 'recurring' && <div className="bg-slate-50 dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-700 flex items-center gap-4">
           <Calendar className="w-5 h-5 text-slate-500 dark:text-slate-400" />
           <div className="flex-1">
-            <label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase block">Date de l'opération</label>
-            <input type="date" value={opDate} onChange={e => setOpDate(e.target.value)} className="w-full bg-transparent font-bold text-slate-700 dark:text-slate-200 outline-none" />
+            <label htmlFor="op-date" className="text-[11px] font-black text-slate-600 dark:text-slate-300 uppercase block">Date de l'opération</label>
+            <input id="op-date" type="date" value={opDate} onChange={e => setOpDate(e.target.value)} className="w-full bg-transparent font-bold text-slate-700 dark:text-slate-200 outline-none" />
           </div>
         </div>}
 
         {saveStatus === 'saved' && (
-            <div className="bg-emerald-100 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300 p-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2">
+            <div role="status" className="bg-emerald-100 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300 p-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2">
                 <CheckCircle className="w-4 h-4"/> Enregistré sur Drive
             </div>
         )}
 
         {formError && (
-            <div className="bg-rose-100 dark:bg-rose-950/50 text-rose-800 dark:text-rose-300 p-3 rounded-xl text-sm font-bold flex items-center gap-2">
+            <div role="alert" className="bg-rose-100 dark:bg-rose-950/50 text-rose-800 dark:text-rose-300 p-3 rounded-xl text-sm font-bold flex items-center gap-2">
                 <AlertCircle className="w-4 h-4 flex-shrink-0"/> {formError}
             </div>
         )}
 
         {activeTab === 'deposit' ? (
           <form onSubmit={handleDeposit} className="space-y-4">
-            <select value={depositAccountId} onChange={e => setDepositAccountId(e.target.value)} className="w-full p-3 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-emerald-500 font-bold" required>
+            <label htmlFor="dep-account" className="sr-only">Compte de destination</label>
+            <select id="dep-account" value={depositAccountId} onChange={e => setDepositAccountId(e.target.value)} className="w-full p-3 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-emerald-500 font-bold" required>
               <option value="">Compte de destination</option>
               {accounts.map(acc => <option key={acc.id} value={acc.id}>{acc.name} ({acc.institution})</option>)}
             </select>
-            <input type="text" value={depositAmount} onChange={e => setDepositAmount(e.target.value)} className="w-full p-4 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 border border-slate-300 dark:border-slate-700 rounded-lg text-2xl font-black" placeholder="0,00 €" inputMode="decimal" />
+            <label htmlFor="dep-amount" className="sr-only">Montant du dépôt</label>
+            <input id="dep-amount" type="text" value={depositAmount} onChange={e => setDepositAmount(e.target.value)} className="w-full p-4 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 border border-slate-300 dark:border-slate-700 rounded-lg text-2xl font-black" placeholder="0,00 €" inputMode="decimal" />
             <Button type="submit" isLoading={saveStatus === 'pending'} className="w-full !bg-emerald-600 hover:!bg-emerald-700 py-4">Valider le dépôt</Button>
           </form>
         ) : activeTab === 'transfer' ? (
           <form onSubmit={handleTransfer} className="space-y-4">
-            <select value={sourceAccountId} onChange={e => setSourceAccountId(e.target.value)} className="w-full p-3 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-indigo-500 font-bold" required>
+            <label htmlFor="tr-from" className="sr-only">Compte de départ</label>
+            <select id="tr-from" value={sourceAccountId} onChange={e => setSourceAccountId(e.target.value)} className="w-full p-3 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-indigo-500 font-bold" required>
               <option value="">Depuis</option>
               {accounts.map(acc => <option key={acc.id} value={acc.id} disabled={acc.id === destAccountId}>{acc.name}</option>)}
             </select>
-            <div className="flex justify-center"><ArrowDown className="text-slate-300 dark:text-slate-600" /></div>
-            <select value={destAccountId} onChange={e => setDestAccountId(e.target.value)} className="w-full p-3 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-indigo-500 font-bold" required>
+            <div className="flex justify-center"><ArrowDown className="text-slate-500 dark:text-slate-400" aria-hidden="true" /></div>
+            <label htmlFor="tr-to" className="sr-only">Compte d'arrivée</label>
+            <select id="tr-to" value={destAccountId} onChange={e => setDestAccountId(e.target.value)} className="w-full p-3 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-indigo-500 font-bold" required>
               <option value="">Vers</option>
               {accounts.map(acc => <option key={acc.id} value={acc.id} disabled={acc.id === sourceAccountId}>{acc.name}</option>)}
             </select>
-            <input type="text" value={transferAmount} onChange={e => setTransferAmount(e.target.value)} className="w-full p-4 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 border border-slate-300 dark:border-slate-700 rounded-lg text-2xl font-black" placeholder="0,00 €" inputMode="decimal" />
-            <Button type="submit" isLoading={saveStatus === 'pending'} className="w-full py-4">Exécuter le virement</Button>
+            <label htmlFor="tr-amount" className="sr-only">Montant du virement</label>
+            <input id="tr-amount" type="text" value={transferAmount} onChange={e => setTransferAmount(e.target.value)} className="w-full p-4 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 border border-slate-300 dark:border-slate-700 rounded-lg text-2xl font-black" placeholder="0,00 €" inputMode="decimal" />
+            <Button type="submit" isLoading={saveStatus === 'pending'} className="w-full py-4">Enregistrer le virement</Button>
           </form>
         ) : (
           <RecurringManager accounts={accounts} recurringMovements={recurringMovements} onUpdate={onUpdateRecurring} />

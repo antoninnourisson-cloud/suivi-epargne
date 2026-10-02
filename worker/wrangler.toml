@@ -1,5 +1,8 @@
 # Serveur de Pécule (session persistante + notifications push).
 # Guide complet : worker/README.md
+# Le nom technique `suivi-epargne-api` (ancien nom de l'app) est conservé : le changer créerait
+# un autre Worker, à une autre adresse (redirection OAuth, VITE_BACKEND_URL, sessions...).
+# Déploiement automatique : .github/workflows/worker.yml (dès que les secrets GitHub existent).
 name = "suivi-epargne-api"
 main = "src/index.ts"
 compatibility_date = "2025-06-01"

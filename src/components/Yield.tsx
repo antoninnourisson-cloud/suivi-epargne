@@ -50,7 +50,7 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig, monthPlan,
         };
       })
       .sort((x, y) => y.annual - x.annual),
-    [accounts, currentYear]);
+    [accounts, currentYear, fiscalConfig]);
 
   // Totaux via computeParentalInterest (partagé avec le rappel de fin d'année du Dashboard)
   // plutôt que recalculés ici : les deux écrans ne doivent jamais pouvoir diverger.
@@ -61,7 +61,7 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig, monthPlan,
   // sera réellement crédité au 31 décembre si rien ne bouge d'ici là.
   const expected = useMemo(() => computeExpectedYearInterest(accounts, currentYear), [accounts, currentYear]);
   const accruedTotal = useMemo(() => accounts.reduce((sum, a) => sum + computeAccruedInterest(a, currentYear), 0), [accounts, currentYear]);
-  const { totalAnnual, totalAnnualOwned, totalAnnualParental } = useMemo(
+  const { totalAnnual } = useMemo(
     () => computeParentalInterest(accounts, currentYear),
     [accounts, currentYear]
   );

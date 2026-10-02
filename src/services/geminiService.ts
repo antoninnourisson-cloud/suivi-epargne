@@ -19,7 +19,7 @@ const GEMINI_MODEL = 'gemini-3.6-flash';
 // par Google sans attendre une mise à jour de l'app.
 const MODEL_OVERRIDE_KEY = 'gemini_model';
 export const getGeminiModelOverride = (): string => { try { return localStorage.getItem(MODEL_OVERRIDE_KEY) || ''; } catch { return ''; } };
-export const setGeminiModelOverride = (m: string) => { try { m.trim() ? localStorage.setItem(MODEL_OVERRIDE_KEY, m.trim()) : localStorage.removeItem(MODEL_OVERRIDE_KEY); } catch { /* non mémorisé */ } };
+export const setGeminiModelOverride = (m: string) => { try { if (m.trim()) localStorage.setItem(MODEL_OVERRIDE_KEY, m.trim()); else localStorage.removeItem(MODEL_OVERRIDE_KEY); } catch { /* non mémorisé */ } };
 export const DEFAULT_GEMINI_MODEL = GEMINI_MODEL;
 const modelChain = (): string[] => {
   const o = getGeminiModelOverride();

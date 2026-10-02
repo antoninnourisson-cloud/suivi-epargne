@@ -5,7 +5,7 @@
 // exposés pour les écrans.
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { tracksDeposits, totalFixedCharges } from '../lib/finance';
-import { applyMovement } from '../lib/accountOps';
+import { applyMovement, balanceChangeMovements } from '../lib/accountOps';
 import { migrate, canonicalize, emptyData, isFromNewerApp, stripDeviceSecrets, validateImport, APP_SCHEMA_VERSION } from '../lib/schema';
 import { buildAccountsUpdateMail } from '../lib/mailTemplates';
 import { localTodayISO } from '../lib/dates';
@@ -85,7 +85,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
   const [geminiApiKey, setGeminiKeyState] = useState<string>(() => lsGet(GEMINI_KEY) || '');
   const setGeminiApiKey = useCallback((k: string) => {
     setGeminiKeyState(k);
-    k ? lsSet(GEMINI_KEY, k) : lsDel(GEMINI_KEY);
+    if (k) lsSet(GEMINI_KEY, k); else lsDel(GEMINI_KEY);
   }, []);
   /** Une ancienne version gardait la clé dans le fichier Drive : on la récupère sur l'appareil. */
   const adoptLegacyGeminiKey = (raw: unknown) => {
@@ -203,7 +203,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
     markPersisted(raw);
     hasLoadedRef.current = true;
     setIsLoadingData(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [applyData]);
 
   // --- SETTERS PAR CHAMP ---
@@ -520,26 +520,10 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
         const idx = next.findIndex(a => a.id === upd.account.id);
         if (idx < 0) continue;
         const old = next[idx];
-        const diff = upd.account.ownedAmount - old.ownedAmount;
-        const parentalDiff = upd.account.parentalCapital - old.parentalCapital;
-        const movements: AccountMovement[] = [];
-        const push = (amount: number, label: string, kind?: 'valuation' | 'parental') => {
-          if (Math.abs(amount) <= 0.001) return;
-          movements.push({
-            id: crypto.randomUUID(), date: upd.date, amount: Math.round(Math.abs(amount) * 100) / 100,
-            label: `${label} (${amount > 0 ? '+' : '-'})`, type: amount > 0 ? 'IN' : 'OUT',
-            ...(kind ? { kind } : {}),
-          });
-        };
-        if (upd.account.totalDeposits !== undefined && tracksDeposits(upd.account.type)) {
-          const cash = upd.cashFlow ?? 0;
-          push(cash, cash > 0 ? 'Versement' : 'Retrait');
-          push(diff - cash, 'Valorisation', 'valuation');
-        } else {
-          push(diff, 'Actualisation');
-        }
-        // Part des parents : tracée à part (historique, intérêts passés et journal justes).
-        push(parentalDiff, 'Part des parents', 'parental');
+        const movements = balanceChangeMovements(old, upd.account, upd.date, {
+          ownLabel: 'Actualisation', cashFlow: upd.cashFlow,
+          splitValuation: upd.account.totalDeposits !== undefined && tracksDeposits(upd.account.type),
+        });
         next[idx] = { ...upd.account, movements: [...(old.movements || []), ...movements] };
       }
       return next;

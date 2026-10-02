@@ -8,3 +8,8 @@
 .dark .text-indigo-600:not([class*="dark:text-"]) { color: #5ca37d; }
 .dark .text-indigo-700:not([class*="dark:text-"]),
 .dark .text-indigo-800:not([class*="dark:text-"]) { color: #8cc2a3; }
+
+/* Focus clavier toujours visible, y compris sur les champs qui retirent le contour
+   natif (`outline-none`) : sélecteur plus précis que la classe utilitaire. */
+html :focus-visible { outline: 2px solid #2a6b4b; outline-offset: 2px; }
+html.dark :focus-visible { outline-color: #8cc2a3; }

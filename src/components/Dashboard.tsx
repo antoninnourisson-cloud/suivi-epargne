@@ -1,11 +1,17 @@
-import React, { useState, useMemo, useEffect, lazy, Suspense } from 'react';
+import React, { useState, useMemo, useEffect, Suspense } from 'react';
 
 // Graphiques chargés à part (recharts) : les cartes s'affichent sans les attendre.
 const StackedSavingsChart = lazyWithRetry(() => import('./DashboardCharts').then(m => ({ default: m.StackedSavingsChart })));
 const InstitutionChart = lazyWithRetry(() => import('./DashboardCharts').then(m => ({ default: m.InstitutionChart })));
+import { accountColor } from '../lib/chartTheme';
+import { TodoList, TodoSpec } from './TodoList';
+import type { View } from '../navigation';
+import type { EmergencyFund } from '../lib/planning';
+import type { AgendaEvent } from '../lib/agenda';
+import { Sprout, LifeBuoy, Download, CalendarDays } from 'lucide-react';
 import { lazyWithRetry } from './ErrorBoundary';
 import { SavingsAccount, PortfolioSnapshot, AccountType, Expense, FiscalConfig, WorkBenefits, RecurringMovement, Subscription } from '../types';
-import { Euro, Lock, Wallet, ListTodo, ChevronDown, Landmark, CalendarClock, Unlock, Save, AlertTriangle, Trash2, Clock, TrendingUp, TrendingDown, PiggyBank, Percent, ShieldAlert, Repeat } from 'lucide-react';
+import { Landmark, CalendarClock, Save, AlertTriangle, Trash2, Clock, TrendingUp, TrendingDown, PiggyBank, Percent, ShieldAlert, Repeat } from 'lucide-react';
 import { computeAccruedParentalInterest, computeRecentSavingsRate, computeAccountBalanceAtDate, findStaleRegulatedRates, computeLepEligibility, computeIncome, findDueRecurring, computeMonthSavedAmount, computeSavedSince, payPeriodOf, computeSavingsRateHistory, computeUnlockCost, findFiscalReview, applyTaxScale, nextSubscriptionDate, findAvRateUpdatesDue } from '../lib/finance';
 import { parseISODate, formatISODay, daysBetween, localTodayISO } from '../lib/dates';
 import { Button } from './Button';
@@ -45,9 +51,18 @@ interface DashboardProps {
     navigoRate: number;
     taxRateManual: number;
   };
+  // Ouvre un autre écran (actions des alertes, premier lancement).
+  onNavigate?: (view: View) => void;
+  onAddAccount?: () => void;
+  // Rappel trimestriel de télécharger une copie.
+  lastExportAt?: string;
+  onExport?: () => void;
+  emergency?: EmergencyFund | null;
+  onSetEmergencyMonths?: (m: number) => void;
+  agendaNext?: AgendaEvent[];
 }
 
-export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expenses, fiscalConfig, workBenefits, onDeleteAccount, config, recurringMovements = [], onRecordRecurring, monthPlan, monthlyPay = 0, paydayDay, trackingStartDate, subscriptions = [], onUpdateFiscalConfig, onOpenSettings, onUpdateAccounts, payRaise, onAcceptPayRaise, onDismissPayRaise }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalConfig, workBenefits, onDeleteAccount, config, recurringMovements = [], onRecordRecurring, monthPlan, monthlyPay = 0, paydayDay, trackingStartDate, subscriptions = [], onUpdateFiscalConfig, onOpenSettings, onUpdateAccounts, payRaise, onAcceptPayRaise, onDismissPayRaise, onNavigate, onAddAccount, lastExportAt, onExport, emergency, onSetEmergencyMonths, agendaNext = [] }) => {
   const [dateRange, setDateRange] = useState(() => {
     try {
         const stored = localStorage.getItem('dashboard_date_range');
@@ -255,6 +270,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
     }
 
     data.reverse();
+    // Au-delà de 4 mois, un point par semaine suffit (et le dernier jour est toujours gardé) :
+    // le graphique reste lisible et léger même sur cinq ans.
+    if (data.length > 120) {
+      const step = data.length > 730 ? 14 : 7;
+      return data.filter((_, i) => i % step === 0 || i === data.length - 1);
+    }
     return data;
   }, [accounts, dateRange]);
 
@@ -273,13 +294,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
     [accounts, payPeriod?.key, trackingStartDate]
   );
 
-  const [todoOpen, setTodoOpen] = useState(() => {
-    try { return localStorage.getItem('dashboard_todo_open') !== '0'; } catch { return true; }
-  });
-  const toggleTodo = () => setTodoOpen(open => {
-    try { localStorage.setItem('dashboard_todo_open', open ? '0' : '1'); } catch { /* préférence non mémorisée */ }
-    return !open;
-  });
+  const [rateMonth, setRateMonth] = useState<string | null>(null);
+  // Évolution de votre part depuis le début du mois (point mensuel de l'historique).
+  const monthDelta = useMemo(() => {
+    const key = localTodayISO().slice(0, 7);
+    const prev = [...history].filter(h => h.date < `${key}-01`).sort((a, b) => a.date.localeCompare(b.date)).pop();
+    return prev && prev.ownedAmount !== undefined ? mySavings - prev.ownedAmount : null;
+  }, [history, mySavings]);
   const rateHistory = useMemo(() => computeSavingsRateHistory(accounts, monthlyPay, 12, new Date(), trackingStartDate), [accounts, monthlyPay, trackingStartDate]);
   // Moyenne des mois COMPLETS seulement : le mois en cours n'est pas encore fini.
   const avgRate = useMemo(() => {
@@ -383,15 +404,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
     return acc;
   }, {} as Record<string, { name: string, value: number }>));
 
-  const COLORS = ['#3b8560', '#f59e0b', '#0ea5e9', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4'];
-  // Couleur stable par IDENTITÉ de compte (hash de l'id), plus par position dans le
-  // tableau : supprimer/restaurer/réordonner un compte remélangait toutes les couleurs du
-  // graphique et de sa légende.
-  const getAccountColor = (accountId: string) => {
-    let h = 0;
-    for (let i = 0; i < accountId.length; i++) h = (h * 31 + accountId.charCodeAt(i)) >>> 0;
-    return COLORS[h % COLORS.length];
-  };
+  // Couleur par compte : rang de son identifiant (trié), donc stable quand l'ordre
+  // d'affichage change, et jamais deux comptes de la même couleur jusqu'à dix comptes.
+  const sortedIds = useMemo(() => accounts.map(a => a.id).sort(), [accounts]);
+  const getAccountColor = (accountId: string) => accountColor(sortedIds, accountId);
 
   const exportSession = () => {
     const now = new Date();
@@ -411,201 +427,176 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
     document.body.removeChild(link);
   };
 
-  const StatCard = ({ title, amount, icon: Icon, color, subtext, extra }: any) => (
-    <div className="bg-white dark:bg-slate-800 p-4 md:p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 min-w-0">
-      <div className="flex justify-between items-start gap-2">
-        <div className="min-w-0">
-          <p className="text-slate-500 dark:text-slate-400 text-xs md:text-sm font-medium">{title}</p>
-          <h3 className="text-lg md:text-2xl font-bold text-slate-800 dark:text-slate-100 mt-1 whitespace-nowrap">
-            {formatEUR(amount, 2)}
-          </h3>
-          {subtext && <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 uppercase font-bold tracking-wide">{subtext}</p>}
-          {extra}
-        </div>
-        <div className={`hidden 2xl:block p-3 rounded-lg ${color}`}>
-          <Icon className="w-6 h-6 text-white" />
-        </div>
-      </div>
+  const StatCard = ({ title, amount, subtext, extra, hero }: { title: string; amount: number; subtext?: string; extra?: React.ReactNode; hero?: React.ReactNode }) => (
+    <div className="bg-white dark:bg-slate-800 p-4 md:p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 min-w-0">
+      <p className="text-slate-600 dark:text-slate-300 text-xs md:text-sm font-bold">{title}</p>
+      <p className={`${hero ? 'text-3xl md:text-4xl' : 'text-xl md:text-2xl'} font-black text-slate-800 dark:text-slate-100 mt-1 tabular-nums`}>{formatEUR(amount, 0)}</p>
+      {subtext && <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 font-bold">{subtext}</p>}
+      {hero}
+      {extra}
     </div>
   );
 
-  if (accounts.length === 0) return <div className="text-center py-20 text-slate-600 dark:text-slate-300">Aucune donnée disponible.</div>;
+  if (accounts.length === 0) return (
+    <section aria-labelledby="welcome-title" className="max-w-xl mx-auto bg-white dark:bg-slate-800 rounded-3xl border border-slate-200 dark:border-slate-700 p-8 mt-6 text-center shadow-sm">
+      <Sprout className="w-10 h-10 text-indigo-600 mx-auto mb-3" aria-hidden="true" />
+      <h2 id="welcome-title" className="text-2xl font-black text-slate-800 dark:text-slate-100">Bienvenue dans Pécule</h2>
+      <p className="text-slate-600 dark:text-slate-300 mt-2">Trois étapes pour faire pousser votre épargne :</p>
+      <ol className="text-left mt-6 space-y-3 text-sm text-slate-700 dark:text-slate-200">
+        <li className="flex gap-3"><span className="w-6 h-6 rounded-full bg-indigo-600 text-white text-xs font-black flex items-center justify-center flex-shrink-0">1</span> Ajoutez vos comptes (Livret A, LEP, assurance vie…) avec leur solde.</li>
+        <li className="flex gap-3"><span className="w-6 h-6 rounded-full bg-indigo-600 text-white text-xs font-black flex items-center justify-center flex-shrink-0">2</span> Indiquez votre salaire et vos charges dans le Pilotage.</li>
+        <li className="flex gap-3"><span className="w-6 h-6 rounded-full bg-indigo-600 text-white text-xs font-black flex items-center justify-center flex-shrink-0">3</span> Choisissez votre jour de paie : Pécule vous dira quoi placer, et où.</li>
+      </ol>
+      <div className="mt-8 flex flex-col sm:flex-row gap-2 justify-center">
+        {onAddAccount && <button onClick={onAddAccount} className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-xl font-black">Ajouter mon premier compte</button>}
+        {onNavigate && <button onClick={() => onNavigate('pilot')} className="px-6 py-3 rounded-xl font-bold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-700">Ouvrir le Pilotage</button>}
+      </div>
+    </section>
+  );
 
-  const todoCount =
-    (daysSinceLastUpdate !== null && daysSinceLastUpdate >= 21 ? 1 : 0) +
-    (onRecordRecurring ? dueRecurring.length : 0) +
-    (lepStatus && lepStatus.status !== 'ok' ? 1 : 0) +
-    (showRateReminder && staleRates ? 1 : 0) +
-    (parentalYearEndReminder !== null ? 1 : 0) +
-    (onDeleteAccount ? inactiveEmptyAccounts.length : 0) +
-    ceilingAlerts.length +
-    (onUpdateFiscalConfig && fiscalReview.newScale ? 1 : 0) +
-    (onUpdateFiscalConfig && fiscalReview.annualCheckDue ? 1 : 0) +
-    (avRatesDue.length > 0 ? 1 : 0) +
-    (payRaise ? 1 : 0);
+  const exportDue = !!onExport && (!lastExportAt || daysBetween(parseISODate(lastExportAt), new Date()) >= 90);
+  const todos: TodoSpec[] = [];
+  if (daysSinceLastUpdate !== null && daysSinceLastUpdate >= 21) todos.push({
+    key: 'stale-update', icon: Clock, tone: 'action', snoozable: true,
+    text: `Aucune actualisation de solde depuis ${daysSinceLastUpdate} jours.`,
+    primary: onNavigate ? { label: 'Actualiser', onClick: () => onNavigate('update') } : undefined,
+  });
+  if (onRecordRecurring) for (const { recurring: r, dueDate } of dueRecurring) todos.push({
+    key: `rec-${r.id}-${dueDate}`, icon: Repeat, tone: 'action',
+    text: <>Échéance du {parseISODate(dueDate).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })} : {r.label}, {r.type === 'IN' ? '+' : '−'}{fmtEUR(r.amount)} sur {accounts.find(a => a.id === r.accountId)?.name}</>,
+    primary: { label: 'Enregistrer', onClick: () => onRecordRecurring(r, dueDate) },
+    secondary: { label: 'Pas ce mois-ci', onClick: () => skipRecurring(r.id) },
+  });
+  if (lepStatus && lepStatus.status !== 'ok') todos.push({
+    key: `lep-${lepStatus.status}`, icon: ShieldAlert, tone: 'info', snoozable: true,
+    text: lepStatus.status === 'exceeded'
+      ? <>Votre revenu estimé ({fmtEUR(lepStatus.estimatedRfr)}) dépasse le plafond du LEP ({fmtEUR(lepStatus.ceiling)}) : votre banque pourrait ne pas le reconduire.</>
+      : <>Votre revenu estimé ({fmtEUR(lepStatus.estimatedRfr)}) approche du plafond du LEP ({fmtEUR(lepStatus.ceiling)}) : il reste {lepStatus.marginPct.toLocaleString('fr-FR', { maximumFractionDigits: lepStatus.marginPct < 1 ? 1 : 0 })} % de marge.</>,
+    detail: 'Estimation depuis votre salaire. Le vrai critère est le revenu fiscal de référence de votre avis d\'imposition.',
+  });
+  if (showRateReminder && staleRates) todos.push({
+    key: 'rates', icon: Percent, tone: 'action',
+    text: <>Taux réglementés révisés au {staleRates.revision.label} : mettez à jour {staleRates.accounts.map(a => a.name).join(', ')}.</>,
+    detail: 'Un taux périmé fausse le rendement, la projection et le plan de placement.',
+    primary: onUpdateAccounts ? { label: ratesEditorOpen ? 'Fermer' : 'Mettre à jour', onClick: () => setRatesEditorOpen(o => !o) } : undefined,
+    secondary: { label: 'Taux inchangé', onClick: dismissRateReminder },
+    extra: ratesEditorOpen && onUpdateAccounts ? <RegulatedRatesEditor accounts={accounts} onApply={onUpdateAccounts} /> : undefined,
+  });
+  if (parentalYearEndReminder !== null) todos.push({
+    key: `parental-ye-${new Date().getFullYear()}`, icon: PiggyBank, tone: 'info', snoozable: true,
+    text: <>Fin d'année : le capital de vos parents a produit environ {fmtEUR(parentalYearEndReminder)} d'intérêts cette année. Ils vous reviennent ; le capital, lui, reste à eux.</>,
+    primary: onNavigate ? { label: 'Voir la part parentale', onClick: () => onNavigate('parental') } : undefined,
+  });
+  if (onDeleteAccount) for (const a of inactiveEmptyAccounts) todos.push({
+    key: `empty-${a.id}`, icon: Trash2, tone: 'info', snoozable: true,
+    text: `${a.name} est à 0 € et inactif.`,
+    primary: { label: 'Supprimer', onClick: () => onDeleteAccount(a) },
+  });
+  if (onUpdateFiscalConfig && fiscalReview.newScale) todos.push({
+    key: `scale-${fiscalReview.newScale.year}`, icon: Landmark, tone: 'action',
+    text: `Nouveau barème de l'impôt : ${fiscalReview.newScale.label}.`,
+    detail: 'Votre « super net » utilise encore l\'ancien. L\'ancien barème reste dans l\'historique (Paramètres).',
+    primary: { label: 'Appliquer', onClick: () => onUpdateFiscalConfig(prev => applyTaxScale(prev, fiscalReview.newScale!)) },
+  });
+  if (onUpdateFiscalConfig && fiscalReview.annualCheckDue) todos.push({
+    key: `annual-${new Date().getFullYear()}`, icon: Landmark, tone: 'action',
+    text: <>Nouvelle année : vérifiez vos paramètres fiscaux (plafond LEP {formatEUR(fiscalConfig.lepIncomeCeiling ?? 0)}, abattement plafonné à {formatEUR(fiscalConfig.standardAllowanceCap ?? 0)}, barème {fiscalConfig.taxScaleYear ?? 'personnalisé'}).</>,
+    primary: { label: 'C\'est à jour', onClick: () => onUpdateFiscalConfig(prev => ({ ...prev, paramsReviewedYear: new Date().getFullYear() })) },
+    secondary: onOpenSettings ? { label: 'Ouvrir les paramètres', onClick: onOpenSettings } : undefined,
+  });
+  if (payRaise) todos.push({
+    key: `raise-${payRaise.period}`, icon: TrendingUp, tone: 'action',
+    text: `Votre net a augmenté de ${formatEUR(payRaise.delta, 0)} par mois (fiche de ${formatPeriod(payRaise.period)}).`,
+    detail: payRaise.hasFixedAmount ? `« Ajouter » augmente votre épargne mensuelle de ${formatEUR(payRaise.delta, 0)}. Si c'est une prime ponctuelle, ignorez.` : '« Ajouter » base le Pilotage sur cette fiche. Si c\'est une prime ponctuelle, ignorez.',
+    primary: onAcceptPayRaise ? { label: 'Ajouter', onClick: onAcceptPayRaise } : undefined,
+    secondary: onDismissPayRaise ? { label: 'Ignorer', onClick: onDismissPayRaise } : undefined,
+  });
+  if (avRatesDue.length > 0) todos.push({
+    key: `av-rate-${new Date().getFullYear()}`, icon: Percent, tone: 'action',
+    text: `Taux servi ${new Date().getFullYear() - 1} : reportez le nouveau taux du fonds euros de ${avRatesDue.map(a => a.name).join(', ')}, publié par votre assureur en janvier.`,
+    primary: onNavigate ? { label: 'Mes comptes', onClick: () => onNavigate('accounts') } : undefined,
+    secondary: { label: 'Taux inchangé', onClick: confirmAvRates },
+  });
+  for (const a of ceilingAlerts) todos.push({
+    key: `ceiling-${a.id}-${Math.floor(a.pct / 5)}`, icon: AlertTriangle, tone: 'info', snoozable: true,
+    text: `${a.name} est rempli à ${Math.round(a.pct)} % : il reste ${formatEUR(a.remaining, 0)} avant le plafond.`,
+    primary: onNavigate ? { label: 'Voir le plan', onClick: () => onNavigate('pilot') } : undefined,
+  });
+  if (exportDue) todos.push({
+    key: 'export', icon: Download, tone: 'info', snoozable: true,
+    text: 'Téléchargez une copie de vos données (tous les trois mois, par précaution).',
+    detail: 'Pécule garde déjà une copie mensuelle sur votre Drive ; celle-ci reste chez vous.',
+    primary: { label: 'Télécharger', onClick: onExport! },
+  });
+  if (emergency && !emergency.reached) todos.push({
+    key: 'emergency', icon: LifeBuoy, tone: 'info', snoozable: true,
+    text: `Épargne de précaution : il manque ${formatEUR(emergency.missing, 0)} pour couvrir ${emergency.months} mois de dépenses.`,
+    detail: 'Gardez-la sur des livrets disponibles à tout moment avant de placer sur l\'assurance vie.',
+  });
 
   return (
     <div className="space-y-6">
       <InstallPrompt />
 
-      {todoCount > 0 && (
-        <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
-          <button
-            type="button"
-            onClick={toggleTodo}
-            aria-expanded={todoOpen}
-            className="w-full flex items-center justify-between gap-3 p-4 text-left"
-          >
-            <span className="text-sm font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
-              <ListTodo className="w-4 h-4 text-indigo-600" /> À faire
-              <span className="px-2 py-0.5 rounded-full bg-indigo-600 text-white text-[11px] font-black">{todoCount}</span>
-            </span>
-            <ChevronDown className={`w-4 h-4 text-slate-500 dark:text-slate-400 transition-transform ${todoOpen ? 'rotate-180' : ''}`} />
-          </button>
-          {todoOpen && (
-            <div className="px-4 pb-4 space-y-2">
-      {daysSinceLastUpdate !== null && daysSinceLastUpdate >= 21 && (
-        <div className="flex items-center gap-3 p-3 rounded-xl border bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-sm font-bold">
-          <Clock className="w-4 h-4 flex-shrink-0" />
-          Aucune actualisation de solde depuis {daysSinceLastUpdate} jours — pensez à mettre vos comptes à jour.
-        </div>
-      )}
+      <TodoList items={todos} />
 
-      {onRecordRecurring && dueRecurring.map(({ recurring: r, dueDate }) => (
-        <div key={r.id} className="flex flex-wrap items-center gap-3 p-3 rounded-xl border bg-violet-50 dark:bg-violet-950/40 border-violet-200 dark:border-violet-900 text-violet-800 dark:text-violet-300 text-sm font-bold">
-          <Repeat className="w-4 h-4 flex-shrink-0" />
-          <span className="flex-1 min-w-0">
-            Échéance du {parseISODate(dueDate).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })} : {r.label} — {r.type === 'IN' ? '+' : '-'}{fmtEUR(r.amount)} sur {accounts.find(a => a.id === r.accountId)?.name}
-          </span>
-          <button onClick={() => onRecordRecurring(r, dueDate)} className="px-3 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-xs font-black flex-shrink-0">Enregistrer</button>
-          <button onClick={() => skipRecurring(r.id)} className="text-xs font-bold underline flex-shrink-0 hover:opacity-70">Pas ce mois-ci</button>
-        </div>
-      ))}
-
-      {lepStatus && lepStatus.status !== 'ok' && (
-        <div className={`flex items-start gap-3 p-3 rounded-xl border text-sm font-bold ${lepStatus.status === 'exceeded' ? 'bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-900 text-rose-800 dark:text-rose-300' : 'bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-900 text-amber-800 dark:text-amber-300'}`}>
-          <ShieldAlert className="w-4 h-4 flex-shrink-0 mt-0.5" />
-          <div>
-            {lepStatus.status === 'exceeded'
-              ? <>Votre revenu estimé ({fmtEUR(lepStatus.estimatedRfr)}) dépasse le plafond LEP ({fmtEUR(lepStatus.ceiling)}) : votre éligibilité pourrait ne pas être reconduite au prochain contrôle de votre banque.</>
-              : <>Votre revenu estimé ({fmtEUR(lepStatus.estimatedRfr)}) approche du plafond LEP ({fmtEUR(lepStatus.ceiling)}) — il reste {lepStatus.marginPct.toLocaleString('fr-FR', { maximumFractionDigits: lepStatus.marginPct < 1 ? 1 : 0 })} % de marge.</>}
-            <span className="block font-normal text-[11px] mt-1 opacity-80">
-              Estimation à partir de votre net imposable. Le vrai critère est le Revenu Fiscal de Référence du foyer, sur votre avis d'imposition — à vérifier là-bas avant toute décision.
-            </span>
-          </div>
-        </div>
-      )}
-
-      {showRateReminder && staleRates && (
-        <div className="flex flex-wrap items-start gap-3 p-3 rounded-xl border bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-900 text-amber-800 dark:text-amber-300 text-sm font-bold">
-          <Percent className="w-4 h-4 flex-shrink-0 mt-0.5" />
-          <div className="flex-1 min-w-0">
-            Les taux réglementés ont été révisés au {staleRates.revision.label}. Vous n'avez pas encore mis à jour :{' '}
-            {staleRates.accounts.map(a => a.name).join(', ')} — un taux périmé fausse le rendement, la projection et la stratégie de placement.
-          </div>
-          <button onClick={dismissRateReminder} className="text-xs font-bold underline flex-shrink-0 hover:opacity-70">
-            Taux inchangé
-          </button>
-          {onUpdateAccounts && <button onClick={() => setRatesEditorOpen(o => !o)} className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-black flex-shrink-0">Mettre à jour</button>}
-          {ratesEditorOpen && onUpdateAccounts && <div className="basis-full mt-2"><RegulatedRatesEditor accounts={accounts} onApply={onUpdateAccounts} /></div>}
-        </div>
-      )}
-
-      {parentalYearEndReminder !== null && (
-        <div className="flex items-center gap-3 p-3 rounded-xl border bg-indigo-50 dark:bg-indigo-950/40 border-indigo-200 dark:border-indigo-900 text-indigo-800 dark:text-indigo-300 text-sm font-bold">
-          <PiggyBank className="w-4 h-4 flex-shrink-0" />
-          Rappel de fin d'année : les intérêts générés cette année par la part de vos parents représentent environ {fmtEUR(parentalYearEndReminder)} — normalement à vous d'après votre accord (le capital, lui, reste intouchable).
-        </div>
-      )}
-
-      {inactiveEmptyAccounts.length > 0 && onDeleteAccount && (
-        <div className="space-y-2">
-          {inactiveEmptyAccounts.map(a => (
-            <div key={a.id} className="flex items-center justify-between gap-3 p-3 rounded-xl border bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-sm">
-              <span className="text-slate-600 dark:text-slate-300 font-bold flex items-center gap-2"><Trash2 className="w-4 h-4 text-slate-500 dark:text-slate-400" /> {a.name} est à 0€ et inactif — le supprimer ?</span>
-              <button onClick={() => onDeleteAccount(a)} className="text-xs font-bold text-rose-600 hover:bg-rose-50 px-3 py-1.5 rounded-lg flex-shrink-0">Supprimer</button>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {onUpdateFiscalConfig && fiscalReview.newScale && (
-        <div className="flex flex-wrap items-center gap-3 p-3 rounded-xl border bg-indigo-50 dark:bg-indigo-950/40 border-indigo-200 dark:border-indigo-900 text-indigo-800 dark:text-indigo-300 text-sm font-bold">
-          <Landmark className="w-4 h-4 flex-shrink-0" />
-          <span className="flex-1 min-w-0">Nouveau barème de l'impôt : {fiscalReview.newScale.label}. Votre « super net » est encore calculé avec l'ancien.</span>
-          <button onClick={() => onUpdateFiscalConfig(prev => applyTaxScale(prev, fiscalReview.newScale!))} className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black flex-shrink-0">Appliquer</button>
-          <span className="basis-full text-[11px] font-normal opacity-80">L'ancien barème est conservé dans l'historique (Paramètres → Fiscalité).</span>
-        </div>
-      )}
-
-      {onUpdateFiscalConfig && fiscalReview.annualCheckDue && (
-        <div className="flex flex-wrap items-center gap-3 p-3 rounded-xl border bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-sm font-bold">
-          <Landmark className="w-4 h-4 flex-shrink-0" />
-          <span className="flex-1 min-w-0">
-            Nouvelle année : vérifiez vos paramètres fiscaux — plafond LEP {formatEUR(fiscalConfig.lepIncomeCeiling ?? 0)}, abattement de 10 % plafonné à {formatEUR(fiscalConfig.standardAllowanceCap ?? 0)}, barème {fiscalConfig.taxScaleYear ?? 'personnalisé'}.
-          </span>
-          {onOpenSettings && <button onClick={onOpenSettings} className="text-xs font-bold underline flex-shrink-0 hover:opacity-70">Ouvrir les paramètres</button>}
-          <button onClick={() => onUpdateFiscalConfig(prev => ({ ...prev, paramsReviewedYear: new Date().getFullYear() }))} className="px-3 py-1.5 rounded-lg bg-slate-800 dark:bg-slate-100 text-white dark:text-slate-900 text-xs font-black flex-shrink-0">C'est à jour</button>
-        </div>
-      )}
-
-      {payRaise && (
-        <div className="flex flex-wrap items-center gap-3 p-3 rounded-xl border bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-900 text-emerald-800 dark:text-emerald-300 text-sm font-bold">
-          <TrendingUp className="w-4 h-4 flex-shrink-0" />
-          <span className="flex-1 min-w-0">
-            Votre net a augmenté de {formatEUR(payRaise.delta, 0)} par mois (fiche de {formatPeriod(payRaise.period)}).
-            <span className="block text-[11px] font-normal opacity-80">{payRaise.hasFixedAmount ? `« Ajouter » augmente votre épargne mensuelle de ${formatEUR(payRaise.delta, 0)}.` : '« Ajouter » base le Pilotage sur cette fiche : la capacité d\'épargne suit.'} Si c'est une prime ponctuelle, ignorez.</span>
-          </span>
-          {onAcceptPayRaise && <button onClick={onAcceptPayRaise} className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black flex-shrink-0">Ajouter</button>}
-          {onDismissPayRaise && <button onClick={onDismissPayRaise} className="text-xs font-bold underline flex-shrink-0 hover:opacity-70">Ignorer</button>}
-        </div>
-      )}
-
-      {avRatesDue.length > 0 && (
-        <div className="flex flex-wrap items-center gap-3 p-3 rounded-xl border bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-sm font-bold">
-          <Percent className="w-4 h-4 flex-shrink-0" />
-          <span className="flex-1 min-w-0">
-            Taux servi {new Date().getFullYear() - 1} : reportez le nouveau taux du fonds euros de {avRatesDue.map(a => a.name).join(', ')} (Mes comptes → modifier), publié par votre assureur en janvier.
-          </span>
-          <button onClick={confirmAvRates} className="text-xs font-bold underline flex-shrink-0 hover:opacity-70">Taux inchangé</button>
-        </div>
-      )}
-
-      {ceilingAlerts.length > 0 && (
-        <div className="space-y-2">
-          {ceilingAlerts.map(a => {
-            return (
-              <div key={a.id} className="flex items-center gap-3 p-3 rounded-xl border text-sm font-bold bg-amber-50 border-amber-200 text-amber-800 dark:bg-amber-950/40 dark:border-amber-800 dark:text-amber-300">
-                <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-                <span>{a.name} ({a.type}) est rempli à {a.pct.toFixed(0)} % — il reste {formatEUR(a.remaining, 0)} avant le plafond.</span>
-              </div>
-            );
-          })}
-        </div>
-      )}
-            </div>
-          )}
-        </div>
-      )}
-
-      <div className="grid grid-cols-2 xl:grid-cols-5 gap-3 md:gap-4">
-        <StatCard title="Mon épargne nette" amount={mySavings} icon={Wallet} color="bg-indigo-600" subtext="Capital réel" />
-        <StatCard title="Disponibilité immédiate" amount={availabilityStats.available} icon={Unlock} color="bg-emerald-500" subtext="Liquide" />
-        <div className="col-span-2"><StatCard title="Contrainte fiscale" amount={availabilityStats.taxLocked} icon={Euro} color="bg-amber-500" subtext="AV/PEA récents" extra={availabilityStats.taxLocked > 0 && (
+      <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 md:gap-4">
+        <div className="col-span-2"><StatCard title="Mon épargne nette" amount={mySavings} subtext="Votre part, hors capital de vos parents" hero={monthDelta !== null ? <p className={`text-xs font-bold mt-1 ${monthDelta >= 0 ? 'text-emerald-700 dark:text-emerald-300' : 'text-rose-700 dark:text-rose-300'}`}>{formatSignedEUR(monthDelta, 0)} depuis le début du mois</p> : undefined} /></div>
+        <StatCard title="Disponible tout de suite" amount={availabilityStats.available} subtext="Livrets et comptes courants" />
+        {availabilityStats.taxLocked > 0 && <StatCard title="Disponible avec impôt" amount={availabilityStats.taxLocked} subtext="Assurance vie et PEA récents" extra={availabilityStats.taxLocked > 0 && (
           <div className="mt-2 space-y-0.5 text-[11px] text-slate-600 dark:text-slate-300">
             {unlockCost.extraTax >= 1 && <p>Tout retirer aujourd'hui : <b>≈ {formatEUR(unlockCost.extraTax, 0)}</b> d'impôt en plus qu'après la maturité.</p>}
             {unlockCost.closesPea && <p className="text-rose-700 dark:text-rose-400 font-bold">Un retrait clôturerait votre PEA.</p>}
             {unlockCost.nextFree && <p>Libre de surcoût le <b>{parseISODate(unlockCost.nextFree.date).toLocaleDateString('fr-FR')}</b> ({unlockCost.nextFree.name}).</p>}
             {unlockCost.unknown.length > 0 && <p className="text-slate-500 dark:text-slate-400">Versements à renseigner pour chiffrer : {unlockCost.unknown.join(', ')}.</p>}
           </div>
-        )} /></div>
-        {availabilityStats.hardLocked > 0 && <StatCard title="Bloqué" amount={availabilityStats.hardLocked} icon={Lock} color="bg-slate-500" subtext="Retraite/PEE" />}
+        )} />}
+        {availabilityStats.hardLocked > 0 && <StatCard title="Bloqué" amount={availabilityStats.hardLocked} subtext="Retraite, épargne salariale" />}
       </div>
 
       {/* Sur grand écran, les cartes se rangent sur deux colonnes au lieu de s'étirer. */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
+      {emergency && (
+        <section aria-labelledby="emergency-title" className="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700">
+          <div className="flex items-baseline justify-between gap-3 mb-2">
+            <h3 id="emergency-title" className="text-sm font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2"><LifeBuoy className="w-4 h-4 text-indigo-600" aria-hidden="true" /> Épargne de précaution</h3>
+            <p className="text-sm font-black text-slate-700 dark:text-slate-200">{fmtEUR(emergency.current)} <span className="text-slate-500 dark:text-slate-400 font-bold">/ {fmtEUR(emergency.target)}</span></p>
+          </div>
+          <div className="h-2.5 rounded-full bg-slate-100 dark:bg-slate-700 overflow-hidden" role="progressbar" aria-label="Épargne de précaution" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(emergency.pct)}>
+            <div className={`h-full rounded-full ${emergency.reached ? 'bg-emerald-500' : 'bg-indigo-600'}`} style={{ width: `${emergency.pct}%` }} />
+          </div>
+          <p className="text-xs text-slate-600 dark:text-slate-300 mt-2">
+            {emergency.reached ? 'Atteinte. ' : `Il manque ${fmtEUR(emergency.missing)}. `}
+            {emergency.months} mois de dépenses ({fmtEUR(emergency.monthlySpending)} par mois), sur vos livrets et comptes courants, votre part seulement.
+          </p>
+          {onSetEmergencyMonths && (
+            <div className="mt-3 flex items-center gap-2" role="group" aria-label="Nombre de mois">
+              {[3, 6].map(m => (
+                <button key={m} onClick={() => onSetEmergencyMonths(m)} aria-pressed={emergency.months === m} className={`px-3 py-1 rounded-full text-xs font-bold border ${emergency.months === m ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'}`}>{m} mois</button>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
+      {agendaNext.length > 0 && (
+        <section aria-labelledby="agenda-next-title" className="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700">
+          <div className="flex items-baseline justify-between gap-3 mb-2">
+            <h3 id="agenda-next-title" className="text-sm font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2"><CalendarDays className="w-4 h-4 text-indigo-600" aria-hidden="true" /> Prochaines échéances</h3>
+            {onNavigate && <button onClick={() => onNavigate('agenda')} className="text-xs font-bold text-indigo-700 dark:text-indigo-300 hover:underline">Tout voir</button>}
+          </div>
+          <ul className="divide-y divide-slate-100 dark:divide-slate-700">
+            {agendaNext.map(e => (
+              <li key={`${e.date}-${e.title}`} className="flex items-center justify-between gap-3 py-1.5 text-sm">
+                <span className="min-w-0 truncate text-slate-700 dark:text-slate-200 font-bold">{e.title}</span>
+                <span className="flex-shrink-0 text-xs text-slate-500 dark:text-slate-400">{frenchDay(parseISODate(e.date), true)}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       {upcomingDebits.length > 0 && (
-        <div className="bg-white dark:bg-slate-800 p-5 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
+        <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700">
           <div className="flex items-baseline justify-between gap-3 mb-2">
             <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2"><CalendarClock className="w-4 h-4 text-indigo-600" /> Prélèvements des 7 prochains jours</h3>
             <p className="text-sm font-black text-slate-700 dark:text-slate-200">{formatEUR(upcomingDebits.reduce((sum, x) => sum + x.s.amount, 0))}</p>
@@ -640,21 +631,20 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
         const maxRate = Math.max(1, ...rateHistory.map(m => Math.abs(m.rate)));
         const MONTH_INITIALS = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'];
         return (
-          <div className="bg-white dark:bg-slate-800 p-5 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
+          <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700">
             <div className="flex items-baseline justify-between gap-3 mb-2">
               <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2"><PiggyBank className="w-4 h-4 text-indigo-600" /> {gaugeTitle}</h3>
               <p className="text-sm font-black text-slate-700 dark:text-slate-200">{monthSaved < 0 ? formatSignedEUR(monthSaved, 0) : fmtEUR(monthSaved)}{hasPlan && <span className="text-slate-500 dark:text-slate-400 font-bold"> / {fmtEUR(plan)}</span>}</p>
             </div>
             {hasPlan && (
-              <div className="h-2.5 rounded-full bg-slate-100 dark:bg-slate-700 overflow-hidden">
+              <div className="h-2.5 rounded-full bg-slate-100 dark:bg-slate-700 overflow-hidden" role="progressbar" aria-label={gaugeTitle} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(pct)}>
                 <div className={`h-full rounded-full ${done ? 'bg-emerald-500' : 'bg-indigo-600'}`} style={{ width: `${pct}%` }} />
               </div>
             )}
             <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-2">
               {!hasPlan ? '' : done ? 'Objectif atteint. '
                 : monthSaved < 0 ? `Vous avez plus retiré que versé (${fmtEUR(monthSaved)}). `
-                : `Reste ${fmtEUR(plan - monthSaved)} à placer, ${daysLeft} jour${daysLeft > 1 ? 's' : ''} avant ${payPeriod ? 'la prochaine paie' : 'la fin du mois'}. `}
-              Versements moins retraits sur vos comptes d'épargne, hors variations de valeur.
+                : `Reste ${fmtEUR(plan - monthSaved)} à placer, ${daysLeft} jour${daysLeft > 1 ? 's' : ''} avant ${payPeriod ? 'la prochaine paie' : 'la fin du mois'}.`}
             </p>
             {monthlyPay > 0 && (
               <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-700">
@@ -665,19 +655,24 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
                     {avgRate !== null && <> · moyenne 12 mois <b className="text-slate-800 dark:text-slate-100">{Math.round(avgRate)} %</b></>}
                   </p>
                 </div>
-                <div className="flex items-end gap-1 h-16" role="img" aria-label="Taux d'épargne des 12 derniers mois">
+                <div className="flex items-end gap-1 h-16">
                   {rateHistory.map((m, i) => {
                     const h = Math.max(2, (Math.abs(m.rate) / maxRate) * 100);
                     const current = i === rateHistory.length - 1;
+                    const monthName = parseISODate(`${m.month}-01`).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
                     return (
-                      <div key={m.month} className="flex-1 flex flex-col items-center justify-end h-full gap-1" title={`${m.month} : ${Math.round(m.rate)} % (${fmtEUR(m.saved)})`}>
-                        <div className={`w-full rounded-sm ${m.rate < 0 ? 'bg-rose-400' : current ? 'bg-indigo-300 dark:bg-indigo-700' : 'bg-indigo-600'}`} style={{ height: `${h}%` }} />
-                        <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">{MONTH_INITIALS[Number(m.month.slice(5)) - 1]}</span>
-                      </div>
+                      <button type="button" key={m.month} onClick={() => setRateMonth(rateMonth === m.month ? null : m.month)} aria-pressed={rateMonth === m.month}
+                        aria-label={`${monthName}${current ? ' (en cours)' : ''} : ${Math.round(m.rate)} %, ${fmtEUR(m.saved)}${m.rate < 0 ? ', retrait net' : ''}`}
+                        className="flex-1 flex flex-col items-center justify-end h-full gap-1 rounded focus-visible:ring-2 focus-visible:ring-indigo-500">
+                        <div className={`w-full rounded-sm ${m.rate < 0 ? 'bg-rose-500' : current ? 'bg-indigo-300 dark:bg-indigo-700 bg-[repeating-linear-gradient(45deg,transparent,transparent_3px,rgba(255,255,255,.35)_3px,rgba(255,255,255,.35)_5px)]' : 'bg-indigo-600'} ${rateMonth === m.month ? 'ring-2 ring-amber-400' : ''}`} style={{ height: `${h}%` }} />
+                        <span className={`text-[11px] font-bold ${current ? 'text-slate-800 dark:text-slate-100 underline' : 'text-slate-500 dark:text-slate-400'}`}>{MONTH_INITIALS[Number(m.month.slice(5)) - 1]}</span>
+                      </button>
                     );
                   })}
                 </div>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">Part de votre paie actuelle ({fmtEUR(monthlyPay)}) mise de côté chaque mois. Mois en cours en clair, retraits nets en rouge.</p>
+                <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 min-h-[1.25rem]" aria-live="polite">
+                  {(() => { const m = rateHistory.find(x => x.month === rateMonth); return m ? `${parseISODate(`${m.month}-01`).toLocaleDateString('fr-FR', { month: 'long' })} : ${Math.round(m.rate)} % de la paie, ${formatSignedEUR(m.saved, 0)}.` : `Touchez un mois pour le détail. Part de votre paie (${fmtEUR(monthlyPay)}) mise de côté ; mois en cours hachuré, retraits en rouge.`; })()}
+                </p>
               </div>
             )}
           </div>
@@ -685,7 +680,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
       })()}
 
       {projection && (
-        <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
+        <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700">
           <div className="flex items-center gap-2 mb-4">
             <div className="p-2 rounded-lg bg-indigo-600"><TrendingUp className="w-4 h-4 text-white" /></div>
             <div>
@@ -720,9 +715,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
         </div>
       )}
 
-      <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 xl:col-span-2">
+      <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 xl:col-span-2">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 mb-4">
-          <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100">Évolution de mon épargne nette</h3>
+          <div>
+            <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">Évolution de mon épargne nette</h3>
+            {accounts.some(a => isConstrainedAccount(a.type)) && <p className="text-[11px] text-slate-500 dark:text-slate-400">Zones hachurées : épargne disponible seulement avec impôt ou bloquée.</p>}
+          </div>
           <div className="flex flex-wrap items-center gap-2">
             <input type="date" value={dateRange.start} onChange={(e) => setDateRange((prev: any) => ({ ...prev, start: e.target.value }))} aria-label="Début de la période" className="bg-slate-50 dark:bg-slate-900 text-sm border border-slate-200 dark:border-slate-700 p-2 rounded-lg" />
             <span className="text-slate-500 dark:text-slate-400 text-sm">à</span>
@@ -739,11 +737,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, expense
         </div>
       </div>
 
-      <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 h-80">
-        <h3 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-4">Par établissement</h3>
+      <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700">
+        <h3 className="text-sm font-bold text-slate-600 dark:text-slate-300 mb-4">Par établissement</h3>
+        <div style={{ height: Math.max(120, dataByInstitution.length * 44) }}>
         <Suspense fallback={<div className="h-full w-full rounded-lg bg-slate-100 dark:bg-slate-900 animate-pulse" aria-hidden />}>
           <InstitutionChart data={dataByInstitution} />
         </Suspense>
+        </div>
       </div>
       </div>
     </div>

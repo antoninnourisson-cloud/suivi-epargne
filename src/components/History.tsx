@@ -6,6 +6,7 @@ import { LineChart as LineChartIcon, ArrowUpRight, ArrowDownRight, Minus, Wallet
 import { formatEUR } from '../lib/format';
 import { YearReviewCard } from './YearReviewCard';
 import type { GlobalAppData } from '../types';
+import { useIsDark, chartTheme } from '../lib/chartTheme';
 
 interface HistoryProps {
   history: PortfolioSnapshot[];
@@ -21,6 +22,7 @@ const monthLabel = (iso: string) => {
 };
 
 export const History: React.FC<HistoryProps> = ({ history, expensesHistory, reviewData }) => {
+  const t = chartTheme(useIsDark());
   const [tab, setTab] = useState<'patrimoine' | 'charges'>('patrimoine');
   const sorted = useMemo(() => [...history].sort((a, b) => a.date.localeCompare(b.date)), [history]);
   const chartData = useMemo(() => sorted.map(s => ({ ...s, label: monthLabel(s.date) })), [sorted]);
@@ -48,15 +50,15 @@ export const History: React.FC<HistoryProps> = ({ history, expensesHistory, revi
 
   return (
     <div className="space-y-6 animate-fade-in pb-20">
-      {reviewData && <YearReviewCard data={reviewData} />}
       <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
-        <h2 className="text-2xl font-black text-slate-800 dark:text-slate-100 flex items-center gap-2 mb-1"><LineChartIcon className="w-6 h-6 text-indigo-600" /> Historique du patrimoine</h2>
-        <p className="text-sm text-slate-500 dark:text-slate-400">Un point est enregistré chaque mois automatiquement.</p>
+        <h2 className="text-2xl font-black text-slate-800 dark:text-slate-100 flex items-center gap-2 mb-1"><LineChartIcon className="w-6 h-6 text-indigo-600" aria-hidden="true" /> Historique du patrimoine</h2>
+        <p className="text-sm text-slate-600 dark:text-slate-300">Un point est enregistré chaque mois automatiquement.</p>
       </div>
+      {reviewData && <YearReviewCard data={reviewData} />}
 
-      <div className="flex gap-4 border-b border-slate-200 dark:border-slate-700">
-        <button onClick={() => setTab('patrimoine')} className={`pb-2 px-4 font-bold text-sm flex items-center gap-2 ${tab === 'patrimoine' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-500 dark:text-slate-400'}`}><Wallet className="w-4 h-4" /> Patrimoine</button>
-        <button onClick={() => setTab('charges')} className={`pb-2 px-4 font-bold text-sm flex items-center gap-2 ${tab === 'charges' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-500 dark:text-slate-400'}`}><Receipt className="w-4 h-4" /> Charges fixes</button>
+      <div role="tablist" aria-label="Historique" className="flex gap-4 border-b border-slate-200 dark:border-slate-700">
+        <button role="tab" aria-selected={tab === 'patrimoine'} onClick={() => setTab('patrimoine')} className={`pb-2 px-4 font-bold text-sm flex items-center gap-2 ${tab === 'patrimoine' ? 'text-indigo-700 dark:text-indigo-300 border-b-2 border-indigo-600' : 'text-slate-600 dark:text-slate-300'}`}><Wallet className="w-4 h-4" /> Patrimoine</button>
+        <button role="tab" aria-selected={tab === 'charges'} onClick={() => setTab('charges')} className={`pb-2 px-4 font-bold text-sm flex items-center gap-2 ${tab === 'charges' ? 'text-indigo-700 dark:text-indigo-300 border-b-2 border-indigo-600' : 'text-slate-600 dark:text-slate-300'}`}><Receipt className="w-4 h-4" /> Charges fixes</button>
       </div>
 
       {tab === 'patrimoine' && (
@@ -82,16 +84,16 @@ export const History: React.FC<HistoryProps> = ({ history, expensesHistory, revi
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                 <defs>
-                  <linearGradient id="gTotal" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#3b8560" stopOpacity={0.6} /><stop offset="95%" stopColor="#3b8560" stopOpacity={0.05} /></linearGradient>
-                  <linearGradient id="gOwned" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#10b981" stopOpacity={0.6} /><stop offset="95%" stopColor="#10b981" stopOpacity={0.05} /></linearGradient>
+                  <linearGradient id="gTotal" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={t.brand} stopOpacity={0.6} /><stop offset="95%" stopColor={t.brand} stopOpacity={0.05} /></linearGradient>
+                  <linearGradient id="gOwned" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={t.gold} stopOpacity={0.5} /><stop offset="95%" stopColor={t.gold} stopOpacity={0.05} /></linearGradient>
                 </defs>
-                <XAxis dataKey="label" tick={{ fontSize: 11 }} />
-                <YAxis tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 11 }} />
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f5f5f4" />
-                <RechartsTooltip formatter={(v: number, name: string) => [fmt(v), name === 'totalAmount' ? 'Total' : 'Ma part']} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                <XAxis dataKey="label" tick={{ fontSize: 11, fill: t.tick }} stroke={t.grid} />
+                <YAxis tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 11, fill: t.tick }} stroke={t.grid} />
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={t.grid} />
+                <RechartsTooltip formatter={(v: number, name: string) => [fmt(v), name === 'totalAmount' ? 'Total' : 'Ma part']} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', background: t.tooltipBg, color: t.tooltipText }} labelStyle={{ color: t.tooltipLabel, fontWeight: 700 }} />
                 <Legend formatter={(v) => (v === 'totalAmount' ? 'Total' : 'Ma part')} wrapperStyle={{ fontSize: 12 }} />
-                <Area type="monotone" dataKey="totalAmount" stroke="#3b8560" fill="url(#gTotal)" strokeWidth={2} />
-                <Area type="monotone" dataKey="ownedAmount" stroke="#10b981" fill="url(#gOwned)" strokeWidth={2} />
+                <Area type="monotone" dataKey="totalAmount" stroke={t.brand} fill="url(#gTotal)" strokeWidth={2} />
+                <Area type="monotone" dataKey="ownedAmount" stroke={t.gold} fill="url(#gOwned)" strokeWidth={2} />
               </AreaChart>
             </ResponsiveContainer>
           </div>
@@ -145,10 +147,10 @@ export const History: React.FC<HistoryProps> = ({ history, expensesHistory, revi
                 <defs>
                   <linearGradient id="gCharges" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#ef4444" stopOpacity={0.5} /><stop offset="95%" stopColor="#ef4444" stopOpacity={0.05} /></linearGradient>
                 </defs>
-                <XAxis dataKey="label" tick={{ fontSize: 11 }} />
-                <YAxis tickFormatter={(v) => formatEUR(v, 0)} tick={{ fontSize: 11 }} />
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f5f5f4" />
-                <RechartsTooltip formatter={(v: number) => [fmt(v), 'Charges fixes']} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                <XAxis dataKey="label" tick={{ fontSize: 11, fill: t.tick }} stroke={t.grid} />
+                <YAxis tickFormatter={(v) => formatEUR(v, 0)} tick={{ fontSize: 11, fill: t.tick }} stroke={t.grid} />
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={t.grid} />
+                <RechartsTooltip formatter={(v: number) => [fmt(v), 'Charges fixes']} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', background: t.tooltipBg, color: t.tooltipText }} labelStyle={{ color: t.tooltipLabel, fontWeight: 700 }} />
                 <Area type="monotone" dataKey="total" stroke="#ef4444" fill="url(#gCharges)" strokeWidth={2} />
               </AreaChart>
             </ResponsiveContainer>

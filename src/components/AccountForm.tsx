@@ -8,7 +8,7 @@ import { NumberInput } from './NumberInput';
 import { localTodayISO } from '../lib/dates';
 import { parseFrenchNumber } from '../lib/numbers';
 import { tracksDeposits, PEA_DEPOSIT_CEILING, applyRateChange } from '../lib/finance';
-import { PlusCircle, Save, Users, Calculator, ShieldCheck, Tag, X, History } from 'lucide-react';
+import { PlusCircle, Save, Users, Calculator, Tag, X, History } from 'lucide-react';
 import { formatEUR } from '../lib/format';
 
 interface AccountFormProps {

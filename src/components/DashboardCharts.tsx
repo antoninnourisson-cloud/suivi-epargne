@@ -10,6 +10,7 @@ import {
 } from 'recharts';
 import { SavingsAccount } from '../types';
 import { formatEUR } from '../lib/format';
+import { useIsDark, chartTheme } from '../lib/chartTheme';
 
 interface StackedProps {
   stackedData: any[];
@@ -18,7 +19,9 @@ interface StackedProps {
   isConstrainedAccount: (type: SavingsAccount['type']) => boolean;
 }
 
-export const StackedSavingsChart: React.FC<StackedProps> = ({ stackedData, accounts, getAccountColor, isConstrainedAccount }) => (
+export const StackedSavingsChart: React.FC<StackedProps> = ({ stackedData, accounts, getAccountColor, isConstrainedAccount }) => {
+  const t = chartTheme(useIsDark());
+  return (
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={stackedData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
             <defs>
@@ -39,19 +42,27 @@ export const StackedSavingsChart: React.FC<StackedProps> = ({ stackedData, accou
                 );
               })}
             </defs>
-            <XAxis dataKey="displayDate" tick={{ fontSize: 10 }} minTickGap={30} />
-            <YAxis tickFormatter={(val) => `${(val / 1000).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} k€`} tick={{ fontSize: 10 }} width={52} />
-            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f5f5f4" />
-            <RechartsTooltip 
-              contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', background: '#1c1917', color: '#f5f5f4' }}
-              itemStyle={{ fontSize: '12px', padding: 0 }}
-              formatter={(value: number, name: string) => {
-                const accName = accounts.find(a => a.id === name)?.name || name;
-                if (name === 'total') return [formatEUR(value, 2), "TOTAL"];
-                return [formatEUR(value, 2), accName];
-              }}
-              labelStyle={{ color: '#cbd5e1', marginBottom: '0.5rem', fontWeight: 'bold' }}
-            />
+            <XAxis dataKey="displayDate" tick={{ fontSize: 11, fill: t.tick }} stroke={t.grid} minTickGap={30} />
+            <YAxis tickFormatter={(val) => `${(val / 1000).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} k€`} tick={{ fontSize: 11, fill: t.tick }} stroke={t.grid} width={52} />
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={t.grid} />
+            <RechartsTooltip content={({ active, payload, label }) => {
+              if (!active || !payload) return null;
+              // Comptes à 0 € masqués, du plus gros au plus petit.
+              const rows = payload.filter(p => Number(p.value) > 0.5).sort((a, b) => Number(b.value) - Number(a.value));
+              const total = rows.reduce((sum, p) => sum + Number(p.value), 0);
+              return (
+                <div style={{ borderRadius: 12, background: t.tooltipBg, color: t.tooltipText, padding: '8px 12px', fontSize: 12, boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}>
+                  <p style={{ color: t.tooltipLabel, fontWeight: 700, marginBottom: 4 }}>{label}</p>
+                  {rows.map(p => (
+                    <p key={String(p.dataKey)} style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                      <span><span style={{ color: p.color }}>●</span> {accounts.find(a => a.id === p.dataKey)?.name || String(p.dataKey)}</span>
+                      <b>{formatEUR(Number(p.value), 0)}</b>
+                    </p>
+                  ))}
+                  {rows.length > 1 && <p style={{ display: 'flex', justifyContent: 'space-between', gap: 12, borderTop: `1px solid ${t.tooltipLabel}`, marginTop: 4, paddingTop: 4 }}><span>Total</span><b>{formatEUR(total, 0)}</b></p>}
+                </div>
+              );
+            }} />
             <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} formatter={(value) => accounts.find(a => a.id === value)?.name || value} />
             {accounts.map(acc => (
               <Area
@@ -67,17 +78,22 @@ export const StackedSavingsChart: React.FC<StackedProps> = ({ stackedData, accou
             ))}
           </AreaChart>
         </ResponsiveContainer>
-);
+  );
+};
 
-export const InstitutionChart: React.FC<{ data: { name: string; value: number }[] }> = ({ data: dataByInstitution }) => (
+export const InstitutionChart: React.FC<{ data: { name: string; value: number }[] }> = ({ data: dataByInstitution }) => {
+  const t = chartTheme(useIsDark());
+  return (
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={dataByInstitution} layout="vertical">
+          <BarChart data={dataByInstitution} layout="vertical" margin={{ right: 72 }}>
             <XAxis type="number" hide />
-            <YAxis dataKey="name" type="category" width={96} tick={{fontSize: 11, fontWeight: 600, fill: '#a8a29e'}} />
-            <RechartsTooltip formatter={(v: number) => formatEUR(v)} cursor={{fill: 'transparent'}} />
-            <Bar dataKey="value" fill="#3b8560" radius={[0, 4, 4, 0]} barSize={24}>
-              <LabelList dataKey="value" position="insideRight" formatter={(v: number) => formatEUR(v, 0)} style={{ fill: '#fff', fontSize: 11, fontWeight: 700 }} />
+            <YAxis dataKey="name" type="category" width={120} tick={{ fontSize: 12, fontWeight: 600, fill: t.tick }} stroke={t.grid} />
+            <RechartsTooltip formatter={(v: number) => formatEUR(v)} cursor={{ fill: 'transparent' }} contentStyle={{ borderRadius: '12px', border: 'none', background: t.tooltipBg, color: t.tooltipText }} />
+            <Bar dataKey="value" fill={t.brand} radius={[0, 4, 4, 0]} barSize={22}>
+              {/* Montant à droite de la barre : lisible même pour une petite barre. */}
+              <LabelList dataKey="value" position="right" formatter={(v: number) => formatEUR(v, 0)} style={{ fill: t.tick, fontSize: 12, fontWeight: 700 }} />
             </Bar>
           </BarChart>
         </ResponsiveContainer>
-);
+  );
+};

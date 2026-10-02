@@ -13,12 +13,13 @@ interface AccountUpdateProps {
   accounts: SavingsAccount[];
   onUpdateAccountsComplex: (updates: { account: SavingsAccount, date: string, cashFlow?: number }[]) => void;
   onCancel?: () => void; // Ajout prop optionnelle pour cohérence
+  onAddAccount?: () => void;
   // Horodatage de la dernière écriture Drive CONFIRMÉE : sert à n'annoncer le succès que
   // lorsqu'il est réel (voir useSaveFeedback).
   lastSavedAt?: Date | null;
 }
 
-export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdateAccountsComplex, lastSavedAt }) => {
+export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdateAccountsComplex, lastSavedAt, onAddAccount }) => {
   const today = localTodayISO();
   const { status: saveStatus, markPending } = useSaveFeedback(lastSavedAt);
 
@@ -182,9 +183,11 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
 
   if (accounts.length === 0) {
     return (
-      <div className="text-center py-20 bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
-        <AlertCircle className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-        <h2 className="text-xl text-slate-600 dark:text-slate-300">Aucun compte à actualiser.</h2>
+      <div className="text-center py-16 px-6 bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700">
+        <AlertCircle className="w-10 h-10 text-slate-500 dark:text-slate-400 mx-auto mb-3" aria-hidden="true" />
+        <h2 className="text-xl font-black text-slate-800 dark:text-slate-100">Ajoutez d'abord un compte</h2>
+        <p className="text-sm text-slate-600 dark:text-slate-300 mt-1">Ici, vous mettrez à jour vos soldes d'après vos relevés.</p>
+        {onAddAccount && <button onClick={onAddAccount} className="mt-5 bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl font-bold">Ajouter un compte</button>}
       </div>
     );
   }

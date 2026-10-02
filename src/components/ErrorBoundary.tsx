@@ -7,18 +7,18 @@ import { AlertTriangle, RotateCw } from 'lucide-react';
 interface State { error: Error | null }
 
 export class ErrorBoundary extends React.Component<{ children: React.ReactNode; resetKey?: string }, State> {
-  state: State = { error: null };
+  override state: State = { error: null };
 
   static getDerivedStateFromError(error: Error): State { return { error }; }
 
-  componentDidCatch(error: Error) { console.error('Erreur d\'affichage', error); }
+  override componentDidCatch(error: Error) { console.error('Erreur d\'affichage', error); }
 
-  componentDidUpdate(prev: { resetKey?: string }) {
+  override componentDidUpdate(prev: { resetKey?: string }) {
     // Changer d'écran efface l'erreur : l'utilisateur n'est pas bloqué sur le message.
     if (prev.resetKey !== this.props.resetKey && this.state.error) this.setState({ error: null });
   }
 
-  render() {
+  override render() {
     if (!this.state.error) return this.props.children;
     return (
       <div role="alert" className="max-w-md mx-auto mt-12 bg-white dark:bg-slate-800 border border-amber-200 dark:border-amber-900 rounded-2xl p-6 text-center">

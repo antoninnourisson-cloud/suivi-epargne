@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { applyMovement, snapshotBalances, restoreBalances, isRestitutionMovement, findCancellingGroups } from './accountOps';
+import { applyMovement, balanceChangeMovements, snapshotBalances, restoreBalances, isRestitutionMovement, findCancellingGroups } from './accountOps';
 import { AccountType, SavingsAccount, AccountMovement } from '../types';
 
 const acc = (over: Partial<SavingsAccount> = {}): SavingsAccount => ({
@@ -63,5 +63,24 @@ describe('findCancellingGroups', () => {
     const g = findCancellingGroups([a]);
     expect(g.map(x => x.date)).toEqual(['2026-08-26']);
     expect(g[0].movements.map(m => m.id)).toEqual(['1', '2', '3', '4']);
+  });
+});
+
+describe('balanceChangeMovements', () => {
+  const base = { id: 'a', name: 'A', institution: 'B', type: 'Livret A', totalAmount: 150, ownedAmount: 100, parentalCapital: 50, movements: [] } as any;
+  it('trace votre part et celle des parents séparément', () => {
+    const m = balanceChangeMovements(base, { ...base, ownedAmount: 120, parentalCapital: 40, totalAmount: 160 }, '2026-10-02', { ownLabel: 'Correction de solde' });
+    expect(m.map(x => [x.label, x.type, x.amount, x.kind])).toEqual([
+      ['Correction de solde (+)', 'IN', 20, undefined],
+      ['Part des parents (-)', 'OUT', 10, 'parental'],
+    ]);
+  });
+  it('sépare versement et variation de valeur sur un placement', () => {
+    const av = { ...base, type: 'Assurance Vie', parentalCapital: 0, totalAmount: 100, totalDeposits: 90 };
+    const m = balanceChangeMovements(av, { ...av, ownedAmount: 160, totalAmount: 160 }, '2026-10-02', { ownLabel: 'Actualisation', cashFlow: 50, splitValuation: true });
+    expect(m.map(x => [x.label, x.amount, x.kind])).toEqual([['Versement (+)', 50, undefined], ['Valorisation (+)', 10, 'valuation']]);
+  });
+  it('ne crée rien sans changement', () => {
+    expect(balanceChangeMovements(base, { ...base }, '2026-10-02', { ownLabel: 'X' })).toEqual([]);
   });
 });

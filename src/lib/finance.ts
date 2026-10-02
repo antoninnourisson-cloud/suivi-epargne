@@ -24,6 +24,7 @@ export interface IncomeBreakdown {
   swileCost: number;
   netBeforeTax: number;
   netTaxableYear: number;
+  netTaxableBeforeAllowance: number; // salaires imposables avant l'abattement de 10 % (case 1AJ)
   taxAmount: number;          // impôt annuel (barème)
   monthlyTax: number;         // impôt mensuel (barème auto)
   autoRate: number;           // taux effectif du barème (%)
@@ -160,6 +161,7 @@ export const computeIncome = (
     swileCost,
     netBeforeTax,
     netTaxableYear,
+    netTaxableBeforeAllowance: netAnnualBeforeAllowance,
     taxAmount,
     monthlyTax,
     autoRate,

@@ -12,7 +12,7 @@
 
 ## Présentation
 
-Pécule (anciennement Pécule) est une application web installable (PWA) pour suivre ses comptes d'épargne, piloter son budget et anticiper sa fiscalité. Elle n'a pas de base de données : toutes les données tiennent dans un seul fichier `suivi_epargne.json`, sur le Google Drive de l'utilisateur. L'app n'a accès qu'aux fichiers qu'elle a créés (portée OAuth `drive.file`).
+Pécule (anciennement Suivi Épargne) est une application web installable (PWA) pour suivre ses comptes d'épargne, piloter son budget et anticiper sa fiscalité. Elle n'a pas de base de données : toutes les données tiennent dans un seul fichier `suivi_epargne.json`, sur le Google Drive de l'utilisateur. L'app n'a accès qu'aux fichiers qu'elle a créés (portée OAuth `drive.file`).
 
 Un **petit serveur optionnel** (Cloudflare Worker, dossier [`worker/`](worker/)) ajoute deux choses impossibles depuis le seul navigateur : une **session Google persistante** et des **notifications push**. Sans lui, l'app fonctionne entièrement côté navigateur.
 
@@ -99,7 +99,7 @@ Un **petit serveur optionnel** (Cloudflare Worker, dossier [`worker/`](worker/))
 - **Logo** : une pousse qui sort d'une pièce. La source vectorielle est dans `src/components/Logo.tsx`, et les PNG dans `public/` (192, 512, `apple-touch-icon` 180).
 - **Couleurs** : vert sapin `#14532d` (fond de marque, menu), or `#fbbf24`, crème `#fef3c7`, gris chauds (stone). Dans `tailwind.config.js`, `indigo` pointe vers l'échelle sapin, donc les classes `indigo-*` du code sont vertes.
 - **Ton** : bienveillant et concret, en phrases simples.
-- Le dépôt, l'adresse GitHub Pages et le fichier Drive `suivi_epargne.json` gardent l'ancien nom pour ne rien casser.
+- **Noms techniques** : le dépôt (`suivi-epargne`), l'adresse GitHub Pages (`/suivi-epargne/`), le fichier Drive (`suivi_epargne.json`) et le Worker (`suivi-epargne-api`) gardent l'ancien nom pour ne rien casser.
 
 ## Architecture
 
@@ -135,7 +135,7 @@ Les données financières ne transitent pas par le serveur, sauf la lecture quot
 
 ## Développement
 
-Prérequis : Node.js 20+.
+Prérequis : Node.js 22+ (version de référence dans `.nvmrc`).
 
 ```bash
 npm install
@@ -144,6 +144,10 @@ npm test           # tests unitaires (app + serveur)
 npm run typecheck  # vérification des types (app + serveur)
 npm run build
 ```
+
+**Mode démo** : avec `npm run dev`, ouvre <http://localhost:5173/?demo=1>. L'app se charge avec des données fictives (`src/dev/demoData.ts`), sans connexion Google : rien n'est lu ni écrit sur Drive. Ce mode n'existe qu'en développement, il est absent du build de production.
+
+Entretien courant, invariants à respecter et procédures en cas de panne : voir [MAINTENANCE.md](MAINTENANCE.md).
 
 En local, l'app tourne **sans serveur** par défaut. Pour la tester contre le Worker local, lance `npm run dev` dans `worker/` (sur le port 8787), et crée à la racine un fichier `.env.development.local` contenant :
 
@@ -161,8 +165,17 @@ VITE_BACKEND_URL=http://localhost:8787
 
 **Avant chaque mise à jour visible**, ajouter une entrée en tête de [`src/changelog.ts`](src/changelog.ts) (version `AAAA.MM.JJ`, titre, deux à cinq phrases simples). C'est elle qui déclenche la fenêtre « Quoi de neuf ».
 
-- **App** : chaque push sur `main` déclenche GitHub Actions (tests, vérification des types, build, publication sur GitHub Pages). L'adresse du serveur est définie dans `.env.production`.
-- **Serveur** : `npm run deploy` dans `worker/`. L'installation initiale, les secrets et la révocation sont décrits dans [worker/README.md](worker/README.md).
+Tout passe par GitHub Actions (`.github/workflows/`) :
+
+| Workflow | Quand | Ce qu'il fait |
+|---|---|---|
+| `ci.yml` (Vérifications) | chaque pull request, chaque push sur `main`, chaque lundi à 6 h UTC | types (app + serveur), tests, build (tailles des fichiers dans le résumé du run), audit des dépendances de production (informatif) |
+| `deploy.yml` (Déploiement GitHub Pages) | chaque push sur `main` | les vérifications de `ci.yml`, puis build, publication sur GitHub Pages, et enfin tag `v<version>` + GitHub Release avec les puces de l'entrée en tête du changelog (une seule fois par version) |
+| `worker.yml` (Déploiement du serveur) | push sur `main` touchant `worker/`, `src/lib/`, `src/types.ts` ou `src/constants.ts` (ou lancement à la main) | types, tests, puis `wrangler deploy`. Sauté tant que les secrets `CLOUDFLARE_API_TOKEN` et `CLOUDFLARE_ACCOUNT_ID` n'existent pas dans le dépôt |
+
+- **App** : l'adresse du serveur est définie dans `.env.production`. Le commit déployé est injecté au build (`__BUILD_SHA__`, « dev » en local).
+- **Serveur** : automatique une fois les deux secrets ajoutés ; sinon `npm run deploy` dans `worker/`. L'installation initiale, les secrets du Worker et la révocation sont décrits dans [worker/README.md](worker/README.md).
+- **Dépendances** : Dependabot propose chaque mois des mises à jour groupées (`.github/dependabot.yml`). Les versions majeures de React, Tailwind, Vite, Vitest et Recharts se font à la main.
 
 ## Sur mobile
 
@@ -175,3 +188,5 @@ Sur iPhone, les notifications ne fonctionnent que dans l'app installée.
 ---
 
 Projet personnel, non commercial.
+
+**Licence** : Tous droits réservés — projet personnel.
