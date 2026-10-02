@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeEmergencyFund, buildSoloPlan, buildTaxReturnChecklist, reviewSubscriptions } from './planning';
+import { computeEmergencyFund, buildSoloPlan, buildTaxReturnChecklist, reviewSubscriptions, benefitsFromPayslips } from './planning';
 import { DEFAULT_FISCAL_CONFIG as CFG } from '../constants';
 import { AccountType } from '../types';
 
@@ -60,5 +60,28 @@ describe('revue des abonnements', () => {
     expect(rows[0].reviewDue).toBe(true);
     expect(rows[1].priceIncrease).toEqual({ from: 10, to: 12, date: '2026-06-01' });
     expect(rows[1].reviewDue).toBe(false);
+  });
+});
+
+describe('avantages salariaux depuis les fiches de paie', () => {
+  const cur = { navigo: { active: true, basePrice: 90.8, refundRate: 67.24 }, mutuelle: { active: true, totalCost: 50, employerRate: 50 }, mealVouchers: { active: true, faceValue: 10, employerRate: 60, daysPerMonth: 20 } };
+  const slip = (period: string, ex: any) => ({ id: period, extracted: { period, ...ex } });
+  it('moyenne des 3 dernières fiches, Navigo et tickets à 50 %', () => {
+    const r = benefitsFromPayslips([
+      slip('2026-07', { navigoRefund: 40, mealVouchers: 100, mutuelleCost: 20 }),
+      slip('2026-08', { navigoRefund: 44, mealVouchers: 90 }),
+      slip('2026-09', { navigoRefund: 42, mealVouchers: 110, mutuelleCost: 22 }),
+      slip('2026-01', { navigoRefund: 999 }),
+    ] as any, cur as any)!;
+    expect(r.months).toBe(3);
+    expect(r.benefits.navigo).toEqual({ active: true, basePrice: 84, refundRate: 50 });
+    expect(r.benefits.mealVouchers.daysPerMonth).toBe(20);
+    expect(r.benefits.mealVouchers.employerRate).toBe(50);
+    expect(r.benefits.mutuelle).toEqual({ active: true, totalCost: 21, employerRate: 0 });
+  });
+  it('désactive ce qui ne figure sur aucune fiche', () => {
+    const r = benefitsFromPayslips([slip('2026-09', { navigoRefund: 42 })] as any, cur as any)!;
+    expect(r.benefits.mutuelle.active).toBe(false);
+    expect(r.benefits.mealVouchers.active).toBe(false);
   });
 });

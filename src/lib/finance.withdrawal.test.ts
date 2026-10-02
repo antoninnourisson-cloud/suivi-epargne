@@ -385,3 +385,20 @@ describe('corrections et point de départ du suivi', () => {
     expect(computeSavedSince([a], '2026-09-01', NOW, '2026-09-20')).toBe(200);
   });
 });
+
+describe('fonds euros et petites cessions de crypto', () => {
+  it("ne compte pas de prélèvements sociaux sur la part en fonds euros", () => {
+    const av = acc({ type: AccountType.ASSURANCE_VIE, openingDate: '2024-01-01', totalDeposits: 6000 });
+    const all = computeWithdrawalTax(av, 1000, CFG, NOW);
+    const euro = computeWithdrawalTax({ ...av, euroFundPct: 100 }, 1000, CFG, NOW);
+    const half = computeWithdrawalTax({ ...av, euroFundPct: 50 }, 1000, CFG, NOW);
+    expect(all.socialCharges).toBeGreaterThan(0);
+    expect(euro.socialCharges).toBe(0);
+    expect(half.socialCharges).toBeCloseTo(all.socialCharges / 2);
+  });
+  it('exonère une cession de crypto de 305 € au plus', () => {
+    const c = acc({ type: AccountType.CRYPTO, totalDeposits: 6000 });
+    expect(computeWithdrawalTax(c, 300, CFG, NOW).incomeTax).toBe(0);
+    expect(computeWithdrawalTax(c, 1000, CFG, NOW).incomeTax).toBeGreaterThan(0);
+  });
+});

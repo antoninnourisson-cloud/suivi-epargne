@@ -11,6 +11,7 @@ import path from 'path';
 // vers n'importe quel Worker tiers.
 const backendOriginPlugin = (): Plugin => {
   let origin = '';
+  let isBuild = false;
   return {
     name: 'backend-origin-csp',
     // config.env = variables VITE_* déjà résolues pour le mode courant (.env.production au
@@ -18,8 +19,14 @@ const backendOriginPlugin = (): Plugin => {
     configResolved(config) {
       const raw = config.env.VITE_BACKEND_URL || '';
       try { origin = raw ? new URL(raw).origin : ''; } catch { origin = ''; }
+      isBuild = config.command === 'build';
     },
-    transformIndexHtml: html => html.replace('__BACKEND_ORIGIN__', origin),
+    // En production, les connexions au serveur de développement local (ws://localhost)
+    // n'ont rien à faire dans la CSP.
+    transformIndexHtml: html => {
+      const out = html.replace('__BACKEND_ORIGIN__', origin);
+      return isBuild ? out.replace(/ ws:\/\/localhost:5173 ws:\/\/127\.0\.0\.1:5173/, '') : out;
+    },
   };
 };
 

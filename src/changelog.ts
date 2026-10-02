@@ -15,6 +15,17 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '2026.10.04',
+    date: '2026-10-04',
+    title: 'Chiffres réels et réglages fins',
+    items: [
+      "Avantages salariaux : bouton « Utiliser mes fiches de paie » (Navigo et titres-restaurant à 50 %, mutuelle retenue sur la paie).",
+      "Notifications : choisissez type par type celles que vous recevez (Paramètres → Notifications).",
+      "Assurance vie : indiquez la part en fonds euros, les prélèvements sociaux déjà payés ne sont plus comptés au retrait. Crypto : cession de 305 € au plus exonérée.",
+      "Sécurité : nouveau code PIN de 6 chiffres minimum, copie locale de secours chiffrée, règles du navigateur durcies.",
+    ],
+  },
+  {
     version: '2026.10.03-2',
     date: '2026-10-03',
     title: 'LEP : alerte avant fermeture',

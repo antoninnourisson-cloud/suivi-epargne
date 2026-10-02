@@ -6,11 +6,12 @@
 import React, { useEffect, useState } from 'react';
 import { Bell, BellOff, Loader2, Send, AlertTriangle, CheckCircle } from 'lucide-react';
 import { isBackendEnabled } from '../services/backendService';
+import { NOTIFICATION_CATEGORIES, NotificationPrefs } from '../lib/notificationPrefs';
 import { getPushState, enablePush, disablePush, sendTestPush, isIosOutsideHomeScreen, PushState } from '../services/pushService';
 
 // `paydayDay` / `onOpenPayday` : raccourci vers le réglage du rappel de paie, qui vit dans
 // le Pilotage (on le cherchait ici).
-export const NotificationSettings: React.FC<{ paydayDay?: number; onOpenPayday?: () => void }> = ({ paydayDay, onOpenPayday }) => {
+export const NotificationSettings: React.FC<{ paydayDay?: number; onOpenPayday?: () => void; prefs?: NotificationPrefs; onChangePrefs?: (p: NotificationPrefs) => void }> = ({ paydayDay, onOpenPayday, prefs = {}, onChangePrefs }) => {
   const [state, setState] = useState<PushState | 'loading'>('loading');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
@@ -98,6 +99,21 @@ export const NotificationSettings: React.FC<{ paydayDay?: number; onOpenPayday?:
           <span>Rappel du jour de paie : <b>{paydayDay ? `le ${paydayDay} du mois` : 'désactivé'}</b></span>
           <button type="button" onClick={onOpenPayday} className="font-bold text-indigo-600 dark:text-indigo-300 hover:underline">Modifier dans le Pilotage</button>
         </p>
+      )}
+
+      {onChangePrefs && (
+        <fieldset className="mt-2 border-t border-slate-200 dark:border-slate-700 pt-4">
+          <legend className="text-[11px] font-black text-slate-600 dark:text-slate-300 uppercase mb-2">Types de notifications (tous vos appareils)</legend>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2">
+            {NOTIFICATION_CATEGORIES.map(c => (
+              <label key={c.id} className="flex items-start gap-2 text-sm text-slate-700 dark:text-slate-200 cursor-pointer">
+                <input type="checkbox" className="mt-1 w-4 h-4 accent-indigo-600" checked={prefs[c.id] !== false}
+                  onChange={e => onChangePrefs({ ...prefs, [c.id]: e.target.checked })} />
+                {c.label}
+              </label>
+            ))}
+          </div>
+        </fieldset>
       )}
 
       {message && (

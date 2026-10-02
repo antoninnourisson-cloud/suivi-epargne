@@ -1,6 +1,6 @@
 // Planification : épargne de précaution, plan « solo » après la restitution du capital des
 // parents, aide à la déclaration de revenus, revue des abonnements. Fonctions pures, testées.
-import { AccountType, FiscalConfig, GlobalAppData, SavingsAccount, Subscription } from '../types';
+import { AccountType, FiscalConfig, GlobalAppData, PayslipRecord, SavingsAccount, Subscription, WorkBenefits } from '../types';
 import { computeDonationSummary, computePlacementStrategy, subscriptionMonthlyCost, isMonthlyCharge, SavingsSplit, accountsAfterRestitution } from './finance';
 import { netAnnualRate } from './projection';
 import { parseISODate, formatISODay } from './dates';
@@ -207,4 +207,52 @@ export const reviewSubscriptions = (subs: Subscription[], monthlyPay: number, as
     }
     return { sub: s, yearly, shareOfPay: monthlyPay > 0 ? (subscriptionMonthlyCost(s) / monthlyPay) * 100 : undefined, priceIncrease, reviewDue, cancelBy };
   }).sort((a, b) => b.yearly - a.yearly);
+};
+
+// ---------------------------------------------------------------------------
+// Avantages salariaux : chiffres réels des fiches de paie
+// ---------------------------------------------------------------------------
+
+export interface BenefitsFromPayslips {
+  benefits: WorkBenefits;
+  months: number;          // nombre de fiches utilisées (les 3 plus récentes au plus)
+  navigoRefund?: number;   // moyennes mensuelles relevées
+  mealVouchersEmployee?: number;
+  mutuelleEmployee?: number;
+}
+
+/**
+ * Remboursement transport, part salariale des titres-restaurant et de la mutuelle : moyennes
+ * des 3 dernières fiches qui en parlent. Navigo remboursé à `navigoRate` %, titres-restaurant
+ * payés à `mealEmployerRate` % par l'employeur. Une ligne absente des fiches = avantage
+ * désactivé (rien retenu, rien remboursé).
+ */
+export const benefitsFromPayslips = (
+  payslips: PayslipRecord[],
+  current: WorkBenefits,
+  opts: { navigoRate?: number; mealEmployerRate?: number } = {},
+): BenefitsFromPayslips | null => {
+  const recent = [...payslips].filter(p => p.extracted?.period).sort((a, b) => (b.extracted.period || '').localeCompare(a.extracted.period || '')).slice(0, 3);
+  if (recent.length === 0) return null;
+  const avg = (k: 'navigoRefund' | 'mealVouchers' | 'mutuelleCost') => {
+    const v = recent.map(p => p.extracted[k]).filter((x): x is number => typeof x === 'number' && x > 0);
+    return v.length ? v.reduce((a, b) => a + b, 0) / v.length : undefined;
+  };
+  const navigoRate = opts.navigoRate ?? 50;
+  const mealRate = opts.mealEmployerRate ?? 50;
+  const nav = avg('navigoRefund'), meal = avg('mealVouchers'), mut = avg('mutuelleCost');
+  const r2 = (n: number) => Math.round(n * 100) / 100;
+  const face = current.mealVouchers.faceValue > 0 ? current.mealVouchers.faceValue : 10;
+  return {
+    months: recent.length,
+    navigoRefund: nav, mealVouchersEmployee: meal, mutuelleEmployee: mut,
+    benefits: {
+      navigo: nav ? { active: true, basePrice: r2(nav / (navigoRate / 100)), refundRate: navigoRate } : { ...current.navigo, active: false },
+      // Part salariale constatée : coût = montant retenu (la part patronale n'apparaît pas).
+      mutuelle: mut ? { active: true, totalCost: r2(mut), employerRate: 0 } : { ...current.mutuelle, active: false },
+      mealVouchers: meal
+        ? { active: true, faceValue: face, employerRate: mealRate, daysPerMonth: Math.max(1, Math.round(meal / (face * (1 - mealRate / 100)))) }
+        : { ...current.mealVouchers, active: false },
+    },
+  };
 };

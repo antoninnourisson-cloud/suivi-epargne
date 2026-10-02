@@ -27,6 +27,7 @@ import {
 } from './google';
 import { sendPush, PushMessage } from './webpush';
 import { fetchFiscalSources, FiscalSource } from './fiscalSources';
+import { isReminderEnabled } from '../../src/lib/notificationPrefs';
 import { computeReminders, applyDiscreetMode, isDiscreet, parisCivilDate } from './reminders';
 import {
   allowedOrigins, isOriginAcceptable, safeReturnUrl, deriveStateKey, newOAuthState, signState, verifyState,
@@ -454,7 +455,8 @@ const remindUser = async (env: Env, sub: string, now: Date): Promise<void> => {
   try {
     const data = await readDataFile(accessToken);
     if (!data) return;
-    let reminders = computeReminders(data, parisCivilDate(now), env.APP_URL);
+    let reminders = computeReminders(data, parisCivilDate(now), env.APP_URL)
+      .filter(r => isReminderEnabled(r.key, data.config?.notificationPrefs));
     if (isDiscreet(data)) reminders = applyDiscreetMode(reminders);
     for (const reminder of reminders) {
       if (subs.length === 0) break;

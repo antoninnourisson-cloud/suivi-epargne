@@ -34,6 +34,7 @@ export const AccountForm: React.FC<AccountFormProps> = ({ onSave, initialData, o
   const [tags, setTags] = useState<string[]>(initialData?.tags || []);
   const [tagInput, setTagInput] = useState('');
   const [rateEffectiveDate, setRateEffectiveDate] = useState(localTodayISO());
+  const [euroFundPct, setEuroFundPct] = useState(initialData?.euroFundPct !== undefined ? String(initialData.euroFundPct) : '');
   const [managementFee, setManagementFee] = useState(initialData?.managementFee !== undefined ? String(initialData.managementFee).replace('.', ',') : '');
   const showFee = [AccountType.ASSURANCE_VIE, AccountType.PEA, AccountType.PER].includes(type);
   // Texte et non nombre : vide = versements inconnus (différent de 0 €).
@@ -125,6 +126,7 @@ export const AccountForm: React.FC<AccountFormProps> = ({ onSave, initialData, o
       isTaxable: isTaxableType,
       rateHistory: rateHistory.length > 0 ? rateHistory : undefined,
       tags: tags.length > 0 ? tags : undefined,
+      euroFundPct: type === AccountType.ASSURANCE_VIE && euroFundPct.trim() !== '' && (parseFrenchNumber(euroFundPct) ?? -1) >= 0 ? Math.min(100, parseFrenchNumber(euroFundPct)!) : undefined,
       managementFee: showFee && managementFee.trim() !== '' && (parseFrenchNumber(managementFee) ?? -1) >= 0 ? parseFrenchNumber(managementFee)! : undefined,
       totalDeposits: showDeposits && parsedDeposits !== null && parsedDeposits !== undefined && parsedDeposits >= 0 ? parsedDeposits : undefined,
     });
@@ -185,6 +187,13 @@ export const AccountForm: React.FC<AccountFormProps> = ({ onSave, initialData, o
                 <label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase mb-1 block">Frais de gestion annuels (%)</label>
                 <input type="text" inputMode="decimal" value={managementFee} onChange={e => setManagementFee(e.target.value)} placeholder="0" className="w-full p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-bold" />
                 <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">Facultatif. Le taux servi d'un fonds euros est déjà net de frais : laissez vide. Pour des unités de compte, indiquez les frais du contrat (souvent 0,5 à 0,85 %).</p>
+              </div>
+            )}
+            {type === AccountType.ASSURANCE_VIE && (
+              <div className="col-span-2">
+                <label htmlFor="acc-eurofund" className="text-[11px] font-black text-slate-600 dark:text-slate-300 uppercase mb-1 block">Part en fonds euros (%)</label>
+                <input id="acc-eurofund" type="text" inputMode="decimal" value={euroFundPct} onChange={e => setEuroFundPct(e.target.value)} placeholder="100" className="w-full p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-bold" />
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">Facultatif. Sur le fonds euros, les prélèvements sociaux sont déjà retenus chaque année : un retrait ne les redoit pas. 100 si tout est en fonds euros.</p>
               </div>
             )}
             {showDeposits && (

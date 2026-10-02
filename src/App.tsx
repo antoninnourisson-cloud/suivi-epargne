@@ -930,6 +930,9 @@ const App: React.FC = () => {
 
             {view === 'settings' && (
                 <Settings
+                    payslips={data.payslips}
+                    notificationPrefs={data.config.notificationPrefs}
+                    onChangeNotificationPrefs={p => data.patchConfig({ notificationPrefs: p })}
                     config={data.fiscalConfig}
                     workBenefits={data.workBenefits}
                     parentsEmail={data.parentsEmail}

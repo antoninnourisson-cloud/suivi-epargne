@@ -8,6 +8,7 @@ import { tracksDeposits, totalFixedCharges } from '../lib/finance';
 import { applyMovement, balanceChangeMovements } from '../lib/accountOps';
 import { migrate, canonicalize, emptyData, isFromNewerApp, withoutDeviceOnlyFields, validateImport, APP_SCHEMA_VERSION } from '../lib/schema';
 import { buildAccountsUpdateMail } from '../lib/mailTemplates';
+import { sealJSON, openJSON } from '../services/localVault';
 import { localTodayISO } from '../lib/dates';
 import { GlobalAppData, SavingsAccount, AccountMovement, PortfolioSnapshot, ExpenseSnapshot } from '../types';
 import {
@@ -171,12 +172,12 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
         try {
           const stored = lsGet(PENDING_KEY) || lsGet(BACKUP_KEY);
           if (stored) {
-            const snap = JSON.parse(stored) as StoredSnapshot;
+            const snap = await openJSON<StoredSnapshot>(stored);
             // Une sauvegarde rattachée à un AUTRE fichier Drive appartient à un autre compte.
             const sameAccount = !snap.fileId || snap.fileId === fileId;
             if (sameAccount && canonicalize(snap.data) !== canonicalize(raw)) {
               setLocalBackup(snap);
-              lsSet(PENDING_KEY, JSON.stringify({ ...snap, fileId }));
+              lsSet(PENDING_KEY, await sealJSON({ ...snap, fileId }));
             } else {
               lsDel(PENDING_KEY);
               lsDel(BACKUP_KEY);
@@ -401,7 +402,10 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
       const data = buildData();
       if (canonicalize(data) === persistedRef.current) { lsDel(BACKUP_KEY); return; }
       const snapshot: StoredSnapshot = { savedAt: new Date().toISOString(), fileId: driveFileIdRef.current ?? undefined, data };
-      lsSet(BACKUP_KEY, JSON.stringify(snapshot));
+      // Chiffrée (voir localVault) ; réécrite seulement si Drive n'a pas rattrapé entre-temps.
+      sealJSON(snapshot).then(sealed => {
+        if (canonicalize(data) !== persistedRef.current) lsSet(BACKUP_KEY, sealed);
+      }).catch(() => { /* filet de secours seulement */ });
     }, 600);
     return () => clearTimeout(timer);
   }, [buildData]);

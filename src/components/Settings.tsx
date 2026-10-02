@@ -2,7 +2,8 @@
 // FILE: src/components/Settings.tsx
 // ================================================
 import React, { useEffect, useState } from 'react';
-import { FiscalConfig, TaxBracket, WorkBenefits } from '../types';
+import { FiscalConfig, PayslipRecord, TaxBracket, WorkBenefits } from '../types';
+import { benefitsFromPayslips } from '../lib/planning';
 import { Save, AlertTriangle, Settings as SettingsIcon, Plus, Trash2, Mail, Download, Upload, Database, KeyRound, FileText, Fingerprint, Hash , SlidersHorizontal, ChevronDown, Building2, Scale, PiggyBank, Landmark } from 'lucide-react';
 import { isLockAvailable, isBiometricEnabled, isPinEnabled, enableLock, disableBiometric, enablePin, disablePin } from '../services/appLockService';
 import { NotificationSettings } from './NotificationSettings';
@@ -15,6 +16,7 @@ import { parseISODate } from '../lib/dates';
 import { ChangelogHistory } from './WhatsNew';
 
 interface SettingsProps {
+  payslips?: PayslipRecord[];
   config: FiscalConfig;
   workBenefits: WorkBenefits;
   parentsEmail: string; // <--- Prop
@@ -28,11 +30,13 @@ interface SettingsProps {
   fiscalWatchSlot?: React.ReactNode;
   securitySlot?: React.ReactNode;
   taxNoticeSlot?: React.ReactNode;
+  notificationPrefs?: Record<string, boolean>;
+  onChangeNotificationPrefs?: (p: Record<string, boolean>) => void;
   paydayDay?: number;
   onOpenPayday?: () => void;
 }
 
-export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parentsEmail, geminiApiKey, pickerApiKey, onSave, onExport, onImport, paydayDay, onOpenPayday, backupSlot, fiscalWatchSlot, securitySlot, taxNoticeSlot }) => {
+export const Settings: React.FC<SettingsProps> = ({ payslips = [], config, workBenefits, parentsEmail, geminiApiKey, pickerApiKey, onSave, onExport, onImport, paydayDay, onOpenPayday, backupSlot, fiscalWatchSlot, securitySlot, taxNoticeSlot, notificationPrefs, onChangeNotificationPrefs }) => {
   const [importMsg, setImportMsg] = useState<string | null>(null);
   // L'import écrase TOUT (comptes, mouvements, objectifs, fiches de paie, réglages) puis
   // resynchronise sur Drive : il faut une confirmation explicite, la boîte de sélection de
@@ -60,6 +64,7 @@ export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parent
   const [localEmail, setLocalEmail] = useState<string>(parentsEmail || '');
   const [localGeminiKey, setLocalGeminiKey] = useState<string>(geminiApiKey || '');
   const [localPickerKey, setLocalPickerKey] = useState<string>(pickerApiKey || '');
+  const [benefitsMsg, setBenefitsMsg] = useState<string | null>(null);
 
   // Enregistrement automatique, comme partout ailleurs dans l'app (plus de bouton « Tout
   // enregistrer » à ne pas oublier). Une adresse e-mail incomplète n'est pas enregistrée.
@@ -107,8 +112,8 @@ export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parent
 
   const submitPinSetup = async () => {
     setPinError(null);
-    if (!/^\d{4,8}$/.test(pinDraft)) {
-      setPinError('Le code doit faire entre 4 et 8 chiffres.');
+    if (!/^\d{6,8}$/.test(pinDraft)) {
+      setPinError('Le code doit faire entre 6 et 8 chiffres (un code court se devine en quelques minutes si quelqu’un copie les données du navigateur).');
       return;
     }
     await enablePin(pinDraft);
@@ -285,7 +290,7 @@ export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parent
                 <div className="flex items-center justify-between gap-4">
                     <div>
                         <p className="font-bold text-slate-800 dark:text-slate-100 text-sm flex items-center gap-1.5"><Hash className="w-3.5 h-3.5"/> Code PIN</p>
-                        <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 max-w-md">4 à 8 chiffres, en repli si la biométrie n'est pas disponible ou par préférence.</p>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 max-w-md">6 à 8 chiffres, en repli si la biométrie n'est pas disponible ou par préférence.</p>
                     </div>
                     <button
                         onClick={togglePin}
@@ -316,7 +321,7 @@ export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parent
         </div>
 
         {/* SECTION NOTIFICATIONS (visible seulement si l'app est reliée au serveur) */}
-        <NotificationSettings paydayDay={paydayDay} onOpenPayday={onOpenPayday} />
+        <NotificationSettings paydayDay={paydayDay} onOpenPayday={onOpenPayday} prefs={notificationPrefs} onChangePrefs={onChangeNotificationPrefs} />
 
         {securitySlot && <div className="lg:col-span-2">{securitySlot}</div>}
 
@@ -336,6 +341,25 @@ export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parent
         {/* SECTION 1: AVANTAGES SALARIAUX */}
         <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 lg:col-span-2">
            <h3 className="font-bold text-slate-800 dark:text-slate-100 mb-4 border-b border-slate-200 dark:border-slate-700 pb-2 flex items-center gap-2"><Building2 className="w-4 h-4 text-indigo-600" /> Avantages et prélèvements de l'entreprise</h3>
+           {payslips.length > 0 && (
+             <div className="mb-5 p-4 rounded-xl bg-indigo-50/60 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-900 flex flex-wrap items-center gap-3">
+               <p className="flex-1 min-w-[14rem] text-xs text-slate-700 dark:text-slate-200">
+                 Reprenez les montants réels de vos fiches de paie (moyenne des 3 dernières) : remboursement Navigo à 50 %, titres-restaurant payés à 50 % par l'employeur, part de mutuelle retenue sur la paie.
+                 {benefitsMsg && <span className="block mt-1 font-bold text-indigo-800 dark:text-indigo-200" role="status">{benefitsMsg}</span>}
+               </p>
+               <button type="button" onClick={() => {
+                 const r = benefitsFromPayslips(payslips, localBenefits);
+                 if (!r) return;
+                 setLocalBenefits(r.benefits);
+                 const parts = [
+                   r.navigoRefund ? `Navigo ${formatEUR(r.navigoRefund, 2)} remboursés` : 'pas de remboursement transport',
+                   r.mealVouchersEmployee ? `titres-restaurant ${formatEUR(r.mealVouchersEmployee, 2)} retenus` : 'pas de titres-restaurant',
+                   r.mutuelleEmployee ? `mutuelle ${formatEUR(r.mutuelleEmployee, 2)} retenue` : 'pas de mutuelle retenue',
+                 ];
+                 setBenefitsMsg(`D'après ${r.months} fiche${r.months > 1 ? 's' : ''} : ${parts.join(', ')} par mois.`);
+               }} className="flex-shrink-0 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black">Utiliser mes fiches de paie</button>
+             </div>
+           )}
            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                {/* NAVIGO */}
                <div className="bg-indigo-50 dark:bg-indigo-950/40 p-4 rounded-xl border border-indigo-100 dark:border-indigo-900">

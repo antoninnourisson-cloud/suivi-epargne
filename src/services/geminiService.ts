@@ -49,7 +49,7 @@ const RESPONSE_SCHEMA = {
     netAmount: { type: 'NUMBER', description: "Net à payer AVANT impôt sur le revenu, en euros (ligne généralement intitulée « Net à payer avant impôt sur le revenu »)" },
     netTaxable: { type: 'NUMBER', description: 'Net imposable du mois, en euros (assiette fiscale, différente du net à payer)' },
     navigoRefund: { type: 'NUMBER', description: 'Remboursement transport (Navigo), en euros' },
-    mealVouchers: { type: 'NUMBER', description: 'Valeur des tickets restaurant du mois, en euros' },
+    mealVouchers: { type: 'NUMBER', description: 'Part SALARIALE des titres-restaurant retenue sur la paie ce mois (montant déduit du salaire), en euros' },
     mutuelleCost: { type: 'NUMBER', description: 'Part salariale de la mutuelle retenue ce mois, en euros' },
     incomeTaxWithheld: { type: 'NUMBER', description: 'Prélèvement à la source (impôt sur le revenu) réellement retenu ce mois, en euros' },
     netPaid: { type: 'NUMBER', description: 'Net payé / net versé : le montant réellement viré sur le compte bancaire ce mois, APRÈS impôt sur le revenu, en euros' },

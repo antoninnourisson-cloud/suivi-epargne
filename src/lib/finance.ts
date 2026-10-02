@@ -1048,6 +1048,9 @@ export const AV_ANNUAL_ALLOWANCE = 4_600;
 export const depositsAfterWithdrawal = (totalDeposits: number, value: number, amount: number): number =>
   value <= 0 ? totalDeposits : Math.max(0, totalDeposits * (1 - Math.min(1, amount / value)));
 
+// Cessions de crypto-actifs exonérées si leur total annuel ne dépasse pas 305 € (art. 150 VH bis).
+export const CRYPTO_EXEMPT_DISPOSALS = 305;
+
 export interface WithdrawalTax {
   known: boolean;        // false : versements cumulés inconnus, ou fiscalité non modélisée
   gainPart: number;      // part de gains contenue dans le montant retiré
@@ -1069,7 +1072,7 @@ export interface WithdrawalTax {
  * - autres (PER, immobilier…) : non modélisé.
  */
 export const computeWithdrawalTax = (
-  account: { type: AccountType; openingDate?: string; totalAmount: number; totalDeposits?: number },
+  account: { type: AccountType; openingDate?: string; totalAmount: number; totalDeposits?: number; euroFundPct?: number },
   amount: number,
   fiscalConfig: FiscalConfig,
   asOfDate: Date = new Date()
@@ -1084,7 +1087,14 @@ export const computeWithdrawalTax = (
 
   const gainRatio = Math.max(0, (account.totalAmount - account.totalDeposits) / account.totalAmount);
   const gainPart = Math.min(amount, account.totalAmount) * gainRatio;
-  const socialCharges = gainPart * socialChargesRateFor(account.type, fiscalConfig);
+  // Fonds euros d'une assurance vie : prélèvements sociaux déjà payés chaque année.
+  const psShare = account.type === AccountType.ASSURANCE_VIE && account.euroFundPct !== undefined
+    ? Math.max(0, Math.min(1, 1 - account.euroFundPct / 100)) : 1;
+  // Crypto : cessions de l'année jusqu'à 305 € exonérées (on suppose que ce retrait est la seule).
+  if (account.type === AccountType.CRYPTO && amount <= CRYPTO_EXEMPT_DISPOSALS) {
+    return { known: true, gainPart, socialCharges: 0, incomeTax: 0, net: amount, closesPea };
+  }
+  const socialCharges = gainPart * psShare * socialChargesRateFor(account.type, fiscalConfig);
   let incomeTax: number;
   switch (account.type) {
     case AccountType.PEA:

@@ -64,6 +64,10 @@ export interface SavingsAccount {
   // Frais de gestion annuels (%) d'un contrat (unités de compte). Le taux servi d'un fonds
   // euros est déjà net de frais : laisser vide. Absent = 0.
   managementFee?: number;
+  // Assurance vie : part du contrat en fonds euros (%). Sur cette part, les prélèvements
+  // sociaux sont déjà payés chaque année : un retrait n'en redoit pas. Absent = prudent
+  // (tout compté au retrait).
+  euroFundPct?: number;
   // Dernière vérification du taux (même inchangé) : éteint le rappel de révision.
   rateReviewedAt?: string;
 }
@@ -311,6 +315,8 @@ export interface GlobalAppData {
     // « Repartir de zéro » : seuls les mouvements à partir de cette date comptent comme
     // épargne (Placé, taux d'épargne, bilans). Soldes, intérêts et historique inchangés.
     trackingStartDate?: string;
+    // Types de notifications désactivés (id de catégorie → false). Voir lib/notificationPrefs.
+    notificationPrefs?: Record<string, boolean>;
     // Notifications sans montant (écran verrouillé) : appliqué par le serveur.
     discreetNotifications?: boolean;
     // Épargne de précaution : nombre de mois de dépenses à garder sur les livrets.

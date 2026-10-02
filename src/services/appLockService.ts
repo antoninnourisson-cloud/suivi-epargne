@@ -138,7 +138,7 @@ const pbkdf2Pin = async (pin: string, saltB64: string, iterations: number): Prom
 };
 
 export const enablePin = async (pin: string): Promise<void> => {
-  if (!/^\d{4,8}$/.test(pin)) throw new Error('PIN_INVALID_FORMAT');
+  if (!/^\d{6,8}$/.test(pin)) throw new Error('PIN_INVALID_FORMAT');
   const salt = bufferToBase64(crypto.getRandomValues(new Uint8Array(16)).buffer);
   const hash = await pbkdf2Pin(pin, salt, PIN_ITERATIONS);
   localStorage.setItem(PIN_SALT_KEY, salt);
