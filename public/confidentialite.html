@@ -30,31 +30,48 @@
   <section>
     <h2>Où sont vos données</h2>
     <p>Toutes les données de l'application (comptes, mouvements, objectifs, réglages) sont enregistrées dans un fichier unique sur <strong>votre propre Google Drive</strong>. L'application n'a accès qu'aux fichiers qu'elle a elle-même créés (autorisation Google « drive.file ») : elle ne voit pas le reste de votre Drive.</p>
+    <p>Une <strong>copie locale</strong> de ces données est aussi gardée sur chaque appareil où vous utilisez l'application (stockage du navigateur), pour qu'elle s'ouvre vite et fonctionne hors ligne. Elle reste sur l'appareil ; la déconnexion ou l'effacement des données du site la supprime.</p>
   </section>
 
   <section>
     <h2>Le serveur de l'application</h2>
-    <p>Un petit serveur (Cloudflare Workers) sert uniquement à deux choses :</p>
+    <p>Un petit serveur (Cloudflare Workers) sert uniquement à maintenir votre connexion Google et à envoyer des rappels. Voici <strong>exactement</strong> ce qu'il conserve :</p>
     <ul>
-      <li><strong>Maintenir votre connexion Google</strong> : il conserve un jeton d'accès Google, chiffré, pour éviter de vous reconnecter à chaque ouverture. Il ne stocke aucune donnée financière.</li>
-      <li><strong>Envoyer des rappels</strong> si vous activez les notifications : une fois par jour, il lit votre fichier de données pour calculer les rappels (échéances, révision des taux…). Les notifications sont chiffrées de bout en bout.</li>
+      <li><strong>Un jeton Google de longue durée</strong> (« refresh token »), chiffré (AES-256-GCM) avec une clé gardée à part, pour vous éviter de vous reconnecter à chaque ouverture ;</li>
+      <li><strong>Votre adresse e-mail et votre identifiant Google</strong>, pour savoir à quel compte appartient ce jeton ;</li>
+      <li><strong>Les sessions de vos appareils</strong>, sous forme d'empreintes (le jeton de session lui-même n'est jamais stocké). Une session expire après 30 jours sans utilisation, et dans tous les cas <strong>60 jours au plus</strong> après la connexion ;</li>
+      <li><strong>Les abonnements aux notifications</strong> de vos appareils (adresse fournie par le service de notification du navigateur et clés de chiffrement), si vous les activez ;</li>
+      <li><strong>Des marqueurs « déjà envoyé »</strong> (le nom d'un rappel, sans son contenu), pour ne pas vous envoyer deux fois la même notification. Ils s'effacent d'eux-mêmes au bout d'environ 400 jours ;</li>
+      <li><strong>L'état de la tâche quotidienne</strong> : heure du dernier passage, succès ou échec, nombre de comptes traités.</li>
     </ul>
+    <p>Une fois par jour, si les notifications sont activées, le serveur <strong>lit votre fichier de données</strong> sur Drive pour calculer les rappels (échéances, révision des taux, jour de paie…). Il n'en <strong>garde rien</strong> : ni copie, ni montant, ni historique. Il ne stocke aucune donnée financière.</p>
     <p>L'accès au serveur est limité au compte Google de son propriétaire.</p>
+  </section>
+
+  <section>
+    <h2>Notifications</h2>
+    <p>Les notifications sont chiffrées de bout en bout entre le serveur et votre appareil : le service qui les achemine ne peut pas les lire. En revanche, elles <strong>peuvent afficher des montants</strong> (paie à placer, prélèvement, bilan du mois…), visibles sur l'écran de votre appareil, même verrouillé. Le <strong>mode discret</strong>, dans les réglages, remplace ces textes par des messages génériques sans aucun montant.</p>
   </section>
 
   <section>
     <h2>Services tiers</h2>
     <ul>
       <li><strong>Google Drive et Gmail</strong> : stockage des données, et envoi d'un e-mail récapitulatif à l'adresse que vous configurez vous-même (fonction facultative).</li>
-      <li><strong>Google Gemini</strong> (facultatif) : si vous importez une fiche de paie, le document est envoyé à l'API Gemini avec votre propre clé pour en extraire les montants.</li>
-      <li><strong>Services de notification</strong> (Google, Apple, Mozilla, selon l'appareil) : ils acheminent les notifications chiffrées sans pouvoir les lire.</li>
+      <li><strong>Google Gemini</strong> (facultatif) : si vous importez une fiche de paie, le document est envoyé à l'API Gemini avec votre propre clé pour en extraire les montants. Une fiche de paie contient des <strong>informations personnelles</strong> (nom, adresse, numéro de sécurité sociale, employeur, salaire). Avec l'offre gratuite de Gemini, Google peut utiliser les contenus envoyés pour <strong>améliorer ses modèles</strong>, et des personnes peuvent les relire : n'importez une fiche que si cela vous convient, ou utilisez une clé d'une offre payante.</li>
+      <li><strong>Google Fonts</strong> : les polices de caractères de l'application sont chargées depuis les serveurs de Google, qui reçoivent donc votre adresse IP à l'ouverture.</li>
+      <li><strong>Services de notification</strong> (Google, Apple, Mozilla, Microsoft, selon l'appareil) : ils acheminent les notifications chiffrées sans pouvoir les lire.</li>
     </ul>
     <p>Aucune publicité, aucun outil de mesure d'audience, aucune revente de données.</p>
   </section>
 
   <section>
     <h2>Supprimer vos données et révoquer l'accès</h2>
-    <p>Vous pouvez à tout moment retirer l'accès de l'application depuis <a href="https://myaccount.google.com/permissions">myaccount.google.com/permissions</a> : le serveur efface alors vos sessions. Le fichier de données reste sur votre Drive, où vous pouvez le supprimer.</p>
+    <p>Deux façons d'effacer <strong>tout</strong> ce que le serveur détient sur vous (jeton, e-mail, identifiant, sessions, abonnements aux notifications, marqueurs « déjà envoyé ») :</p>
+    <ul>
+      <li>dans l'application, <strong>« Supprimer mes données serveur »</strong> : l'effacement est immédiat, et l'accès est aussi retiré chez Google ;</li>
+      <li>ou retirer l'accès de l'application depuis <a href="https://myaccount.google.com/permissions">myaccount.google.com/permissions</a> : le serveur le constate à la demande suivante, ou au plus tard lors de la tâche quotidienne, et efface alors tout.</li>
+    </ul>
+    <p>Le fichier de données reste sur votre Drive, où vous pouvez le supprimer, et la copie locale sur chaque appareil, que la déconnexion efface.</p>
   </section>
 </main>
 </body>

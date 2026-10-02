@@ -17,7 +17,7 @@ import {
 import { isBackendEnabled, hasBackendSession } from './services/backendService';
 import { disablePush } from './services/pushService';
 import { isLockEnabled } from './services/appLockService';
-import { computeMaturityCountdown, depositsAfterCashFlow, computeMonthlySavingsCapacity, subscriptionsAsExpenses, computeMonthlyPay, computeRestitutionPlan, accountsAfterRestitution, REGULATED_RATE_GROUPS } from './lib/finance';
+import { computeIncome, computeMaturityCountdown, depositsAfterCashFlow, computeMonthlySavingsCapacity, subscriptionsAsExpenses, computeMonthlyPay, computeRestitutionPlan, accountsAfterRestitution, REGULATED_RATE_GROUPS } from './lib/finance';
 import { localTodayISO, parseISODate } from './lib/dates';
 import { formatEUR, formatSignedEUR } from './lib/format';
 import { MovementSearch } from './components/MovementSearch';
@@ -31,6 +31,14 @@ import { applyMovement, snapshotBalances, restoreBalances, isRestitutionMovement
 import { WhatsNewModal } from './components/WhatsNew';
 import { Logo } from './components/Logo';
 import { LATEST_VERSION } from './changelog';
+import { buildRestitutionMail } from './lib/mailTemplates';
+import { ErrorBoundary, lazyWithRetry } from './components/ErrorBoundary';
+import { NAV_ITEMS, NAV_SECTIONS, VIEWS, View, navLabel } from './navigation';
+import { QuickAddFab } from './components/QuickAddFab';
+import { useFiscalWatch } from './hooks/useFiscalWatch';
+import { FiscalWatchCard } from './components/FiscalWatchCard';
+import type { FiscalProposal } from './lib/fiscalWatch';
+import { DriveBackupsPanel, ServerSecurityPanel } from './components/SettingsPanels';
 import {
   LayoutDashboard, Wallet, Trash2, Edit2, ShieldCheck,
   ArrowRightLeft, RefreshCcw, PlusCircle, Cloud, LogOut,
@@ -39,36 +47,36 @@ import {
 } from 'lucide-react';
 
 // Code-splitting : les vues lourdes (recharts, etc.) sont chargées à la demande.
-const Journal = lazy(() => import('./components/Journal').then(m => ({ default: m.Journal })));
-const Agenda = lazy(() => import('./components/Agenda').then(m => ({ default: m.Agenda })));
-const Donations = lazy(() => import('./components/Donations').then(m => ({ default: m.Donations })));
-const Subscriptions = lazy(() => import('./components/Subscriptions').then(m => ({ default: m.Subscriptions })));
-const Dashboard = lazy(() => import('./components/Dashboard').then(m => ({ default: m.Dashboard })));
-const AccountUpdate = lazy(() => import('./components/AccountUpdate').then(m => ({ default: m.AccountUpdate })));
-const AssistantPilot = lazy(() => import('./components/AssistantPilot').then(m => ({ default: m.AssistantPilot })));
-const TransferManager = lazy(() => import('./components/TransferManager').then(m => ({ default: m.TransferManager })));
-const Settings = lazy(() => import('./components/Settings').then(m => ({ default: m.Settings })));
-const Yield = lazy(() => import('./components/Yield').then(m => ({ default: m.Yield })));
-const History = lazy(() => import('./components/History').then(m => ({ default: m.History })));
-const ParentalShare = lazy(() => import('./components/ParentalShare').then(m => ({ default: m.ParentalShare })));
-const Payslips = lazy(() => import('./components/Payslips').then(m => ({ default: m.Payslips })));
+const Journal = lazyWithRetry(() => import('./components/Journal').then(m => ({ default: m.Journal })));
+const Agenda = lazyWithRetry(() => import('./components/Agenda').then(m => ({ default: m.Agenda })));
+const Donations = lazyWithRetry(() => import('./components/Donations').then(m => ({ default: m.Donations })));
+const Subscriptions = lazyWithRetry(() => import('./components/Subscriptions').then(m => ({ default: m.Subscriptions })));
+const Dashboard = lazyWithRetry(() => import('./components/Dashboard').then(m => ({ default: m.Dashboard })));
+const AccountUpdate = lazyWithRetry(() => import('./components/AccountUpdate').then(m => ({ default: m.AccountUpdate })));
+const AssistantPilot = lazyWithRetry(() => import('./components/AssistantPilot').then(m => ({ default: m.AssistantPilot })));
+const TransferManager = lazyWithRetry(() => import('./components/TransferManager').then(m => ({ default: m.TransferManager })));
+const Settings = lazyWithRetry(() => import('./components/Settings').then(m => ({ default: m.Settings })));
+const Yield = lazyWithRetry(() => import('./components/Yield').then(m => ({ default: m.Yield })));
+const History = lazyWithRetry(() => import('./components/History').then(m => ({ default: m.History })));
+const ParentalShare = lazyWithRetry(() => import('./components/ParentalShare').then(m => ({ default: m.ParentalShare })));
+const Payslips = lazyWithRetry(() => import('./components/Payslips').then(m => ({ default: m.Payslips })));
 
 const ViewLoader = () => (
   <div className="flex justify-center items-center py-20"><Loader2 className="animate-spin w-8 h-8 text-indigo-600" /></div>
 );
 
-const NavButton = ({ active, onClick, icon: Icon, label, highlight }: any) => (
+const NavButton = ({ active, onClick, icon: Icon, label }: { active: boolean; onClick: () => void; icon: React.ComponentType<{ className?: string }>; label: string }) => (
     <button
       onClick={onClick}
-      className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-bold transition-all rounded-xl mb-1 ${active ? 'bg-creme text-sapin shadow-lg shadow-black/10' : `${highlight ? 'text-amber-300' : 'text-emerald-50/80'} hover:bg-white/10 hover:text-white`}`}
+      aria-current={active ? 'page' : undefined}
+      className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-bold transition-all rounded-xl mb-1 ${active ? 'bg-creme text-sapin shadow-lg shadow-black/10' : 'text-emerald-50/85 hover:bg-white/10 hover:text-white focus-visible:bg-white/10'}`}
     >
-      <Icon className={`w-5 h-5 ${active ? 'text-sapin' : highlight ? 'text-amber-300' : 'text-emerald-100/70'}`} />
+      <Icon className={`w-5 h-5 ${active ? 'text-sapin' : 'text-emerald-100/75'}`} />
       {label}
     </button>
 );
 
-type View = 'dashboard' | 'accounts' | 'transfers' | 'pilot' | 'update' | 'settings' | 'yield' | 'history' | 'parental' | 'payslips' | 'subscriptions' | 'donations' | 'agenda' | 'journal';
-const VALID_VIEWS: View[] = ['dashboard', 'accounts', 'transfers', 'pilot', 'update', 'settings', 'yield', 'history', 'parental', 'payslips', 'subscriptions', 'donations', 'agenda', 'journal'];
+const VALID_VIEWS: readonly View[] = VIEWS;
 
 const App: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -167,6 +175,37 @@ const App: React.FC = () => {
     navigoRate: data.navigoRate, taxRateManual: data.taxRateManual,
   }), [data.grossAnnual, data.navigoBase, data.navigoRate, data.taxRateManual]);
 
+  // Impôt annuel estimé (après décote) et revenu imposable : plafonnent la réduction des dons.
+  const taxEstimate = useMemo(() => {
+    if (!data.workBenefits || !(data.grossAnnual > 0)) return undefined;
+    const b = computeIncome({ ...dashboardConfig, extraMonthlyIncome: 0 }, data.fiscalConfig, data.workBenefits);
+    return { taxDue: b.taxAmount, taxableIncome: b.netTaxableYear };
+  }, [dashboardConfig, data.fiscalConfig, data.workBenefits, data.grossAnnual]);
+
+  // Veille fiscale hebdomadaire (Gemini + recherche web) : propositions à valider.
+  const fiscalWatch = useFiscalWatch(data.geminiApiKey, data.fiscalConfig, data.accounts, isAuthenticated && !data.isLoadingData && !locked);
+  const applyFiscalProposal = (p: FiscalProposal) => {
+    const next = p.apply({ fiscal: data.fiscalConfig, accounts: data.accounts });
+    data.setFiscalConfig(next.fiscal);
+    if (next.accounts !== data.accounts) data.setAccounts(next.accounts);
+    addToast({ message: `${p.label} mis à jour`, kind: 'success' });
+  };
+  const fiscalWatchCard = (compact: boolean) => (
+    <FiscalWatchCard compact={compact} proposals={fiscalWatch.proposals} running={fiscalWatch.running} checkedAt={fiscalWatch.checkedAt}
+      lastError={fiscalWatch.lastError} hasKey={fiscalWatch.hasKey} onApply={applyFiscalProposal} onDismiss={fiscalWatch.dismiss} onRun={fiscalWatch.run} />
+  );
+  const askConfirm = (title: string, message: string, onConfirm: () => void, danger = false) =>
+    setDialog({ open: true, kind: 'confirm', title, message, danger, confirmLabel: 'Confirmer', onConfirm: () => onConfirm() });
+
+  // Mois avant la restitution prévue du capital parental (pour la projection).
+  const restitutionInMonths = useMemo(() => {
+    const r = data.parentalRestitution;
+    if (!r?.plannedDate || r.done) return undefined;
+    const d = new Date(r.plannedDate), now = new Date();
+    const months = (d.getFullYear() - now.getFullYear()) * 12 + d.getMonth() - now.getMonth();
+    return months >= 0 ? months : undefined;
+  }, [data.parentalRestitution]);
+
   // Charges fixes vues par les écrans en lecture seule (survie, objectifs, simulateur) :
   // charges saisies + abonnements actifs. Le Pilotage, lui, les affiche séparément.
   const allCharges = useMemo(
@@ -216,17 +255,22 @@ const App: React.FC = () => {
   // après authentification + déverrouillage, comme le raccourci d'ajout rapide.
   const deepLinkedRef = useRef(false);
 
-  // Le bouton d'ajout rapide recouvrait les montants alignés à droite : il s'efface quand
-  // on fait défiler vers le bas et revient dès qu'on remonte.
-  const [fabHidden, setFabHidden] = useState(false);
-  const lastScrollRef = useRef(0);
-  const handleMainScroll = (e: React.UIEvent<HTMLElement>) => {
-    const y = e.currentTarget.scrollTop;
-    const delta = y - lastScrollRef.current;
-    if (Math.abs(delta) > 8) setFabHidden(delta > 0 && y > 80);
-    lastScrollRef.current = y;
-  };
-  useEffect(() => { setFabHidden(false); lastScrollRef.current = 0; }, [view]);
+  // Changer d'écran : retour en haut, titre de l'onglet, et focus sur le titre de l'écran
+  // (annoncé par les lecteurs d'écran).
+  const mainRef = useRef<HTMLElement>(null);
+  const firstViewRef = useRef(true);
+  useEffect(() => {
+    document.title = isAuthenticated ? `${navLabel(view)} · Pécule` : 'Pécule';
+    const main = mainRef.current;
+    if (!main) return;
+    main.scrollTo({ top: 0 });
+    if (firstViewRef.current) { firstViewRef.current = false; return; }
+    const t = setTimeout(() => {
+      const h = main.querySelector<HTMLElement>('h2');
+      if (h) { h.tabIndex = -1; h.focus({ preventScroll: true }); }
+    }, 120);
+    return () => clearTimeout(t);
+  }, [view, isAuthenticated]);
 
   // Les écrans sont chargés à la demande : on précharge les plus utilisés une fois connecté,
   // pour éviter le petit temps de chargement à leur première ouverture.
@@ -297,10 +341,23 @@ const App: React.FC = () => {
   // Init Google API — une seule fois par chargement de page : en développement, React
   // (StrictMode) rejoue les effets de montage, ce qui lançait deux initialisations
   // concurrentes (deux rafraîchissements, deux consommations du code de connexion...).
+  // Les données ne sont chargées qu'une fois l'appareil déverrouillé : tant que le verrou
+  // est affiché, rien de financier n'est lu ni gardé en mémoire.
+  const [loadRequested, setLoadRequested] = useState(false);
+  useEffect(() => {
+    if (loadRequested && !locked) { setLoadRequested(false); data.loadDriveData(); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadRequested, locked]);
+
   const initStartedRef = useRef(false);
   useEffect(() => {
     if (initStartedRef.current) return;
     initStartedRef.current = true;
+    // Mode démo (développement uniquement) : données fictives, sans Google.
+    if (import.meta.env.DEV && new URLSearchParams(window.location.search).has('demo')) {
+      import('./dev/demoData').then(({ DEMO_DATA }) => { setIsApiLoaded(true); setIsAuthenticated(true); data.loadDemoData(DEMO_DATA); });
+      return;
+    }
     initGoogleApi()
       .then(async () => {
         setIsApiLoaded(true);
@@ -313,7 +370,7 @@ const App: React.FC = () => {
             if (justLoggedIn || hasBackendSession()) {
               if (!justLoggedIn && !isTokenValid()) await handleAuthClick(true);
               setIsAuthenticated(true);
-              data.loadDriveData();
+              setLoadRequested(true);
             }
           } catch (e: any) {
             if (e instanceof TypeError) {
@@ -332,12 +389,12 @@ const App: React.FC = () => {
         if (storedToken && persistence) {
            if (isTokenValid()) {
                setIsAuthenticated(true);
-               data.loadDriveData();
+               setLoadRequested(true);
            } else {
                try {
                    await handleAuthClick(true); // Silent
                    setIsAuthenticated(true);
-                   data.loadDriveData();
+                   setLoadRequested(true);
                } catch (e) {
                    console.log("Refresh échoué. Login requis.");
                }
@@ -601,15 +658,8 @@ const App: React.FC = () => {
     const snap = snapshotBalances(data.accounts, plan.rows.map(r => r.accountId));
     let emailed = false;
     if (sendMail) {
-      const rows = plan.rows.map(r => `<tr><td style="padding:4px 12px 4px 0">${r.name}</td><td style="padding:4px 0;text-align:right"><b>${formatEUR(r.amount, 2)}</b></td></tr>`).join('');
-      emailed = data.queueParentsMail('restitution', 'Restitution de votre capital', `
-        <div style="font-family: sans-serif; color: #1e293b;">
-          <p>Bonjour,</p>
-          <p>Voici le récapitulatif de la restitution de votre capital, retiré le ${parseISODate(date).toLocaleDateString('fr-FR')} :</p>
-          <table style="border-collapse: collapse;">${rows}
-            <tr><td style="padding:8px 12px 4px 0;border-top:1px solid #e2e8f0">Total</td><td style="padding:8px 0 4px;text-align:right;border-top:1px solid #e2e8f0"><b>${formatEUR(plan.total, 2)}</b></td></tr>
-          </table>
-        </div>`);
+      emailed = data.queueParentsMail('restitution', 'Restitution de votre capital',
+        buildRestitutionMail(parseISODate(date).toLocaleDateString('fr-FR'), plan.rows, plan.total, 0));
     }
     const after = accountsAfterRestitution(data.accounts, date);
     const createdIds = after.flatMap(a => (a.movements || []).filter(m => isRestitutionMovement(m) && m.date === date).map(m => m.id));
@@ -662,7 +712,11 @@ const App: React.FC = () => {
   // de connexion ou les données, pour ne jamais laisser filtrer d'information (y compris
   // le simple fait qu'une session Google est déjà active) tant que ce n'est pas déverrouillé.
   if (locked) {
-    return <AppLockScreen onUnlock={() => setLocked(false)} />;
+    return <AppLockScreen onUnlock={() => setLocked(false)} onForgot={async () => {
+      await handleLogout().catch(() => undefined);
+      try { ['gemini_api_key', 'suivi_epargne_last_save', 'last_view'].forEach(k => localStorage.removeItem(k)); } catch { /* stockage bloqué */ }
+      setLocked(false);
+    }} />;
   }
 
   if (!isAuthenticated) {
@@ -706,25 +760,14 @@ const App: React.FC = () => {
             </button>
           </div>
         </div>
-        <nav className="flex-1 p-4 overflow-y-auto">
-          <NavButton active={view === 'dashboard'} onClick={() => setView('dashboard')} icon={LayoutDashboard} label="Tableau de bord" />
-          <NavButton active={view === 'update'} onClick={() => setView('update')} icon={RefreshCcw} label="Actualiser solde" highlight />
-
-          <div className="pt-6 pb-2 text-[11px] font-black text-emerald-100/60 uppercase px-4 tracking-widest">Analyses</div>
-          <NavButton active={view === 'pilot'} onClick={() => setView('pilot')} icon={ShieldCheck} label="Pilotage" />
-          <NavButton active={view === 'agenda'} onClick={() => setView('agenda')} icon={CalendarDays} label="Agenda" />
-          <NavButton active={view === 'yield'} onClick={() => setView('yield')} icon={Coins} label="Rendement" />
-          <NavButton active={view === 'history'} onClick={() => setView('history')} icon={LineChart} label="Historique" />
-          {showParentalScreen && <NavButton active={view === 'parental'} onClick={() => setView('parental')} icon={Users} label="Part parentale" />}
-
-          <div className="pt-6 pb-2 text-[11px] font-black text-emerald-100/60 uppercase px-4 tracking-widest">Gestion</div>
-          <NavButton active={view === 'accounts'} onClick={() => setView('accounts')} icon={Wallet} label="Mes comptes" />
-          <NavButton active={view === 'transfers'} onClick={() => setView('transfers')} icon={ArrowRightLeft} label="Virements" />
-          <NavButton active={view === 'payslips'} onClick={() => setView('payslips')} icon={FileText} label="Fiches de paie" />
-          <NavButton active={view === 'subscriptions'} onClick={() => setView('subscriptions')} icon={CalendarClock} label="Abonnements" />
-          <NavButton active={view === 'donations'} onClick={() => setView('donations')} icon={HandHeart} label="Dons" />
-          <NavButton active={view === 'journal'} onClick={() => setView('journal')} icon={ScrollText} label="Journal" />
-
+        <nav aria-label="Navigation principale" className="flex-1 p-4 overflow-y-auto">
+          {NAV_ITEMS.filter(i => !i.section && i.key !== 'settings').map(i => <NavButton key={i.key} active={view === i.key} onClick={() => setView(i.key)} icon={i.icon} label={i.label} />)}
+          {NAV_SECTIONS.map(section => (
+            <React.Fragment key={section}>
+              <div className="pt-6 pb-2 text-[11px] font-black text-emerald-100/70 uppercase px-4 tracking-widest">{section}</div>
+              {NAV_ITEMS.filter(i => i.section === section && (i.key !== 'parental' || showParentalScreen)).map(i => <NavButton key={i.key} active={view === i.key} onClick={() => setView(i.key)} icon={i.icon} label={i.label} />)}
+            </React.Fragment>
+          ))}
           <div className="my-4 border-t border-white/10 mx-4"></div>
           <NavButton active={view === 'settings'} onClick={() => setView('settings')} icon={SettingsIcon} label="Paramètres" />
         </nav>
@@ -749,7 +792,7 @@ const App: React.FC = () => {
         </div>
       </header>
 
-      <main onScroll={handleMainScroll} className="flex-1 p-4 md:p-8 overflow-y-auto relative h-screen pb-40 md:pb-24">
+      <main ref={mainRef} id="contenu" className="flex-1 p-4 md:p-8 overflow-y-auto relative h-dvh pb-40 md:pb-24">
 
         <div className="max-w-7xl mx-auto pb-20">
             {/* --- BANNIÈRES DE SYNCHRONISATION --- */}
@@ -759,14 +802,20 @@ const App: React.FC = () => {
                 <div className="text-slate-600 dark:text-slate-300 text-sm font-bold">Pas de connexion. Vos modifications sont enregistrées sur cet appareil et seront envoyées sur Drive dès le retour du réseau.</div>
               </div>
             )}
+            {data.appOutdated && (
+              <div role="alert" className="mb-4 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-xl p-4 flex items-center justify-between gap-4">
+                <div className="flex items-center gap-2 text-amber-800 dark:text-amber-300 text-sm font-bold"><AlertTriangle className="w-5 h-5 flex-shrink-0"/> Vos données ont été enregistrées par une version plus récente de Pécule. Mettez l'app à jour : rien ne sera enregistré d'ici là.</div>
+                <button onClick={() => window.location.reload()} className="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-lg font-bold text-sm flex-shrink-0">Mettre à jour</button>
+              </div>
+            )}
             {data.sessionExpired && (
-              <div className="mb-4 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-xl p-4 flex items-center justify-between gap-4">
+              <div role="alert" className="mb-4 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-xl p-4 flex items-center justify-between gap-4">
                 <div className="flex items-center gap-2 text-amber-800 dark:text-amber-300 text-sm font-bold"><AlertTriangle className="w-5 h-5 flex-shrink-0"/> Votre session Google a expiré. Reconnectez-vous pour continuer à sauvegarder.</div>
                 <button onClick={handleReconnect} className="bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-lg font-bold text-sm flex-shrink-0">Se reconnecter</button>
               </div>
             )}
             {data.syncConflict && (
-              <div className="mb-4 bg-orange-50 dark:bg-orange-950/40 border border-orange-200 dark:border-orange-800 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div role="alert" className="mb-4 bg-orange-50 dark:bg-orange-950/40 border border-orange-200 dark:border-orange-800 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div className="flex items-center gap-2 text-orange-800 dark:text-orange-300 text-sm font-bold"><AlertTriangle className="w-5 h-5 flex-shrink-0"/> Vos données ont été modifiées sur un autre appareil. Choisissez la version à garder.</div>
                 <div className="flex items-center gap-2 flex-shrink-0">
                   <button onClick={data.forceSaveToDrive} className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2"><Save className="w-4 h-4"/> Garder mes modifications</button>
@@ -775,8 +824,9 @@ const App: React.FC = () => {
               </div>
             )}
             {data.syncError && !data.sessionExpired && !data.syncConflict && !data.isOffline && (
-              <div className="mb-4 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-xl p-3 text-rose-700 dark:text-rose-300 text-sm font-bold flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4"/> La dernière sauvegarde a échoué. Une nouvelle tentative aura lieu à la prochaine modification.
+              <div role="alert" className="mb-4 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-xl p-3 text-rose-700 dark:text-rose-300 text-sm font-bold flex items-center justify-between gap-3">
+                <span className="flex items-center gap-2"><AlertTriangle className="w-4 h-4 flex-shrink-0"/> La dernière sauvegarde a échoué.</span>
+                <button onClick={data.forceSaveToDrive} className="bg-rose-600 hover:bg-rose-700 text-white px-3 py-1.5 rounded-lg font-bold text-xs flex-shrink-0">Réessayer</button>
               </div>
             )}
             {data.mailError && (
@@ -795,7 +845,9 @@ const App: React.FC = () => {
               </div>
             )}
 
+            <ErrorBoundary resetKey={view}>
             <Suspense fallback={<ViewLoader />}>
+            {view === 'dashboard' && fiscalWatch.proposals.length > 0 && <div className="mb-6">{fiscalWatchCard(true)}</div>}
             {view === 'dashboard' && <Dashboard accounts={data.accounts} history={data.history} expenses={allCharges} fiscalConfig={data.fiscalConfig} workBenefits={data.workBenefits} onDeleteAccount={handleDeleteAccount} config={dashboardConfig} monthPlan={monthPlan} monthlyPay={monthlyPay} paydayDay={data.paydayDay} trackingStartDate={data.trackingStartDate} payRaise={payRaise && !payRaiseHandled ? { delta: payRaise.delta, period: payRaise.latest.extracted.period || '', hasFixedAmount: data.paydayAmount !== undefined } : null} onAcceptPayRaise={acceptPayRaise} onDismissPayRaise={dismissPayRaise} subscriptions={data.subscriptions} onUpdateFiscalConfig={data.setFiscalConfig} onUpdateAccounts={data.setAccounts} onOpenSettings={() => setView('settings')} recurringMovements={data.recurringMovements} onRecordRecurring={(r, date) => handleQuickAdd(r.accountId, r.amount, r.type, r.label, date)} />}
 
             {view === 'pilot' && <AssistantPilot
@@ -838,7 +890,7 @@ const App: React.FC = () => {
             {view === 'transfers' && <TransferManager accounts={data.accounts} onUpdateAccountsComplex={data.updateAccountsWithMovements} onLinkedTransfer={data.executeLinkedTransfer} lastSavedAt={data.lastSavedAt} recurringMovements={data.recurringMovements} onUpdateRecurring={data.setRecurringMovements} />}
             {view === 'update' && <AccountUpdate accounts={data.accounts} onUpdateAccountsComplex={data.updateAccountsWithMovements} lastSavedAt={data.lastSavedAt} />}
 
-            {view === 'yield' && <Yield accounts={data.accounts} fiscalConfig={data.fiscalConfig} monthPlan={monthPlan} savingsSplit={data.savingsSplit} />}
+            {view === 'yield' && <Yield accounts={data.accounts} fiscalConfig={data.fiscalConfig} monthPlan={monthPlan} savingsSplit={data.savingsSplit} restitutionInMonths={restitutionInMonths} />}
             {view === 'history' && <History history={data.history} expensesHistory={data.expensesHistory} reviewData={fullData} />}
             {view === 'journal' && <Journal
                 accounts={data.accounts}
@@ -900,7 +952,7 @@ const App: React.FC = () => {
                 onRestitute={handleRestitution}
                 onUndoRestitution={handleUndoRestitution}
             />}
-            {view === 'donations' && <Donations donations={data.donations} onUpdate={data.setDonations} pickerApiKey={data.pickerApiKey} />}
+            {view === 'donations' && <Donations donations={data.donations} onUpdate={data.setDonations} pickerApiKey={data.pickerApiKey} taxEstimate={taxEstimate} ceiling75={data.fiscalConfig.donation75Ceiling} />}
             {view === 'subscriptions' && <Subscriptions subscriptions={data.subscriptions} onUpdate={data.setSubscriptions} />}
             {view === 'payslips' && <Payslips payslips={data.payslips} onUpdatePayslips={data.setPayslips} geminiApiKey={data.geminiApiKey} pickerApiKey={data.pickerApiKey} onApplyToPilotage={handleApplyPayslipToPilotage} activePayslipId={data.activePayslipId} onClearActivePayslip={handleClearActivePayslip} />}
 
@@ -911,8 +963,12 @@ const App: React.FC = () => {
                     parentsEmail={data.parentsEmail}
                     geminiApiKey={data.geminiApiKey}
                     pickerApiKey={data.pickerApiKey}
-                    onExport={data.exportData}
+                    onExport={() => { data.exportData(); data.patchConfig({ lastExportAt: localTodayISO() }); }}
                     onImport={data.importData}
+                    backupSlot={<DriveBackupsPanel list={data.listDriveBackups} restore={data.restoreDriveBackup} confirm={(t, m, ok) => askConfirm(t, m, ok, true)} />}
+                    fiscalWatchSlot={fiscalWatchCard(false)}
+                    securitySlot={<ServerSecurityPanel discreet={!!data.config.discreetNotifications} onToggleDiscreet={v => data.patchConfig({ discreetNotifications: v || undefined })} confirm={askConfirm}
+                      onSignedOutEverywhere={() => { setIsAuthenticated(false); data.resetData(); addToast({ message: 'Tous les appareils sont déconnectés', kind: 'success' }); }} />}
                     paydayDay={data.paydayDay}
                     onOpenPayday={() => setView('pilot')}
                     onSave={(newFiscal, newBenefits, newEmail, newGeminiKey, newPickerKey) => {
@@ -1046,19 +1102,13 @@ const App: React.FC = () => {
               </div>
             )}
             </Suspense>
+            </ErrorBoundary>
         </div>
       </main>
 
-      {/* Bouton d'ajout rapide flottant (mobile + desktop) */}
-      {data.accounts.length > 0 && (
-        <button
-          onClick={() => setQuickAddOpen(true)}
-          className={`fixed bottom-20 md:bottom-6 right-4 z-40 w-14 h-14 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-900/30 flex items-center justify-center transition-all duration-200 ${fabHidden ? 'translate-y-24 opacity-0 pointer-events-none' : 'hover:scale-105'}`}
-          aria-label="Ajout rapide"
-          title="Ajout rapide"
-        >
-          <Zap className="w-6 h-6" />
-        </button>
+      {/* Bouton d'ajout rapide flottant, masqué là où une barre d'enregistrement occupe le bas de l'écran. */}
+      {data.accounts.length > 0 && view !== 'update' && view !== 'transfers' && (
+        <QuickAddFab scrollRef={mainRef} resetKey={view} onClick={() => setQuickAddOpen(true)} />
       )}
 
       <QuickAddModal
@@ -1073,24 +1123,13 @@ const App: React.FC = () => {
         setView={setView}
         moreOpen={moreNavOpen}
         setMoreOpen={setMoreNavOpen}
-        moreItems={[
-          { key: 'transfers', label: 'Virements', icon: ArrowRightLeft },
-          { key: 'agenda', label: 'Agenda', icon: CalendarDays },
-          { key: 'yield', label: 'Rendement', icon: Coins },
-          { key: 'history', label: 'Historique', icon: LineChart },
-          ...(showParentalScreen ? [{ key: 'parental', label: 'Part parentale', icon: Users }] : []),
-          { key: 'payslips', label: 'Fiches de paie', icon: FileText },
-          { key: 'subscriptions', label: 'Abonnements', icon: CalendarClock },
-          { key: 'donations', label: 'Dons', icon: HandHeart },
-          { key: 'journal', label: 'Journal', icon: ScrollText },
-          { key: 'settings', label: 'Paramètres', icon: SettingsIcon },
-        ]}
+        hidden={showParentalScreen ? [] : ['parental']}
       />
 
       <ToastContainer toasts={toasts} onDismiss={dismiss} />
 
       {/* Une fois après chaque mise à jour : ce qui a changé. */}
-      <WhatsNewModal />
+      <WhatsNewModal isNewUser={data.accounts.length === 0} />
 
       <Dialog state={dialog} onClose={closeDialog} />
     </div>

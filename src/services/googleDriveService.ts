@@ -328,8 +328,8 @@ export const getFileRevision = async (fileId: string): Promise<string> => {
   return String(data.headRevisionId);
 };
 
-export const createConfigFile = async (data: any): Promise<string> => {
-  const metadata = { name: FILE_NAME, mimeType: 'application/json' };
+export const createConfigFile = async (data: unknown, name: string = FILE_NAME): Promise<string> => {
+  const metadata = { name, mimeType: 'application/json' };
   const form = new FormData();
   form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
   form.append('file', new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
@@ -383,6 +383,39 @@ export const updateConfigFile = async (
   // que de retourner '' — la chaîne vide est le sentinelle "écriture sans contrôle" et la
   // laisser se propager dans driveRevisionRef désactiverait la détection de conflit.
   return getFileRevision(fileId);
+};
+
+// --- SAUVEGARDES MENSUELLES ---
+// Drive ne garde les anciennes révisions d'un fichier que 30 jours (ou 100 révisions), et
+// l'app sauvegarde souvent : sans copie à part, une erreur découverte trop tard n'aurait
+// plus de version saine où revenir. Une copie par mois, les 12 dernières gardées (les plus
+// anciennes vont à la corbeille Drive, récupérables 30 jours).
+const BACKUP_PREFIX = 'suivi_epargne_backup_';
+export const BACKUPS_KEPT = 12;
+
+export interface DriveBackup { id: string; name: string; createdTime: string; month: string }
+
+export const listBackups = async (): Promise<DriveBackup[]> => {
+  const q = encodeURIComponent(`name contains '${BACKUP_PREFIX}' and trashed = false`);
+  const res = await authedFetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,createdTime)&orderBy=createdTime desc&pageSize=50`);
+  const data = await res.json();
+  return (data.files || [])
+    .filter((f: { name: string }) => f.name.startsWith(BACKUP_PREFIX))
+    .map((f: { id: string; name: string; createdTime: string }) => ({ ...f, month: f.name.slice(BACKUP_PREFIX.length, BACKUP_PREFIX.length + 7) }));
+};
+
+/** Crée la copie du mois si elle n'existe pas encore. Renvoie true si une copie a été créée. */
+export const writeMonthlyBackup = async (monthKey: string, data: unknown): Promise<boolean> => {
+  const existing = await listBackups();
+  if (existing.some(b => b.month === monthKey)) return false;
+  await createConfigFile(data, `${BACKUP_PREFIX}${monthKey}.json`);
+  const stale = [...existing].sort((a, b) => b.month.localeCompare(a.month)).slice(BACKUPS_KEPT - 1);
+  for (const b of stale) {
+    await authedFetch(`https://www.googleapis.com/drive/v3/files/${b.id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ trashed: true }),
+    }).catch(() => { /* une copie de trop n'est pas grave */ });
+  }
+  return true;
 };
 
 // --- GMAIL ---

@@ -7,7 +7,7 @@ import { AccountType, FiscalConfig, GlobalAppData, SavingsAccount, PayslipRecord
 import {
   computePlacementStrategy, activeSavingsSplit, SavingsSplit, payslipSuperNet, payPeriodOf,
   buildPayLines, computePayTransfers, computeMonthlySavingsCapacity, findDueRecurring,
-  findStaleRegulatedRates, findFiscalReview, findAvRateUpdatesDue,
+  findStaleRegulatedRates, findFiscalReview, findAvRateUpdatesDue, socialChargesRateFor,
 } from './finance';
 import { DEFAULT_FISCAL_CONFIG } from '../constants';
 
@@ -20,8 +20,8 @@ const TAX_FREE = [AccountType.LIVRET_A, AccountType.LDDS, AccountType.LEP];
 /**
  * Taux net réellement gagné chaque année, en %.
  * - Livret A, LDDS, LEP : le taux affiché, sans impôt ni frais.
- * - Assurance Vie, PEA, PER… : taux − frais de gestion éventuels, puis − 17,2 % de
- *   prélèvements sociaux. Le taux servi d'un fonds euros est publié NET de frais de
+ * - Assurance Vie, PEA, PER… : taux − frais de gestion éventuels, puis − prélèvements
+ *   sociaux (17,2 % sur l'assurance vie, 18,6 % ailleurs en 2026). Le taux servi d'un fonds euros est publié NET de frais de
  *   gestion : les frais ne concernent que les unités de compte (0 par défaut).
  *   L'impôt sur le revenu éventuel au retrait n'est pas compté (rien après 8 ans pour
  *   des gains annuels sous l'abattement).
@@ -30,7 +30,7 @@ export const netAnnualRate = (account: { type: AccountType; interestRate?: numbe
   const rate = account.interestRate || 0;
   if (TAX_FREE.includes(account.type)) return rate;
   const afterFees = Math.max(0, rate - (account.managementFee || 0));
-  return afterFees * (1 - fiscalConfig.socialChargesCapital);
+  return afterFees * (1 - socialChargesRateFor(account.type, fiscalConfig));
 };
 
 // ---------------------------------------------------------------------------
@@ -54,7 +54,10 @@ export const projectSavings = (
   fiscalConfig: FiscalConfig,
   monthly: number,
   years: number,
-  split?: SavingsSplit
+  split?: SavingsSplit,
+  // Mois (à partir de maintenant) où les parents reprennent leur capital : les livrets
+  // retrouvent de la place sous leurs plafonds et ce capital cesse de produire des intérêts.
+  restitutionInMonths?: number
 ): ProjectionResult => {
   // Les plafonds se vérifient sur le solde RÉEL (part des parents comprise) ; le résultat
   // ne compte que votre part. Les intérêts du capital parental vous reviennent (accord
@@ -65,6 +68,9 @@ export const projectSavings = (
   const start = sim.reduce((s, a) => s + a.own, 0);
   const rates = new Map(sim.map(a => [a.id, netAnnualRate(a, fiscalConfig) / 100 / 12]));
   for (let m = 0; m < years * 12; m++) {
+    if (restitutionInMonths !== undefined && m === Math.max(0, restitutionInMonths)) {
+      for (const a of sim) a.totalAmount = a.own;
+    }
     for (const a of sim) {
       const interest = a.totalAmount * (rates.get(a.id) || 0);
       a.totalAmount += interest;

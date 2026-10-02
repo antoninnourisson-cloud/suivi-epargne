@@ -7,6 +7,7 @@ import React, { useState } from 'react';
 import { CHANGELOG, LATEST_VERSION, ChangelogEntry } from '../changelog';
 import { parseISODate } from '../lib/dates';
 import { Sparkles, X } from 'lucide-react';
+import { Modal } from './Modal';
 
 const SEEN_KEY = 'last_seen_version';
 
@@ -32,21 +33,22 @@ const EntryBlock: React.FC<{ e: ChangelogEntry }> = ({ e }) => (
   </div>
 );
 
-export const WhatsNewModal: React.FC = () => {
-  const [entries, setEntries] = useState<ChangelogEntry[]>(unseenEntries);
-  if (entries.length === 0) return null;
+export const WhatsNewModal: React.FC<{ isNewUser?: boolean }> = ({ isNewUser }) => {
+  const [entries, setEntries] = useState<ChangelogEntry[]>(() => {
+    // Tout premier lancement : rien de « nouveau » à présenter, on note la version.
+    if (isNewUser && !readSeen()) { markSeen(); return []; }
+    return unseenEntries();
+  });
   const close = () => { markSeen(); setEntries([]); };
   return (
-    <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center bg-slate-900/50 backdrop-blur-sm" onClick={close} role="dialog" aria-modal="true" aria-labelledby="whatsnew-title">
-      <div className="bg-white dark:bg-slate-800 rounded-t-3xl sm:rounded-3xl shadow-2xl max-w-md w-full p-6 max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between mb-4">
-          <h2 id="whatsnew-title" className="text-lg font-black text-slate-800 dark:text-slate-100 flex items-center gap-2"><Sparkles className="w-5 h-5 text-indigo-600" /> Quoi de neuf</h2>
-          <button onClick={close} aria-label="Fermer" className="p-2 -m-1 text-slate-500 dark:text-slate-400"><X className="w-5 h-5" /></button>
-        </div>
-        <div className="space-y-5">{entries.map(e => <EntryBlock key={e.version} e={e} />)}</div>
-        <button onClick={close} className="mt-6 w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black">C'est noté</button>
+    <Modal open={entries.length > 0} onClose={close} label="Quoi de neuf" variant="sheet" className="max-w-md p-6">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-lg font-black text-slate-800 dark:text-slate-100 flex items-center gap-2"><Sparkles className="w-5 h-5 text-indigo-600" aria-hidden="true" /> Quoi de neuf</h2>
+        <button onClick={close} aria-label="Fermer" className="p-2 -m-1 text-slate-500 dark:text-slate-400"><X className="w-5 h-5" /></button>
       </div>
-    </div>
+      <div className="space-y-5">{entries.map(e => <EntryBlock key={e.version} e={e} />)}</div>
+      <button onClick={close} className="mt-6 w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black">C'est noté</button>
+    </Modal>
   );
 };
 

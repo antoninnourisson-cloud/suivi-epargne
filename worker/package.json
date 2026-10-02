@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "wrangler dev",
+    "dev": "wrangler dev --var EXTRA_ORIGINS:http://localhost:5173",
     "deploy": "wrangler deploy",
     "setup-secrets": "node scripts/setup-secrets.mjs",
     "typecheck": "tsc --noEmit",

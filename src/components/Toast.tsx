@@ -33,13 +33,15 @@ export const useToasts = () => {
 };
 
 export const ToastContainer: React.FC<{ toasts: ToastItem[]; onDismiss: (id: string) => void }> = ({ toasts, onDismiss }) => {
-  if (toasts.length === 0) return null;
+  // La zone existe toujours (même vide) : les lecteurs d'écran n'annoncent que ce qui
+  // apparaît dans une zone « live » déjà présente. Sur mobile, au-dessus de la barre du bas.
   return (
-    <div className="fixed bottom-4 left-1/2 -translate-x-1/2 md:left-auto md:right-4 md:translate-x-0 z-[60] flex flex-col gap-2 w-[calc(100%-2rem)] max-w-sm">
+    <div role="status" aria-live="polite" className="fixed bottom-[calc(5.5rem+env(safe-area-inset-bottom))] md:bottom-4 left-1/2 -translate-x-1/2 md:left-auto md:right-4 md:translate-x-0 z-[60] flex flex-col gap-2 w-[calc(100%-2rem)] max-w-sm pointer-events-none">
       {toasts.map(t => (
         <div
           key={t.id}
-          className={`flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg text-sm font-bold animate-in slide-in-from-bottom-2 ${
+          role={t.kind === 'error' ? 'alert' : undefined}
+          className={`pointer-events-auto flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg text-sm font-bold animate-in slide-in-from-bottom-2 ${
             t.kind === 'error' ? 'bg-rose-600 text-white' : 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900'
           }`}
         >
@@ -63,6 +65,7 @@ export const ToastContainer: React.FC<{ toasts: ToastItem[]; onDismiss: (id: str
 // Accès aux toasts depuis n'importe quel écran (fourni par App).
 type AddToast = (toast: Omit<ToastItem, 'id'>) => string;
 export const ToastContext = createContext<AddToast | null>(null);
+export const useToast = () => useContext(ToastContext);
 
 type ListSetter<T> = React.Dispatch<React.SetStateAction<T[]>>;
 

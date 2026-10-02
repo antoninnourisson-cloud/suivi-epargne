@@ -58,3 +58,15 @@ describe('computeBadgeCount', () => {
     expect(computeBadgeCount(data, new Date(2026, 9, 1))).toBe(1);
   });
 });
+
+describe('projectSavings et restitution', () => {
+  it('libère la place sous le plafond après la restitution du capital parental', () => {
+    const la = { id: 'la', name: 'Livret A', institution: 'B', type: AccountType.LIVRET_A, totalAmount: 22950, ownedAmount: 12950, parentalCapital: 10000, interestRate: 0, movements: [] } as any;
+    const av = { id: 'av', name: 'AV', institution: 'B', type: AccountType.ASSURANCE_VIE, totalAmount: 0, ownedAmount: 0, parentalCapital: 0, interestRate: 0, movements: [] } as any;
+    const without = projectSavings([la, av], CFG, 1000, 1);
+    const withRestitution = projectSavings([la, av], CFG, 1000, 1, undefined, 0);
+    const laOwn = (r: any) => r.byAccount.find((b: any) => b.accountId === 'la').amount;
+    expect(laOwn(without)).toBeCloseTo(12950);
+    expect(laOwn(withRestitution)).toBeGreaterThan(12950);
+  });
+});

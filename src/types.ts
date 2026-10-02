@@ -205,7 +205,21 @@ export interface TaxBracket {
 
 export interface FiscalConfig {
   salaryChargesRate: number;
+  // Prélèvements sociaux sur les revenus du capital (18,6 % depuis le 1er janvier 2026 :
+  // dividendes, plus-values, PEA, PEE, crypto…).
   socialChargesCapital: number;
+  // Prélèvements sociaux propres à l'assurance vie (restés à 17,2 % en 2026). Absent dans
+  // les anciens fichiers : migré au chargement.
+  socialChargesLifeInsurance?: number;
+  // Décote de l'impôt pour une personne seule : impôt − (montant − taux × impôt) quand
+  // l'impôt brut est sous le seuil. 2026 : 897 €, 45,25 %, seuil 1 982 €.
+  decote?: { single: number; rate: number; threshold: number };
+  // Minimum de l'abattement de 10 % (509 € pour les revenus 2025).
+  standardAllowanceMin?: number;
+  // Plafond LEP : ajout par demi-part au-delà de la 1re part (6 149 € en 2026).
+  lepCeilingPerHalfPart?: number;
+  // Dons : plafond des dons à 75 % (1 000 €) et part maximale du revenu imposable (20 %).
+  donation75Ceiling?: number;
   standardAllowance: number;
   // Plafond légal de l'abattement forfaitaire. Optionnel : les fichiers de données
   // enregistrés avant son introduction n'ont pas ce champ, le calcul retombe alors
@@ -258,6 +272,8 @@ export interface WorkBenefits {
 }
 
 export interface GlobalAppData {
+  // Version du format (voir src/lib/schema.ts). Absent = fichier antérieur à la v2.
+  schemaVersion?: number;
   accounts: SavingsAccount[];
   expenses: Expense[];
   history: PortfolioSnapshot[];
@@ -289,6 +305,12 @@ export interface GlobalAppData {
     // « Repartir de zéro » : seuls les mouvements à partir de cette date comptent comme
     // épargne (Placé, taux d'épargne, bilans). Soldes, intérêts et historique inchangés.
     trackingStartDate?: string;
+    // Notifications sans montant (écran verrouillé) : appliqué par le serveur.
+    discreetNotifications?: boolean;
+    // Épargne de précaution : nombre de mois de dépenses à garder sur les livrets.
+    emergencyMonths?: number;
+    // Dernier export JSON téléchargé (rappel trimestriel).
+    lastExportAt?: string;
   };
   goals?: SavingsGoal[];
   lastView?: string;

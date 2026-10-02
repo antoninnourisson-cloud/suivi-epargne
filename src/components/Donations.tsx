@@ -15,6 +15,8 @@ import { formatEUR } from '../lib/format';
 import { useUndoableRemove } from './Toast';
 
 interface DonationsProps {
+  taxEstimate?: { taxDue: number; taxableIncome: number };
+  ceiling75?: number;
   donations: Donation[];
   onUpdate: React.Dispatch<React.SetStateAction<Donation[]>>;
   pickerApiKey?: string;
@@ -26,7 +28,7 @@ const driveUrl = (id: string) => `https://drive.google.com/file/d/${encodeURICom
 type Draft = { date: string; amount: string; organization: string; rate: 66 | 75; receiptReceived: boolean; receiptFileId?: string; receiptFileName?: string; note: string };
 const emptyDraft = (): Draft => ({ date: localTodayISO(), amount: '', organization: '', rate: 66, receiptReceived: false, note: '' });
 
-export const Donations: React.FC<DonationsProps> = ({ donations, onUpdate, pickerApiKey }) => {
+export const Donations: React.FC<DonationsProps> = ({ donations, onUpdate, pickerApiKey, taxEstimate, ceiling75 }) => {
   const thisYear = new Date().getFullYear();
   // Jusqu'en juin, c'est l'année écoulée qu'on déclare : on l'affiche par défaut.
   const [year, setYear] = useState(() => new Date().getMonth() < 6 && donations.some(d => d.date.startsWith(`${thisYear - 1}-`)) ? thisYear - 1 : thisYear);
@@ -39,7 +41,7 @@ export const Donations: React.FC<DonationsProps> = ({ donations, onUpdate, picke
     const set = new Set<number>([thisYear, ...donations.map(d => Number(d.date.slice(0, 4)))]);
     return [...set].filter(y => y > 2000).sort((a, b) => b - a);
   }, [donations, thisYear]);
-  const summary = useMemo(() => computeDonationSummary(donations, year), [donations, year]);
+  const summary = useMemo(() => computeDonationSummary(donations, year, { ...taxEstimate, ceiling75 }), [donations, year, taxEstimate, ceiling75]);
   const rows = useMemo(
     () => donations.filter(d => d.date.startsWith(`${year}-`)).sort((a, b) => b.date.localeCompare(a.date)),
     [donations, year]
@@ -133,6 +135,7 @@ export const Donations: React.FC<DonationsProps> = ({ donations, onUpdate, picke
           <div>
             <p className="text-[11px] font-black text-emerald-700 dark:text-emerald-400 uppercase">Réduction estimée</p>
             <p className="text-xl font-black text-emerald-700 dark:text-emerald-400">{fmt(summary.reduction)}</p>
+            {summary.cappedByTax && <p className="text-[11px] text-amber-700 dark:text-amber-400">Limitée à votre impôt estimé : {fmt(summary.reductionUncapped)} en théorie, l'excédent n'est pas remboursé.</p>}
           </div>
           <div>
             <p className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">À déclarer à 75 %</p>
@@ -150,7 +153,7 @@ export const Donations: React.FC<DonationsProps> = ({ donations, onUpdate, picke
         )}
         <p className="mt-3 text-[11px] text-slate-500 dark:text-slate-400 flex items-start gap-1">
           <Info className="w-3 h-3 flex-shrink-0 mt-0.5" />
-          Estimation : 75 % jusqu'à {fmt(DONATION_75_CEILING)} de dons aux organismes d'aide aux personnes en difficulté (l'excédent passe à 66 %), 66 % pour les autres, dans la limite de 20 % du revenu imposable. Les cases et plafonds peuvent changer chaque année : vérifiez sur impots.gouv.
+          Estimation : 75 % jusqu'à {fmt(ceiling75 ?? DONATION_75_CEILING)} de dons aux organismes d'aide aux personnes en difficulté (l'excédent passe à 66 %), 66 % pour les autres, dans la limite de 20 % du revenu imposable. Les cases et plafonds peuvent changer chaque année : vérifiez sur impots.gouv.
         </p>
         {rows.length > 0 && (
           <button onClick={exportCsv} className="mt-4 flex items-center gap-2 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 px-4 py-2 rounded-xl font-bold text-sm"><FileDown className="w-4 h-4" /> Exporter {year} (CSV)</button>

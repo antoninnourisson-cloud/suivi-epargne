@@ -76,10 +76,18 @@ export const AccountForm: React.FC<AccountFormProps> = ({ onSave, initialData, o
     }
   };
 
-  const setRevolutMode = () => {
-    setInstitution('Revolut');
-    setName('Poche loisirs/Projets');
-    setType(AccountType.COMPTE_COURANT);
+  // Raccourcis de création : choisissent le type (et un nom par défaut modifiable).
+  const PRESETS: { type: AccountType; label: string }[] = [
+    { type: AccountType.LIVRET_A, label: 'Livret A' },
+    { type: AccountType.LDDS, label: 'LDDS' },
+    { type: AccountType.LEP, label: 'LEP' },
+    { type: AccountType.ASSURANCE_VIE, label: 'Assurance vie' },
+    { type: AccountType.PEA, label: 'PEA' },
+    { type: AccountType.COMPTE_COURANT, label: 'Compte courant' },
+  ];
+  const applyPreset = (t: AccountType, label: string) => {
+    setType(t);
+    if (!name.trim() || PRESETS.some(p => p.label === name)) setName(label);
   };
 
   const addTag = () => {
@@ -122,28 +130,34 @@ export const AccountForm: React.FC<AccountFormProps> = ({ onSave, initialData, o
     });
   };
 
-  const moneyInputClass = "w-full bg-transparent font-black text-slate-800 dark:text-slate-100 text-lg outline-none";
+  const moneyInputClass = "w-full bg-transparent font-black text-slate-800 dark:text-slate-100 text-lg rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500";
 
   return (
     <div className="space-y-6">
-      {!initialData && (
-        <button type="button" onClick={setRevolutMode} className="w-full bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 p-5 rounded-3xl flex items-center gap-4 hover:border-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 transition-all text-left">
-          <div className="bg-indigo-600 p-3 rounded-2xl"><ShieldCheck className="w-6 h-6 text-white" /></div>
-          <div><p className="text-sm font-black text-slate-800 dark:text-slate-100">Ajouter mon compte Revolut</p><p className="text-[11px] text-slate-500 dark:text-slate-400 font-bold uppercase">(Loisirs et projets à court terme)</p></div>
-        </button>
-      )}
 
       <form onSubmit={handleSubmit} className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-700">
         <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-2">
-          {initialData ? <Save className="w-5 h-5 text-indigo-600" /> : <PlusCircle className="w-5 h-5 text-indigo-600" />}
-          Configuration du compte
+          {initialData ? <Save className="w-5 h-5 text-indigo-600" aria-hidden="true" /> : <PlusCircle className="w-5 h-5 text-indigo-600" aria-hidden="true" />}
+          {initialData ? `Modifier « ${initialData.name} »` : 'Nouveau compte'}
         </h3>
+        {!initialData && (
+          <div className="mb-5">
+            <p className="text-[11px] font-black text-slate-600 dark:text-slate-300 uppercase mb-2">Type de compte</p>
+            <div className="flex flex-wrap gap-2" role="group" aria-label="Raccourcis de type de compte">
+              {PRESETS.map(p => (
+                <button key={p.type} type="button" aria-pressed={type === p.type} onClick={() => applyPreset(p.type, p.label)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-bold border ${type === p.type ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:border-indigo-400'}`}>{p.label}</button>
+              ))}
+            </div>
+          </div>
+        )}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div><label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase block mb-1">Type</label><select value={type} onChange={(e) => setType(e.target.value as AccountType)} className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl font-bold">{Object.values(AccountType).map(t => <option key={t} value={t}>{t}</option>)}</select></div>
-          <div><label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase block mb-1">Banque</label><input type="text" value={institution} onChange={e => setInstitution(e.target.value)} className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl font-bold" required /></div>
+          <div className="md:col-span-2"><label htmlFor="acc-name" className="text-[11px] font-black text-slate-600 dark:text-slate-300 uppercase block mb-1">Nom du compte</label><input id="acc-name" type="text" value={name} onChange={e => setName(e.target.value)} placeholder={`${type}${institution ? ` - ${institution}` : ''}`} className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl font-bold" /></div>
+          <div><label htmlFor="acc-type" className="text-[11px] font-black text-slate-600 dark:text-slate-300 uppercase block mb-1">Type</label><select id="acc-type" value={type} onChange={(e) => setType(e.target.value as AccountType)} className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl font-bold">{Object.values(AccountType).map(t => <option key={t} value={t}>{t}</option>)}</select></div>
+          <div><label htmlFor="acc-bank" className="text-[11px] font-black text-slate-600 dark:text-slate-300 uppercase block mb-1">Banque <span aria-hidden="true" className="text-rose-600">*</span></label><input id="acc-bank" type="text" value={institution} onChange={e => setInstitution(e.target.value)} className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl font-bold" required /></div>
 
           <div className="md:col-span-2 bg-indigo-50 dark:bg-indigo-950/40 p-5 rounded-2xl border border-indigo-100 dark:border-indigo-900">
-            <label className="flex items-center gap-2 text-[11px] font-black text-indigo-700 dark:text-indigo-300 uppercase mb-4"><Calculator className="w-4 h-4" /> Répartition du Capital</label>
+            <label className="flex items-center gap-2 text-[11px] font-black text-indigo-700 dark:text-indigo-300 uppercase mb-4"><Calculator className="w-4 h-4" /> Répartition du capital</label>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-indigo-100 dark:border-indigo-900"><label className="text-[11px] font-black text-indigo-700 dark:text-indigo-300 block mb-1">Solde total (€)</label><NumberInput ariaLabel="Solde total (€)" value={totalAmount} onChange={handleTotalChange} className={moneyInputClass} min={0} /></div>
               {showParental && (<div className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-amber-100 dark:border-amber-900"><label className="text-[11px] font-black text-amber-700 dark:text-amber-300 block mb-1"><Users className="w-3 h-3" /> Part des parents (€)</label><NumberInput ariaLabel="Part des parents (€)" value={parentalCapital} onChange={handleParentalChange} className={`${moneyInputClass} text-amber-700 dark:text-amber-300`} min={0} /></div>)}
@@ -212,8 +226,9 @@ export const AccountForm: React.FC<AccountFormProps> = ({ onSave, initialData, o
             </div>
           </div>
         </div>
-        <div className="mt-8 flex justify-between items-center gap-4">
-          <div className="flex gap-3">{onCancel && <Button type="button" variant="ghost" onClick={onCancel}>Annuler</Button>}<Button type="submit" className="px-10 py-4">Enregistrer</Button></div>
+        <div className="mt-8 sticky bottom-[calc(4.5rem+env(safe-area-inset-bottom))] md:static flex justify-end items-center gap-3 bg-white/95 dark:bg-slate-800/95 py-3 -mx-2 px-2 rounded-xl">
+          {onCancel && <Button type="button" variant="ghost" onClick={onCancel}>Annuler</Button>}
+          <Button type="submit" className="px-10 py-4">Enregistrer</Button>
         </div>
       </form>
     </div>

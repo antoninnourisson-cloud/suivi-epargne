@@ -16,9 +16,10 @@ interface Props {
   fiscalConfig: FiscalConfig;
   monthPlan?: number;
   savingsSplit?: { accountId: string; pct: number }[];
+  restitutionInMonths?: number;
 }
 
-export const SplitProjectionCard: React.FC<Props> = ({ accounts, fiscalConfig, monthPlan, savingsSplit }) => {
+export const SplitProjectionCard: React.FC<Props> = ({ accounts, fiscalConfig, monthPlan, savingsSplit, restitutionInMonths }) => {
   const la = accounts.find(a => a.type === AccountType.LIVRET_A);
   const av = accounts.find(a => a.type === AccountType.ASSURANCE_VIE);
   const [monthlyRaw, setMonthlyRaw] = useState(String(Math.round(monthPlan && monthPlan > 0 ? monthPlan : 1000)));
@@ -33,8 +34,8 @@ export const SplitProjectionCard: React.FC<Props> = ({ accounts, fiscalConfig, m
       { label: custom ? 'Votre répartition' : `50 % ${la.name} · 50 % ${av.name}`, split: custom ? savingsSplit! : [{ accountId: la.id, pct: 50 }, { accountId: av.id, pct: 50 }] },
       { label: `100 % ${av.name}`, split: [{ accountId: av.id, pct: 100 }] },
     ];
-    return list.map(sc => ({ ...sc, result: projectSavings(accounts, fiscalConfig, monthly, years, sc.split) }));
-  }, [accounts, fiscalConfig, la, av, monthly, years, savingsSplit]);
+    return list.map(sc => ({ ...sc, result: projectSavings(accounts, fiscalConfig, monthly, years, sc.split, restitutionInMonths) }));
+  }, [accounts, fiscalConfig, la, av, monthly, years, savingsSplit, restitutionInMonths]);
 
   if (!la || !av) return null;
   const best = Math.max(...scenarios.map(s => s.result.total), 0);
@@ -44,8 +45,8 @@ export const SplitProjectionCard: React.FC<Props> = ({ accounts, fiscalConfig, m
       <div>
         <h3 className="font-black text-slate-800 dark:text-slate-100 flex items-center gap-2"><LineChart className="w-5 h-5 text-indigo-600" /> Projection selon la répartition</h3>
         <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-          Taux nets : {la.name} {formatRate(netAnnualRate(la, fiscalConfig))} · {av.name} {formatRate(Math.round(netAnnualRate(av, fiscalConfig) * 100) / 100)} (après 17,2 % de prélèvements sociaux).
-          Taux supposés constants, à partir de votre part actuelle.
+          Taux nets : {la.name} {formatRate(netAnnualRate(la, fiscalConfig))} · {av.name} {formatRate(Math.round(netAnnualRate(av, fiscalConfig) * 100) / 100)} (après prélèvements sociaux).
+          Taux supposés constants, à partir de votre part actuelle{restitutionInMonths !== undefined ? ' ; la restitution du capital de vos parents est prise en compte' : ''}.
         </p>
       </div>
       <div className="flex flex-wrap items-end gap-3">

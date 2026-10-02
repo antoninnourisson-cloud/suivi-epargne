@@ -4,7 +4,7 @@
 // Fonctions pures, testables, réutilisées par le Pilotage et le Dashboard.
 // ================================================
 import { FiscalConfig, TaxBracket, WorkBenefits, RateChange, AccountType, AccountMovement, RecurringMovement, SavingsAccount, GlobalAppData, PayslipExtractedData, Subscription, Expense, Donation, PayChecklistLine } from '../types';
-import { DEFAULT_STANDARD_ALLOWANCE_CAP, DEFAULT_FISCAL_CONFIG, DEFAULT_WORK_BENEFITS, TAX_SCALES, LATEST_TAX_SCALE, TaxScale } from '../constants';
+import { DEFAULT_STANDARD_ALLOWANCE_CAP, DEFAULT_STANDARD_ALLOWANCE_MIN, DEFAULT_DECOTE, SOCIAL_CHARGES_LIFE_INSURANCE, DEFAULT_FISCAL_CONFIG, DEFAULT_WORK_BENEFITS, TAX_SCALES, LATEST_TAX_SCALE, TaxScale } from '../constants';
 import { MS_PER_DAY, formatISODay, parseISODate, daysBetween } from './dates';
 
 export interface IncomeInput {
@@ -67,6 +67,24 @@ export const computeIncomeTax = (taxableAnnual: number, brackets: TaxBracket[]):
 };
 
 /**
+ * Décote d'une personne seule (art. 197 du CGI) : réduit fortement l'impôt des revenus
+ * modestes. impôt − (montant − taux × impôt), jamais négatif, seulement sous le seuil.
+ */
+export const applyDecote = (grossTax: number, cfg: Pick<FiscalConfig, 'decote'>): number => {
+  const d = cfg.decote ?? DEFAULT_DECOTE;
+  if (!(grossTax > 0) || grossTax >= d.threshold) return Math.max(0, grossTax);
+  return Math.max(0, grossTax - Math.max(0, d.single - d.rate * grossTax));
+};
+
+/** Prélèvements sociaux applicables aux gains d'un compte (l'assurance vie a son propre taux). */
+export const socialChargesRateFor = (type: AccountType, cfg: FiscalConfig): number =>
+  type === AccountType.ASSURANCE_VIE ? (cfg.socialChargesLifeInsurance ?? SOCIAL_CHARGES_LIFE_INSURANCE) : cfg.socialChargesCapital;
+
+// Part de la CSG/CRDS non déductible (2,4 % + 0,5 % sur 98,25 % du brut) : retenue sur le
+// salaire, mais imposable. L'oublier sous-estime le net imposable d'environ 2,85 % du brut.
+const NON_DEDUCTIBLE_CSG_RATE = 0.9825 * 0.029;
+
+/**
  * Décompose le revenu en net avant impôt, coûts (mutuelle/tickets), impôt
  * et "super net" (reste à vivre réel).
  */
@@ -96,7 +114,12 @@ export const computeIncome = (
   const netBeforeTax = netSalaryOnly + navigoGain + input.extraMonthlyIncome;
 
   // Le remboursement transport est exonéré : il est volontairement absent de l'assiette.
-  const netAnnualBeforeAllowance = (netSalaryOnly + input.extraMonthlyIncome) * 12;
+  // En revanche la CSG/CRDS non déductible et la part patronale de la mutuelle sont imposables.
+  const nonDeductibleCsg = grossMonth * NON_DEDUCTIBLE_CSG_RATE;
+  const mutuelleEmployerPart = workBenefits.mutuelle.active
+    ? workBenefits.mutuelle.totalCost * (workBenefits.mutuelle.employerRate / 100)
+    : 0;
+  const netAnnualBeforeAllowance = (netSalaryOnly + nonDeductibleCsg + mutuelleEmployerPart + input.extraMonthlyIncome) * 12;
   // L'abattement de 10 % est plafonné par la loi ; sans plafond l'impôt des hauts revenus est
   // fortement sous-estimé. Le champ étant récent, on retombe sur le plafond par défaut si les
   // données de l'utilisateur ne le contiennent pas (ou contiennent une valeur inexploitable),
@@ -104,13 +127,17 @@ export const computeIncome = (
   const allowanceCap = Number.isFinite(fiscalConfig.standardAllowanceCap as number)
     ? (fiscalConfig.standardAllowanceCap as number)
     : DEFAULT_STANDARD_ALLOWANCE_CAP;
+  const allowanceMin = Number.isFinite(fiscalConfig.standardAllowanceMin as number)
+    ? (fiscalConfig.standardAllowanceMin as number)
+    : DEFAULT_STANDARD_ALLOWANCE_MIN;
+  // Minimum légal (sans dépasser le revenu lui-même), puis plafond.
   const standardAllowanceAmount = Math.min(
-    Math.max(0, netAnnualBeforeAllowance * fiscalConfig.standardAllowance),
+    Math.max(Math.min(allowanceMin, Math.max(0, netAnnualBeforeAllowance)), netAnnualBeforeAllowance * fiscalConfig.standardAllowance),
     allowanceCap
   );
   const netTaxableYear = Math.max(0, netAnnualBeforeAllowance - standardAllowanceAmount);
 
-  const taxAmount = computeIncomeTax(netTaxableYear, fiscalConfig.taxBrackets);
+  const taxAmount = applyDecote(computeIncomeTax(netTaxableYear, fiscalConfig.taxBrackets), fiscalConfig);
   const monthlyTax = taxAmount / 12;
   const autoRate = netTaxableYear > 0 ? (taxAmount / netTaxableYear) * 100 : 0;
 
@@ -161,7 +188,7 @@ export const computeSavingsCapacity = (
 // ATTENTION au sens du résultat : PEA et Assurance Vie sont à fiscalité DIFFÉRÉE — l'impôt
 // n'est dû qu'au retrait, pas chaque année. Ce calcul donne donc le net qu'on toucherait EN
 // RETIRANT les gains, jamais un montant « à déclarer » pour l'année.
-const PFU_INCOME_TAX_RATE = 0.128; // part "impôt" du Prélèvement Forfaitaire Unique à 30 % (12,8 % IR + 17,2 % social)
+const PFU_INCOME_TAX_RATE = 0.128; // part « impôt » du PFU (12,8 % IR + 18,6 % de prélèvements sociaux en 2026, 17,2 % sur l'assurance vie)
 // Taux réduit d'IR sur les gains d'Assurance Vie après 8 ans (art. 125-0 A du CGI), HORS
 // abattement annuel de 4 600 €/9 200 € : celui-ci porte sur l'ensemble des contrats d'une
 // personne (pas par compte) et dépend de versements antérieurs au 27/09/2017 — non modélisable
@@ -218,7 +245,7 @@ export const computeCapitalGainsTax = (
     ? accountAgeYears(account.openingDate, asOfDate)
     : 0;
 
-  const socialCharges = grossInterest * fiscalConfig.socialChargesCapital;
+  const socialCharges = grossInterest * socialChargesRateFor(account.type, fiscalConfig);
 
   const withMaturity = (maturityYears: number, reducedRate: number, regimeIfMature: CapitalTaxRegime): CapitalTaxBreakdown => {
     const mature = ageYears >= maturityYears;
@@ -235,8 +262,10 @@ export const computeCapitalGainsTax = (
     // dus dans tous les cas sur du capital).
     case AccountType.PEA:
       return withMaturity(fiscalConfig.legalMaturity.pea, 0, 'EXONERE_IR');
+    // Les gains d'un PEE sont TOUJOURS exonérés d'impôt sur le revenu (même en déblocage
+    // anticipé) : seuls les prélèvements sociaux sont dus.
     case AccountType.PEE:
-      return withMaturity(fiscalConfig.legalMaturity.pee, 0, 'EXONERE_IR');
+      return { grossInterest, socialCharges, incomeTax: 0, netInterest: grossInterest - socialCharges, regime: 'EXONERE_IR' };
     case AccountType.ASSURANCE_VIE:
       return withMaturity(fiscalConfig.legalMaturity.assuranceVie, AV_REDUCED_INCOME_TAX_RATE, 'AV_REDUIT');
     // Crypto : flat tax 30 % quelle que soit la durée de détention, pas de notion de maturité.
@@ -260,7 +289,7 @@ export const computeCapitalGainsTax = (
 const regimeForAge = (type: AccountType, ageYears: number, fiscalConfig: FiscalConfig): CapitalTaxRegime => {
   switch (type) {
     case AccountType.PEA: return ageYears >= fiscalConfig.legalMaturity.pea ? 'EXONERE_IR' : 'PFU';
-    case AccountType.PEE: return ageYears >= fiscalConfig.legalMaturity.pee ? 'EXONERE_IR' : 'PFU';
+    case AccountType.PEE: return 'EXONERE_IR';
     case AccountType.ASSURANCE_VIE: return ageYears >= fiscalConfig.legalMaturity.assuranceVie ? 'AV_REDUIT' : 'PFU';
     default: return 'NON_MODELISE';
   }
@@ -589,8 +618,8 @@ export interface LepEligibility {
 }
 
 /**
- * Estime si le LEP reste accessible. Perdre l'éligibilité oblige à sortir le capital d'un
- * livret à ~4 % vers un support moins rémunérateur : autant le voir venir.
+ * Estime si le LEP reste accessible. Perdre l'éligibilité oblige à sortir le capital du
+ * livret réglementé le mieux rémunéré vers un support moins rémunérateur : autant le voir venir.
  *
  * APPROXIMATION ASSUMÉE, à afficher comme telle : le vrai Revenu Fiscal de Référence
  * figure sur l'avis d'imposition, porte sur le FOYER, et la banque contrôle celui de
@@ -608,10 +637,11 @@ export const computeLepEligibility = (
   const base = fiscalConfig.lepIncomeCeiling;
   if (!base || base <= 0 || netTaxableYear <= 0) return null;
 
-  // Le plafond augmente avec les parts (approximation linéaire de la grille officielle,
-  // qui ajoute une fraction par demi-part).
+  // Grille officielle : un montant fixe ajouté par demi-part au-delà de la première part
+  // (6 149 € en 2026), et non une multiplication du plafond.
   const parts = fiscalConfig.lepHouseholdParts && fiscalConfig.lepHouseholdParts > 0 ? fiscalConfig.lepHouseholdParts : 1;
-  const ceiling = base * parts;
+  const perHalf = fiscalConfig.lepCeilingPerHalfPart ?? DEFAULT_FISCAL_CONFIG.lepCeilingPerHalfPart ?? 0;
+  const ceiling = base + Math.max(0, Math.round((parts - 1) * 2)) * perHalf;
   const marginPct = ((ceiling - netTaxableYear) / ceiling) * 100;
 
   const status: LepEligibility['status'] =
@@ -1027,12 +1057,12 @@ export interface WithdrawalTax {
 /**
  * Impôt dû sur un retrait de `amount`. Seule la part de gains est imposée :
  * gains retirés = montant × (valeur − versements) / valeur.
- * - PEA / PEE : 17,2 % de prélèvements sociaux, IR exonéré après la maturité légale ;
+ * - PEA : prélèvements sociaux (18,6 % en 2026), IR exonéré après 5 ans ; PEE : toujours exonéré d'IR ;
  * - Assurance Vie : IR à 7,5 % après 8 ans, sur la part de gains au-delà de l'abattement
  *   annuel (4 600 €, supposé non entamé cette année) ; PFU avant 8 ans. Sur un fonds euros,
  *   les prélèvements sociaux sont en réalité déjà retenus chaque année : on les compte ici
  *   quand même (cas prudent, et exact pour les unités de compte) ;
- * - Crypto : PFU 30 % sur la part de plus-value ;
+ * - Crypto : PFU (31,4 % en 2026) sur la part de plus-value ;
  * - autres (PER, immobilier…) : non modélisé.
  */
 export const computeWithdrawalTax = (
@@ -1051,13 +1081,13 @@ export const computeWithdrawalTax = (
 
   const gainRatio = Math.max(0, (account.totalAmount - account.totalDeposits) / account.totalAmount);
   const gainPart = Math.min(amount, account.totalAmount) * gainRatio;
-  const socialCharges = gainPart * fiscalConfig.socialChargesCapital;
+  const socialCharges = gainPart * socialChargesRateFor(account.type, fiscalConfig);
   let incomeTax: number;
   switch (account.type) {
     case AccountType.PEA:
       incomeTax = closesPea ? gainPart * PFU_INCOME_TAX_RATE : 0; break;
     case AccountType.PEE:
-      incomeTax = ageYears >= fiscalConfig.legalMaturity.pee ? 0 : gainPart * PFU_INCOME_TAX_RATE; break;
+      incomeTax = 0; break;
     case AccountType.ASSURANCE_VIE:
       incomeTax = ageYears >= fiscalConfig.legalMaturity.assuranceVie
         ? Math.max(0, gainPart - AV_ANNUAL_ALLOWANCE) * AV_REDUCED_INCOME_TAX_RATE
@@ -1304,27 +1334,38 @@ export interface DonationSummary {
   total: number;
   total66: number;        // à déclarer au taux de 66 % (y compris l'excédent des dons à 75 %)
   total75: number;        // à déclarer au taux de 75 % (plafonné)
-  reduction: number;      // réduction d'impôt estimée
+  reduction: number;      // réduction d'impôt réellement utilisable (plafonnée à l'impôt dû si connu)
+  reductionUncapped: number; // réduction théorique, avant plafonnement
+  cappedByTax: boolean;   // la réduction dépasse l'impôt dû : l'excédent est perdu (non remboursable)
   missingReceipts: Donation[];
 }
 
 /**
- * Récapitulatif d'une année de dons. Simplifié : ne vérifie pas le plafond global de 20 %
- * du revenu imposable (l'excédent se reporte sur 5 ans), rarement atteint.
+ * Récapitulatif d'une année de dons. Si l'impôt dû (après décote) et le revenu imposable
+ * sont connus, la réduction est plafonnée : 20 % du revenu imposable pour l'assiette (le
+ * reste se reporte sur 5 ans), et jamais plus que l'impôt dû (réduction non remboursable).
  */
-export const computeDonationSummary = (donations: Donation[], year: number): DonationSummary => {
+export const computeDonationSummary = (
+  donations: Donation[], year: number,
+  opts: { taxDue?: number; taxableIncome?: number; ceiling75?: number } = {}
+): DonationSummary => {
   const ofYear = donations.filter(d => d.date.startsWith(`${year}-`) && d.amount > 0);
   const raw75 = ofYear.filter(d => d.rate === 75).reduce((sum, d) => sum + d.amount, 0);
   const raw66 = ofYear.filter(d => d.rate !== 75).reduce((sum, d) => sum + d.amount, 0);
-  const total75 = Math.min(raw75, DONATION_75_CEILING);
-  const total66 = raw66 + (raw75 - total75);
+  const total75 = Math.min(raw75, opts.ceiling75 ?? DONATION_75_CEILING);
+  let total66 = raw66 + (raw75 - total75);
+  if (opts.taxableIncome !== undefined && opts.taxableIncome > 0) total66 = Math.min(total66, opts.taxableIncome * 0.20);
+  const reductionUncapped = total75 * 0.75 + total66 * 0.66;
+  const cappedByTax = opts.taxDue !== undefined && reductionUncapped > opts.taxDue;
   return {
     year,
     count: ofYear.length,
     total: raw66 + raw75,
     total66,
     total75,
-    reduction: total75 * 0.75 + total66 * 0.66,
+    reduction: cappedByTax ? Math.max(0, opts.taxDue!) : reductionUncapped,
+    reductionUncapped,
+    cappedByTax,
     missingReceipts: ofYear.filter(d => !d.receiptReceived),
   };
 };
@@ -1398,11 +1439,35 @@ export const applyTaxScale = (cfg: FiscalConfig, scale: TaxScale, asOfDate: Date
   ...cfg,
   taxBrackets: scale.brackets.map(b => ({ ...b })),
   taxScaleYear: scale.year,
+  ...(scale.decote ? { decote: { ...scale.decote } } : {}),
+  ...(scale.allowanceCap ? { standardAllowanceCap: scale.allowanceCap } : {}),
+  ...(scale.allowanceMin ? { standardAllowanceMin: scale.allowanceMin } : {}),
   taxBracketsHistory: [
     ...(cfg.taxBracketsHistory || []),
     { year: identifyTaxScale(cfg.taxBrackets)?.year ?? cfg.taxScaleYear, replacedOn: formatISODay(asOfDate), brackets: cfg.taxBrackets },
   ],
 });
+
+/**
+ * Mise à niveau des paramètres fiscaux d'un ancien fichier : champs ajoutés depuis, et
+ * prélèvements sociaux 2026 (17,2 % → 18,6 %, l'assurance vie restant à 17,2 %). Ne touche
+ * à une valeur que si elle vaut exactement l'ancienne valeur légale, jamais à un réglage
+ * personnalisé.
+ */
+export const migrateFiscalConfig = (cfg: FiscalConfig): FiscalConfig => {
+  const out: FiscalConfig = { ...cfg };
+  if (out.socialChargesLifeInsurance === undefined) {
+    out.socialChargesLifeInsurance = SOCIAL_CHARGES_LIFE_INSURANCE;
+    if (Math.abs(out.socialChargesCapital - 0.172) < 1e-9) out.socialChargesCapital = DEFAULT_FISCAL_CONFIG.socialChargesCapital;
+  }
+  if (!out.decote) out.decote = { ...DEFAULT_DECOTE };
+  if (out.standardAllowanceMin === undefined) out.standardAllowanceMin = DEFAULT_STANDARD_ALLOWANCE_MIN;
+  if (out.standardAllowanceCap === undefined || out.standardAllowanceCap === 14171 || out.standardAllowanceCap === 14426) out.standardAllowanceCap = DEFAULT_STANDARD_ALLOWANCE_CAP;
+  if (out.lepIncomeCeiling === 22419 || out.lepIncomeCeiling === 22823) out.lepIncomeCeiling = DEFAULT_FISCAL_CONFIG.lepIncomeCeiling;
+  if (out.lepCeilingPerHalfPart === undefined) out.lepCeilingPerHalfPart = DEFAULT_FISCAL_CONFIG.lepCeilingPerHalfPart;
+  if (out.donation75Ceiling === undefined) out.donation75Ceiling = DEFAULT_FISCAL_CONFIG.donation75Ceiling;
+  return out;
+};
 
 // ---------------------------------------------------------------------------
 // Nettoyage des données au chargement

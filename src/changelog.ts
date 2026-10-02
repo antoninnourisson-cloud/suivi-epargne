@@ -15,6 +15,18 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '2026.10.02',
+    date: '2026-10-02',
+    title: 'Sécurité, impôts 2026 et veille fiscale',
+    items: [
+      "Impôt plus juste : décote, CSG non déductible, abattement de 10 % 2026, prélèvements sociaux à 18,6 % (17,2 % sur l'assurance vie), PEE toujours exonéré d'impôt, plafond LEP 2026, dons plafonnés à votre impôt.",
+      "Veille fiscale : chaque semaine, Gemini vérifie sur les sites officiels les taux, plafonds et barèmes, et vous propose les changements avec leur source. Rien ne change sans votre accord.",
+      "Sécurité : « Code oublié » vous déconnecte au lieu d'ouvrir l'app ; sessions limitées à 60 jours ; « Déconnecter tous les appareils » et « Supprimer mes données serveur » dans Paramètres ; notifications discrètes possibles.",
+      "Votre clé Gemini reste désormais sur cet appareil (à ressaisir une fois sur vos autres appareils).",
+      "Données : une copie mensuelle sur Drive (12 mois restaurables), plus aucune réécriture inutile à l'ouverture, et un fichier importé ne peut plus changer l'adresse de vos parents.",
+    ],
+  },
+  {
     version: '2026.10.01-4',
     date: '2026-10-01',
     title: 'Suivi Épargne devient Pécule',

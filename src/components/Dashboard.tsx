@@ -1,8 +1,9 @@
 import React, { useState, useMemo, useEffect, lazy, Suspense } from 'react';
 
 // Graphiques chargés à part (recharts) : les cartes s'affichent sans les attendre.
-const StackedSavingsChart = lazy(() => import('./DashboardCharts').then(m => ({ default: m.StackedSavingsChart })));
-const InstitutionChart = lazy(() => import('./DashboardCharts').then(m => ({ default: m.InstitutionChart })));
+const StackedSavingsChart = lazyWithRetry(() => import('./DashboardCharts').then(m => ({ default: m.StackedSavingsChart })));
+const InstitutionChart = lazyWithRetry(() => import('./DashboardCharts').then(m => ({ default: m.InstitutionChart })));
+import { lazyWithRetry } from './ErrorBoundary';
 import { SavingsAccount, PortfolioSnapshot, AccountType, Expense, FiscalConfig, WorkBenefits, RecurringMovement, Subscription } from '../types';
 import { Euro, Lock, Wallet, ListTodo, ChevronDown, Landmark, CalendarClock, Unlock, Save, AlertTriangle, Trash2, Clock, TrendingUp, TrendingDown, PiggyBank, Percent, ShieldAlert, Repeat } from 'lucide-react';
 import { computeAccruedParentalInterest, computeRecentSavingsRate, computeAccountBalanceAtDate, findStaleRegulatedRates, computeLepEligibility, computeIncome, findDueRecurring, computeMonthSavedAmount, computeSavedSince, payPeriodOf, computeSavingsRateHistory, computeUnlockCost, findFiscalReview, applyTaxScale, nextSubscriptionDate, findAvRateUpdatesDue } from '../lib/finance';

@@ -1,4 +1,4 @@
-# Serveur de Suivi Épargne (session persistante + notifications push).
+# Serveur de Pécule (session persistante + notifications push).
 # Guide complet : worker/README.md
 name = "suivi-epargne-api"
 main = "src/index.ts"
@@ -9,11 +9,11 @@ compatibility_date = "2025-06-01"
 # sinon le scope drive.file ne donne pas accès au fichier de données déjà créé.
 GOOGLE_CLIENT_ID = "763862877733-hl1an9vcn0ibnoq2iq035927528mimd5.apps.googleusercontent.com"
 APP_URL = "https://antoninnourisson-cloud.github.io/suivi-epargne/"
-# Origine du serveur de dev Vite, pour tester l'app en local contre ce Worker.
-EXTRA_ORIGINS = "http://localhost:5173"
 # Contact exigé par le protocole VAPID. Une URL https est acceptée (RFC 8292) : évite de
 # publier une adresse e-mail dans ce fichier, visible dans le dépôt.
 VAPID_SUBJECT = "https://antoninnourisson-cloud.github.io/suivi-epargne/"
+# Pas d'EXTRA_ORIGINS en production : localhost n'est autorisé qu'en local, par `npm run dev`
+# (= wrangler dev --var EXTRA_ORIGINS:http://localhost:5173, voir package.json).
 
 # Secrets (jamais dans ce fichier) — posés par `npm run setup-secrets` et `wrangler secret put` :
 #   GOOGLE_CLIENT_SECRET, ENCRYPTION_KEY, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, ALLOWED_EMAILS
@@ -21,6 +21,22 @@ VAPID_SUBJECT = "https://antoninnourisson-cloud.github.io/suivi-epargne/"
 [[kv_namespaces]]
 binding = "STORE"
 id = "4fc93d52562e4d78a88691e38753518c"
+
+# Limitation de débit par IP (binding natif, sans écriture KV). namespace_id est un entier
+# libre, propre au compte : rien à créer dans le tableau de bord. period = 10 ou 60 s.
+[[ratelimits]]
+name = "AUTH_LIMITER"
+namespace_id = "7301"
+simple = { limit = 20, period = 60 }
+
+[[ratelimits]]
+name = "API_LIMITER"
+namespace_id = "7302"
+simple = { limit = 60, period = 60 }
+
+# Logs et traces consultables dans le tableau de bord (Workers → suivi-epargne-api → Logs).
+[observability]
+enabled = true
 
 # Rappels quotidiens : 07:00 UTC = 9 h à Paris en été, 8 h en hiver.
 [triggers]

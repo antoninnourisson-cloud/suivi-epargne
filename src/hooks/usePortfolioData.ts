@@ -1,85 +1,59 @@
-// ================================================
-// FILE: src/hooks/usePortfolioData.ts
-// ================================================
-import { useState, useCallback, useRef, useEffect } from 'react';
-import { tracksDeposits, totalFixedCharges, normalizeAccounts, dedupeMonthlySnapshots } from '../lib/finance';
+// État applicatif et synchronisation avec le fichier Drive.
+//
+// Tout le document vit dans UN état (`doc`) : ajouter un champ ne demande plus que son type,
+// sa valeur par défaut (src/lib/schema.ts) et son interface. Les setters par champ restent
+// exposés pour les écrans.
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import { tracksDeposits, totalFixedCharges } from '../lib/finance';
 import { applyMovement } from '../lib/accountOps';
-import {
-  GlobalAppData, SavingsAccount, Expense, PortfolioSnapshot, ExpenseSnapshot,
-  FiscalConfig, WorkBenefits, AccountMovement, SavingsGoal, PayslipRecord, RecurringMovement, Subscription, Donation, PayChecklist, ParentalRestitution
-} from '../types';
-import { 
-  DEFAULT_FISCAL_CONFIG, DEFAULT_WORK_BENEFITS 
-} from '../constants';
+import { migrate, canonicalize, emptyData, isFromNewerApp, stripDeviceSecrets, validateImport, APP_SCHEMA_VERSION } from '../lib/schema';
+import { buildAccountsUpdateMail } from '../lib/mailTemplates';
+import { localTodayISO } from '../lib/dates';
+import { GlobalAppData, SavingsAccount, AccountMovement, PortfolioSnapshot, ExpenseSnapshot } from '../types';
 import {
   findConfigFile, createConfigFile, readConfigFile, updateConfigFile, sendGmail,
-  getFileRevision, setOnAuthLost, ConflictError, ApiError
+  getFileRevision, setOnAuthLost, ConflictError, ApiError, writeMonthlyBackup, listBackups, DriveBackup,
 } from '../services/googleDriveService';
 
-// Miroir local de l'état courant : filet anti-crash, réécrit à chaque modification.
+// Miroir local des modifications PAS ENCORE confirmées sur Drive (filet anti-crash). Effacé
+// dès que Drive est à jour : les données ne restent pas en clair dans le navigateur au-delà
+// du nécessaire.
 const BACKUP_KEY = 'suivi_epargne_backup';
 // Quarantaine : copie de modifications qui n'ont JAMAIS atteint Drive, détectée au
-// démarrage. Volontairement distincte du miroir ci-dessus, qui est écrasé en continu —
-// sans cette séparation, la première saisie suivant l'ouverture détruisait la trace des
-// modifications non synchronisées, et la bannière de restauration n'était qu'un one-shot
-// non durable (un rechargement après cette saisie les rendait irrécupérables).
+// démarrage. Distincte du miroir, qui est réécrit en continu : sans cette séparation, la
+// première saisie suivant l'ouverture détruisait la trace des modifications non
+// synchronisées.
 const PENDING_KEY = 'suivi_epargne_pending';
+// Annonce des sauvegardes aux autres onglets (l'événement `storage` ne se déclenche que
+// dans les AUTRES onglets).
+const LAST_SAVE_KEY = 'suivi_epargne_last_save';
+// Clé Gemini : propre à l'appareil, jamais dans le fichier Drive ni dans un export.
+const GEMINI_KEY = 'gemini_api_key';
+const LAST_BACKUP_MONTH_KEY = 'last_drive_backup_month';
 
 type StoredSnapshot = { savedAt: string; fileId?: string; data: GlobalAppData };
+type Doc = GlobalAppData;
+type Config = GlobalAppData['config'];
+type Updater<T> = T | ((prev: T) => T);
+const resolve = <T,>(u: Updater<T>, prev: T): T => (typeof u === 'function' ? (u as (p: T) => T)(prev) : u);
 
-/**
- * Projette des données sur une forme canonique comparable, en appliquant les mêmes
- * valeurs par défaut que l'état du hook. Indispensable pour comparer un fichier Drive
- * (qui peut être ancien, avec des champs absents ou dans un autre ordre) à une
- * sauvegarde locale sans générer de faux « écarts ».
- *
- * `lastView` est exclu : c'est de la préférence d'affichage, pas une donnée financière,
- * et elle ne doit pas faire croire à des modifications perdues.
- */
-const canonicalize = (data: GlobalAppData | null | undefined): string => {
-  if (!data) return '';
-  const c = data.config || ({} as GlobalAppData['config']);
-  return JSON.stringify({
-    accounts: (data.accounts || []).map(a => ({ ...a, movements: a.movements || [] })),
-    expenses: data.expenses || [],
-    history: data.history || [],
-    expensesHistory: data.expensesHistory || [],
-    goals: data.goals || [],
-    payslips: data.payslips || [],
-    recurringMovements: data.recurringMovements || [],
-    subscriptions: data.subscriptions || [],
-    donations: data.donations || [],
-    payChecklist: data.payChecklist ?? null,
-    parentalRestitution: data.parentalRestitution ?? null,
-    activePayslipId: data.activePayslipId ?? null,
-    fiscalConfig: data.fiscalConfig || null,
-    workBenefits: data.workBenefits || null,
-    config: {
-      grossAnnual: c.grossAnnual ?? null,
-      leisureBudget: c.leisureBudget ?? null,
-      projectSavings: c.projectSavings ?? null,
-      navigoBase: c.navigoBase ?? null,
-      navigoRate: c.navigoRate ?? null,
-      taxRateManual: c.taxRateManual ?? null,
-      extraMonthlyIncome: c.extraMonthlyIncome ?? null,
-      parentsEmail: c.parentsEmail ?? null,
-      geminiApiKey: c.geminiApiKey ?? null,
-      pickerApiKey: c.pickerApiKey ?? null,
-      paydayDay: c.paydayDay ?? null,
-      paydayAmount: c.paydayAmount ?? null,
-      savingsSplit: c.savingsSplit ?? null,
-      savingsSplitFrom: c.savingsSplitFrom ?? null,
-      trackingStartDate: c.trackingStartDate ?? null,
-    },
-  });
+const lsGet = (k: string) => { try { return localStorage.getItem(k); } catch { return null; } };
+const lsSet = (k: string, v: string) => { try { localStorage.setItem(k, v); } catch { /* quota ou stockage bloqué */ } };
+const lsDel = (k: string) => { try { localStorage.removeItem(k); } catch { /* idem */ } };
+
+const localMonthKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+
+export type SyncFailure = 'conflict' | 'session' | 'offline' | 'notfound' | 'error';
+/** Classe une erreur de Drive en une seule catégorie, la même pour tous les chemins. */
+export const classifySyncError = (err: unknown): SyncFailure => {
+  if (err instanceof ConflictError) return 'conflict';
+  if (err instanceof Error && err.message === 'SESSION_EXPIRED') return 'session';
+  if (err instanceof ApiError && err.status === 404) return 'notfound';
+  // fetch échoue par TypeError quand la requête ne peut pas partir (réseau coupé, DNS,
+  // délai) : navigator.onLine n'est pas toujours fiable (portail captif).
+  if (err instanceof TypeError) return 'offline';
+  return 'error';
 };
-
-// Clé de mois en heure LOCALE. `toISOString().slice(0,7)` raisonne en UTC : le 1er du
-// mois à 00h30 à Paris (UTC+2), l'UTC est encore la veille, donc le snapshot du mois
-// courant écrasait celui du mois précédent.
-const localMonthKey = (d: Date) =>
-  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-const localDayKey = (d: Date) => `${localMonthKey(d)}-${String(d.getDate()).padStart(2, '0')}`;
 
 export const usePortfolioData = (isAuthenticated: boolean) => {
   const [isLoadingData, setIsLoadingData] = useState(false);
@@ -87,90 +61,59 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
   const [driveFileId, setDriveFileId] = useState<string | null>(null);
 
   // État de synchronisation exposé à l'UI (bannières).
-  const [syncError, setSyncError] = useState(false);       // échec de sauvegarde
-  const [syncConflict, setSyncConflict] = useState(false); // écriture concurrente (autre appareil)
+  const [syncError, setSyncError] = useState(false);
+  const [syncConflict, setSyncConflict] = useState(false);
   const [sessionExpired, setSessionExpired] = useState(false);
-  // Pas de connexion : on gèle simplement les sauvegardes (pas d'erreur affichée),
-  // le filet de sécurité localStorage garde les modifications jusqu'au retour du réseau.
+  // Le fichier vient d'une version plus récente de l'app : lecture seule jusqu'à la mise à jour.
+  const [appOutdated, setAppOutdated] = useState(false);
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
-  // Horodatage de la dernière écriture confirmée sur Drive (pas juste un état local) :
-  // sert de preuve visible que la sauvegarde cloud a bien réussi, pas seulement l'affichage.
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
-  const driveRevisionRef = useRef<string | null>(null);
-  // Miroir non-réactif de driveFileId : sert à étiqueter les sauvegardes locales avec le
-  // fichier (donc le compte Google) auquel elles appartiennent, depuis des effets qui ne
-  // doivent pas se redéclencher quand il change.
-  const driveFileIdRef = useRef<string | null>(null);
-  // Sauvegarde locale trouvée au démarrage et différente de ce qui vient d'être chargé
-  // depuis Drive (signe qu'une sync a échoué/été bloquée avant que l'app ne se ferme).
   const [localBackup, setLocalBackup] = useState<StoredSnapshot | null>(null);
-  // Destinataire du dernier mail d'alerte parents qui a échoué (null = rien à signaler).
   const [mailError, setMailError] = useState<string | null>(null);
-  
-  // Données
-  const [accounts, setAccounts] = useState<SavingsAccount[]>([]);
-  const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [history, setHistory] = useState<PortfolioSnapshot[]>([]);
-  const [expensesHistory, setExpensesHistory] = useState<ExpenseSnapshot[]>([]);
-  const [goals, setGoals] = useState<SavingsGoal[]>([]);
-  const [payslips, setPayslips] = useState<PayslipRecord[]>([]);
-  const [recurringMovements, setRecurringMovements] = useState<RecurringMovement[]>([]);
-  const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
-  const [donations, setDonations] = useState<Donation[]>([]);
-  const [payChecklist, setPayChecklist] = useState<PayChecklist | undefined>(undefined);
-  const [parentalRestitution, setParentalRestitution] = useState<ParentalRestitution | undefined>(undefined);
-  // Fiche de paie servant de référence exacte au Pilotage Budgétaire (undefined = mode
-  // estimation théorique, comportement historique).
-  const [activePayslipId, setActivePayslipId] = useState<string | undefined>(undefined);
 
-  // Configs
-  const [grossAnnual, setGrossAnnual] = useState<number>(45000);
-  const [leisureBudget, setLeisureBudget] = useState<number>(300);
-  const [projectSavings, setProjectSavings] = useState<number>(200);
-  const [navigoBase, setNavigoBase] = useState<number>(90.80);
-  const [navigoRate, setNavigoRate] = useState<number>(67.24);
-  const [taxRateManual, setTaxRateManual] = useState<number>(0);
-  const [extraMonthlyIncome, setExtraMonthlyIncome] = useState<number>(0);
-  const [fiscalConfig, setFiscalConfig] = useState<FiscalConfig>(DEFAULT_FISCAL_CONFIG);
-  const [workBenefits, setWorkBenefits] = useState<WorkBenefits>(DEFAULT_WORK_BENEFITS);
-  const [parentsEmail, setParentsEmail] = useState<string>('');
-  const [geminiApiKey, setGeminiApiKey] = useState<string>('');
-  const [pickerApiKey, setPickerApiKey] = useState<string>('');
-  // Rappel du jour de paie (notification push) : undefined = désactivé. Le montant est
-  // facultatif — absent, le serveur prend la capacité d'épargne calculée du Pilotage.
-  const [paydayDay, setPaydayDay] = useState<number | undefined>(undefined);
-  const [paydayAmount, setPaydayAmount] = useState<number | undefined>(undefined);
-  const [savingsSplit, setSavingsSplit] = useState<{ accountId: string; pct: number }[] | undefined>(undefined);
-  const [savingsSplitFrom, setSavingsSplitFrom] = useState<string | undefined>(undefined);
-  const [trackingStartDate, setTrackingStartDate] = useState<string | undefined>(undefined);
+  const driveRevisionRef = useRef<string | null>(null);
+  const driveFileIdRef = useRef<string | null>(null);
+  // Contenu canonique de ce qui est sur Drive (après chargement ou sauvegarde) : aucune
+  // écriture tant que l'état n'en diffère pas. Ouvrir l'app ne réécrit donc plus le fichier.
+  const persistedRef = useRef<string>('');
 
-  const [lastView, setLastViewState] = useState<string>(
-    () => localStorage.getItem('last_view') || 'dashboard'
-  );
-  // Miroir non-réactif de `lastView` : buildData le lit ici plutôt que via l'état,
-  // pour que la valeur soit incluse dans les sauvegardes Drive réelles sans que
-  // changer d'onglet ne déclenche lui-même un cycle d'auto-sauvegarde.
+  // --- DOCUMENT ---
+  const [doc, setDoc] = useState<Doc>(emptyData);
+  const docRef = useRef(doc);
+  docRef.current = doc;
+
+  const [geminiApiKey, setGeminiKeyState] = useState<string>(() => lsGet(GEMINI_KEY) || '');
+  const setGeminiApiKey = useCallback((k: string) => {
+    setGeminiKeyState(k);
+    k ? lsSet(GEMINI_KEY, k) : lsDel(GEMINI_KEY);
+  }, []);
+  /** Une ancienne version gardait la clé dans le fichier Drive : on la récupère sur l'appareil. */
+  const adoptLegacyGeminiKey = (raw: unknown) => {
+    const k = (raw as { config?: { geminiApiKey?: string } } | null)?.config?.geminiApiKey;
+    if (k && !lsGet(GEMINI_KEY)) setGeminiApiKey(k);
+  };
+
+  const [lastView, setLastViewState] = useState<string>(() => lsGet('last_view') || 'dashboard');
   const lastViewRef = useRef(lastView);
-  // Persiste la vue courante localement (restauration instantanée) SANS déclencher
-  // une réécriture complète du fichier Drive à chaque changement d'onglet.
+  // Persiste la vue localement SANS déclencher de réécriture Drive à chaque changement d'onglet.
   const setLastView = useCallback((v: string) => {
-    localStorage.setItem('last_view', v);
+    lsSet('last_view', v);
     lastViewRef.current = v;
     setLastViewState(v);
   }, []);
 
-  const saveTimeoutRef = useRef<any>(null);
-  // Garde-fou anti-écrasement : tant qu'un chargement Drive n'a pas réussi,
-  // on n'autorise aucune sauvegarde (évite d'écraser un bon fichier avec un état vide).
+  // Ce qui part sur Drive : le document, sans secret d'appareil, avec la vue courante.
+  const buildData = useCallback((): GlobalAppData => ({
+    ...stripDeviceSecrets(doc), schemaVersion: APP_SCHEMA_VERSION, lastView: lastViewRef.current,
+  }), [doc]);
+
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  // Garde-fou : tant qu'un chargement Drive n'a pas réussi, aucune sauvegarde (évite
+  // d'écraser un bon fichier avec un état vide).
   const hasLoadedRef = useRef(false);
-  // Mutex d'écriture : la sauvegarde auto (debounce) et une résolution de conflit manuelle
-  // (forceSaveToDrive) pouvaient partir en parallèle. Chaque appel à updateConfigFile fait
-  // GET-révision puis PATCH en plusieurs allers-retours réseau ; sans sérialisation, deux
-  // appels concurrents s'entrelacent et peuvent soit s'écraser silencieusement l'un l'autre,
-  // soit faire réapparaître un "conflit" juste après qu'il ait été résolu par l'utilisateur
-  // (l'appel encore en vol détecte après coup le changement de révision).
-  // On chaîne donc tous les appels sur cette promesse pour n'en avoir jamais qu'un à la fois.
-  const saveMutexRef = useRef<Promise<any>>(Promise.resolve());
+  // Mutex d'écriture : sauvegarde auto et résolution de conflit manuelle ne doivent
+  // jamais s'entrelacer (chaque écriture fait lecture de révision puis PATCH).
+  const saveMutexRef = useRef<Promise<unknown>>(Promise.resolve());
   const runExclusive = useCallback(<T,>(fn: () => Promise<T>): Promise<T> => {
     const run = () => fn();
     const next = saveMutexRef.current.then(run, run);
@@ -178,27 +121,27 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
     return next;
   }, []);
 
-  // La perte de session (401 non récupérable) remonte via ce callback.
   useEffect(() => {
     setOnAuthLost(() => setSessionExpired(true));
     return () => setOnAuthLost(null);
   }, []);
 
-  // --- DÉTECTION HORS LIGNE ---
-  // navigator.onLine reflète la connectivité réseau du système ; on s'en sert pour geler
-  // les sauvegardes proprement (pas d'erreur affichée) plutôt que de laisser chaque tentative
-  // échouer bruyamment. Le retour en ligne relance automatiquement une sauvegarde (voir
-  // dépendance `isOffline` de l'effet d'auto-save ci-dessous) sans attendre une nouvelle saisie.
   useEffect(() => {
-    const handleOnline = () => setIsOffline(false);
-    const handleOffline = () => setIsOffline(true);
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-    };
+    const on = () => setIsOffline(false);
+    const off = () => setIsOffline(true);
+    window.addEventListener('online', on);
+    window.addEventListener('offline', off);
+    return () => { window.removeEventListener('online', on); window.removeEventListener('offline', off); };
   }, []);
+
+  /** Remplace tout le document (chargement, import, restauration). */
+  const applyData = useCallback((raw: unknown) => {
+    adoptLegacyGeminiKey(raw);
+    setDoc(stripDeviceSecrets(migrate(raw)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const markPersisted = (data: unknown) => { persistedRef.current = canonicalize(data); };
 
   // --- CHARGEMENT ---
   const loadDriveData = useCallback(async () => {
@@ -208,211 +151,124 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
     setSyncError(false);
     try {
       let fileId = await findConfigFile();
-      if (!fileId) {
-        const defaultData: GlobalAppData = {
-          accounts: [],
-          expenses: [],
-          history: [],
-          expensesHistory: [],
-          fiscalConfig: DEFAULT_FISCAL_CONFIG,
-          workBenefits: DEFAULT_WORK_BENEFITS,
-          config: {
-            grossAnnual: 45000,
-            leisureBudget: 300,
-            projectSavings: 200,
-            navigoBase: 90.80,
-            navigoRate: 67.24,
-            taxRateManual: 0,
-            extraMonthlyIncome: 0,
-            parentsEmail: ''
-          }
-        };
-        fileId = await createConfigFile(defaultData);
-      }
+      if (!fileId) fileId = await createConfigFile(emptyData());
       setDriveFileId(fileId);
-      const data: GlobalAppData = await readConfigFile(fileId);
-      
-      if (data) {
-        setAccounts(normalizeAccounts(data.accounts || []));
-        setExpenses(data.expenses || []);
-        setHistory(dedupeMonthlySnapshots(data.history || []));
-        setExpensesHistory(dedupeMonthlySnapshots(data.expensesHistory || []));
-        setGoals(data.goals || []);
-        setPayslips(data.payslips || []);
-        setRecurringMovements(data.recurringMovements || []);
-        setSubscriptions(data.subscriptions || []);
-        setDonations(data.donations || []);
-        setPayChecklist(data.payChecklist || undefined);
-        setParentalRestitution(data.parentalRestitution || undefined);
-        setActivePayslipId(data.activePayslipId || undefined);
-        setFiscalConfig(data.fiscalConfig || DEFAULT_FISCAL_CONFIG);
-        
-        if (data.workBenefits) {
-            setWorkBenefits(data.workBenefits);
-        } else {
-            // `data.config?.` : un fichier sans `config` (version antérieure, édition
-            // manuelle) déréférençait ici AVANT le guard `if (data.config)` plus bas —
-            // TypeError avalé par le catch global, app vide sans message.
-            const legacyNavigoBase = data.config?.navigoBase || 90.80;
-            const legacyNavigoRate = data.config?.navigoRate || 67.24;
-            setWorkBenefits({
-                ...DEFAULT_WORK_BENEFITS,
-                navigo: { active: true, basePrice: legacyNavigoBase, refundRate: legacyNavigoRate }
-            });
-        }
+      const raw: unknown = await readConfigFile(fileId);
+      if (raw) {
+        setAppOutdated(isFromNewerApp(raw));
+        applyData(raw);
+        const savedView = (raw as { lastView?: string }).lastView;
+        if (savedView) setLastView(savedView);
+        markPersisted(raw);
+        // Ancien fichier contenant encore la clé Gemini : une écriture la retire de Drive.
+        if ((raw as { config?: { geminiApiKey?: string } }).config?.geminiApiKey) persistedRef.current = '';
 
-        if (data.config) {
-          setGrossAnnual(data.config.grossAnnual ?? 45000);
-          setLeisureBudget(data.config.leisureBudget ?? 300);
-          setProjectSavings(data.config.projectSavings ?? 200);
-          setNavigoBase(data.config.navigoBase ?? 90.80);
-          setNavigoRate(data.config.navigoRate ?? 67.24);
-          setTaxRateManual(data.config.taxRateManual ?? 0);
-          setExtraMonthlyIncome(data.config.extraMonthlyIncome ?? 0);
-          setParentsEmail(data.config.parentsEmail ?? '');
-          setGeminiApiKey(data.config.geminiApiKey ?? '');
-          setPickerApiKey(data.config.pickerApiKey ?? '');
-          setPaydayDay(data.config.paydayDay ?? undefined);
-          setPaydayAmount(data.config.paydayAmount ?? undefined);
-          setSavingsSplit(data.config.savingsSplit ?? undefined);
-          setSavingsSplitFrom(data.config.savingsSplitFrom ?? undefined);
-          setTrackingStartDate(data.config.trackingStartDate ?? undefined);
-        }
-        if (data.lastView) setLastView(data.lastView);
-
-        // Mémorise la révision Drive courante (détection de conflit à la sauvegarde).
-        // En cas d'échec on laisse `null` : la sauvegarde auto refusera alors d'écrire
-        // (voir l'effet d'auto-save) plutôt que d'écraser sans contrôle de concurrence.
+        // En cas d'échec on laisse `null` : la sauvegarde auto refusera d'écrire plutôt
+        // que d'écraser sans contrôle de concurrence.
         try { driveRevisionRef.current = await getFileRevision(fileId); } catch { driveRevisionRef.current = null; }
 
-        // Détecte des modifications locales qui n'ont jamais atteint Drive (sync bloquée
-        // par un conflit, une session expirée, une coupure réseau... avant fermeture).
-        //
-        // On compare le CONTENU canonique complet, et non plus une somme de soldes :
-        // cette somme restait identique pour un virement interne, un rééquilibrage
-        // part personnelle / part parentale, ou toute modification de charges, objectifs
-        // et réglages — autant de cas où la sauvegarde locale était donc supprimée
-        // sans alerte, et les modifications perdues silencieusement.
+        // Modifications locales qui n'ont jamais atteint Drive (sync bloquée avant fermeture) ?
         try {
-          const stored = localStorage.getItem(PENDING_KEY) || localStorage.getItem(BACKUP_KEY);
+          const stored = lsGet(PENDING_KEY) || lsGet(BACKUP_KEY);
           if (stored) {
             const snap = JSON.parse(stored) as StoredSnapshot;
-            // Une sauvegarde rattachée à un AUTRE fichier Drive appartient à un autre
-            // compte Google : la proposer ici écraserait les données du compte courant.
+            // Une sauvegarde rattachée à un AUTRE fichier Drive appartient à un autre compte.
             const sameAccount = !snap.fileId || snap.fileId === fileId;
-            const diverges = canonicalize(snap.data) !== canonicalize(data);
-            if (sameAccount && diverges) {
-              // La bannière d'abord, la quarantaine ensuite : si le setItem échoue (quota
-              // plein), l'utilisateur doit quand même être PRÉVENU que des modifications
-              // locales divergent — l'ancien ordre jetait la détection avec l'écriture.
+            if (sameAccount && canonicalize(snap.data) !== canonicalize(raw)) {
               setLocalBackup(snap);
-              try { localStorage.setItem(PENDING_KEY, JSON.stringify({ ...snap, fileId })); } catch { /* quota : la bannière reste */ }
+              lsSet(PENDING_KEY, JSON.stringify({ ...snap, fileId }));
             } else {
-              localStorage.removeItem(PENDING_KEY);
-              if (!sameAccount) localStorage.removeItem(BACKUP_KEY);
+              lsDel(PENDING_KEY);
+              lsDel(BACKUP_KEY);
             }
           }
-        } catch { /* sauvegarde illisible : on l'ignore, pas de perte supplémentaire */ }
+        } catch { /* sauvegarde illisible : ignorée */ }
 
         driveFileIdRef.current = fileId;
-        // Chargement réussi : les sauvegardes automatiques sont désormais autorisées.
         hasLoadedRef.current = true;
       }
-    } catch (error: any) {
-      // Un chargement raté doit être VISIBLE : l'ancien catch (console.error seul)
-      // affichait un portefeuille vide sans le moindre message — indiscernable, pour
-      // l'utilisateur, d'une perte totale de ses données.
-      console.error("Erreur chargement", error);
-      if (error?.message === 'SESSION_EXPIRED') setSessionExpired(true);
+    } catch (error) {
+      // Un chargement raté doit être VISIBLE (sinon indiscernable d'une perte totale).
+      console.error('Erreur chargement', error);
+      if (classifySyncError(error) === 'session') setSessionExpired(true);
       else setSyncError(true);
     } finally {
       setIsLoadingData(false);
     }
+  }, [applyData, setLastView]);
+
+  /** Mode démo (développement uniquement) : données fictives en mémoire, aucune écriture Drive. */
+  const loadDemoData = useCallback((raw: unknown) => {
+    applyData(raw);
+    markPersisted(raw);
+    hasLoadedRef.current = true;
+    setIsLoadingData(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [applyData]);
+
+  // --- SETTERS PAR CHAMP ---
+  const setters = useMemo(() => {
+    const top = <K extends keyof Doc>(k: K) => (u: Updater<Doc[K]>) => setDoc(d => ({ ...d, [k]: resolve(u, d[k]) }));
+    const cfg = <K extends keyof Config>(k: K) => (u: Updater<Config[K]>) => setDoc(d => ({ ...d, config: { ...d.config, [k]: resolve(u, d.config[k]) } }));
+    return {
+      setAccounts: top('accounts') as (u: Updater<SavingsAccount[]>) => void,
+      setExpenses: top('expenses') as (u: Updater<Doc['expenses']>) => void,
+      setHistory: top('history') as (u: Updater<PortfolioSnapshot[]>) => void,
+      setExpensesHistory: top('expensesHistory') as (u: Updater<ExpenseSnapshot[]>) => void,
+      setGoals: top('goals') as (u: Updater<NonNullable<Doc['goals']>>) => void,
+      setPayslips: top('payslips') as (u: Updater<NonNullable<Doc['payslips']>>) => void,
+      setRecurringMovements: top('recurringMovements') as (u: Updater<NonNullable<Doc['recurringMovements']>>) => void,
+      setSubscriptions: top('subscriptions') as (u: Updater<NonNullable<Doc['subscriptions']>>) => void,
+      setDonations: top('donations') as (u: Updater<NonNullable<Doc['donations']>>) => void,
+      setPayChecklist: top('payChecklist'),
+      setParentalRestitution: top('parentalRestitution'),
+      setActivePayslipId: top('activePayslipId'),
+      setFiscalConfig: top('fiscalConfig') as (u: Updater<NonNullable<Doc['fiscalConfig']>>) => void,
+      setWorkBenefits: top('workBenefits') as (u: Updater<NonNullable<Doc['workBenefits']>>) => void,
+      setGrossAnnual: cfg('grossAnnual'),
+      setLeisureBudget: cfg('leisureBudget'),
+      setProjectSavings: cfg('projectSavings'),
+      setNavigoBase: cfg('navigoBase') as (u: Updater<number>) => void,
+      setNavigoRate: cfg('navigoRate') as (u: Updater<number>) => void,
+      setTaxRateManual: cfg('taxRateManual'),
+      setExtraMonthlyIncome: cfg('extraMonthlyIncome'),
+      setParentsEmail: cfg('parentsEmail') as (u: Updater<string>) => void,
+      setPickerApiKey: cfg('pickerApiKey') as (u: Updater<string>) => void,
+      setPaydayDay: cfg('paydayDay'),
+      setPaydayAmount: cfg('paydayAmount'),
+      setSavingsSplit: cfg('savingsSplit'),
+      setSavingsSplitFrom: cfg('savingsSplitFrom'),
+      setTrackingStartDate: cfg('trackingStartDate'),
+      /** Modifie plusieurs réglages d'un coup. */
+      patchConfig: (patch: Partial<Config>) => setDoc(d => ({ ...d, config: { ...d.config, ...patch } })),
+    };
   }, []);
 
-  // Construit l'objet de données complet à partir de l'état courant.
-  const buildData = useCallback((): GlobalAppData => ({
-    accounts,
-    expenses,
-    history,
-    expensesHistory,
-    fiscalConfig,
-    workBenefits,
-    goals,
-    payslips,
-    recurringMovements,
-    subscriptions,
-    donations,
-    payChecklist,
-    parentalRestitution,
-    activePayslipId,
-    config: {
-      grossAnnual, leisureBudget, projectSavings, navigoBase, navigoRate,
-      taxRateManual, extraMonthlyIncome, parentsEmail, geminiApiKey, pickerApiKey,
-      paydayDay, paydayAmount, savingsSplit, savingsSplitFrom, trackingStartDate,
-    },
-    lastView: lastViewRef.current,
-  }), [accounts, expenses, history, expensesHistory, fiscalConfig, workBenefits, grossAnnual,
-       leisureBudget, projectSavings, navigoBase, navigoRate, taxRateManual,
-       extraMonthlyIncome, parentsEmail, goals, payslips, recurringMovements, subscriptions, donations, payChecklist, parentalRestitution, activePayslipId, geminiApiKey, pickerApiKey,
-       paydayDay, paydayAmount, savingsSplit, savingsSplitFrom, trackingStartDate]);
-
-  // Applique un objet de données (import / rechargement) à l'état.
-  const applyData = useCallback((data: GlobalAppData) => {
-    setAccounts(normalizeAccounts(data.accounts || []));
-    setExpenses(data.expenses || []);
-    setHistory(dedupeMonthlySnapshots(data.history || []));
-    setExpensesHistory(dedupeMonthlySnapshots(data.expensesHistory || []));
-    setGoals(data.goals || []);
-    setPayslips(data.payslips || []);
-    setRecurringMovements(data.recurringMovements || []);
-    setSubscriptions(data.subscriptions || []);
-    setDonations(data.donations || []);
-    setPayChecklist(data.payChecklist || undefined);
-    setParentalRestitution(data.parentalRestitution || undefined);
-    setActivePayslipId(data.activePayslipId || undefined);
-    // Champs absents (import partiel) : valeurs par défaut, comme au chargement Drive, et
-    // non les réglages du fichier précédent (clés API, e-mail des parents…).
-    setFiscalConfig(data.fiscalConfig || DEFAULT_FISCAL_CONFIG);
-    setWorkBenefits(data.workBenefits || DEFAULT_WORK_BENEFITS);
-    if (!data.config) data = { ...data, config: {} as GlobalAppData['config'] };
-    if (data.config) {
-      setGrossAnnual(data.config.grossAnnual ?? 45000);
-      setLeisureBudget(data.config.leisureBudget ?? 300);
-      setProjectSavings(data.config.projectSavings ?? 200);
-      setNavigoBase(data.config.navigoBase ?? 90.80);
-      setNavigoRate(data.config.navigoRate ?? 67.24);
-      setTaxRateManual(data.config.taxRateManual ?? 0);
-      setExtraMonthlyIncome(data.config.extraMonthlyIncome ?? 0);
-      setParentsEmail(data.config.parentsEmail ?? '');
-      setGeminiApiKey(data.config.geminiApiKey ?? '');
-      setPickerApiKey(data.config.pickerApiKey ?? '');
-      setPaydayDay(data.config.paydayDay ?? undefined);
-      setPaydayAmount(data.config.paydayAmount ?? undefined);
-      setSavingsSplit(data.config.savingsSplit ?? undefined);
-      setSavingsSplitFrom(data.config.savingsSplitFrom ?? undefined);
-      setTrackingStartDate(data.config.trackingStartDate ?? undefined);
-    }
-  }, []);
-
-  // Export JSON (téléchargement local de sauvegarde).
+  // --- EXPORT / IMPORT ---
   const exportData = useCallback(() => {
     const blob = new Blob([JSON.stringify(buildData(), null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `suivi-epargne-${new Date().toISOString().split('T')[0]}.json`;
+    a.download = `pecule-${localTodayISO()}.json`;
     a.click();
     URL.revokeObjectURL(url);
   }, [buildData]);
 
-  // Import JSON depuis un fichier local.
+  /**
+   * Import d'un fichier local. Le fichier est contrôlé avant de remplacer quoi que ce soit,
+   * et l'adresse e-mail des parents n'est JAMAIS reprise d'un fichier (un fichier piégé
+   * pourrait sinon détourner les récapitulatifs vers un inconnu).
+   */
   const importData = useCallback(async (file: File): Promise<boolean> => {
     try {
-      const text = await file.text();
-      const parsed = JSON.parse(text) as GlobalAppData;
-      if (!parsed || !Array.isArray(parsed.accounts)) throw new Error('Format invalide');
+      const parsed: unknown = JSON.parse(await file.text());
+      const errors = validateImport(parsed);
+      if (errors.length > 0) { console.error('Import refusé', errors); return false; }
+      const keepEmail = docRef.current.config.parentsEmail;
+      const keepPicker = docRef.current.config.pickerApiKey;
       applyData(parsed);
+      setDoc(d => ({ ...d, config: { ...d.config, parentsEmail: keepEmail, pickerApiKey: d.config.pickerApiKey || keepPicker } }));
       return true;
     } catch (e) {
       console.error('Import échoué', e);
@@ -420,124 +276,105 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
     }
   }, [applyData]);
 
-  // Recharge depuis Drive (résout un conflit en récupérant la dernière version distante,
-  // AU PRIX de l'abandon des modifications locales non sauvegardées).
   const reloadFromDrive = useCallback(() => {
-    // L'utilisateur abandonne explicitement ses modifications locales : on purge la
-    // quarantaine ET le miroir, sinon le rechargement qui suit les redétecterait comme
-    // divergentes et reproposerait aussitôt de restaurer ce qu'il vient de refuser.
-    localStorage.removeItem(PENDING_KEY);
-    localStorage.removeItem(BACKUP_KEY);
+    // Abandon explicite des modifications locales : on purge quarantaine ET miroir.
+    lsDel(PENDING_KEY);
+    lsDel(BACKUP_KEY);
     setLocalBackup(null);
     setSyncConflict(false);
     loadDriveData();
   }, [loadDriveData]);
 
-  // Résout un conflit en écrasant la version distante avec l'état local courant
-  // (l'utilisateur choisit explicitement de garder ses modifications).
-  const forceSaveToDrive = useCallback(async () => {
-    if (!driveFileId) return;
-    try {
-      // Sérialisé (voir runExclusive) : attend qu'une sauvegarde auto déjà en vol se termine
-      // avant d'écrire, pour ne jamais courir en parallèle et voir l'une écraser l'autre.
-      const newRevision = await runExclusive(() => updateConfigFile(driveFileId, buildData())); // sans expectedRevision : pas de contrôle de concurrence
-      driveRevisionRef.current = newRevision;
-      announceSave(driveFileId, newRevision);
-      flushPendingParentMail();
-      setSyncConflict(false);
-      setSyncError(false);
-      setLastSavedAt(new Date());
-      // L'état local est désormais sur Drive : plus rien en attente.
-      localStorage.removeItem(PENDING_KEY);
-      setLocalBackup(null);
-    } catch (err: any) {
-      if (err?.message === 'SESSION_EXPIRED') setSessionExpired(true);
-      else if (err instanceof TypeError) setIsOffline(true);
-      else setSyncError(true);
-    }
-  }, [driveFileId, buildData, runExclusive]);
-
-  // Restaure la sauvegarde locale détectée au démarrage (l'utilisateur choisit de la garder
-  // plutôt que la version Drive). Une sauvegarde normale s'enclenchera ensuite normalement.
-  const restoreLocalBackup = useCallback(() => {
-    if (!localBackup) return;
-    applyData(localBackup.data);
-    // La quarantaine a rempli son rôle : les données sont revenues dans l'état, que
-    // l'auto-save va pousser sur Drive.
-    localStorage.removeItem(PENDING_KEY);
-    setLocalBackup(null);
-  }, [localBackup, applyData]);
-
-  const dismissLocalBackup = useCallback(() => {
-    localStorage.removeItem(PENDING_KEY);
-    setLocalBackup(null);
-  }, []);
-
-  // --- FILET DE SÉCURITÉ LOCAL ---
-  // Miroir de l'état courant dans le navigateur : si une sauvegarde Drive reste bloquée
-  // (conflit, session expirée, hors-ligne...), les modifications ne sont jamais perdues
-  // silencieusement — elles restent récupérables via ce backup même après un rechargement.
-  // Étiqueté avec le fichier Drive courant pour ne jamais être réappliqué à un autre
-  // compte Google. Ce miroir est écrasé en continu ; ce qui doit survivre à l'arbitrage
-  // de l'utilisateur vit dans PENDING_KEY (voir loadDriveData).
-  useEffect(() => {
-    if (!hasLoadedRef.current) return;
-    try {
-      const snapshot: StoredSnapshot = {
-        savedAt: new Date().toISOString(),
-        fileId: driveFileIdRef.current ?? undefined,
-        data: buildData(),
-      };
-      localStorage.setItem(BACKUP_KEY, JSON.stringify(snapshot));
-    } catch { /* quota localStorage dépassé : tant pis, ce n'est qu'un filet de secours */ }
-  }, [buildData]);
+  const announceSave = (fileId: string, revision: string | null) =>
+    lsSet(LAST_SAVE_KEY, JSON.stringify({ fileId, revision, at: Date.now() }));
 
   // --- MAIL PARENTS DIFFÉRÉ ---
-  // Le mail était envoyé AVANT toute persistance : si la sauvegarde Drive échouait ensuite
-  // (conflit, session expirée) puis que l'utilisateur rechargeait depuis Drive, les parents
-  // avaient été notifiés d'un mouvement qui n'a jamais existé. Le mail est donc mis en
-  // attente ici et n'est expédié qu'après une écriture Drive CONFIRMÉE.
-  // File d'attente (et non une seule case) : deux opérations rapprochées envoient chacune
-  // leur e-mail, et annuler une opération ne retire que SON e-mail (`opId`).
+  // Expédié seulement après une écriture Drive CONFIRMÉE : jamais pour un mouvement qui
+  // n'a pas persisté. File par opération (`opId`) pour pouvoir annuler la sienne.
   const pendingParentMailRef = useRef<{ opId: string; to: string; subject: string; body: string }[]>([]);
-  const flushPendingParentMail = () => {
+  const flushPendingParentMail = useCallback(() => {
     const mails = pendingParentMailRef.current;
     if (mails.length === 0) return;
     pendingParentMailRef.current = [];
     setMailError(null);
     for (const mail of mails) {
-      // Non bloquant, mais l'échec reste visible via mailError (bannière).
       sendGmail(mail.to, mail.subject, mail.body).catch(err => {
         console.error('Envoi du mail aux parents échoué', err);
         setMailError(mail.to);
       });
     }
-  };
-
-  /** Annule l'e-mail aux parents en attente (opération annulée avant la sauvegarde). */
-  const cancelQueuedParentsMail = (opId: string) => {
+  }, []);
+  const cancelQueuedParentsMail = useCallback((opId: string) => {
     pendingParentMailRef.current = pendingParentMailRef.current.filter(m => m.opId !== opId);
-  };
-
-  /** Met en attente un e-mail aux parents (envoyé après la prochaine sauvegarde confirmée). */
-  const queueParentsMail = (opId: string, subject: string, htmlBody: string): boolean => {
-    if (!parentsEmail) return false;
-    pendingParentMailRef.current = [...pendingParentMailRef.current.filter(m => m.opId !== opId), { opId, to: parentsEmail, subject, body: htmlBody }];
+  }, []);
+  const queueParentsMail = useCallback((opId: string, subject: string, htmlBody: string): boolean => {
+    const to = docRef.current.config.parentsEmail;
+    if (!to) return false;
+    pendingParentMailRef.current = [...pendingParentMailRef.current.filter(m => m.opId !== opId), { opId, to, subject, body: htmlBody }];
     return true;
+  }, []);
+
+  /** Copie mensuelle sur Drive, à la première sauvegarde réussie du mois (non bloquante). */
+  const maybeMonthlyBackup = (data: GlobalAppData) => {
+    const month = localMonthKey(new Date());
+    if (lsGet(LAST_BACKUP_MONTH_KEY) === month) return;
+    writeMonthlyBackup(month, data)
+      .then(() => lsSet(LAST_BACKUP_MONTH_KEY, month))
+      .catch(err => console.warn('Copie mensuelle Drive non créée', err));
   };
 
-  // --- COORDINATION MULTI-ONGLETS ---
-  // Chaque sauvegarde réussie est annoncée via localStorage (l'événement `storage` ne se
-  // déclenche que dans les AUTRES onglets). Sans ça, deux onglets du même appareil se
-  // faisaient mutuellement dérailler : révision périmée → faux conflit "un autre appareil
-  // a écrit" pour soi-même.
-  const LAST_SAVE_KEY = 'suivi_epargne_last_save';
-  const announceSave = (fileId: string, revision: string | null) => {
-    try { localStorage.setItem(LAST_SAVE_KEY, JSON.stringify({ fileId, revision, at: Date.now() })); } catch { /* informatif */ }
+  const onSaved = (fileId: string, revision: string, saved: GlobalAppData) => {
+    driveRevisionRef.current = revision;
+    markPersisted(saved);
+    announceSave(fileId, revision);
+    flushPendingParentMail();
+    setSyncError(false);
+    setLastSavedAt(new Date());
+    lsDel(BACKUP_KEY);
+    maybeMonthlyBackup(saved);
   };
+
+  const handleSyncFailure = (err: unknown) => {
+    const kind = classifySyncError(err);
+    if (kind === 'conflict') setSyncConflict(true);
+    else if (kind === 'session') setSessionExpired(true);
+    else if (kind === 'offline') setIsOffline(true);
+    else { setSyncError(true); console.error('Erreur de sauvegarde', err); }
+    return kind;
+  };
+
+  // Résout un conflit en écrasant la version distante (choix explicite de l'utilisateur).
+  const forceSaveToDrive = useCallback(async () => {
+    if (!driveFileId || appOutdated) return;
+    try {
+      const data = buildData();
+      const newRevision = await runExclusive(() => updateConfigFile(driveFileId, data)); // sans contrôle : choix explicite
+      onSaved(driveFileId, newRevision, data);
+      setSyncConflict(false);
+      lsDel(PENDING_KEY);
+      setLocalBackup(null);
+    } catch (err) {
+      handleSyncFailure(err);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [driveFileId, buildData, runExclusive, appOutdated]);
+
+  const restoreLocalBackup = useCallback(() => {
+    if (!localBackup) return;
+    applyData(localBackup.data);
+    lsDel(PENDING_KEY);
+    setLocalBackup(null);
+  }, [localBackup, applyData]);
+
+  const dismissLocalBackup = useCallback(() => {
+    lsDel(PENDING_KEY);
+    setLocalBackup(null);
+  }, []);
+
   const isSavingRef = useRef(false);
   useEffect(() => { isSavingRef.current = isSaving; }, [isSaving]);
 
+  // --- COORDINATION MULTI-ONGLETS ---
   useEffect(() => {
     const onStorage = async (e: StorageEvent) => {
       if (e.key !== LAST_SAVE_KEY || !e.newValue) return;
@@ -545,247 +382,146 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
         const { fileId, revision } = JSON.parse(e.newValue);
         if (!fileId || fileId !== driveFileIdRef.current) return;
         if (!revision || revision === driveRevisionRef.current) return;
-        // Des modifications locales non sauvegardées existent ici : on NE se synchronise
-        // pas — la révision reste périmée et la prochaine sauvegarde lèvera le conflit,
-        // ce qui est la réponse honnête (édition concurrente réelle).
+        // Modifications locales en cours : la prochaine sauvegarde lèvera le conflit.
         if (isSavingRef.current) return;
-        const remote = await readConfigFile(fileId);
+        const remote: unknown = await readConfigFile(fileId);
         driveRevisionRef.current = String(revision);
-        // Contenu identique (cas courant : l'autre onglet a poussé ce qu'on a déjà) : il
-        // suffit d'adopter la révision. Sinon on adopte aussi les données.
-        if (canonicalize(remote) !== canonicalize(buildData())) {
-          applyData(remote);
-        }
-      } catch { /* annonce illisible ou lecture Drive ratée : on laisse le conflit naturel jouer */ }
+        markPersisted(remote);
+        if (canonicalize(remote) !== canonicalize(docRef.current)) applyData(remote);
+      } catch { /* annonce illisible ou lecture ratée : le conflit naturel jouera */ }
     };
     window.addEventListener('storage', onStorage);
     return () => window.removeEventListener('storage', onStorage);
-  }, [buildData, applyData]);
+  }, [applyData]);
+
+  // --- MIROIR LOCAL (seulement tant que Drive n'est pas à jour) ---
+  useEffect(() => {
+    if (!hasLoadedRef.current) return;
+    const timer = setTimeout(() => {
+      const data = buildData();
+      if (canonicalize(data) === persistedRef.current) { lsDel(BACKUP_KEY); return; }
+      const snapshot: StoredSnapshot = { savedAt: new Date().toISOString(), fileId: driveFileIdRef.current ?? undefined, data };
+      lsSet(BACKUP_KEY, JSON.stringify(snapshot));
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [buildData]);
 
   // --- SAUVEGARDE AUTO ---
   useEffect(() => {
-    // Chaque retour anticipé remet isSaving à false : un run précédent a pu le passer à
-    // true puis voir son timeout annulé par le cleanup — passer hors-ligne pendant la
-    // fenêtre de debounce laissait sinon l'indicateur "Sauvegarde..." allumé à jamais.
     if (!isAuthenticated || !driveFileId || isLoadingData || !hasLoadedRef.current) { setIsSaving(false); return; }
-    if (syncConflict || sessionExpired) { setIsSaving(false); return; } // on ne réécrit pas tant que non résolu
-    // Hors ligne : on gèle silencieusement (le filet de sécurité local garde déjà tout).
-    // `isOffline` est dans les deps ci-dessous : au retour du réseau, cet effet se
-    // relance de lui-même et retente la sauvegarde sans attendre une nouvelle saisie.
-    if (isOffline) { setIsSaving(false); return; }
+    if (syncConflict || sessionExpired || appOutdated || isOffline) { setIsSaving(false); return; }
+    // Rien de changé par rapport à Drive : pas d'écriture (ni nouvelle révision).
+    if (canonicalize(buildData()) === persistedRef.current) { setIsSaving(false); return; }
 
     setIsSaving(true);
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-
     saveTimeoutRef.current = setTimeout(async () => {
+      const data = buildData();
       try {
-        // Sérialisé via runExclusive : si une résolution de conflit manuelle
-        // (forceSaveToDrive) est en cours, on attend qu'elle se termine avant de lire
-        // driveRevisionRef.current, pour ne jamais comparer contre une révision obsolète.
         const newRevision = await runExclusive(async () => {
-          // Sans révision de référence, updateConfigFile écrirait SANS contrôle de
-          // concurrence : une seule lecture ratée au chargement (rate-limit Drive) aurait
-          // donc désactivé la détection de conflit pour toute la session, écrasant en
-          // silence les modifications venues d'un autre appareil. On tente de la
-          // récupérer, et on renonce à écrire si c'est impossible.
-          if (!driveRevisionRef.current) {
-            driveRevisionRef.current = await getFileRevision(driveFileId);
-          }
-          return updateConfigFile(driveFileId, buildData(), driveRevisionRef.current);
+          // Sans révision de référence, l'écriture se ferait sans contrôle de concurrence :
+          // on la récupère, et on renonce à écrire si c'est impossible.
+          if (!driveRevisionRef.current) driveRevisionRef.current = await getFileRevision(driveFileId);
+          return updateConfigFile(driveFileId, data, driveRevisionRef.current);
         });
-        driveRevisionRef.current = newRevision;
-        announceSave(driveFileId, newRevision);
-        flushPendingParentMail();
-        setSyncError(false);
-        setLastSavedAt(new Date());
-      } catch (err: any) {
-        if (err instanceof ConflictError) {
-          setSyncConflict(true); // un autre appareil a écrit : on n'écrase pas
-        } else if (err?.message === 'SESSION_EXPIRED') {
-          setSessionExpired(true);
-        } else if (err instanceof ApiError && err.status === 404) {
-          // Le fichier Drive a été supprimé/mis à la corbeille en dehors de l'app : sans
-          // ré-résolution, TOUTES les sauvegardes suivantes échouaient à l'identique
-          // (y compris forceSaveToDrive, la porte de sortie). On recrée/retrouve le
-          // fichier et on réécrit dedans immédiatement.
+        onSaved(driveFileId, newRevision, data);
+      } catch (err) {
+        if (handleSyncFailure(err) === 'notfound') {
+          // Fichier supprimé hors de l'app : on le retrouve ou on le recrée.
+          setSyncError(false);
           try {
-            const recoveredId = (await findConfigFile()) ?? (await createConfigFile(buildData()));
-            let recoveredRevision: string | null = null;
-            if (recoveredId !== driveFileId) {
-              setDriveFileId(recoveredId);
-              driveFileIdRef.current = recoveredId;
-              recoveredRevision = await getFileRevision(recoveredId).catch(() => null);
+            const foundId = await findConfigFile();
+            if (foundId && foundId !== driveFileId) {
+              // Un AUTRE fichier existe : peut-être un ancien doublon. On ne l'écrase pas
+              // à l'aveugle : s'il diffère, c'est un conflit à arbitrer par l'utilisateur.
+              setDriveFileId(foundId);
+              driveFileIdRef.current = foundId;
+              const remote: unknown = await readConfigFile(foundId);
+              driveRevisionRef.current = await getFileRevision(foundId).catch(() => null);
+              markPersisted(remote);
+              if (canonicalize(remote) !== canonicalize(data)) setSyncConflict(true);
             } else {
-              // Même id ressorti de la recherche : fichier restauré depuis la corbeille ?
-              recoveredRevision = await updateConfigFile(recoveredId, buildData(), null);
+              const id = foundId ?? (await createConfigFile(data));
+              if (id !== driveFileId) { setDriveFileId(id); driveFileIdRef.current = id; }
+              const revision = foundId ? await updateConfigFile(id, data, null) : await getFileRevision(id);
+              onSaved(id, revision, data);
             }
-            driveRevisionRef.current = recoveredRevision;
-            setSyncError(false);
-            setLastSavedAt(new Date());
           } catch (recoveryErr) {
             setSyncError(true);
-            console.error("Fichier Drive introuvable et récupération échouée", recoveryErr);
+            console.error('Fichier Drive introuvable et récupération échouée', recoveryErr);
           }
-        } else if (err instanceof TypeError) {
-          // fetch échoue par TypeError quand la requête ne peut pas partir (réseau coupé,
-          // DNS, timeout)... : navigator.onLine n'est pas toujours fiable (portail captif),
-          // donc on traite ce cas comme hors-ligne plutôt que comme une vraie erreur.
-          setIsOffline(true);
-        } else {
-          setSyncError(true);
-          console.error("Erreur sauvegarde auto", err);
         }
       } finally {
         setIsSaving(false);
       }
     }, 2000);
-
     return () => clearTimeout(saveTimeoutRef.current);
-  }, [
-    accounts, expenses, history, expensesHistory, fiscalConfig, workBenefits, 
-    grossAnnual, leisureBudget, projectSavings, navigoBase, navigoRate, 
-    taxRateManual, extraMonthlyIncome, parentsEmail, geminiApiKey, pickerApiKey,
-    paydayDay, paydayAmount, savingsSplit, savingsSplitFrom, trackingStartDate,
-    isAuthenticated, driveFileId, isLoadingData,
-    buildData, syncConflict, sessionExpired, goals, payslips, recurringMovements, subscriptions, donations, payChecklist, parentalRestitution, activePayslipId, isOffline, runExclusive
-  ]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [doc, isAuthenticated, driveFileId, isLoadingData, buildData, syncConflict, sessionExpired, appOutdated, isOffline, runExclusive]);
 
-  // Réveil périodique pour que les snapshots ci-dessous s'ouvrent sur le nouveau mois même
-  // sans aucune saisie (PWA laissée ouverte, ou mois sans opération) : sans ça, ces effets
-  // ne se déclenchant que sur un changement de données, l'historique pouvait sauter un mois.
+  // Réveil périodique : les points mensuels s'ouvrent sur le nouveau mois même sans saisie.
   const [monthTick, setMonthTick] = useState(() => localMonthKey(new Date()));
   useEffect(() => {
     const sync = () => setMonthTick(localMonthKey(new Date()));
-    const timer = setInterval(sync, 60 * 60 * 1000); // 1 h : largement suffisant
+    const timer = setInterval(sync, 60 * 60 * 1000);
     document.addEventListener('visibilitychange', sync);
     return () => { clearInterval(timer); document.removeEventListener('visibilitychange', sync); };
   }, []);
 
-  // --- SNAPSHOT PATRIMOINE (alimente la courbe d'évolution) ---
-  // Enregistre/actualise un point par mois avec le total et la part personnelle.
-  // Dates en heure LOCALE (voir localMonthKey) : en UTC, une saisie le 1er du mois à
-  // 00h30 heure de Paris était rattachée au mois précédent et écrasait son point.
+  // --- POINT MENSUEL DU PATRIMOINE ET DES CHARGES (heure locale) ---
   useEffect(() => {
     if (!hasLoadedRef.current) return;
-    const total = accounts.reduce((s, a) => s + a.totalAmount, 0);
-    const owned = accounts.reduce((s, a) => s + a.ownedAmount, 0);
-    const now = new Date();
-    const month = localMonthKey(now); // AAAA-MM
-    const today = localDayKey(now);
-    setHistory(prev => {
+    const total = doc.accounts.reduce((s, a) => s + a.totalAmount, 0);
+    const owned = doc.accounts.reduce((s, a) => s + a.ownedAmount, 0);
+    const month = monthTick;
+    const today = localTodayISO();
+    setDoc(d => {
+      const prev = d.history || [];
       const existing = prev.find(s => s.date.startsWith(month));
-      if (existing && existing.totalAmount === total && existing.ownedAmount === owned) return prev;
+      if (existing && existing.totalAmount === total && existing.ownedAmount === owned) return d;
       const others = prev.filter(s => !s.date.startsWith(month));
       const snapshot: PortfolioSnapshot = { date: existing ? existing.date : today, totalAmount: total, ownedAmount: owned };
-      return [...others, snapshot].sort((a, b) => a.date.localeCompare(b.date));
+      return { ...d, history: [...others, snapshot].sort((a, b) => a.date.localeCompare(b.date)) };
     });
-  }, [accounts, monthTick]);
+  }, [doc.accounts, monthTick]);
 
-  // --- SNAPSHOT CHARGES (alimente la répartition dans le temps) ---
   useEffect(() => {
     if (!hasLoadedRef.current) return;
-    const total = Math.round(totalFixedCharges(expenses, subscriptions) * 100) / 100;
-    const now = new Date();
-    const month = localMonthKey(now);
-    const today = localDayKey(now);
-    setExpensesHistory(prev => {
+    const total = Math.round(totalFixedCharges(doc.expenses, doc.subscriptions || []) * 100) / 100;
+    const month = monthTick;
+    const today = localTodayISO();
+    setDoc(d => {
+      const prev = d.expensesHistory || [];
       const existing = prev.find(s => s.date.startsWith(month));
-      if (existing && existing.total === total) return prev;
+      if (existing && existing.total === total) return d;
       const others = prev.filter(s => !s.date.startsWith(month));
       const snapshot: ExpenseSnapshot = { date: existing ? existing.date : today, total };
-      return [...others, snapshot].sort((a, b) => a.date.localeCompare(b.date));
+      return { ...d, expensesHistory: [...others, snapshot].sort((a, b) => a.date.localeCompare(b.date)) };
     });
-  }, [expenses, monthTick, subscriptions]);
+  }, [doc.expenses, doc.subscriptions, monthTick]);
 
-  // Construit et envoie l'email récapitulatif aux parents si un mouvement Livret A/LEP
-  // est détecté. Factorisé pour être réutilisable par l'ajout rapide (FAB) et par les
-  // actualisations de solde classiques.
-  const notifyParentsIfNeeded = (updates: { account: SavingsAccount, date: string }[], opId: string = crypto.randomUUID()) => {
-    let mailBody = `
-      <div style="font-family: Arial, sans-serif; color: #1e293b;">
-        <h2 style="color: #14532d; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px;">Mise à jour des comptes</h2>
-        <p>Une opération a été détectée sur les livrets :</p>
-        <table style="width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 14px; border: 1px solid #e2e8f0;">
-          <tr style="background-color: #f1f5f9; text-align: left;">
-            <th style="padding: 10px; border-bottom: 1px solid #cbd5e1;">Compte</th>
-            <th style="padding: 10px; border-bottom: 1px solid #cbd5e1;">Avant</th>
-            <th style="padding: 10px; border-bottom: 1px solid #cbd5e1;">Après</th>
-            <th style="padding: 10px; border-bottom: 1px solid #cbd5e1;">Diff</th>
-          </tr>
-    `;
-    let shouldSendMail = false;
-    const fmt = (n: number) => n.toLocaleString('fr-FR', {style:'currency', currency:'EUR'});
-    // Le mail part en text/html : toute valeur issue des données (dont un JSON importé,
-    // non validé champ par champ) doit être échappée avant interpolation.
-    const esc = (s: string) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-
-    updates.forEach(upd => {
-       const oldAcc = accounts.find(a => a.id === upd.account.id);
-       if (oldAcc) {
-          const isTarget = ['Livret A', 'LEP'].includes(oldAcc.type);
-          const diff = upd.account.totalAmount - oldAcc.totalAmount;
-          
-          if (isTarget && Math.abs(diff) > 0.001) {
-             shouldSendMail = true;
-             const color = diff > 0 ? '#16a34a' : '#dc2626'; // Vert/Rouge
-             const sign = diff > 0 ? '+' : '';
-             
-             mailBody += `
-                <tr style="border-bottom: 1px solid #e2e8f0;">
-                  <td style="padding: 10px; vertical-align: top;">
-                    <b>${esc(oldAcc.type)}</b>
-                  </td>
-                  <td style="padding: 10px; vertical-align: top;">
-                    <b>${fmt(oldAcc.totalAmount)}</b><br/>
-                    <small style="color: #64748b;">Parents: ${fmt(oldAcc.parentalCapital)}</small><br/>
-                    <small style="color: #64748b;">Moi: ${fmt(oldAcc.ownedAmount)}</small>
-                  </td>
-                  <td style="padding: 10px; vertical-align: top;">
-                    <b>${fmt(upd.account.totalAmount)}</b><br/>
-                    <small style="color: #64748b;">Parents: ${fmt(upd.account.parentalCapital)}</small><br/>
-                    <small style="color: #64748b;">Moi: ${fmt(upd.account.ownedAmount)}</small>
-                  </td>
-                  <td style="padding: 10px; vertical-align: top; color: ${color}; font-weight: bold;">
-                    ${sign}${fmt(diff)}
-                  </td>
-                </tr>
-             `;
-          }
-       }
-    });
-
-    mailBody += `
-        </table>
-        <p style="font-size: 11px; color: #94a3b8; margin-top: 20px;">
-           Généré automatiquement le ${new Date().toLocaleDateString()} à ${new Date().toLocaleTimeString()}
-        </p>
-      </div>
-    `;
-
-    if (shouldSendMail && parentsEmail) {
-        // Mis en attente : expédié uniquement après la prochaine écriture Drive confirmée
-        // (voir flushPendingParentMail) — jamais pour un mouvement qui n'a pas persisté.
-        pendingParentMailRef.current = [...pendingParentMailRef.current, { opId, to: parentsEmail, subject: 'Pécule : mise à jour des comptes', body: mailBody }];
-    } else if (shouldSendMail && !parentsEmail) {
-        console.warn("⚠️ Mouvement détecté mais aucun email parent configuré.");
+  /** Met en attente le récapitulatif aux parents si le Livret A ou le LEP change. */
+  const notifyParentsIfNeeded = useCallback((updates: { account: SavingsAccount; date: string }[], opId: string = crypto.randomUUID()) => {
+    // docRef : l'état le plus récent, même si un setAccounts vient d'être appelé dans le même tour.
+    const body = buildAccountsUpdateMail(docRef.current.accounts, updates);
+    if (!body) return;
+    if (!queueParentsMail(opId, 'Pécule : mise à jour des comptes', body)) {
+      console.warn('Mouvement sur un livret, mais aucune adresse e-mail des parents configurée.');
     }
-  };
+  }, [queueParentsMail]);
 
-  // --- LOGIQUE METIER COMPLEXE (Mouvements & Email Détaillé) ---
   // `cashFlow` : argent réellement versé (+) ou retiré (−) sur un compte qui suit ses
-  // versements cumulés (PEA, AV…). Le reste de l'écart de solde est une variation de valeur,
-  // enregistrée à part (`kind: 'valuation'`) pour ne pas passer pour de l'épargne.
-  const updateAccountsWithMovements = (updates: { account: SavingsAccount, date: string, cashFlow?: number }[]) => {
+  // versements (PEA, AV…). Le reste de l'écart est une variation de valeur.
+  const updateAccountsWithMovements = useCallback((updates: { account: SavingsAccount; date: string; cashFlow?: number }[]) => {
     notifyParentsIfNeeded(updates);
-
-    setAccounts(prev => {
-      const newAccounts = [...prev];
-      updates.forEach(upd => {
-        const idx = newAccounts.findIndex(a => a.id === upd.account.id);
-        if (idx < 0) return;
-        const oldAcc = newAccounts[idx];
-        const diff = upd.account.ownedAmount - oldAcc.ownedAmount;
-        const parentalDiff = upd.account.parentalCapital - oldAcc.parentalCapital;
+    setters.setAccounts(prev => {
+      const next = [...prev];
+      for (const upd of updates) {
+        const idx = next.findIndex(a => a.id === upd.account.id);
+        if (idx < 0) continue;
+        const old = next[idx];
+        const diff = upd.account.ownedAmount - old.ownedAmount;
+        const parentalDiff = upd.account.parentalCapital - old.parentalCapital;
         const movements: AccountMovement[] = [];
         const push = (amount: number, label: string, kind?: 'valuation' | 'parental') => {
           if (Math.abs(amount) <= 0.001) return;
@@ -802,18 +538,17 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
         } else {
           push(diff, 'Actualisation');
         }
-        // Changement de la part des parents : tracé à part, pour que l'historique (et les
-        // intérêts passés) restent justes et que le journal le montre.
+        // Part des parents : tracée à part (historique, intérêts passés et journal justes).
         push(parentalDiff, 'Part des parents', 'parental');
-        newAccounts[idx] = { ...upd.account, movements: [...(oldAcc.movements || []), ...movements] };
-      });
-      return newAccounts;
+        next[idx] = { ...upd.account, movements: [...(old.movements || []), ...movements] };
+      }
+      return next;
     });
-  };
+  }, [notifyParentsIfNeeded, setters]);
 
-  const executeLinkedTransfer = (sourceId: string, destId: string, amount: number, date: string) => {
+  const executeLinkedTransfer = useCallback((sourceId: string, destId: string, amount: number, date: string) => {
     const linkId = crypto.randomUUID();
-    setAccounts(prev => {
+    setters.setAccounts(prev => {
       const source = prev.find(a => a.id === sourceId);
       const dest = prev.find(a => a.id === destId);
       if (!source || !dest) return prev;
@@ -822,79 +557,83 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
       return prev.map(a => a.id === sourceId ? applyMovement(a, moveOut, 1, { trackDeposits: true })
         : a.id === destId ? applyMovement(a, moveIn, 1, { trackDeposits: true }) : a);
     });
-  };
+  }, [setters]);
 
-  const resetData = () => {
-      hasLoadedRef.current = false;
-      driveRevisionRef.current = null;
-      driveFileIdRef.current = null;
-      setSyncError(false);
-      setSyncConflict(false);
-      setSessionExpired(false);
-      setAccounts([]);
-      setExpenses([]);
-      setHistory([]);
-      setExpensesHistory([]);
-      setGoals([]);
-      setPayslips([]);
-      setRecurringMovements([]);
-      setSubscriptions([]);
-      setDonations([]);
-      setPayChecklist(undefined);
-      setParentalRestitution(undefined);
-      setActivePayslipId(undefined);
-      setDriveFileId(null);
-      // Purge des sauvegardes locales à la déconnexion : sans ça, se reconnecter avec un
-      // AUTRE compte Google proposait de restaurer les données du compte précédent, et
-      // accepter écrasait puis synchronisait ces données dans le Drive du nouveau compte.
-      // (Les snapshots sont désormais étiquetés par fileId, ceci est la seconde barrière.)
-      localStorage.removeItem(BACKUP_KEY);
-      localStorage.removeItem(PENDING_KEY);
-      setLocalBackup(null);
-  };
+  // --- COPIES MENSUELLES DRIVE ---
+  const listDriveBackups = useCallback((): Promise<DriveBackup[]> => listBackups(), []);
+  const restoreDriveBackup = useCallback(async (id: string) => {
+    const raw: unknown = await readConfigFile(id);
+    if (validateImport(raw).length > 0) throw new Error('Copie illisible');
+    applyData(raw);
+  }, [applyData]);
 
+  /**
+   * Déconnexion : purge l'état ET toutes les copies locales (sinon se reconnecter avec un
+   * autre compte proposerait de restaurer les données du précédent).
+   */
+  const resetData = useCallback(() => {
+    hasLoadedRef.current = false;
+    driveRevisionRef.current = null;
+    driveFileIdRef.current = null;
+    persistedRef.current = '';
+    setSyncError(false);
+    setSyncConflict(false);
+    setSessionExpired(false);
+    setAppOutdated(false);
+    setDoc(emptyData());
+    setDriveFileId(null);
+    lsDel(BACKUP_KEY);
+    lsDel(PENDING_KEY);
+    lsDel(LAST_BACKUP_MONTH_KEY);
+    setLocalBackup(null);
+  }, []);
+
+  const c = doc.config;
   return {
-    // État
-    accounts, setAccounts,
-    expenses, setExpenses,
-    history, setHistory,
-    expensesHistory, setExpensesHistory,
-    goals, setGoals,
-    payslips, setPayslips,
-    recurringMovements, setRecurringMovements,
-    subscriptions, setSubscriptions,
-    donations, setDonations,
-    payChecklist, setPayChecklist,
-    parentalRestitution, setParentalRestitution,
+    // Données
+    accounts: doc.accounts,
+    expenses: doc.expenses,
+    history: doc.history,
+    expensesHistory: doc.expensesHistory || [],
+    goals: doc.goals || [],
+    payslips: doc.payslips || [],
+    recurringMovements: doc.recurringMovements || [],
+    subscriptions: doc.subscriptions || [],
+    donations: doc.donations || [],
+    payChecklist: doc.payChecklist,
+    parentalRestitution: doc.parentalRestitution,
+    activePayslipId: doc.activePayslipId,
+    fiscalConfig: doc.fiscalConfig!,
+    workBenefits: doc.workBenefits!,
+    grossAnnual: c.grossAnnual,
+    leisureBudget: c.leisureBudget,
+    projectSavings: c.projectSavings,
+    navigoBase: c.navigoBase ?? 90.80,
+    navigoRate: c.navigoRate ?? 67.24,
+    taxRateManual: c.taxRateManual,
+    extraMonthlyIncome: c.extraMonthlyIncome,
+    parentsEmail: c.parentsEmail ?? '',
+    pickerApiKey: c.pickerApiKey ?? '',
+    paydayDay: c.paydayDay,
+    paydayAmount: c.paydayAmount,
+    savingsSplit: c.savingsSplit,
+    savingsSplitFrom: c.savingsSplitFrom,
+    trackingStartDate: c.trackingStartDate,
+    config: c,
+    geminiApiKey, setGeminiApiKey,
+    ...setters,
     queueParentsMail,
     cancelQueuedParentsMail,
-    activePayslipId, setActivePayslipId,
-    fiscalConfig, setFiscalConfig,
-    workBenefits, setWorkBenefits,
-    grossAnnual, setGrossAnnual,
-    leisureBudget, setLeisureBudget,
-    projectSavings, setProjectSavings,
-    navigoBase, setNavigoBase,
-    navigoRate, setNavigoRate,
-    taxRateManual, setTaxRateManual,
-    extraMonthlyIncome, setExtraMonthlyIncome,
-    parentsEmail, setParentsEmail,
-    geminiApiKey, setGeminiApiKey,
-    pickerApiKey, setPickerApiKey,
-    paydayDay, setPaydayDay,
-    paydayAmount, setPaydayAmount,
-    savingsSplit, setSavingsSplit,
-    savingsSplitFrom, setSavingsSplitFrom,
-    trackingStartDate, setTrackingStartDate,
     buildData,
     lastView, setLastView,
-    
-    // Status
+
+    // Statut
     isLoadingData,
     isSaving,
     syncError,
     syncConflict,
     sessionExpired,
+    appOutdated,
     localBackup,
     lastSavedAt,
     isOffline,
@@ -903,6 +642,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
 
     // Actions
     loadDriveData,
+    loadDemoData,
     reloadFromDrive,
     forceSaveToDrive,
     restoreLocalBackup,
@@ -912,6 +652,8 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
     executeLinkedTransfer,
     exportData,
     importData,
-    resetData
+    listDriveBackups,
+    restoreDriveBackup,
+    resetData,
   };
 };

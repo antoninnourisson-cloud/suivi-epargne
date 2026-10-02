@@ -15,10 +15,22 @@ import { PayslipExtractedData } from '../types';
 // modèle cesse à son tour de fonctionner, la même erreur indiquera quoi mettre ici.
 const GEMINI_MODEL = 'gemini-3.6-flash';
 
+// Modèle choisi dans Paramètres (sur cet appareil) : permet de remplacer un modèle retiré
+// par Google sans attendre une mise à jour de l'app.
+const MODEL_OVERRIDE_KEY = 'gemini_model';
+export const getGeminiModelOverride = (): string => { try { return localStorage.getItem(MODEL_OVERRIDE_KEY) || ''; } catch { return ''; } };
+export const setGeminiModelOverride = (m: string) => { try { m.trim() ? localStorage.setItem(MODEL_OVERRIDE_KEY, m.trim()) : localStorage.removeItem(MODEL_OVERRIDE_KEY); } catch { /* non mémorisé */ } };
+export const DEFAULT_GEMINI_MODEL = GEMINI_MODEL;
+const modelChain = (): string[] => {
+  const o = getGeminiModelOverride();
+  return [...new Set([...(o ? [o] : []), GEMINI_MODEL, ...FALLBACK_MODELS_LIST])];
+};
+
 // Modèles de repli, essayés dans l'ordre si le principal est saturé ou a disparu. La
 // saturation (« the model is overloaded », HTTP 503) touche un modèle à la fois : un autre
 // Flash répond généralement. Tous acceptent le même schéma de sortie structurée.
 const FALLBACK_MODELS = ['gemini-3.8-flash', 'gemini-3.5-flash'];
+const FALLBACK_MODELS_LIST = FALLBACK_MODELS;
 
 // Statuts qui justifient de réessayer : surcharge / quota momentané / erreur passagère.
 // 400 (requête invalide), 401/403 (clé refusée) ne changeront pas en réessayant.
@@ -124,7 +136,7 @@ export const extractPayslipData = async (
   // refusée, requête invalide) interrompt tout de suite — réessayer n'y changerait rien.
   let res: Response | null = null;
   let lastFailure = '';
-  outer: for (const model of [GEMINI_MODEL, ...FALLBACK_MODELS]) {
+  outer: for (const model of modelChain()) {
     for (let attempt = 0; attempt <= retryDelays.length; attempt++) {
       if (attempt > 0) await sleep(retryDelays[attempt - 1]);
       let r: Response;
@@ -146,7 +158,7 @@ export const extractPayslipData = async (
   }
   if (!res) {
     throw new GeminiError(
-      `Gemini indisponible après plusieurs tentatives sur ${1 + FALLBACK_MODELS.length} modèles (dernier échec : ${lastFailure})`,
+      `Gemini indisponible après plusieurs tentatives sur ${modelChain().length} modèles (dernier échec : ${lastFailure})`,
       'OVERLOADED'
     );
   }
@@ -181,4 +193,37 @@ export const extractPayslipData = async (
     netPaid: num(parsed.netPaid),
   };
   return result;
+};
+
+/**
+ * Question libre à Gemini avec la recherche Google activée (veille fiscale). Renvoie le
+ * texte de la réponse. Même chaîne de modèles et mêmes reprises que l'extraction.
+ */
+export const askGeminiWithSearch = async (apiKey: string, prompt: string, timeoutMs = 90_000): Promise<string> => {
+  if (!apiKey) throw new GeminiError('GEMINI_API_KEY_MISSING', 'AUTH');
+  const body = JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], tools: [{ google_search: {} }] });
+  let lastFailure = '';
+  for (const model of modelChain()) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      if (attempt > 0) await sleep(4_000);
+      let r: Response;
+      try { r = await callModel(model, apiKey, body, timeoutMs); }
+      catch (e: unknown) {
+        if ((e as { name?: string })?.name === 'AbortError') { lastFailure = `${model} : délai dépassé`; continue; }
+        throw e;
+      }
+      if (r.ok) {
+        const data = await r.json();
+        const parts: { text?: string }[] = data?.candidates?.[0]?.content?.parts || [];
+        const text = parts.map(p => p.text || '').join('');
+        if (!text) throw new GeminiError('RÉPONSE_GEMINI_VIDE');
+        return text;
+      }
+      const t = await r.text().catch(() => '');
+      lastFailure = `${model} : HTTP ${r.status} — ${t.slice(0, 200)}`;
+      if (r.status === 404) break;
+      if (!RETRYABLE_STATUS.has(r.status)) throw new GeminiError(`Gemini API ${r.status} — ${t.slice(0, 300)}`, r.status === 401 || r.status === 403 ? 'AUTH' : undefined);
+    }
+  }
+  throw new GeminiError(`Gemini indisponible (dernier échec : ${lastFailure})`, 'OVERLOADED');
 };

@@ -8,6 +8,7 @@ import { Save, AlertTriangle, Settings as SettingsIcon, Plus, Trash2, Mail, Down
 import { isLockAvailable, isBiometricEnabled, isPinEnabled, enableLock, disableBiometric, enablePin, disablePin } from '../services/appLockService';
 import { safeNumber } from '../lib/numbers';
 import { NotificationSettings } from './NotificationSettings';
+import { GeminiModelField } from './SettingsPanels';
 import { formatEUR } from '../lib/format';
 import { NumberInput } from './NumberInput';
 import { identifyTaxScale, sameTaxBrackets, applyTaxScale } from '../lib/finance';
@@ -24,11 +25,15 @@ interface SettingsProps {
   onSave: (newConfig: FiscalConfig, newBenefits: WorkBenefits, newEmail: string, newGeminiKey: string, newPickerKey: string) => void;
   onExport: () => void;
   onImport: (file: File) => Promise<boolean>;
+  // Panneaux composés par App (sauvegardes Drive, veille fiscale, appareils et confidentialité).
+  backupSlot?: React.ReactNode;
+  fiscalWatchSlot?: React.ReactNode;
+  securitySlot?: React.ReactNode;
   paydayDay?: number;
   onOpenPayday?: () => void;
 }
 
-export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parentsEmail, geminiApiKey, pickerApiKey, onSave, onExport, onImport, paydayDay, onOpenPayday }) => {
+export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parentsEmail, geminiApiKey, pickerApiKey, onSave, onExport, onImport, paydayDay, onOpenPayday, backupSlot, fiscalWatchSlot, securitySlot }) => {
   const [importMsg, setImportMsg] = useState<string | null>(null);
   // L'import écrase TOUT (comptes, mouvements, objectifs, fiches de paie, réglages) puis
   // resynchronise sur Drive : il faut une confirmation explicite, la boîte de sélection de
@@ -56,6 +61,22 @@ export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parent
   const [localEmail, setLocalEmail] = useState<string>(parentsEmail || '');
   const [localGeminiKey, setLocalGeminiKey] = useState<string>(geminiApiKey || '');
   const [localPickerKey, setLocalPickerKey] = useState<string>(pickerApiKey || '');
+
+  // Enregistrement automatique, comme partout ailleurs dans l'app (plus de bouton « Tout
+  // enregistrer » à ne pas oublier). Une adresse e-mail incomplète n'est pas enregistrée.
+  const emailValid = localEmail.trim() === '' || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(localEmail.trim());
+  const [savedHint, setSavedHint] = useState(false);
+  const dirty = JSON.stringify([localFiscal, localBenefits, localEmail.trim(), localGeminiKey.trim(), localPickerKey.trim()])
+    !== JSON.stringify([config, workBenefits, parentsEmail || '', geminiApiKey || '', pickerApiKey || '']);
+  useEffect(() => {
+    if (!dirty || !emailValid) return;
+    const t = setTimeout(() => {
+      onSave(localFiscal, localBenefits, localEmail.trim(), localGeminiKey.trim(), localPickerKey.trim());
+      setSavedHint(true);
+    }, 700);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [localFiscal, localBenefits, localEmail, localGeminiKey, localPickerKey]);
 
   // Verrou (biométrie et/ou PIN) : réglage 100% local à cet appareil (localStorage), donc
   // en dehors du circuit onSave/Drive utilisé par le reste de cet écran — une empreinte ou
@@ -137,7 +158,7 @@ export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parent
           <h2 className="text-xl font-black text-slate-800 dark:text-slate-100 flex items-center gap-2"><SettingsIcon className="w-6 h-6 text-indigo-600" /> Paramètres</h2>
           <p className="text-sm text-slate-500 dark:text-slate-400">Ajustez la fiscalité et vos avantages salariaux.</p>
         </div>
-        <Button onClick={() => onSave(localFiscal, localBenefits, localEmail, localGeminiKey, localPickerKey)} className="gap-2"><Save className="w-4 h-4" /> Tout enregistrer</Button>
+        <p role="status" className="text-xs font-bold text-slate-500 dark:text-slate-400 flex items-center gap-1.5"><Save className="w-4 h-4" aria-hidden="true" /> {savedHint ? 'Modifications enregistrées' : 'Enregistrement automatique'}</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -170,23 +191,30 @@ export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parent
             </div>
           )}
 
-          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-3">Un export télécharge une copie locale de toutes vos données. L'import remplace les données actuelles puis les resynchronise sur Drive.</p>
+          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-3">Un export télécharge une copie locale de toutes vos données (sans votre clé Gemini). L'import remplace les données actuelles puis les resynchronise sur Drive ; l'adresse e-mail de vos parents n'est jamais reprise d'un fichier importé.</p>
+          {backupSlot}
         </div>
+
+        {fiscalWatchSlot && <div className="lg:col-span-2">{fiscalWatchSlot}</div>}
 
         {/* SECTION EMAIL */}
         <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 lg:col-span-2">
             <h3 className="font-bold text-slate-800 dark:text-slate-100 mb-4 border-b border-slate-200 dark:border-slate-700 pb-2 flex items-center gap-2"><Mail className="w-4 h-4 text-indigo-600"/> Notification aux parents</h3>
             <div className="bg-slate-50 dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-700">
-                <label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase block mb-2">Email destinataire (Alertes Livret A / LEP)</label>
+                <label htmlFor="parents-email" className="text-[11px] font-black text-slate-600 dark:text-slate-300 uppercase block mb-2">E-mail destinataire (récapitulatifs Livret A et LEP)</label>
                 <input 
+                    id="parents-email"
+                    aria-invalid={!emailValid || undefined}
+                    aria-describedby={!emailValid ? 'parents-email-error' : undefined}
                     type="email" 
                     value={localEmail} 
                     onChange={e => setLocalEmail(e.target.value)} 
                     placeholder="parents@exemple.com"
                     className="w-full p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl font-bold text-slate-800 dark:text-slate-100"
                 />
+                {!emailValid && <p id="parents-email-error" role="alert" className="text-xs font-bold text-rose-700 dark:text-rose-300 mt-2">Adresse incomplète : elle sera enregistrée dès qu'elle sera valide.</p>}
                 <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-2 flex items-start gap-1">
-                    <span className="text-indigo-600 font-bold">Note :</span>
+                    <span className="text-indigo-700 dark:text-indigo-300 font-bold">Note :</span>
                     Un email récapitulatif sera envoyé automatiquement depuis votre compte Gmail à cette adresse uniquement lorsqu'un mouvement est détecté sur un Livret A ou un LEP.
                 </p>
             </div>
@@ -197,8 +225,9 @@ export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parent
             <h3 className="font-bold text-slate-800 dark:text-slate-100 mb-4 border-b border-slate-200 dark:border-slate-700 pb-2 flex items-center gap-2"><FileText className="w-4 h-4 text-indigo-600"/> Fiches de paie (analyse IA)</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="bg-slate-50 dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-700">
-                    <label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase block mb-2 flex items-center gap-1"><KeyRound className="w-3 h-3"/> Clé API Gemini</label>
+                    <label htmlFor="gemini-key" className="text-[11px] font-black text-slate-600 dark:text-slate-300 uppercase block mb-2 flex items-center gap-1"><KeyRound className="w-3 h-3"/> Clé API Gemini (cet appareil)</label>
                     <input
+                        id="gemini-key"
                         type="password"
                         autoComplete="off"
                         value={localGeminiKey}
@@ -206,11 +235,13 @@ export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parent
                         placeholder="AIza..."
                         className="w-full p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-bold text-slate-800 dark:text-slate-100"
                     />
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-2">Sert à extraire automatiquement les montants d'une fiche de paie importée. Créée sur <span className="font-bold">Google AI Studio</span>.</p>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-2">Sert à lire les fiches de paie et à la veille fiscale hebdomadaire. Créée sur <span className="font-bold">Google AI Studio</span> ; restreignez-la à l'API « Generative Language » dans Google Cloud.</p>
+                    <GeminiModelField />
                 </div>
                 <div className="bg-slate-50 dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-700">
-                    <label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase block mb-2 flex items-center gap-1"><KeyRound className="w-3 h-3"/> Clé API Google Picker</label>
+                    <label htmlFor="picker-key" className="text-[11px] font-black text-slate-600 dark:text-slate-300 uppercase block mb-2 flex items-center gap-1"><KeyRound className="w-3 h-3"/> Clé API Google Picker</label>
                     <input
+                        id="picker-key"
                         type="password"
                         autoComplete="off"
                         value={localPickerKey}
@@ -223,7 +254,7 @@ export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parent
             </div>
             <div className="mt-4 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-lg p-3 flex gap-2 items-start">
                 <AlertTriangle className="w-4 h-4 text-amber-700 dark:text-amber-400 mt-0.5 flex-shrink-0"/>
-                <p className="text-xs text-amber-700 dark:text-amber-300 leading-relaxed">Ces clés sont stockées en clair dans votre fichier sur Drive (comme le reste de vos réglages) — jamais envoyées ailleurs qu'à Google. Chaque extraction utilise votre propre quota Gemini.</p>
+                <p className="text-xs text-amber-700 dark:text-amber-300 leading-relaxed">La clé Gemini reste sur cet appareil : elle n'est ni dans votre fichier Drive, ni dans les exports (à ressaisir sur chaque appareil). La clé Picker, publique par nature, est synchronisée. Chaque analyse utilise votre propre quota Gemini.</p>
             </div>
         </div>
 
@@ -286,6 +317,8 @@ export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parent
 
         {/* SECTION NOTIFICATIONS (visible seulement si l'app est reliée au serveur) */}
         <NotificationSettings paydayDay={paydayDay} onOpenPayday={onOpenPayday} />
+
+        {securitySlot && <div className="lg:col-span-2">{securitySlot}</div>}
 
         <ChangelogHistory />
 
@@ -367,6 +400,31 @@ export const Settings: React.FC<SettingsProps> = ({ config, workBenefits, parent
               <NumberInput ariaLabel="Abattement forfaitaire (ex. 0,10)" value={localFiscal.standardAllowance} onChange={v => handleFiscalChange('standardAllowance', v)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded font-bold" />
             </div>
             <div className="grid grid-cols-2 gap-3">
+              {([
+                ['socialChargesCapital', 'Prélèv. sociaux (ex. 0,186)', localFiscal.socialChargesCapital],
+                ['socialChargesLifeInsurance', 'Prélèv. sociaux AV (ex. 0,172)', localFiscal.socialChargesLifeInsurance ?? 0.172],
+                ['standardAllowanceCap', 'Abattement 10 % : plafond (€)', localFiscal.standardAllowanceCap ?? 0],
+                ['standardAllowanceMin', 'Abattement 10 % : minimum (€)', localFiscal.standardAllowanceMin ?? 0],
+              ] as [keyof FiscalConfig, string, number][]).map(([field, label, value]) => (
+                <div key={field}>
+                  <label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">{label}</label>
+                  <NumberInput ariaLabel={label} value={value} onChange={v => handleFiscalChange(field, v)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded font-bold" />
+                </div>
+              ))}
+              <div>
+                <label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Décote : montant (€)</label>
+                <NumberInput ariaLabel="Décote : montant" value={localFiscal.decote?.single ?? 897} onChange={v => handleFiscalChange('decote', { rate: 0.4525, threshold: 1982, ...localFiscal.decote, single: v })} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded font-bold" />
+              </div>
+              <div>
+                <label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Décote : seuil d'impôt (€)</label>
+                <NumberInput ariaLabel="Décote : seuil" value={localFiscal.decote?.threshold ?? 1982} onChange={v => handleFiscalChange('decote', { single: 897, rate: 0.4525, ...localFiscal.decote, threshold: v })} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded font-bold" />
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">LEP : + par demi-part</label>
+                <NumberInput ariaLabel="Plafond LEP : ajout par demi-part" value={localFiscal.lepCeilingPerHalfPart ?? 0} onChange={v => handleFiscalChange('lepCeilingPerHalfPart', v)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded font-bold" />
+              </div>
               <div>
                 <label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Plafond RFR LEP (1 part)</label>
                 <NumberInput ariaLabel="Plafond RFR LEP (1 part)" value={localFiscal.lepIncomeCeiling ?? 0} onChange={v => handleFiscalChange('lepIncomeCeiling', v)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded font-bold" />

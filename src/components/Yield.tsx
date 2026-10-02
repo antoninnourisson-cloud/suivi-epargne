@@ -7,7 +7,7 @@ import { netAnnualRate } from '../lib/projection';
 import { SplitProjectionCard } from './SplitProjectionCard';
 
 const REGIME_LABEL: Record<CapitalTaxRegime, string> = {
-  PFU: 'PFU 30%',
+  PFU: 'PFU',
   EXONERE_IR: 'Exonéré IR',
   AV_REDUIT: 'IR réduit 7,5%',
   NON_MODELISE: 'Non calculé',
@@ -18,12 +18,13 @@ interface YieldProps {
   fiscalConfig: FiscalConfig;
   monthPlan?: number;
   savingsSplit?: { accountId: string; pct: number }[];
+  restitutionInMonths?: number;
 }
 
 const fmt = (n: number) => formatEUR(n);
 const REGULATED = [AccountType.LIVRET_A, AccountType.LDDS, AccountType.LEP];
 
-export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig, monthPlan, savingsSplit }) => {
+export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig, monthPlan, savingsSplit, restitutionInMonths }) => {
   const currentYear = new Date().getFullYear();
 
   const rows = useMemo(() =>
@@ -235,7 +236,7 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig, monthPlan,
         </div>
       </div>
 
-      <SplitProjectionCard accounts={accounts} fiscalConfig={fiscalConfig} monthPlan={monthPlan} savingsSplit={savingsSplit} />
+      <SplitProjectionCard accounts={accounts} fiscalConfig={fiscalConfig} monthPlan={monthPlan} savingsSplit={savingsSplit} restitutionInMonths={restitutionInMonths} />
 
       {(latentRows.length > 0 || missingDeposits.length > 0) && (
         <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
@@ -313,7 +314,7 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig, monthPlan,
           </div>
           <p className="px-6 pb-2 pt-1 text-[11px] text-slate-500 dark:text-slate-400 flex items-start gap-1">
             <Info className="w-3 h-3 flex-shrink-0 mt-0.5" />
-            Estimation simplifiée : PFU 30 % ou régime réduit selon l'ancienneté du compte. Lors d'un vrai rachat d'Assurance Vie, l'impôt ne porte que sur la part de gains contenue dans le montant retiré, avec un abattement annuel de 4 600 € après 8 ans : le vrai net est souvent meilleur.
+            Estimation simplifiée : PFU (31,4 % en 2026, 30 % sur l'assurance vie) ou régime réduit selon l'ancienneté du compte. Lors d'un vrai rachat d'Assurance Vie, l'impôt ne porte que sur la part de gains contenue dans le montant retiré, avec un abattement annuel de 4 600 € après 8 ans : le vrai net est souvent meilleur.
             {hasUnmodeled && ' Certains comptes (Immobilier, PER...) ont un régime trop spécifique pour être calculé ici : ils sont exclus du total net.'}
           </p>
 

@@ -46,7 +46,7 @@ describe('computeWithdrawalTax', () => {
     expect(t.known).toBe(true);
     expect(t.gainPart).toBeCloseTo(400);
     expect(t.incomeTax).toBe(0);
-    expect(t.socialCharges).toBeCloseTo(400 * 0.172);
+    expect(t.socialCharges).toBeCloseTo(400 * CFG.socialChargesCapital);
     expect(t.closesPea).toBe(false);
   });
 

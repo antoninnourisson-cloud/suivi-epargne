@@ -51,10 +51,30 @@ export const refreshAccessToken = (refreshToken: string, clientId: string, clien
  * DIRECTEMENT de l'endpoint de Google, en back-channel TLS authentifié par le secret
  * client — cas explicitement prévu par OpenID Connect Core §3.1.3.7.
  */
-export const decodeIdToken = (idToken: string): { sub: string; email?: string; email_verified?: boolean } => {
+export interface IdTokenClaims {
+  sub: string; email?: string; email_verified?: boolean; aud?: string | string[]; iss?: string; exp?: number; azp?: string;
+}
+
+export const decodeIdToken = (idToken: string): IdTokenClaims => {
   const payload = idToken.split('.')[1];
   const json = atob(payload.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - (payload.length % 4)) % 4));
   return JSON.parse(decodeURIComponent(escape(json)));
+};
+
+const GOOGLE_ISSUERS = ['https://accounts.google.com', 'accounts.google.com'];
+
+/**
+ * Même reçu en back-channel, on vérifie que le jeton est bien émis par Google POUR ce
+ * client (OIDC Core §3.1.3.7, points 2-3) et qu'il n'est pas expiré.
+ */
+export const verifyIdTokenClaims = (claims: IdTokenClaims, clientId: string, nowSeconds = Math.floor(Date.now() / 1000)): boolean => {
+  if (!claims || typeof claims.sub !== 'string' || !claims.sub) return false;
+  if (!claims.iss || !GOOGLE_ISSUERS.includes(claims.iss)) return false;
+  const aud = Array.isArray(claims.aud) ? claims.aud : [claims.aud];
+  if (!aud.includes(clientId)) return false;
+  if (Array.isArray(claims.aud) && claims.aud.length > 1 && claims.azp !== clientId) return false;
+  if (typeof claims.exp === 'number' && claims.exp + 300 < nowSeconds) return false;
+  return true;
 };
 
 export const revokeToken = (token: string) =>

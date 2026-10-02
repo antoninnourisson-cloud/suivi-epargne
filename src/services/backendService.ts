@@ -106,6 +106,7 @@ export const getVapidPublicKey = async (): Promise<string> => {
 export const registerPushSubscription = async (subscription: PushSubscriptionJSON): Promise<void> => {
   const res = await call('/push/subscribe', { method: 'POST', body: JSON.stringify({ subscription }) });
   if (res.status === 401) throw new Error('SESSION_EXPIRED');
+  if (res.status === 409) throw new Error('TOO_MANY_DEVICES');
   if (!res.ok) throw new Error('SUBSCRIBE_FAILED');
 };
 
@@ -118,3 +119,38 @@ export const sendTestPush = async (): Promise<boolean> => {
   if (!res.ok) return false;
   return !!(await res.json()).ok;
 };
+
+// --- Appareils et données côté serveur ---
+
+export interface PushDevice { id: string; host: string; createdAt: string | null; current: boolean }
+
+const authedJson = async <T,>(path: string, init: RequestInit = {}): Promise<T> => {
+  const res = await call(path, init);
+  if (res.status === 401) throw new Error('SESSION_EXPIRED');
+  if (!res.ok) throw new Error(`BACKEND_${res.status}`);
+  return res.json() as Promise<T>;
+};
+
+/** Appareils qui reçoivent les notifications. */
+export const listPushDevices = async (): Promise<PushDevice[]> =>
+  (await authedJson<{ devices: PushDevice[] }>('/push/devices')).devices || [];
+
+export const removePushDevice = async (id: string): Promise<void> => {
+  await authedJson('/push/remove', { method: 'POST', body: JSON.stringify({ id }) });
+};
+
+/** Ferme TOUTES les sessions (tous les appareils) et coupe toutes les notifications. */
+export const logoutAllDevices = async (): Promise<number> => {
+  const r = await authedJson<{ sessionsRevoked?: number }>('/auth/logout-all', { method: 'POST' });
+  clearBackendSession();
+  return r.sessionsRevoked ?? 0;
+};
+
+/** Efface tout ce que le serveur garde (session, notifications, jeton Google) et révoque l'accès Google. */
+export const deleteServerAccount = async (): Promise<void> => {
+  await authedJson('/account/delete', { method: 'POST' });
+  clearBackendSession();
+};
+
+export interface ServerHealth { lastRunAt: string | null; ok: boolean | null; usersProcessed?: number; error?: string }
+export const getServerHealth = async (): Promise<ServerHealth> => authedJson<ServerHealth>('/health');

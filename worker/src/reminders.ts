@@ -54,11 +54,41 @@ export const viewUrl = (appUrl: string, view: string) =>
 
 const MONTH_NAMES = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
 
-export const computeReminders = (data: GlobalAppData, now: Date, appUrl: string): Reminder[] => {
+/** Date civile (calendrier), mois de 1 à 12. */
+export interface CivilDate { year: number; month: number; day: number }
+
+const PARIS_PARTS = new Intl.DateTimeFormat('fr-FR', { timeZone: 'Europe/Paris', year: 'numeric', month: '2-digit', day: '2-digit' });
+
+/**
+ * Jour calendaire à Paris pour un instant donné. Les getters locaux d'un Date sont en UTC
+ * dans un Worker : entre minuit et 1 h (2 h l'été) à Paris, ils donneraient la veille.
+ */
+export const parisCivilDate = (instant: Date): CivilDate => {
+  const parts = PARIS_PARTS.formatToParts(instant);
+  const get = (type: string) => Number(parts.find(p => p.type === type)!.value);
+  return { year: get('year'), month: get('month'), day: get('day') };
+};
+
+const pad2 = (n: number) => String(n).padStart(2, '0');
+// Numéro de jour absolu d'une date civile : différences en jours exactes, sans heure d'été.
+const dayNumber = (y: number, m: number, d: number) => Date.UTC(y, m - 1, d) / 86_400_000;
+const dayNumberOfLocal = (d: Date) => dayNumber(d.getFullYear(), d.getMonth() + 1, d.getDate());
+
+/**
+ * Rappels du jour. `today` est la date civile à Paris ; un `Date` est accepté comme instant
+ * et converti (la tâche quotidienne passe `new Date()`, les tests une date choisie).
+ */
+export const computeReminders = (data: GlobalAppData, today: CivilDate | Date, appUrl: string): Reminder[] => {
+  const civil = today instanceof Date ? parisCivilDate(today) : today;
+  const Y = civil.year, M = civil.month - 1, D = civil.day; // M de 0 à 11, comme getMonth()
+  // Les fonctions de src/lib lisent les getters LOCAUX : ce Date (midi local, à l'abri des
+  // changements d'heure) les fait correspondre au jour civil parisien, en UTC comme ailleurs.
+  const now = new Date(Y, M, D, 12);
+  const todayN = dayNumber(Y, M + 1, D);
   const accounts = data.accounts || [];
   const link = (view: string) => viewUrl(appUrl, view);
   const out: Reminder[] = [];
-  const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const monthKey = `${Y}-${pad2(M + 1)}`;
 
   // 1. Échéances récurrentes arrivées à terme et pas encore enregistrées.
   for (const { recurring: r } of findDueRecurring(data.recurringMovements || [], accounts, now)) {
@@ -89,11 +119,11 @@ export const computeReminders = (data: GlobalAppData, now: Date, appUrl: string)
   }
 
   // 3. Décembre : intérêts de la part parentale (accord familial, voir l'app).
-  if (now.getMonth() === 11) {
-    const { totalAnnualParental } = computeAccruedParentalInterest(accounts, now.getFullYear(), now);
+  if (M === 11) {
+    const { totalAnnualParental } = computeAccruedParentalInterest(accounts, Y, now);
     if (totalAnnualParental > 1) {
       out.push({
-        key: `parental:${now.getFullYear()}`,
+        key: `parental:${Y}`,
         message: {
           title: 'Intérêts de fin d’année',
           body: `Les intérêts acquis cette année sur la part de vos parents représentent environ ${eur(totalAnnualParental)}.`,
@@ -106,7 +136,7 @@ export const computeReminders = (data: GlobalAppData, now: Date, appUrl: string)
 
   // 4. Aucune actualisation de solde depuis longtemps (même logique que le Dashboard,
   //    seuil plus haut : une notification doit rester rare pour rester lue).
-  const todayKey = `${monthKey}-${String(now.getDate()).padStart(2, '0')}`;
+  const todayKey = `${monthKey}-${pad2(D)}`;
   let latest: string | null = null;
   for (const a of accounts) {
     for (const m of a.movements || []) {
@@ -115,7 +145,7 @@ export const computeReminders = (data: GlobalAppData, now: Date, appUrl: string)
   }
   if (latest) {
     const [y, mo, d] = latest.split('-').map(Number);
-    const days = Math.floor((now.getTime() - new Date(y, mo - 1, d).getTime()) / 86_400_000);
+    const days = todayN - dayNumber(y, mo, d);
     if (days >= STALE_UPDATE_DAYS) {
       out.push({
         // Une seule fois par « dernière date connue » : une nouvelle saisie réarme le rappel.
@@ -136,7 +166,7 @@ export const computeReminders = (data: GlobalAppData, now: Date, appUrl: string)
     // Fenêtre de 3 jours comptée depuis la date de paie, même à cheval sur deux mois (une
     // paie le 30 gardait sinon un seul jour pour un cron manqué).
     const payPeriod = payPeriodOf(payday, now);
-    const daysSincePay = Math.round((new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() - payPeriod.payDate.getTime()) / 86_400_000);
+    const daysSincePay = todayN - dayNumberOfLocal(payPeriod.payDate);
     if (daysSincePay >= 0 && daysSincePay < PAYDAY_WINDOW_DAYS) {
       const amount = data.config.paydayAmount ?? computeMonthlySavingsCapacity(data);
       const steps = amount > 0
@@ -217,8 +247,8 @@ export const computeReminders = (data: GlobalAppData, now: Date, appUrl: string)
 
   // 7. Bilan du mois écoulé (1er au 3 du mois, une fois) : épargne placée face au plan,
   //    évolution de l'épargne nette, intérêts acquis.
-  if (now.getDate() <= 3 && accounts.length > 0) {
-    const prevEnd = new Date(now.getFullYear(), now.getMonth(), 0);          // dernier jour du mois écoulé
+  if (D <= 3 && accounts.length > 0) {
+    const prevEnd = new Date(Y, M, 0);          // dernier jour du mois écoulé
     const prevStart = new Date(prevEnd.getFullYear(), prevEnd.getMonth(), 1);
     const beforeStart = new Date(prevEnd.getFullYear(), prevEnd.getMonth(), 0); // veille du mois écoulé
     const saved = computeMonthSavedAmount(accounts, prevEnd, data.config?.trackingStartDate);
@@ -251,14 +281,14 @@ export const computeReminders = (data: GlobalAppData, now: Date, appUrl: string)
 
   // 8. Mi-janvier : les relevés au 31/12 des placements arrivent. Un seul rappel par an,
   //    et seulement pour les placements dont la valeur n'a pas encore été actualisée.
-  if (now.getMonth() === 0 && now.getDate() >= 15 && now.getDate() <= 20) {
+  if (M === 0 && D >= 15 && D <= 20) {
     const waiting = findAccountsAwaitingAnnualStatement(accounts, now);
     if (waiting.length > 0) {
       out.push({
-        key: `annual-statement:${now.getFullYear()}`,
+        key: `annual-statement:${Y}`,
         message: {
           title: 'Relevés annuels de vos placements',
-          body: `Reportez la valeur au 31/12 et les versements de ${waiting.map(a => a.name).join(', ')} : les plus-values restent justes.${waiting.some(a => a.type === AccountType.ASSURANCE_VIE) ? ` Pensez aussi au taux servi ${now.getFullYear() - 1} du fonds euros, publié par l'assureur.` : ''}`,
+          body: `Reportez la valeur au 31/12 et les versements de ${waiting.map(a => a.name).join(', ')} : les plus-values restent justes.${waiting.some(a => a.type === AccountType.ASSURANCE_VIE) ? ` Pensez aussi au taux servi ${Y - 1} du fonds euros, publié par l'assureur.` : ''}`,
           url: link('update'),
           tag: 'annual-statement',
         },
@@ -268,8 +298,8 @@ export const computeReminders = (data: GlobalAppData, now: Date, appUrl: string)
 
 
   // 9. Avril, ouverture de la déclaration en ligne : les dons de l'année écoulée à déclarer.
-  if (now.getMonth() === 3 && now.getDate() >= 10 && now.getDate() <= 20) {
-    const sum = computeDonationSummary(data.donations || [], now.getFullYear() - 1);
+  if (M === 3 && D >= 10 && D <= 20) {
+    const sum = computeDonationSummary(data.donations || [], Y - 1);
     if (sum.count > 0) {
       const missing = sum.missingReceipts.length;
       out.push({
@@ -288,8 +318,8 @@ export const computeReminders = (data: GlobalAppData, now: Date, appUrl: string)
 
   // 10. Fin janvier : vérifier les paramètres fiscaux de l'année (barème, plafond LEP,
   //     abattement), tant qu'ils n'ont pas été marqués comme vérifiés dans l'app.
-  const year = now.getFullYear();
-  if (now.getMonth() === 0 && now.getDate() >= 20 && now.getDate() <= 25 && (data.fiscalConfig?.paramsReviewedYear ?? 0) < year) {
+  const year = Y;
+  if (M === 0 && D >= 20 && D <= 25 && (data.fiscalConfig?.paramsReviewedYear ?? 0) < year) {
     out.push({
       key: `fiscal-review:${year}`,
       message: {
@@ -310,10 +340,9 @@ export const computeReminders = (data: GlobalAppData, now: Date, appUrl: string)
       const [py, pm, pd] = restitution.plannedDate.split('-').map(Number);
       const planned = new Date(py, pm - 1, pd);
       const detail = plan.rows.map(r => `${r.name} ${eur(r.amount)}`).join(', ');
-      const plannedLabel = frenchDay(planned) + (planned.getFullYear() !== now.getFullYear() ? ` ${planned.getFullYear()}` : '');
-      const today0 = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      const daysToPlanned = Math.round((planned.getTime() - today0.getTime()) / 86_400_000);
-      if (now.getMonth() === 11 && now.getDate() <= 3 && daysToPlanned > 3) {
+      const plannedLabel = frenchDay(planned) + (planned.getFullYear() !== Y ? ` ${planned.getFullYear()}` : '');
+      const daysToPlanned = dayNumber(py, pm, pd) - todayN;
+      if (M === 11 && D <= 3 && daysToPlanned > 3) {
         out.push({
           key: `restitution-prep:${restitution.plannedDate}`,
           message: {
@@ -340,8 +369,8 @@ export const computeReminders = (data: GlobalAppData, now: Date, appUrl: string)
 
 
   // 12. Début janvier : le bilan de l'année écoulée est prêt (Historique).
-  if (now.getMonth() === 0 && now.getDate() >= 2 && now.getDate() <= 6 && accounts.length > 0) {
-    const y = now.getFullYear() - 1;
+  if (M === 0 && D >= 2 && D <= 6 && accounts.length > 0) {
+    const y = Y - 1;
     const review = computeYearReview(data, y, now);
     out.push({
       key: `year-review:${y}`,
@@ -356,3 +385,44 @@ export const computeReminders = (data: GlobalAppData, now: Date, appUrl: string)
 
   return out;
 };
+
+// ---------- Mode discret ----------
+
+// Texte générique par type de rappel (préfixe de la clé). Utilisé quand le fichier de
+// données demande des notifications discrètes : rien de chiffré sur l'écran verrouillé.
+const DISCREET_BODIES: Record<string, string> = {
+  recurring: 'Une échéance est à enregistrer dans l’app.',
+  parental: 'Le point sur les intérêts de fin d’année est prêt.',
+  payday: 'Votre rappel de paie est prêt.',
+  'payday-followup': 'Des virements de paie restent à faire ou à cocher.',
+  sub: 'Un prélèvement approche : le détail est dans l’app.',
+  recap: 'Le bilan du mois est prêt.',
+  donations: 'Le récapitulatif de vos dons est prêt.',
+  'restitution-prep': 'La restitution approche : le détail est dans l’app.',
+  'restitution-day': 'C’est le jour de la restitution : le détail est dans l’app.',
+  'year-review': 'Le bilan de l’année est prêt dans Historique.',
+};
+// Titres qui portent eux-mêmes un montant : seule partie remplacée d'un titre.
+const DISCREET_TITLES: Record<string, string> = {
+  payday: 'Salaire versé',
+  donations: 'Déclaration de vos dons',
+  'restitution-day': 'Restitution du capital de vos parents',
+};
+const GENERIC_BODY = 'Ouvrez Pécule pour voir le détail.';
+const HAS_AMOUNT = /\d[\d\s  .,]*\s?€|€\s?\d/;
+
+export const isDiscreet = (data: GlobalAppData | null | undefined): boolean =>
+  (data?.config as { discreetNotifications?: unknown } | undefined)?.discreetNotifications === true;
+
+/**
+ * Post-traitement des rappels en mode discret : corps génériques par type, titres et liens
+ * conservés (sauf un titre qui contiendrait un montant). Les clés de dédoublonnage ne
+ * changent pas.
+ */
+export const applyDiscreetMode = (reminders: Reminder[]): Reminder[] =>
+  reminders.map(r => {
+    const kind = r.key.split(':')[0];
+    const body = DISCREET_BODIES[kind] ?? (HAS_AMOUNT.test(r.message.body) ? GENERIC_BODY : r.message.body);
+    const title = HAS_AMOUNT.test(r.message.title) ? (DISCREET_TITLES[kind] ?? 'Pécule') : r.message.title;
+    return { ...r, message: { ...r.message, title, body } };
+  });

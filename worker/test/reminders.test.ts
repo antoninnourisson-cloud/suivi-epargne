@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeReminders } from '../src/reminders';
+import { computeReminders, parisCivilDate, applyDiscreetMode, isDiscreet, Reminder } from '../src/reminders';
 import { AccountType, GlobalAppData } from '../../src/types';
 import { DEFAULT_FISCAL_CONFIG } from '../../src/constants';
 
@@ -240,5 +240,116 @@ describe('computeReminders', () => {
       expect(r?.message.url).toBe(`${APP}?view=history`);
       expect(computeReminders(base({ accounts: [livret] }), new Date(2027, 0, 10, 9), APP).some(x => x.key.startsWith('year-review'))).toBe(false);
     });
+  });
+});
+
+describe('fuseau Europe/Paris', () => {
+  const livret = {
+    id: 'la', name: 'Livret A', type: AccountType.LIVRET_A, institution: 'B',
+    totalAmount: 1000, ownedAmount: 1000, parentalCapital: 0, interestRate: 3,
+    movements: [{ id: 'm', date: '2026-09-20', amount: 10, label: 'x', type: 'IN' as const }],
+  };
+
+  it("donne le jour parisien, pas le jour UTC, autour des changements d'heure", () => {
+    // Passage à l'heure d'été (29 mars 2026, 2 h → 3 h) : UTC+1 avant, UTC+2 après.
+    expect(parisCivilDate(new Date('2026-03-28T22:59:00Z'))).toEqual({ year: 2026, month: 3, day: 28 });
+    expect(parisCivilDate(new Date('2026-03-28T23:30:00Z'))).toEqual({ year: 2026, month: 3, day: 29 });
+    expect(parisCivilDate(new Date('2026-03-29T21:59:00Z'))).toEqual({ year: 2026, month: 3, day: 29 });
+    expect(parisCivilDate(new Date('2026-03-29T22:30:00Z'))).toEqual({ year: 2026, month: 3, day: 30 });
+    // Retour à l'heure d'hiver (25 octobre 2026, 3 h → 2 h) : UTC+2 avant, UTC+1 après.
+    expect(parisCivilDate(new Date('2026-10-24T22:30:00Z'))).toEqual({ year: 2026, month: 10, day: 25 });
+    expect(parisCivilDate(new Date('2026-10-25T22:30:00Z'))).toEqual({ year: 2026, month: 10, day: 25 });
+    expect(parisCivilDate(new Date('2026-10-25T23:30:00Z'))).toEqual({ year: 2026, month: 10, day: 26 });
+  });
+
+  it("change de mois et d'année à minuit à Paris", () => {
+    expect(parisCivilDate(new Date('2026-09-30T22:30:00Z'))).toEqual({ year: 2026, month: 10, day: 1 });
+    expect(parisCivilDate(new Date('2026-12-31T22:59:00Z'))).toEqual({ year: 2026, month: 12, day: 31 });
+    expect(parisCivilDate(new Date('2026-12-31T23:00:00Z'))).toEqual({ year: 2027, month: 1, day: 1 });
+  });
+
+  it('le bilan mensuel suit le 1er du mois parisien, même encore la veille en UTC', () => {
+    const data = base({ accounts: [livret] });
+    const keys = (d: Date) => computeReminders(data, d, APP).map(r => r.key);
+    expect(keys(new Date('2026-09-30T22:30:00Z'))).toContain('recap:2026-09');     // 1er oct. 00:30 à Paris
+    expect(keys(new Date('2026-09-30T21:30:00Z'))).not.toContain('recap:2026-09'); // 30 sept. 23:30
+    expect(keys(new Date('2026-12-31T23:30:00Z'))).toContain('recap:2026-12');     // 1er janv. 2027
+  });
+
+  it('accepte une date civile explicite, et la clé mensuelle suit ce mois', () => {
+    const data = base({
+      accounts: [livret],
+      recurringMovements: [{ id: 'r1', accountId: 'la', amount: 200, type: 'IN', label: 'x', dayOfMonth: 1, active: true }],
+    });
+    const r = computeReminders(data, { year: 2026, month: 10, day: 1 }, APP);
+    expect(r.map(x => x.key)).toContain('recurring:r1:2026-10');
+  });
+
+  it("compte les jours sans mise à jour en jours civils, à travers le changement d'heure", () => {
+    const acc = { ...livret, movements: [{ id: 'm', date: '2026-09-25', amount: 10, label: 'x', type: 'IN' as const }] };
+    const keys = (day: number) => computeReminders(base({ accounts: [acc] }), { year: 2026, month: 10, day }, APP).map(r => r.key);
+    expect(keys(24)).not.toContain('stale:2026-09-25'); // 29 jours
+    expect(keys(25)).toContain('stale:2026-09-25');     // 30 jours, jour du passage à l'heure d'hiver
+    expect(keys(26)).toContain('stale:2026-09-25');
+  });
+
+  it('la fenêtre de paie suit le jour parisien', () => {
+    const lep = { ...livret, id: 'lep', name: 'LEP', type: AccountType.LEP, totalAmount: 9600, ownedAmount: 9600, interestRate: 3.5 };
+    const data = base({ accounts: [lep], config: { ...base().config, paydayDay: 1, paydayAmount: 100 } });
+    const keys = (d: Date) => computeReminders(data, d, APP).map(r => r.key);
+    expect(keys(new Date('2026-09-30T22:30:00Z'))).toContain('payday:2026-10');
+    expect(keys(new Date('2026-09-30T21:30:00Z'))).not.toContain('payday:2026-10');
+  });
+});
+
+describe('mode discret', () => {
+  const r = (key: string, title: string, body: string): Reminder => ({ key, message: { title, body, url: `${APP}?view=x`, tag: key } });
+
+  it('remplace les corps chiffrés par un texte générique par type, garde titres, liens et clés', () => {
+    const out = applyDiscreetMode([
+      r('recurring:r1:2026-10', 'Échéance : Épargne auto', "+200 € sur Livret A — à enregistrer dans l'app."),
+      r('sub:n:2026-10-05', 'Prélèvement demain : Netflix', '13,49 € sur Compte BP, lundi 5 octobre.'),
+      r('recap:2026-09', 'Bilan de septembre', '+300 € placés · épargne 1 300 €.'),
+      r('rates:2026-08', 'Taux réglementés révisés', 'Révision du 1er août : pensez à mettre à jour Livret A.'),
+    ]);
+    expect(out.map(x => x.message.body)).toEqual([
+      'Une échéance est à enregistrer dans l’app.',
+      'Un prélèvement approche : le détail est dans l’app.',
+      'Le bilan du mois est prêt.',
+      'Révision du 1er août : pensez à mettre à jour Livret A.', // sans montant : inchangé
+    ]);
+    expect(out.map(x => x.message.title)).toEqual(['Échéance : Épargne auto', 'Prélèvement demain : Netflix', 'Bilan de septembre', 'Taux réglementés révisés']);
+    expect(out.map(x => x.key)).toEqual(['recurring:r1:2026-10', 'sub:n:2026-10-05', 'recap:2026-09', 'rates:2026-08']);
+    expect(out.every(x => x.message.url === `${APP}?view=x`)).toBe(true);
+  });
+
+  it('retire aussi les montants des titres qui en portent', () => {
+    const [pay, don, unknown] = applyDiscreetMode([
+      r('payday:2026-10', 'Salaire versé : 2 000 € à placer', '900 € Revolut commun · Épargne : 500 € sur Livret A.'),
+      r('donations:2026', 'Déclaration : 150 € de dons en 2026', '≈ 108 € de réduction.'),
+      r('nouveau:1', 'Titre 12 €', 'Corps 12 €'),
+    ]);
+    expect(pay.message).toMatchObject({ title: 'Salaire versé', body: 'Votre rappel de paie est prêt.' });
+    expect(don.message.title).toBe('Déclaration de vos dons');
+    expect(unknown.message).toMatchObject({ title: 'Pécule', body: 'Ouvrez Pécule pour voir le détail.' });
+    expect(JSON.stringify([pay, don, unknown].map(x => x.message))).not.toMatch(/\d\s?€/);
+  });
+
+  it('ne s’active que si config.discreetNotifications vaut true', () => {
+    expect(isDiscreet(base())).toBe(false);
+    expect(isDiscreet(base({ config: { ...base().config, discreetNotifications: true } as any }))).toBe(true);
+    expect(isDiscreet(base({ config: { ...base().config, discreetNotifications: 'yes' } as any }))).toBe(false);
+  });
+
+  it('sur des rappels réels, aucun montant ne subsiste', () => {
+    const data = base({
+      accounts: [{ id: 'la', name: 'Livret A', type: AccountType.LIVRET_A, institution: 'B', totalAmount: 1300, ownedAmount: 1300, parentalCapital: 0, interestRate: 3,
+        movements: [{ id: 'a', date: '2026-08-10', amount: 1000, label: 'x', type: 'IN' as const }, { id: 'b', date: '2026-09-05', amount: 300, label: 'x', type: 'IN' as const }] }],
+      config: { ...base().config, paydayDay: 1, paydayAmount: 300 },
+    });
+    const raw = computeReminders(data, { year: 2026, month: 10, day: 1 }, APP);
+    expect(raw.some(x => /€/.test(x.message.body))).toBe(true);
+    const out = applyDiscreetMode(raw);
+    expect(out.some(x => /€/.test(x.message.title + x.message.body))).toBe(false);
   });
 });

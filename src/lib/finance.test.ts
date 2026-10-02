@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import {
+import { applyDecote, migrateFiscalConfig, computeDonationSummary as _cds,
   computeIncomeTax,
   computeIncome,
   computeSavingsCapacity,
@@ -121,18 +121,19 @@ describe('computeIncome (super net)', () => {
   };
 
   // Repères calculés à la main pour 45 000 € brut, charges 22,32 % :
-  // grossMonth 3750 ; charges 837 ; net 2913 ; net annuel 34 956
-  // abattement 10 % = 3495,60 (< plafond) ; assiette 31 460,40
-  // impôt = 17503*0.11 + 2663.40*0.30 = 1925.33 + 799.02 = 2724.35
+  // grossMonth 3750 ; charges 837 ; net 2913 ; + CSG/CRDS non déductible 106,85 (2,9 % de
+  // 98,25 % du brut) ; net imposable annuel 36 238,16 ; abattement 10 % = 3 623,82 ;
+  // assiette 32 614,35 ; impôt = 17503*0.11 + 3817.35*0.30 = 1925.33 + 1145.20 = 3070.53
+  // (au-dessus du seuil de décote).
 
   it('déduit les charges salariales du brut', () => {
     const r = computeIncome(baseInput, LEGACY_CFG, NO_BENEFITS);
     expect(r.grossMonth).toBeCloseTo(3750, 2);
     expect(r.socialCharges).toBeCloseTo(837, 2);
     expect(r.netSalaryOnly).toBeCloseTo(2913, 2);
-    expect(r.netTaxableYear).toBeCloseTo(31460.4, 2);
-    expect(r.taxAmount).toBeCloseTo(2724.35, 2);
-    expect(r.monthlyTax).toBeCloseTo(227.03, 2);
+    expect(r.netTaxableYear).toBeCloseTo(32614.35, 1);
+    expect(r.taxAmount).toBeCloseTo(3070.53, 1);
+    expect(r.monthlyTax).toBeCloseTo(255.88, 1);
   });
 
   it('exclut le remboursement Navigo de l\'assiette imposable', () => {
@@ -143,19 +144,19 @@ describe('computeIncome (super net)', () => {
     // Le gain Navigo augmente le net avant impôt mais pas l'assiette (exonéré).
     expect(withNavigo.navigoGain).toBeCloseTo(45, 2);
     expect(withNavigo.netBeforeTax).toBeCloseTo(2913 + 45, 2);
-    expect(withNavigo.netTaxableYear).toBeCloseTo(31460.4, 2);
-    expect(withNavigo.taxAmount).toBeCloseTo(2724.35, 2);
+    expect(withNavigo.netTaxableYear).toBeCloseTo(32614.35, 1);
+    expect(withNavigo.taxAmount).toBeCloseTo(3070.53, 1);
   });
 
   it('applique le taux forcé à l\'assiette imposable, pas au net avant impôt', () => {
-    // Correction du bug d'assiette : 31460.40 / 12 * 10 % = 262.17
+    // Assiette imposable : 32 614,35 / 12 * 10 % = 271.79
     // (avant : netBeforeTax * 10 %, ce qui imposait aussi le Navigo).
     const forced = computeIncome(
       { ...baseInput, taxRateManual: 10 },
       LEGACY_CFG,
       NO_BENEFITS
     );
-    expect(forced.effectiveMonthlyTax).toBeCloseTo(262.17, 2);
+    expect(forced.effectiveMonthlyTax).toBeCloseTo(271.79, 1);
 
     const forcedWithNavigo = computeIncome(
       { ...baseInput, taxRateManual: 10 },
@@ -163,20 +164,20 @@ describe('computeIncome (super net)', () => {
       { ...NO_BENEFITS, navigo: { active: true, basePrice: 90, refundRate: 50 } }
     );
     // Même impôt forcé qu'sans Navigo : le remboursement n'est plus imposé.
-    expect(forcedWithNavigo.effectiveMonthlyTax).toBeCloseTo(262.17, 2);
+    expect(forcedWithNavigo.effectiveMonthlyTax).toBeCloseTo(271.79, 1);
   });
 
   it('plafonne l\'abattement forfaitaire de 10%', () => {
-    // 400 000 brut : net annuel 310 720 ; abattement plafonné à 14 171 => assiette 296 549
-    // impôt = 1925.33 + 16063.20 + 38853.65 + 119443*0.45 = 110 591.53
-    // Sans plafond l'assiette serait 279 648 et l'impôt 102 986.08 (-7 605.45).
+    // 400 000 brut : net 310 720 + CSG non déductible 11 397 = 322 117 ; abattement plafonné
+    // à 14 555 => assiette 307 562 ; impôt = 1925.33 + 16063.20 + 38853.65 + 130456*0.45
+    // = 115 547.38.
     const r = computeIncome(
       { ...baseInput, grossAnnual: 400000 },
       LEGACY_CFG,
       NO_BENEFITS
     );
-    expect(r.netTaxableYear).toBeCloseTo(296549, 2);
-    expect(r.taxAmount).toBeCloseTo(110591.53, 2);
+    expect(r.netTaxableYear).toBeCloseTo(307562, 0);
+    expect(r.taxAmount).toBeCloseTo(115547.38, 0);
   });
 
   it('retombe sur le plafond par défaut si le champ est absent des données', () => {
@@ -188,8 +189,8 @@ describe('computeIncome (super net)', () => {
       legacyConfig as FiscalConfig,
       NO_BENEFITS
     );
-    expect(r.netTaxableYear).toBeCloseTo(296549, 2);
-    expect(r.taxAmount).toBeCloseTo(110591.53, 2);
+    expect(r.netTaxableYear).toBeCloseTo(307562, 0);
+    expect(r.taxAmount).toBeCloseTo(115547.38, 0);
     expect(Number.isNaN(r.superNet)).toBe(false);
   });
 
@@ -217,7 +218,7 @@ describe('computeIncome (super net)', () => {
     );
     expect(r.navigoGain).toBeCloseTo(61.05, 2);
     // Et toujours hors assiette imposable.
-    expect(r.netTaxableYear).toBeCloseTo(31460.4, 2);
+    expect(r.netTaxableYear).toBeCloseTo(32614.35, 1);
   });
 
   it('ne produit aucun NaN sur un revenu nul', () => {
@@ -226,6 +227,44 @@ describe('computeIncome (super net)', () => {
     expect(r.taxAmount).toBe(0);
     expect(r.autoRate).toBe(0);
     expect(r.superNet).toBe(0);
+  });
+
+  it('applique la décote 2026 aux petits impôts', () => {
+    // 24 000 € brut, barème 2026 : assiette 17 394,32 ; impôt brut (17394.32-11600)*0.11 = 637.38 ;
+    // décote 897 - 0.4525*637.38 = 608.59 => impôt 28.79.
+    const r = computeIncome({ ...baseInput, grossAnnual: 24000 }, DEFAULT_FISCAL_CONFIG, NO_BENEFITS);
+    expect(r.netTaxableYear).toBeCloseTo(17394.32, 1);
+    expect(r.taxAmount).toBeCloseTo(28.79, 1);
+  });
+
+  it('ajoute la part patronale de la mutuelle au net imposable', () => {
+    const withMut = computeIncome(baseInput, LEGACY_CFG, { ...NO_BENEFITS, mutuelle: { active: true, totalCost: 100, employerRate: 50 } });
+    const without = computeIncome(baseInput, LEGACY_CFG, NO_BENEFITS);
+    expect(withMut.netTaxableYear - without.netTaxableYear).toBeCloseTo(50 * 12 * 0.9, 1);
+  });
+});
+
+describe('applyDecote', () => {
+  it('annule un très petit impôt, ne touche pas un impôt au-dessus du seuil', () => {
+    expect(applyDecote(500, DEFAULT_FISCAL_CONFIG)).toBe(0);
+    expect(applyDecote(2500, DEFAULT_FISCAL_CONFIG)).toBe(2500);
+    expect(applyDecote(1200, DEFAULT_FISCAL_CONFIG)).toBeCloseTo(1200 - (897 - 0.4525 * 1200), 5);
+  });
+});
+
+describe('migrateFiscalConfig', () => {
+  it('passe les anciens 17,2 % à 18,6 % et garde 17,2 % pour l\'assurance vie', () => {
+    const old = { ...DEFAULT_FISCAL_CONFIG, socialChargesCapital: 0.172, socialChargesLifeInsurance: undefined, decote: undefined, standardAllowanceCap: 14171, lepIncomeCeiling: 22419, lepCeilingPerHalfPart: undefined };
+    const m = migrateFiscalConfig(old as FiscalConfig);
+    expect(m.socialChargesCapital).toBeCloseTo(0.186);
+    expect(m.socialChargesLifeInsurance).toBeCloseTo(0.172);
+    expect(m.standardAllowanceCap).toBe(14555);
+    expect(m.lepIncomeCeiling).toBe(23028);
+    expect(m.decote?.single).toBe(897);
+  });
+  it('ne touche pas un réglage personnalisé', () => {
+    const custom = { ...DEFAULT_FISCAL_CONFIG, socialChargesCapital: 0.2, socialChargesLifeInsurance: undefined };
+    expect(migrateFiscalConfig(custom as FiscalConfig).socialChargesCapital).toBe(0.2);
   });
 });
 
@@ -348,19 +387,25 @@ describe('computeCapitalGainsTax (PFU / prélèvements sociaux)', () => {
     expect(r).toEqual({ grossInterest: 0, socialCharges: 0, incomeTax: 0, netInterest: 0, regime: 'PFU' });
   });
 
-  it('applique le PFU à 30% (12,8% IR + 17,2% social) sur un PEA récent', () => {
+  it('applique le PFU (12,8% IR + prélèvements sociaux) sur un PEA récent', () => {
     const r = computeCapitalGainsTax({ type: AccountType.PEA, openingDate: '2024-01-01' }, 1000, fiscal, NOW);
-    expect(r.socialCharges).toBeCloseTo(172, 5);
+    expect(r.socialCharges).toBeCloseTo(1000 * fiscal.socialChargesCapital, 5);
     expect(r.incomeTax).toBeCloseTo(128, 5);
-    expect(r.netInterest).toBeCloseTo(700, 5);
+    expect(r.netInterest).toBeCloseTo(1000 - 128 - 1000 * fiscal.socialChargesCapital, 5);
     expect(r.regime).toBe('PFU');
   });
 
-  it('exonère un PEA de plus de 5 ans d\'IR, mais garde les 17,2% sociaux', () => {
+  it('exonère un PEA de plus de 5 ans d\'IR, mais garde les prélèvements sociaux', () => {
     const r = computeCapitalGainsTax({ type: AccountType.PEA, openingDate: '2015-01-01' }, 1000, fiscal, NOW);
     expect(r.incomeTax).toBe(0);
-    expect(r.socialCharges).toBeCloseTo(172, 5);
-    expect(r.netInterest).toBeCloseTo(828, 5);
+    expect(r.socialCharges).toBeCloseTo(1000 * fiscal.socialChargesCapital, 5);
+    expect(r.netInterest).toBeCloseTo(1000 - 1000 * fiscal.socialChargesCapital, 5);
+    expect(r.regime).toBe('EXONERE_IR');
+  });
+
+  it('exonère toujours un PEE d\'IR, même récent', () => {
+    const r = computeCapitalGainsTax({ type: AccountType.PEE, openingDate: '2025-06-01' }, 1000, fiscal, NOW);
+    expect(r.incomeTax).toBe(0);
     expect(r.regime).toBe('EXONERE_IR');
   });
 
@@ -702,7 +747,8 @@ describe('computeLepEligibility', () => {
 
   it('ajuste le plafond au nombre de parts', () => {
     const r = computeLepEligibility(withLep, 30000, { ...cfg, lepHouseholdParts: 2 });
-    expect(r?.ceiling).toBe(44000);
+    // Grille officielle : + 6 149 € par demi-part au-delà de la 1re part.
+    expect(r?.ceiling).toBe((cfg.lepIncomeCeiling as number) + 2 * 6149);
     expect(r?.status).toBe('ok');
   });
 });
@@ -748,5 +794,19 @@ describe('findDueRecurring', () => {
 describe('barème 2026', () => {
   it("retrouve l'exemple officiel : 30 000 € imposables → 2 103,99 €", () => {
     expect(computeIncomeTax(30000, LATEST_TAX_SCALE.brackets)).toBeCloseTo(2103.99, 2);
+  });
+});
+
+describe('computeDonationSummary (plafonds)', () => {
+  const d = (amount: number, rate: 66 | 75) => ({ id: String(amount) + rate, date: '2026-03-01', amount, organization: 'X', rate, receiptReceived: true });
+  it("plafonne la réduction à l'impôt dû", () => {
+    const s = _cds([d(500, 66)], 2026, { taxDue: 100, taxableIncome: 20000 });
+    expect(s.reductionUncapped).toBeCloseTo(330);
+    expect(s.reduction).toBe(100);
+    expect(s.cappedByTax).toBe(true);
+  });
+  it('limite la base à 66 % à 20 % du revenu imposable', () => {
+    const s = _cds([d(5000, 66)], 2026, { taxableIncome: 10000 });
+    expect(s.total66).toBe(2000);
   });
 });
