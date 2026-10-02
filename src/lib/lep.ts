@@ -98,7 +98,7 @@ const eur = (n: number) => `${Math.round(n).toLocaleString('fr-FR')} €`;
 /** Phrase à afficher (accueil, notification). `null` quand tout va bien. */
 export const describeLepTimeline = (t: LepTimeline | null): { title: string; detail: string } | null => {
   if (!t || t.status === 'ok') return null;
-  const src = t.estimated ? ' (estimation : saisissez le revenu fiscal de référence de vos avis d\'imposition dans Paramètres pour plus de précision)' : '';
+  const src = t.estimated ? ' (estimation : importez votre avis d\'imposition dans Paramètres pour un calcul exact)' : '';
   switch (t.status) {
     case 'closed-due':
       return { title: 'LEP : vous n\'y avez plus droit', detail: `Vos revenus ${t.overYear} et ${t.overYear! + 1} dépassent le plafond (${eur(t.ceiling)}). Votre banque devait le fermer vers le ${frDate(t.closeBy!)}. Prévoyez où placer ce montant (Livret A, LDDS) : les intérêts acquis vous restent.${src}` };

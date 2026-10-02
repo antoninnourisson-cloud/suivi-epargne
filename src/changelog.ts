@@ -15,6 +15,16 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '2026.10.03-2',
+    date: '2026-10-03',
+    title: 'LEP : alerte avant fermeture',
+    items: [
+      "Pécule vous prévient si vos revenus dépassent le plafond du LEP, et annonce la date de fermeture probable (deux années de suite au-dessus du plafond).",
+      "Paramètres : importez votre avis d'imposition (PDF ou photo), Gemini en relève le revenu fiscal de référence et le nombre de parts.",
+      "Une notification est envoyée une fois à chaque changement de situation, et la fermeture apparaît dans l'Agenda.",
+    ],
+  },
+  {
     version: '2026.10.03',
     date: '2026-10-03',
     title: 'Veille fiscale plus fiable',
