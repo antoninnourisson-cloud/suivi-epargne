@@ -29,6 +29,7 @@
 
 ## Plus tard
 
+- **App Android sur le Play Store** (Trusted Web Activity, via PWABuilder ou Bubblewrap) : la même app que pecule-app.com, en plein écran, mises à jour sans republier. À faire : `/.well-known/assetlinks.json` sur le domaine, projet Android signé, compte développeur Google Play (25 $), fiche de confidentialité et période de test fermé.
 - **TypeScript 7** : à faire quand typescript-eslint le prendra en charge (aujourd'hui jusqu'à 6.0, déjà en place).
 - **Code de conduite** (`CODE_OF_CONDUCT.md`, Contributor Covenant 2.1 en français) : choisir d'abord un contact de signalement qui ne soit pas l'adresse personnelle (par exemple une adresse redirigée sur pecule-app.com).
 
