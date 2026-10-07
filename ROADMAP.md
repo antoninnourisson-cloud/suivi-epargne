@@ -35,12 +35,12 @@ Fait : corrections immédiates, accessibilité urgente, filet de sécurité (tes
 3. Point de paie : bilan à chaque paie (prévu / réalisé, un enseignement, une action).
 4. Contrôle des fiches de paie : alerte si une fiche s'écarte nettement de la médiane des six précédentes.
 
-### Phase 3 : solidité avant la restitution (prochaine)
+### Phase 3 : solidité avant la restitution (faite)
 1. Écriture Drive vérifiée : plus de modification perdue entre deux appareils.
 2. Restitution, virements et annulations sortis d'`App.tsx` en commandes testées.
 3. Répétition générale de la restitution en mode démo.
 
-### Phase 4 : passage en solo
+### Phase 4 : passage en solo (prochaine)
 1. Restitution, mode solo, nettoyage de l'ancienne adresse github.io (serveur, client OAuth, clé du Picker).
 2. Simulateur « Et si… » et alertes unifiées chiffrées en euros.
 3. « Votre année Pécule » (bilan annuel).

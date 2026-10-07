@@ -10,24 +10,57 @@ const drive = vi.hoisted(() => ({
   revision: 1,
   writes: [] as unknown[],
   backups: [] as string[],
+  // Historique des révisions (contenu de chacune), pour la vérification après écriture.
+  history: new Map<string, unknown>(),
+  // Écriture d'un autre appareil qui tombe entre notre contrôle de révision et notre PATCH.
+  beforeWrite: null as (() => void) | null,
+  // La version de l'autre appareil ne peut pas être relue au moment du conflit.
+  otherUnreadable: false,
 }));
+
+const remoteWrite = (data: unknown) => {
+  drive.file = JSON.parse(JSON.stringify(data));
+  drive.revision += 1;
+  drive.history.set(String(drive.revision), drive.file);
+};
 
 vi.mock('../services/googleDriveService', () => {
   class ConflictError extends Error { constructor() { super('CONFLICT'); this.name = 'ConflictError'; } }
+  class ConcurrentWriteError extends ConflictError {
+    ourRevisionId: string; otherRevisionId: string; otherContent: unknown;
+    constructor(ours: string, other: string, content: unknown) {
+      super(); this.ourRevisionId = ours; this.otherRevisionId = other; this.otherContent = content;
+    }
+  }
   class ApiError extends Error { status: number; constructor(m: string, s: number) { super(m); this.status = s; } }
+  const copy = (x: unknown) => JSON.parse(JSON.stringify(x)) as unknown;
   return {
-    ConflictError, ApiError,
+    ConflictError, ConcurrentWriteError, ApiError,
     setOnAuthLost: () => {},
     findConfigFile: async () => 'file-1',
     createConfigFile: async () => 'file-1',
-    readConfigFile: async () => JSON.parse(JSON.stringify(drive.file)),
+    readConfigFile: async () => copy(drive.file),
     getFileRevision: async () => String(drive.revision),
+    fetchRevisionContent: async (_id: string, rev: string) => {
+      if (!drive.history.has(rev)) throw new Error('REVISION_GONE');
+      return copy(drive.history.get(rev));
+    },
+    // Même contrat que le vrai service : contrôle, écriture, puis vérification que la
+    // révision précédant la nôtre est bien celle attendue.
     updateConfigFile: async (_id: string, data: unknown, expected?: string | null) => {
       if (expected != null && expected !== String(drive.revision)) throw new ConflictError();
-      drive.file = JSON.parse(JSON.stringify(data));
+      drive.beforeWrite?.();
+      drive.beforeWrite = null;
+      const previous = String(drive.revision);
+      drive.file = copy(data);
       drive.writes.push(drive.file);
       drive.revision += 1;
-      return String(drive.revision);
+      drive.history.set(String(drive.revision), drive.file);
+      const ours = String(drive.revision);
+      if (expected != null && previous !== expected) {
+        throw new ConcurrentWriteError(ours, previous, drive.otherUnreadable ? undefined : copy(drive.history.get(previous)));
+      }
+      return ours;
     },
     writeMonthlyBackup: async (month: string) => { drive.backups.push(month); return true; },
     listBackups: async () => [],
@@ -59,6 +92,9 @@ beforeEach(() => {
   drive.revision = 1;
   drive.writes = [];
   drive.backups = [];
+  drive.history = new Map([['1', drive.file]]);
+  drive.beforeWrite = null;
+  drive.otherUnreadable = false;
 });
 afterEach(() => { vi.useRealTimers(); });
 
@@ -99,6 +135,89 @@ describe('synchronisation Drive', () => {
     await flushSave();
     await waitFor(() => expect(result.current.syncConflict).toBe(true));
     expect(drive.writes).toHaveLength(0);
+  });
+
+  it('sans course : une seule écriture, pas de conflit', async () => {
+    const { result } = await load();
+    act(() => result.current.setLeisureBudget(5));
+    await flushSave();
+    await waitFor(() => expect(drive.writes.length).toBe(1));
+    await flushSave();
+    expect(drive.writes).toHaveLength(1);
+    expect(result.current.syncConflict).toBe(false);
+  });
+
+  describe('écriture concurrente entre le contrôle et le PATCH', () => {
+    const theirs = () => ({ ...baseFile(), config: { ...baseFile().config, leisureBudget: 777 } });
+    const budgetOf = (x: unknown) => (x as { config: { leisureBudget: number } }).config.leisureBudget;
+
+    it("lève le conflit sans rien perdre ni réécrire, puis « Garder mes modifications » garde la mienne", async () => {
+      const { result } = await load();
+      drive.beforeWrite = () => remoteWrite(theirs());
+      act(() => result.current.setLeisureBudget(5));
+      await flushSave();
+      await waitFor(() => expect(result.current.syncConflict).toBe(true));
+      // Les deux versions sont récupérables : la mienne à l'écran et en tête de Drive,
+      // la sienne dans la révision précédente et dans la quarantaine locale.
+      expect(result.current.leisureBudget).toBe(5);
+      expect(budgetOf(drive.file)).toBe(5);
+      expect(budgetOf(drive.history.get('2'))).toBe(777);
+      await waitFor(() => expect(localStorage.getItem('suivi_epargne_pending')).not.toBeNull());
+      // Aucune réécriture automatique pendant le conflit.
+      await flushSave();
+      expect(drive.writes).toHaveLength(1);
+
+      await act(async () => { await result.current.forceSaveToDrive(); });
+      expect(result.current.syncConflict).toBe(false);
+      expect(budgetOf(drive.file)).toBe(5);
+      expect(localStorage.getItem('suivi_epargne_pending')).toBeNull();
+    });
+
+    it("« Recharger l'autre version » applique la sienne et la réécrit en tête, vérifiée", async () => {
+      const { result } = await load();
+      drive.beforeWrite = () => remoteWrite(theirs());
+      act(() => result.current.setLeisureBudget(5));
+      await flushSave();
+      await waitFor(() => expect(result.current.syncConflict).toBe(true));
+
+      await act(async () => { result.current.reloadFromDrive(); });
+      await waitFor(() => expect(result.current.leisureBudget).toBe(777));
+      expect(result.current.syncConflict).toBe(false);
+      await flushSave();
+      await waitFor(() => expect(budgetOf(drive.file)).toBe(777));
+      expect(result.current.syncConflict).toBe(false);
+    });
+
+    it("version de l'autre appareil illisible sur le moment : conflit levé, relue au choix de l'utilisateur", async () => {
+      const { result } = await load();
+      drive.otherUnreadable = true;
+      drive.beforeWrite = () => remoteWrite(theirs());
+      act(() => result.current.setLeisureBudget(5));
+      await flushSave();
+      await waitFor(() => expect(result.current.syncConflict).toBe(true));
+      expect(result.current.leisureBudget).toBe(5);
+
+      await act(async () => { result.current.reloadFromDrive(); });
+      await waitFor(() => expect(result.current.leisureBudget).toBe(777));
+      expect(result.current.syncConflict).toBe(false);
+    });
+
+    it('si la relecture échoue, le conflit reste ouvert et rien n’est écrasé', async () => {
+      const { result } = await load();
+      drive.otherUnreadable = true;
+      drive.beforeWrite = () => remoteWrite(theirs());
+      act(() => result.current.setLeisureBudget(5));
+      await flushSave();
+      await waitFor(() => expect(result.current.syncConflict).toBe(true));
+      drive.history.delete('2');
+      const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      await act(async () => { result.current.reloadFromDrive(); });
+      await waitFor(() => expect(result.current.syncError).toBe(true));
+      spy.mockRestore();
+      expect(result.current.syncConflict).toBe(true);
+      expect(result.current.leisureBudget).toBe(5);
+      expect(drive.writes).toHaveLength(1);
+    });
   });
 
   it("ne réécrit jamais un fichier venant d'une version plus récente de l'app", async () => {

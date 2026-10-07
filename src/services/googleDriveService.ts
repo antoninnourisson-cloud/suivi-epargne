@@ -7,6 +7,7 @@ import {
   isBackendEnabled, hasBackendSession, fetchAccessToken, startBackendLogin, backendLogout, consumeLoginCode,
   saveBackendSession,
 } from './backendService';
+import { verifyWriteChain, RevisionEntry } from '../lib/driveWriteCheck';
 
 const CLIENT_ID = '763862877733-hl1an9vcn0ibnoq2iq035927528mimd5.apps.googleusercontent.com';
 const SCOPES = 'https://www.googleapis.com/auth/drive.file';
@@ -391,11 +392,117 @@ export class ConflictError extends Error {
 }
 
 /**
+ * Conflit constaté APRÈS l'écriture : un autre appareil a écrit entre notre contrôle de
+ * révision et notre PATCH. Notre version est désormais la tête du fichier
+ * (`ourRevisionId`), celle de l'autre appareil est la révision juste avant
+ * (`otherRevisionId`) ; `otherContent` est son contenu quand on a pu le relire
+ * (`undefined` sinon : il reste récupérable plus tard via fetchRevisionContent).
+ * Hérite de ConflictError : tout code qui traite les conflits le traite aussi.
+ */
+export class ConcurrentWriteError extends ConflictError {
+  ourRevisionId: string;
+  otherRevisionId: string;
+  otherContent: unknown;
+  constructor(ourRevisionId: string, otherRevisionId: string, otherContent: unknown) {
+    super();
+    this.name = 'ConcurrentWriteError';
+    this.ourRevisionId = ourRevisionId;
+    this.otherRevisionId = otherRevisionId;
+    this.otherContent = otherContent;
+  }
+}
+
+/** Historique des révisions du fichier (toutes les pages), avec leur date. */
+export const listRevisions = async (fileId: string): Promise<RevisionEntry[]> => {
+  const all: RevisionEntry[] = [];
+  let pageToken: string | undefined;
+  do {
+    const page = pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : '';
+    const res = await authedFetch(
+      `https://www.googleapis.com/drive/v3/files/${fileId}/revisions?pageSize=1000&fields=nextPageToken,revisions(id,modifiedTime)${page}`
+    );
+    const data = await res.json() as { nextPageToken?: string; revisions?: { id: string; modifiedTime?: string }[] };
+    for (const r of data.revisions || []) all.push({ id: String(r.id), modifiedTime: r.modifiedTime });
+    pageToken = data.nextPageToken;
+  } while (pageToken);
+  return all;
+};
+
+/**
+ * Relit le contenu d'une ancienne révision (la version d'un autre appareil écrasée par
+ * une course). Pour un fichier non-Google (blob), Drive ne permet de télécharger que les
+ * révisions marquées « Keep Forever » (doc « Manage file revisions ») : on la marque donc
+ * d'abord, ce qui la protège aussi de la purge automatique (30 jours / 100 révisions)
+ * tant que l'utilisateur n'a pas tranché. Le marquage est laissé en place : quelques Ko,
+ * et seulement lors d'une course réelle. revisions.update et revisions.get acceptent
+ * tous deux le scope drive.file.
+ */
+export const fetchRevisionContent = async (fileId: string, revisionId: string): Promise<unknown> => {
+  const rev = encodeURIComponent(revisionId);
+  try {
+    await authedFetch(`https://www.googleapis.com/drive/v3/files/${fileId}/revisions/${rev}?fields=id`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ keepForever: true }),
+    });
+  } catch (e) {
+    // On tente quand même le téléchargement (déjà marquée, ou Drive le permet malgré tout).
+    console.warn('Révision non marquée « Keep Forever »', e);
+  }
+  const res = await authedFetch(`https://www.googleapis.com/drive/v3/files/${fileId}/revisions/${rev}?alt=media`);
+  return await res.json();
+};
+
+// Après un premier historique non concluant (liste en retard juste après le PATCH), on le
+// relit une fois après ce délai.
+const VERIFY_RETRY_MS = 1500;
+
+/**
+ * Vérifie qu'aucune écriture ne s'est glissée entre le contrôle de révision et notre PATCH,
+ * et lève ConcurrentWriteError sinon (voir src/lib/driveWriteCheck.ts).
+ *
+ * Signal choisi : l'historique des révisions (revisions.list), pas `version`.
+ * - `version` compte toutes les mutations, métadonnées comprises, et continue de
+ *   s'incrémenter seul quelques secondes après un PATCH (voir getFileRevision) :
+ *   « nouvelle version = attendue + 1 » donnerait de faux conflits à chaque sauvegarde.
+ * - `headRevisionId` seul ne dit rien : après une course, c'est bien notre révision.
+ * - L'historique, lui, montre la révision qui précède la nôtre : si ce n'est pas celle
+ *   qu'on croyait écraser, un autre appareil a écrit entre-temps. Une requête de
+ *   métadonnées en plus par sauvegarde, aucune écriture supplémentaire.
+ * Les copies mensuelles sont des fichiers à part : elles n'ajoutent rien à cet historique.
+ *
+ * Historique non concluant même après une relecture : on accepte l'écriture (avec un
+ * avertissement en console) plutôt que d'inventer un conflit sans version à proposer.
+ */
+const verifyWrite = async (fileId: string, expectedRevision: string, ourRevision: string): Promise<void> => {
+  let verdict = verifyWriteChain(await listRevisions(fileId), expectedRevision, ourRevision);
+  if (verdict.kind === 'unknown') {
+    await new Promise(r => setTimeout(r, VERIFY_RETRY_MS));
+    verdict = verifyWriteChain(await listRevisions(fileId), expectedRevision, ourRevision);
+  }
+  if (verdict.kind === 'clean') return;
+  if (verdict.kind === 'unknown') {
+    console.warn('Écriture Drive non vérifiable : historique des révisions incomplet', { expectedRevision, ourRevision });
+    return;
+  }
+  let otherContent: unknown = undefined;
+  try {
+    otherContent = await fetchRevisionContent(fileId, verdict.otherRevisionId);
+  } catch (e) {
+    console.error("Version de l'autre appareil non relue (révision gardée sur Drive)", verdict.otherRevisionId, e);
+  }
+  throw new ConcurrentWriteError(ourRevision, verdict.otherRevisionId, otherContent);
+};
+
+/**
  * Sauvegarde le fichier. Si expectedRevision est fourni et que la révision Drive a
  * changé entre-temps (écriture depuis un autre appareil), lève ConflictError au lieu
  * d'écraser. Retourne la nouvelle révision, lue directement dans la réponse du PATCH
  * (`fields=headRevisionId`) : c'est la valeur autoritative post-écriture, et ça évite
  * l'aller-retour supplémentaire que demandait l'ancienne relecture de version.
+ *
+ * Le contrôle préalable ne suffit pas (Drive n'a pas d'écriture conditionnelle) : une
+ * écriture distante peut tomber entre lui et le PATCH. L'écriture est donc VÉRIFIÉE
+ * après coup (verifyWrite) et lève ConcurrentWriteError, avec la version de l'autre
+ * appareil, si c'est arrivé : rien n'est perdu silencieusement.
  *
  * `expectedRevision` nul/vide signifie « écrire sans contrôle », ce qui n'est légitime
  * que sur une action explicite de l'utilisateur (résolution de conflit « garder mes
@@ -407,12 +514,19 @@ export const updateConfigFile = async (
   data: unknown,
   expectedRevision?: string | null
 ): Promise<string> => {
-  if (expectedRevision != null && expectedRevision !== '') {
+  const checked = expectedRevision != null && expectedRevision !== '';
+  if (checked) {
     // getFileRevision lève si la révision est illisible : on laisse remonter plutôt
     // que de retomber en mode « écriture sans contrôle ».
     const current = await getFileRevision(fileId);
     if (current !== expectedRevision) throw new ConflictError();
   }
+  const newRevision = await patchContent(fileId, data);
+  if (checked) await verifyWrite(fileId, expectedRevision, newRevision);
+  return newRevision;
+};
+
+const patchContent = async (fileId: string, data: unknown): Promise<string> => {
   const res = await authedFetch(
     `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media&fields=headRevisionId`,
     {

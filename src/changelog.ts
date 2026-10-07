@@ -15,6 +15,17 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '2026.10.07-5',
+    date: '2026-10-07',
+    title: 'Plus sûr entre deux appareils',
+    items: [
+      "Si deux appareils enregistrent au même moment, Pécule s'en aperçoit et vous demande quelle version garder : plus aucune modification ne peut être écrasée en silence.",
+      "Après une reconnexion, vos modifications faites hors connexion vous sont proposées au lieu d'être abandonnées.",
+      "Restitution : une date de retrait vide est refusée (elle pouvait effacer la part de vos parents sans possibilité d'annuler), et la date prévue est proposée si elle est passée.",
+      "Les opérations sur les soldes (ajout, suppression, restitution, annulation) sont vérifiées par des centaines de tests automatiques.",
+    ],
+  },
+  {
     version: '2026.10.07-4',
     date: '2026-10-07',
     title: 'Bons mois, jalons et point de paie',

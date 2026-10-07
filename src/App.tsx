@@ -2,7 +2,7 @@
 // FILE: src/App.tsx
 // ================================================
 import React, { useState, useEffect, useMemo, useRef, useCallback, Suspense } from 'react';
-import { SavingsAccount, AccountMovement, PayslipRecord } from './types';
+import { SavingsAccount, PayslipRecord } from './types';
 import { usePortfolioData } from './hooks/usePortfolioData';
 import { useTheme } from './hooks/useTheme';
 import { Dialog, DialogState, emptyDialog } from './components/Dialog';
@@ -16,7 +16,7 @@ import {
 import { isBackendEnabled, hasBackendSession } from './services/backendService';
 import { disablePush } from './services/pushService';
 import { isLockEnabled } from './services/appLockService';
-import { computeIncome, totalFixedCharges, computeMonthlySavingsCapacity, subscriptionsAsExpenses, computeMonthlyPay, computeRestitutionPlan, accountsAfterRestitution, REGULATED_RATE_GROUPS } from './lib/finance';
+import { computeIncome, totalFixedCharges, computeMonthlySavingsCapacity, subscriptionsAsExpenses, computeMonthlyPay, REGULATED_RATE_GROUPS } from './lib/finance';
 import { localTodayISO, parseISODate } from './lib/dates';
 import { formatEUR } from './lib/format';
 import { AccountsView } from './components/AccountsView';
@@ -25,7 +25,12 @@ import { TaxNoticePanel } from './components/TaxNoticePanel';
 // Importé ici (et pas dans l'écran, chargé à la demande) pour capter l'invitation d'installation dès le démarrage.
 import './services/installPrompt';
 import { computeBadgeCount, detectPayRaise } from './lib/projection';
-import { balanceChangeMovements, applyMovement, snapshotBalances, restoreBalances, isRestitutionMovement, round2 as round2Cents, canWithdrawOwn } from './lib/accountOps';
+import { isRestitutionMovement, type CancellingGroup } from './lib/accountOps';
+import {
+  type CommandError, type CommandOk, type CommandPatch, type CommandState,
+  saveAccount, deleteAccount, quickAdd, planMovementDeletion, deleteMovement, cancelDeposit, removeCancellingMovements,
+  recordRestitution, undoRestitution,
+} from './lib/commands';
 import { WhatsNewModal } from './components/WhatsNew';
 import { MovedNotice } from './components/MovedNotice';
 import { Logo } from './components/Logo';
@@ -433,7 +438,10 @@ const App: React.FC = () => {
   const handleReconnect = async () => {
     try {
       await handleAuthClick(false);
-      data.reloadFromDrive();
+      // Chargement normal, pas « recharger l'autre version » : des modifications faites
+      // pendant l'expiration de la session restent proposées (copie locale), et un conflit
+      // en cours n'est jamais tranché à la place de l'utilisateur.
+      void data.loadDriveData();
     } catch (e) {
       addToast({ message: 'Reconnexion échouée.', kind: 'error' });
     }
@@ -449,75 +457,35 @@ const App: React.FC = () => {
   };
 
   // --- ACTIONS METIER ---
+  // Tout ce qui change les soldes passe par les commandes de src/lib/commands (pures et
+  // testées : elles appliquent elles-mêmes les règles du capital des parents et préparent
+  // l'annulation exacte). Ici, seulement l'interface : confirmation, toasts, écriture.
+
+  // État le plus récent pour les commandes : une confirmation ou une annulation (toast)
+  // s'applique à l'état du moment, pas à celui du rendu qui l'a créée.
+  const commandStateRef = useRef<CommandState>({ accounts: data.accounts, parentalRestitution: data.parentalRestitution });
+  commandStateRef.current = { accounts: data.accounts, parentalRestitution: data.parentalRestitution };
+  const commit = (patch: CommandPatch) => {
+    commandStateRef.current = { ...commandStateRef.current, ...patch };
+    if (patch.accounts) data.setAccounts(patch.accounts);
+    if ('parentalRestitution' in patch) data.setParentalRestitution(patch.parentalRestitution);
+  };
+  const undoAction = (r: CommandOk) => ({ label: 'Annuler', onClick: () => commit(r.undo(commandStateRef.current)) });
+  // Compte ou mouvement disparu entre-temps : rien à signaler (comme avant les commandes).
+  const showCommandError = (e: CommandError) => { if (e.code !== 'not-found') addToast({ message: e.error, kind: 'error' }); };
 
   const handleSaveAccount = (acc: SavingsAccount) => {
-    const today = localTodayISO();
-
-    // Garde-fou d'invariant : totalAmount DOIT valoir ownedAmount + parentalCapital.
-    // Le formulaire pouvait le rompre (saisir une part personnelle supérieure au total
-    // laissait la part parentale inchangée), et la première opération suivante recalculait
-    // le total depuis l'invariant, faisant bondir le solde d'un coup. On normalise ici
-    // plutôt que de faire confiance à la saisie.
-    const owned = Number.isFinite(acc.ownedAmount) ? acc.ownedAmount : 0;
-    const parental = Number.isFinite(acc.parentalCapital) ? acc.parentalCapital : 0;
-    const normalized: SavingsAccount = {
-      ...acc,
-      ownedAmount: owned,
-      parentalCapital: parental,
-      totalAmount: Math.round((owned + parental) * 100) / 100,
-    };
-
-    // Un changement de solde par le formulaire d'édition doit laisser la même trace qu'une
-    // actualisation ou un ajout rapide : sans ça, l'historique des mouvements ne totalisait
-    // plus le solde.
-    data.setAccounts(prev => {
-      const isNew = !prev.find(a => a.id === normalized.id);
-      if (isNew) {
-        const withInitial: SavingsAccount = normalized.ownedAmount > 0
-          ? { ...normalized, movements: [{ id: crypto.randomUUID(), date: today, amount: normalized.ownedAmount, label: "Solde initial", type: 'IN', tag: 'initial' }] }
-          : normalized;
-        return [...prev, withInitial];
-      }
-      // Remplacement en place : l'ancien `filter` puis concat renvoyait le compte édité
-      // en fin de liste, réordonnant l'affichage à chaque modification.
-      return prev.map(a => {
-        if (a.id !== normalized.id) return a;
-        // Mêmes mouvements que dans « Actualiser » : correction de votre part, et part des parents à part.
-        return { ...normalized, movements: [...(a.movements || []), ...balanceChangeMovements(a, normalized, today, { ownLabel: 'Correction de solde' })] };
-      });
-    });
+    const r = saveAccount(commandStateRef.current, { account: acc, today: localTodayISO() });
+    if (!r.ok) { showCommandError(r); return; }
+    commit(r.next);
     setShowForm(false);
     setEditingAccount(undefined);
   };
 
-  // Arrondi au centime de toute recomposition (voir lib/accountOps).
-  const round2 = round2Cents;
-
-  // Toutes les lignes que la suppression retire : un virement interne en compte deux (le
-  // OUT côté source et le IN côté destination, appariés par `linkId`).
-  type MovementLeg = { accountId: string; movement: AccountMovement };
-  const collectMovementLegs = (accountId: string, movementId: string): MovementLeg[] => {
-    const account = data.accounts.find(a => a.id === accountId);
-    const movement = account?.movements?.find(m => m.id === movementId);
-    if (!movement) return [];
-    if (!movement.linkId) return [{ accountId, movement }];
-    const legs: MovementLeg[] = [];
-    data.accounts.forEach(acc => (acc.movements || []).forEach(m => {
-      if (m.linkId === movement.linkId) legs.push({ accountId: acc.id, movement: m });
-    }));
-    return legs;
-  };
-
   const handleDeleteMovement = (accountId: string, movementId: string) => {
-    const account = data.accounts.find(a => a.id === accountId);
-    const movement = account?.movements?.find(m => m.id === movementId);
-    if (!movement) return;
-    if (isRestitutionMovement(movement)) {
-      addToast({ message: 'La restitution s\'annule depuis Part parentale.', kind: 'error' });
-      return;
-    }
-    const legs = collectMovementLegs(accountId, movementId);
-    const isTransfer = legs.length > 1;
+    const plan = planMovementDeletion(data.accounts, accountId, movementId);
+    if (!plan.ok) { showCommandError(plan); return; }
+    const { movement, legs, isTransfer } = plan;
     setDialog({
       open: true, kind: 'confirm', danger: true, confirmLabel: 'Supprimer',
       title: isTransfer ? 'Supprimer le virement' : 'Supprimer le mouvement',
@@ -525,20 +493,14 @@ const App: React.FC = () => {
         ? `« ${movement.label} » est un virement interne : les ${legs.length} lignes liées seront supprimées ensemble.`
         : `« ${movement.label} » sera supprimé.`,
       onConfirm: () => {
-        // Instantané avant suppression : l'annulation rétablit l'état EXACT (une part des
-        // parents plafonnée à 0 pendant la suppression revenait sinon à un mauvais montant).
-        const ids = [...new Set(legs.map(l => l.accountId))];
-        const snap = snapshotBalances(data.accounts, ids);
-        data.setAccounts(prev => prev.map(acc => legs
-          .filter(l => l.accountId === acc.id)
-          .reduce((cur, l) => applyMovement(cur, l.movement, -1), acc)));
-        addToast({
-          message: isTransfer ? `Virement supprimé (${legs.length} lignes)` : 'Mouvement supprimé',
-          action: { label: 'Annuler', onClick: () => data.setAccounts(prev => restoreBalances(prev, snap)) },
-        });
+        const r = deleteMovement(commandStateRef.current, { accountId, movementId });
+        if (!r.ok) { showCommandError(r); return; }
+        commit(r.next);
+        addToast({ message: r.message, action: undoAction(r) });
       },
     });
   };
+
 
   const handleRenameMovement = (accountId: string, movementId: string, currentLabel: string) => {
     const m = data.accounts.find(a => a.id === accountId)?.movements?.find(x => x.id === movementId);
@@ -554,29 +516,20 @@ const App: React.FC = () => {
 
   const handleDeleteAccount = (acc: SavingsAccount) => {
     const isEmpty = acc.totalAmount === 0;
-    // Position d'origine mémorisée pour que l'annulation remette le compte à sa place au
-    // lieu de le renvoyer en fin de liste (même exigence que pour l'édition, cf. plus haut).
-    const originalIndex = data.accounts.findIndex(a => a.id === acc.id);
     setDialog({
       open: true, kind: 'confirm', danger: true, confirmLabel: 'Supprimer',
       title: `Supprimer « ${acc.name} »`,
       message: isEmpty ? 'Ce compte est vide, il sera supprimé.' : 'Ce compte contient encore un solde. Supprimer définitivement ?',
       onConfirm: () => {
-        data.setAccounts(prev => prev.filter(a => a.id !== acc.id));
-        addToast({
-          message: `« ${acc.name} » supprimé`,
-          action: {
-            label: 'Annuler',
-            onClick: () => data.setAccounts(prev => {
-              const next = [...prev];
-              next.splice(originalIndex < 0 ? next.length : originalIndex, 0, acc);
-              return next;
-            }),
-          },
-        });
+        // L'annulation remet le compte à sa place d'origine (voir deleteAccount).
+        const r = deleteAccount(commandStateRef.current, { accountId: acc.id });
+        if (!r.ok) { showCommandError(r); return; }
+        commit(r.next);
+        addToast({ message: r.message, action: undoAction(r) });
       },
     });
   };
+
 
   // Bascule le Pilotage budgétaire sur les chiffres EXACTS de cette fiche de paie (brut,
   // charges, navigo, mutuelle, titres resto, impôt réellement prélevé), à la place de la
@@ -607,20 +560,14 @@ const App: React.FC = () => {
   // Renvoie l'id du mouvement créé (la liste des virements de paie en a besoin pour
   // pouvoir l'annuler).
   const handleQuickAdd = (accountId: string, amount: number, type: 'IN' | 'OUT', label: string, date: string): string | undefined => {
-    const account = data.accounts.find(a => a.id === accountId);
-    if (!account) return undefined;
-    amount = round2(amount);
-    // Garde-fou : un retrait ne peut pas entamer la part des parents.
-    if (type === 'OUT' && !canWithdrawOwn(account, amount)) {
-      addToast({ message: `Retrait impossible : votre part sur ${account.name} n'est que de ${formatEUR(account.ownedAmount)}.`, kind: 'error' });
-      return undefined;
-    }
-    const movement: AccountMovement = { id: crypto.randomUUID(), date, amount, label, type };
-    data.setAccounts(prev => prev.map(a => (a.id === accountId ? applyMovement(a, movement, 1, { trackDeposits: true }) : a)));
-
-    addToast({ message: `${label} — ${account.name}`, kind: 'success' });
-    return movement.id;
+    // Garde-fou dans la commande : un retrait ne peut pas entamer la part des parents.
+    const r = quickAdd(commandStateRef.current, { accountId, amount, type, label, date });
+    if (!r.ok) { showCommandError(r); return undefined; }
+    commit(r.next);
+    addToast({ message: r.message, kind: 'success' });
+    return r.movementId;
   };
+
 
   // Mode solo : plus aucun compte n'a de part parentale (après la restitution). L'écran
   // Part parentale reste accessible tant qu'un relevé de restitution existe.
@@ -629,57 +576,39 @@ const App: React.FC = () => {
 
   // --- RESTITUTION DU CAPITAL PARENTAL ---
   // Retire la part des parents de chaque compte (la part propre ne bouge pas), garde un
-  // relevé (montants, intérêts offerts chaque année).
+  // relevé (montants, intérêts offerts) : voir lib/commands/restitution.
   const handleRestitution = (date: string) => {
-    const plan = computeRestitutionPlan(data.accounts, date);
-    if (plan.total <= 0) return;
-    // Seule l'année de la restitution est chiffrée avec certitude : les années précédentes
-    // dépendaient d'une part parentale qui a pu varier (on ne l'invente pas).
-    const interestsOffered: { year: number; amount: number }[] = plan.totalInterest >= 0.5
-      ? [{ year: plan.interestYear, amount: round2(plan.totalInterest) }] : [];
-    const previous = data.parentalRestitution;
-    const snap = snapshotBalances(data.accounts, plan.rows.map(r => r.accountId));
-    const after = accountsAfterRestitution(data.accounts, date);
-    const createdIds = after.flatMap(a => (a.movements || []).filter(m => isRestitutionMovement(m) && m.date === date).map(m => m.id));
-    data.setAccounts(prev => accountsAfterRestitution(prev, date).map(a => {
-      // mêmes ids que `after` : l'annulation sait quels mouvements jeter
-      const ref = after.find(x => x.id === a.id);
-      return ref ? { ...a, movements: ref.movements } : a;
-    }));
-    data.setParentalRestitution({
-      ...previous,
-      done: { date, accounts: plan.rows.map(r => ({ accountId: r.accountId, name: r.name, amount: r.amount })), interestsOffered },
-    });
-    addToast({
-      message: `Restitution enregistrée : ${formatEUR(plan.total)}`,
-      kind: 'success',
-      action: { label: 'Annuler', onClick: () => {
-        data.setAccounts(prev => restoreBalances(prev, snap, createdIds));
-        data.setParentalRestitution(previous);
-      } },
-    });
+    const r = recordRestitution(commandStateRef.current, { date });
+    if (!r.ok) { showCommandError(r); return; }
+    commit(r.next);
+    addToast({ message: r.message, kind: 'success', action: undoAction(r) });
   };
 
   // Annulation depuis l'écran (après coup) : les mouvements de restitution sont retirés,
   // ce qui rend leur part aux parents.
   const handleUndoRestitution = () => {
-    if (!data.parentalRestitution?.done) return;
-    data.setAccounts(prev => prev.map(a => (a.movements || [])
-      .filter(isRestitutionMovement)
-      .reduce((cur, m) => applyMovement(cur, m, -1), a)));
-    data.setParentalRestitution({ ...data.parentalRestitution, done: undefined });
-    addToast({ message: 'Restitution annulée : la part de vos parents est rétablie', kind: 'success' });
+    const r = undoRestitution(commandStateRef.current);
+    if (!r.ok) return;
+    commit(r.next);
+    addToast({ message: r.message, kind: 'success' });
   };
 
   // Annule un versement enregistré depuis la liste des virements de paie : retire le
   // mouvement et rétablit solde et versements cumulés.
   const handleCancelPayDeposit = (accountId: string, movementId: string) => {
-    data.setAccounts(prev => prev.map(a => {
-      if (a.id !== accountId) return a;
-      const m = (a.movements || []).find(x => x.id === movementId);
-      return m ? applyMovement(a, m, -1, { trackDeposits: true }) : a;
-    }));
+    const r = cancelDeposit(commandStateRef.current, { accountId, movementId });
+    if (!r.ok) { showCommandError(r); return; }
+    commit(r.next);
   };
+
+  const handleRemoveCancelling = (groups: CancellingGroup[]) => {
+    // Mouvements qui s'annulent : leur somme est nulle, les soldes ne bougent pas.
+    const r = removeCancellingMovements(commandStateRef.current, groups);
+    if (!r.ok) { showCommandError(r); return; }
+    commit(r.next);
+    addToast({ message: r.message, kind: 'success', action: undoAction(r) });
+  };
+
 
   // --- RENDU ---
 
@@ -886,13 +815,7 @@ const App: React.FC = () => {
                     ...a, movements: (a.movements || []).map(m => m.id !== movementId ? m : (m.kind === 'adjustment' ? { ...m, kind: undefined } : { ...m, kind: 'adjustment' })),
                   }));
                 }}
-                onRemoveCancelling={(groups) => {
-                  // Mouvements qui s'annulent : leur somme est nulle, les soldes ne bougent pas.
-                  const ids = new Set(groups.flatMap(g => g.movements.map(m => m.id)));
-                  const snap = snapshotBalances(data.accounts, [...new Set(groups.map(g => g.accountId))]);
-                  data.setAccounts(prev => prev.map(a => ({ ...a, movements: (a.movements || []).filter(m => !ids.has(m.id)) })));
-                  addToast({ message: `${ids.size} mouvements supprimés (soldes inchangés)`, kind: 'success', action: { label: 'Annuler', onClick: () => data.setAccounts(prev => restoreBalances(prev, snap)) } });
-                }}
+                onRemoveCancelling={handleRemoveCancelling}
                 onRevertRate={(accountId, entryDate) => {
                   // Annule le changement de taux sur TOUT le groupe changé ensemble (Livret A et
                   // LDDS), remet le rappel de révision et propose de revenir en arrière.

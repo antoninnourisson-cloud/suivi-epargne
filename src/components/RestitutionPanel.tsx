@@ -31,7 +31,13 @@ export const RestitutionPanel: React.FC<RestitutionPanelProps> = ({ accounts, re
   const suggested = suggestedRestitutionDate();
   const [date, setDate] = useState(restitution?.plannedDate || suggested);
   const [confirming, setConfirming] = useState(false);
-  const [withdrawDate, setWithdrawDate] = useState(localTodayISO());
+  // Date du retrait réel : la date prévue si elle est passée (enregistrement après coup),
+  // sinon aujourd'hui.
+  const [withdrawDate, setWithdrawDate] = useState(() => {
+    const today = localTodayISO();
+    const planned = restitution?.plannedDate;
+    return planned && planned <= today ? planned : today;
+  });
 
   const plan = useMemo(() => computeRestitutionPlan(accounts, date || suggested), [accounts, date, suggested]);
 

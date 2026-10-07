@@ -12,7 +12,8 @@ import { localTodayISO } from '../lib/dates';
 import { GlobalAppData, SavingsAccount, AccountMovement, PortfolioSnapshot, ExpenseSnapshot } from '../types';
 import {
   findConfigFile, createConfigFile, readConfigFile, updateConfigFile,
-  getFileRevision, setOnAuthLost, ConflictError, ApiError, writeMonthlyBackup, listBackups, DriveBackup,
+  getFileRevision, setOnAuthLost, ConflictError, ConcurrentWriteError, ApiError, writeMonthlyBackup, listBackups, DriveBackup,
+  fetchRevisionContent,
 } from '../services/googleDriveService';
 
 // Miroir local des modifications PAS ENCORE confirmées sur Drive (filet anti-crash). Effacé
@@ -32,6 +33,8 @@ const GEMINI_KEY = 'gemini_api_key';
 const LAST_BACKUP_MONTH_KEY = 'last_drive_backup_month';
 
 type StoredSnapshot = { savedAt: string; fileId?: string; data: GlobalAppData };
+/** Version d'un autre appareil écrasée par une course d'écriture (voir ConcurrentWriteError). */
+type OtherVersion = { fileId: string; revisionId: string; content: unknown };
 type Doc = GlobalAppData;
 type Config = GlobalAppData['config'];
 type Updater<T> = T | ((prev: T) => T);
@@ -75,6 +78,10 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
   // Contenu canonique de ce qui est sur Drive (après chargement ou sauvegarde) : aucune
   // écriture tant que l'état n'en diffère pas. Ouvrir l'app ne réécrit donc plus le fichier.
   const persistedRef = useRef<string>('');
+  // Course d'écriture constatée après coup : la version de l'autre appareil, en attente du
+  // choix de l'utilisateur (bannière de conflit). `content` vaut undefined si elle n'a pas
+  // encore pu être relue sur Drive.
+  const otherVersionRef = useRef<OtherVersion | null>(null);
 
   // --- DOCUMENT ---
   const [doc, setDoc] = useState<Doc>(emptyData);
@@ -147,6 +154,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
     setIsLoadingData(true);
     setSessionExpired(false);
     setSyncConflict(false);
+    otherVersionRef.current = null;
     setSyncError(false);
     try {
       let fileId = await findConfigFile();
@@ -271,14 +279,44 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
     }
   }, [applyData]);
 
+  /**
+   * « Recharger l'autre version » après une course d'écriture : Drive porte NOTRE version
+   * en tête, celle de l'autre appareil est dans la révision précédente. On l'applique
+   * localement ; la sauvegarde auto la réécrit ensuite en tête (écriture vérifiée, à partir
+   * de notre révision). Relue sur Drive si elle ne l'avait pas été au moment du conflit.
+   */
+  const adoptOtherVersion = useCallback(async (other: OtherVersion) => {
+    try {
+      const content = other.content !== undefined
+        ? other.content
+        : await runExclusive(() => fetchRevisionContent(other.fileId, other.revisionId));
+      if (otherVersionRef.current !== other) return; // chargement ou résolution entre-temps
+      otherVersionRef.current = null;
+      lsDel(PENDING_KEY);
+      lsDel(BACKUP_KEY);
+      setLocalBackup(null);
+      setAppOutdated(isFromNewerApp(content));
+      applyData(content);
+      setSyncError(false);
+      setSyncConflict(false);
+    } catch (err) {
+      // Toujours rien d'écrasé : le conflit reste ouvert, on pourra réessayer.
+      console.error("Version de l'autre appareil illisible", other.revisionId, err);
+      if (classifySyncError(err) === 'session') setSessionExpired(true);
+      else setSyncError(true);
+    }
+  }, [applyData, runExclusive]);
+
   const reloadFromDrive = useCallback(() => {
+    const other = otherVersionRef.current;
+    if (other && other.fileId === driveFileIdRef.current) { void adoptOtherVersion(other); return; }
     // Abandon explicite des modifications locales : on purge quarantaine ET miroir.
     lsDel(PENDING_KEY);
     lsDel(BACKUP_KEY);
     setLocalBackup(null);
     setSyncConflict(false);
     void loadDriveData();
-  }, [loadDriveData]);
+  }, [loadDriveData, adoptOtherVersion]);
 
   const announceSave = (fileId: string, revision: string | null) =>
     lsSet(LAST_SAVE_KEY, JSON.stringify({ fileId, revision, at: Date.now() }));
@@ -302,6 +340,26 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
     maybeMonthlyBackup(saved);
   };
 
+  /**
+   * Course d'écriture constatée APRÈS notre PATCH (voir ConcurrentWriteError). Rien n'est
+   * réécrit automatiquement : Drive garde notre version en tête (c'est aussi l'état local),
+   * la version de l'autre appareil est gardée en mémoire et dans la quarantaine locale
+   * chiffrée (proposée au prochain démarrage si l'app est fermée avant de trancher), et la
+   * bannière de conflit habituelle laisse l'utilisateur choisir : « Garder mes
+   * modifications » réécrit la nôtre, « Recharger l'autre version » applique la sienne.
+   */
+  const onConcurrentWrite = (fileId: string, ours: GlobalAppData, err: ConcurrentWriteError) => {
+    driveRevisionRef.current = err.ourRevisionId;
+    markPersisted(ours);
+    otherVersionRef.current = { fileId, revisionId: err.otherRevisionId, content: err.otherContent };
+    if (err.otherContent !== undefined) {
+      const snap: StoredSnapshot = { savedAt: new Date().toISOString(), fileId, data: err.otherContent as GlobalAppData };
+      sealJSON(snap).then(sealed => lsSet(PENDING_KEY, sealed)).catch(() => { /* reste en mémoire et sur Drive */ });
+    }
+    console.warn('Écriture concurrente détectée après sauvegarde', { ours: err.ourRevisionId, other: err.otherRevisionId });
+    setSyncConflict(true);
+  };
+
   const handleSyncFailure = (err: unknown) => {
     const kind = classifySyncError(err);
     if (kind === 'conflict') setSyncConflict(true);
@@ -318,6 +376,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
       const data = buildData();
       const newRevision = await runExclusive(() => updateConfigFile(driveFileId, data)); // sans contrôle : choix explicite
       onSaved(driveFileId, newRevision, data);
+      otherVersionRef.current = null;
       setSyncConflict(false);
       lsDel(PENDING_KEY);
       setLocalBackup(null);
@@ -398,7 +457,8 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
         });
         onSaved(driveFileId, newRevision, data);
       } catch (err) {
-        if (handleSyncFailure(err) === 'notfound') {
+        if (err instanceof ConcurrentWriteError) onConcurrentWrite(driveFileId, data, err);
+        else if (handleSyncFailure(err) === 'notfound') {
           // Fichier supprimé hors de l'app : on le retrouve ou on le recrée.
           setSyncError(false);
           try {
@@ -525,6 +585,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
     hasLoadedRef.current = false;
     driveRevisionRef.current = null;
     driveFileIdRef.current = null;
+    otherVersionRef.current = null;
     persistedRef.current = '';
     setSyncError(false);
     setSyncConflict(false);
