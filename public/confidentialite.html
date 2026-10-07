@@ -6,17 +6,18 @@
 <title>Pécule — Confidentialité</title>
 <meta name="description" content="Règles de confidentialité de l'application personnelle Pécule (anciennement Suivi Épargne).">
 <style>
-  :root { --bg: #f8fafc; --card: #ffffff; --text: #0f172a; --muted: #475569; --line: #e2e8f0; --accent: #2a6b4b; }
+  @font-face { font-family: 'Google Sans Flex'; font-style: normal; font-display: swap; font-weight: 100 1000; src: url('fonts/google-sans-flex-latin-wght.woff2') format('woff2-variations'); }
+  :root { --bg: #f8faf4; --card: #f2f4ee; --text: #191c19; --muted: #404941; --line: #c0c9be; --accent: #003b1b; --accent-ink: #ffffff; --hero: #14532d; --hero-ink: #87c695; --tonal: #cce7ce; --tonal-ink: #1f3324; --gold: #795900; }
   @media (prefers-color-scheme: dark) {
-    :root { --bg: #0f172a; --card: #1e293b; --text: #e2e8f0; --muted: #94a3b8; --line: #334155; --accent: #8cc2a3; }
+    :root { --bg: #111411; --card: #191c19; --text: #e1e3dd; --muted: #c0c9be; --line: #404941; --accent: #96d5a3; --accent-ink: #00391a; --hero: #14532d; --hero-ink: #87c695; --tonal: #354c3a; --tonal-ink: #cce7ce; --gold: #f9bd22; }
   }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.6 "Google Sans Flex", system-ui, -apple-system, "Segoe UI", sans-serif; }
   main { max-width: 720px; margin: 0 auto; padding: 32px 16px 64px; }
-  h1 { font-size: 28px; margin: 0 0 4px; }
+  h1 { font-size: 36px; margin: 0 0 4px; font-weight: 500; }
   .date { color: var(--muted); margin: 0 0 24px; font-size: 14px; }
-  section { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 20px; margin-bottom: 16px; }
-  h2 { font-size: 18px; margin: 0 0 8px; }
+  section { background: var(--card); border: 0; border-radius: 20px; padding: 20px; margin-bottom: 16px; }
+  h2 { font-size: 20px; margin: 0 0 8px; font-weight: 500; }
   p, li { color: var(--muted); }
   ul { padding-left: 20px; margin: 8px 0 0; }
   a { color: var(--accent); }
