@@ -46,7 +46,7 @@ Fait : corrections immédiates, accessibilité urgente, filet de sécurité (tes
 3. « Votre année Pécule » (bilan annuel).
 
 ### Phase 5 : infrastructure (en cours)
-1. Adresse de contact sur le domaine (redirection e-mail Cloudflare), puis code de conduite et contacts de SECURITY/CONTRIBUTING.
+1. ✅ Adresse contact@pecule-app.com (redirection e-mail Cloudflare), code de conduite (Contributor Covenant 2.1) et contacts de SECURITY/CONTRIBUTING.
 2. Cloudflare devant le site : en-têtes de sécurité HTTP (HSTS, anti-iframe, politique de permissions).
 3. Seconde sauvegarde chiffrée chez Cloudflare (chiffrée dans l'app, illisible pour le serveur).
 4. Surveillance quotidienne du site et du serveur (GitHub Actions, issue ouverte en cas de panne).

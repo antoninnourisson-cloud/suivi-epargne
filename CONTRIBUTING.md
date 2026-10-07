@@ -6,6 +6,7 @@ Merci de votre intérêt ! Pécule est une application personnelle, mais les sig
 
 - **Une question, une idée, un bug** : ouvrez une [issue](https://github.com/antoninnourisson-cloud/suivi-epargne/issues/new/choose). Pour une fonctionnalité importante, discutons-en avant d'écrire du code.
 - **Une faille de sécurité** : ne l'ouvrez pas en public, suivez [SECURITY.md](SECURITY.md).
+- **Le reste** : [contact@pecule-app.com](mailto:contact@pecule-app.com). Les échanges autour du projet suivent le [code de conduite](CODE_OF_CONDUCT.md).
 - **Aucune donnée réelle** dans les issues, captures ou tests : ni montants, ni fiches de paie, ni avis d'imposition. Utilisez le mode démo.
 
 ## Installer le projet

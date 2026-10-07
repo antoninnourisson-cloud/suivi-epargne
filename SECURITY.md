@@ -4,7 +4,7 @@ Pécule manipule des données financières et un accès à Google Drive : les fa
 
 ## Signaler une faille
 
-**N'ouvrez pas d'issue publique.** Utilisez le signalement privé de GitHub : onglet **Security** du dépôt, puis **Report a vulnerability**.
+**N'ouvrez pas d'issue publique.** Utilisez le signalement privé de GitHub (onglet **Security** du dépôt, puis **Report a vulnerability**), ou écrivez à [contact@pecule-app.com](mailto:contact@pecule-app.com).
 
 Indiquez si possible :
 
