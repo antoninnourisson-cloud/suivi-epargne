@@ -21,7 +21,7 @@
 
 Fait : corrections immédiates, accessibilité urgente, filet de sécurité (tests, lint strict, contrôles), retrait des e-mails, marque Google validée, domaine pecule-app.com, passage visuel Material 3 Expressive.
 
-### Phase 1 : interface (en cours)
+### Phase 1 : interface (faite)
 1. Bibliothèque de composants Material (`src/components/ui/`) : Card, StatTile, MoneyText, DeltaBadge, DataTable, TextField, SegmentedButton, Tabs, Chip, EmptyState, PageHeader, Sparkline. Conversion progressive des boutons et cartes faits main.
 2. Accueil : un chiffre principal (variation + petite courbe SVG), deux tâches au plus, le reste replié.
 3. Pilotage : « À placer ce mois » d'abord, puis « D'où vient ce chiffre ».
@@ -29,7 +29,7 @@ Fait : corrections immédiates, accessibilité urgente, filet de sécurité (tes
 5. Graphiques relookés Material, chacun avec son tableau accessible.
 6. Pages publiques (présentation, confidentialité) au même style.
 
-### Phase 2 : motivation
+### Phase 2 : motivation (prochaine)
 1. Bons mois : au moins 500 € mis de côté sur 30 jours à partir de chaque paie (seuil réglable, désactivable).
 2. Jalons et séries : précaution atteinte, livret plein, série de paies tenues (un joker par an).
 3. Point de paie : bilan à chaque paie (prévu / réalisé, un enseignement, une action).
