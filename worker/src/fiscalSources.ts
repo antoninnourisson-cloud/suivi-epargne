@@ -20,7 +20,7 @@ export const FISCAL_SOURCE_URLS: { url: string; topic: string }[] = [
 const MAX_CHARS = 20000;
 
 /** Texte lisible d'une page HTML : sans scripts, styles, menus ni pieds de page. */
-export const htmlToText = (html: string): string => {
+export const htmlToText = (html: string, maxChars = MAX_CHARS): string => {
   let h = html;
   const main = h.match(/<main[\s\S]*?<\/main>/i);
   if (main) h = main[0];
@@ -30,10 +30,11 @@ export const htmlToText = (html: string): string => {
   h = h.replace(/&nbsp;|&#160;|&#8239;/g, ' ').replace(/&euro;/g, '€').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"').replace(/&#39;|&rsquo;|&apos;/g, "'").replace(/&eacute;/g, 'é').replace(/&egrave;/g, 'è').replace(/&agrave;/g, 'à')
     .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)));
-  return h.replace(/[ \t  ]+/g, ' ').replace(/\n\s*\n+/g, '\n').trim().slice(0, MAX_CHARS);
+  return h.replace(/[ \t  ]+/g, ' ').replace(/\n\s*\n+/g, '\n').trim().slice(0, maxChars);
 };
 
-export const fetchFiscalSources = async (fetcher: typeof fetch = fetch): Promise<FiscalSource[]> =>
+/** `maxChars` : longueur gardée par page (l'app reçoit 20 000 caractères ; la veille du serveur lit la page entière puis n'en garde que les passages utiles). */
+export const fetchFiscalSources = async (fetcher: typeof fetch = fetch, maxChars = MAX_CHARS): Promise<FiscalSource[]> =>
   Promise.all(FISCAL_SOURCE_URLS.map(async ({ url, topic }) => {
     try {
       const res = await fetcher(url, {
@@ -42,7 +43,7 @@ export const fetchFiscalSources = async (fetcher: typeof fetch = fetch): Promise
         signal: AbortSignal.timeout(12_000),
       });
       if (!res.ok) return { url, topic, text: '', ok: false };
-      return { url, topic, text: htmlToText(await res.text()), ok: true };
+      return { url, topic, text: htmlToText(await res.text(), maxChars), ok: true };
     } catch {
       return { url, topic, text: '', ok: false };
     }

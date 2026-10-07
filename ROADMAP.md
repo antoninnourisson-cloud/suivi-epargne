@@ -47,12 +47,12 @@ Fait : corrections immédiates, accessibilité urgente, filet de sécurité (tes
 
 ### Phase 5 : infrastructure (en cours)
 1. ✅ Adresse contact@pecule-app.com (redirection e-mail Cloudflare), code de conduite (Contributor Covenant 2.1) et contacts de SECURITY/CONTRIBUTING.
-2. Cloudflare devant le site : en-têtes de sécurité HTTP (HSTS, anti-iframe, politique de permissions).
-3. Seconde sauvegarde chiffrée chez Cloudflare (chiffrée dans l'app, illisible pour le serveur).
-4. Surveillance quotidienne du site et du serveur (GitHub Actions, issue ouverte en cas de panne).
+2. ✅ Cloudflare devant le site : en-têtes de sécurité HTTP (HSTS, anti-iframe, politique de permissions).
+3. ✅ Seconde sauvegarde chiffrée chez Cloudflare (chiffrée dans l'app, illisible pour le serveur).
+4. ✅ Surveillance quotidienne du site et du serveur (GitHub Actions, issue ouverte en cas de panne).
 5. Veille fiscale côté serveur avec l'IA de Cloudflare, si l'offre gratuite suffit et que la qualité tient.
 
-### Phase 6 : wiki GitHub
+### Phase 6 : wiki GitHub (rédigé, à relire en phase 7)
 Remplir le wiki du dépôt : guide d'utilisation (premiers pas, paie et Pilotage, comptes et Actualiser, parents et restitution, motivation, simulateur, notifications, sauvegardes et conflits, confidentialité), FAQ, et pages pour contribuer (architecture, invariants, déploiement, veille fiscale). Le README et MAINTENANCE restent la référence technique ; le wiki s'adresse d'abord aux utilisateurs.
 
 ### Phase 7 : point final (en dernier, une fois tout le reste bouclé)
