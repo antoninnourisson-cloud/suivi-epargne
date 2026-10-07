@@ -12,8 +12,8 @@ import type { EmergencyFund } from '../lib/planning';
 import type { AgendaEvent } from '../lib/agenda';
 import { Sprout, LifeBuoy, Download, CalendarDays, ChevronDown, ChartLine } from 'lucide-react';
 import { lazyWithRetry } from './ErrorBoundary';
-import { SavingsAccount, PortfolioSnapshot, AccountType, Expense, FiscalConfig, WorkBenefits, RecurringMovement, Subscription } from '../types';
-import { Landmark, CalendarClock, Save, AlertTriangle, Trash2, Clock, TrendingUp, TrendingDown, PiggyBank, Percent, ShieldAlert, Repeat } from 'lucide-react';
+import { SavingsAccount, PortfolioSnapshot, AccountType, Expense, FiscalConfig, WorkBenefits, RecurringMovement, Subscription, PayslipRecord } from '../types';
+import { Landmark, CalendarClock, Save, AlertTriangle, Trash2, Clock, TrendingUp, TrendingDown, PiggyBank, Percent, ShieldAlert, Repeat, FileWarning } from 'lucide-react';
 import { computeAccruedParentalInterest, computeRecentSavingsRate, computeAccountBalanceAtDate, findStaleRegulatedRates, findDueRecurring, computeMonthSavedAmount, computeSavedSince, payPeriodOf, computeSavingsRateHistory, computeUnlockCost, findFiscalReview, applyTaxScale, nextSubscriptionDate, findAvRateUpdatesDue } from '../lib/finance';
 import { parseISODate, formatISODay, daysBetween, localTodayISO } from '../lib/dates';
 import { Button, Card, DeltaBadge, MoneyText, PageHeader, SegmentedButton, Sparkline, StatTile } from './ui';
@@ -24,6 +24,10 @@ import { InstallPrompt } from './InstallPrompt';
 import { RegulatedRatesEditor } from './RegulatedRatesEditor';
 import { signedAmount, round2 } from '../lib/money';
 import { groupByInstitution } from '../lib/chartData';
+import { computeGoodMonths, computeMilestones, computePayReview, detectPayslipAnomalies, motivationSettings, nextMilestone } from '../lib/motivation';
+import { GoodMonthsCard } from './motivation/GoodMonthsCard';
+import { PayReviewCard } from './motivation/PayReviewCard';
+import { describeAnomaly } from './motivation/text';
 
 interface DashboardProps {
   accounts: SavingsAccount[];
@@ -67,9 +71,19 @@ interface DashboardProps {
   onSetEmergencyMonths?: (m: number) => void;
   agendaNext?: AgendaEvent[];
   lepTimeline?: LepTimeline | null;
+  // Motivation (lib/motivation) : bons mois, jalons, point de paie, contrôle des fiches.
+  payslips?: PayslipRecord[];
+  gamification?: boolean;
+  goodMonthThreshold?: number;
+  milestonesSeen?: string[];
+  payReviewsDone?: string[];
+  rfrByYear?: Record<string, number>;
+  restitutionDoneOn?: string;
+  onMarkMilestonesSeen?: (ids: string[]) => void;
+  onValidatePayReview?: (key: string) => void;
 }
 
-export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalConfig, onDeleteAccount, recurringMovements = [], onRecordRecurring, monthPlan, monthlyPay = 0, paydayDay, trackingStartDate, subscriptions = [], onUpdateFiscalConfig, onOpenSettings, onUpdateAccounts, payRaise, onAcceptPayRaise, onDismissPayRaise, onNavigate, onAddAccount, lastExportAt, onExport, emergency, onSetEmergencyMonths, agendaNext = [], lepTimeline }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalConfig, onDeleteAccount, recurringMovements = [], onRecordRecurring, monthPlan, monthlyPay = 0, paydayDay, trackingStartDate, subscriptions = [], onUpdateFiscalConfig, onOpenSettings, onUpdateAccounts, payRaise, onAcceptPayRaise, onDismissPayRaise, onNavigate, onAddAccount, lastExportAt, onExport, emergency, onSetEmergencyMonths, agendaNext = [], lepTimeline, payslips = [], gamification, goodMonthThreshold, milestonesSeen, payReviewsDone, rfrByYear, restitutionDoneOn, onMarkMilestonesSeen, onValidatePayReview }) => {
   const [dateRange, setDateRange] = useState<{ start: string; end: string }>(() => {
     try {
         const stored = localStorage.getItem('dashboard_date_range');
@@ -412,6 +426,40 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalC
   const sortedIds = useMemo(() => accounts.map(a => a.id).sort(), [accounts]);
   const getAccountColor = (accountId: string) => accountColor(sortedIds, accountId);
 
+  // --- MOTIVATION : bons mois, jalons, point de paie ---
+  const motivation = useMemo(() => motivationSettings({ gamification, goodMonthThreshold }), [gamification, goodMonthThreshold]);
+  const goodMonths = useMemo(
+    () => (motivation.enabled ? computeGoodMonths({ accounts, today, paydayDay, payslips, threshold: motivation.threshold, trackingStartISO: trackingStartDate }) : null),
+    [motivation, accounts, today, paydayDay, payslips, trackingStartDate]
+  );
+  const monthlySpending = emergency?.monthlySpending ?? 0;
+  const milestones = useMemo(
+    () => (goodMonths ? computeMilestones({ accounts, mySavings, monthlySpending, goodMonths, rfrByYear, restitutionDoneOn }) : []),
+    [goodMonths, accounts, mySavings, monthlySpending, rfrByYear, restitutionDoneOn]
+  );
+  const upcomingMilestone = useMemo(() => nextMilestone(milestones), [milestones]);
+  // Jalons atteints jamais montrés : célébrés une fois, jusqu'au « Merci ».
+  const freshMilestones = useMemo(
+    () => (milestonesSeen ? milestones.filter(m => m.achieved && !milestonesSeen.includes(m.id)) : []),
+    [milestones, milestonesSeen]
+  );
+  // Tout premier passage : les jalons déjà atteints sont notés comme vus, sans célébration.
+  useEffect(() => {
+    if (!goodMonths || milestonesSeen !== undefined || !onMarkMilestonesSeen) return;
+    onMarkMilestonesSeen(milestones.filter(m => m.achieved).map(m => m.id));
+  }, [goodMonths, milestones, milestonesSeen, onMarkMilestonesSeen]);
+  const payReview = useMemo(
+    () => (goodMonths ? computePayReview({ accounts, goodMonths, today, plan: monthPlan, trackingStartISO: trackingStartDate }) : undefined),
+    [goodMonths, accounts, today, monthPlan, trackingStartDate]
+  );
+  const showPayReview = !!payReview && !(payReviewsDone || []).includes(payReview.key);
+  // Contrôle des fiches de paie (toujours actif : une sécurité, pas un jeu).
+  const latestPayslipAnomaly = useMemo(() => {
+    const anomalies = detectPayslipAnomalies(payslips);
+    const latest = payslips.filter(p => p.reviewed && p.extracted?.period).sort((a, b) => (b.extracted.period as string).localeCompare(a.extracted.period as string))[0];
+    return latest ? anomalies.find(a => a.payslipId === latest.id) : undefined;
+  }, [payslips]);
+
   const exportSession = () => {
     const now = new Date();
     const timestamp = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
@@ -531,6 +579,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalC
     text: 'Téléchargez une copie de vos données (tous les trois mois, par précaution).',
     detail: 'Pécule garde déjà une copie mensuelle sur votre Drive ; celle-ci reste chez vous.',
     primary: { label: 'Télécharger', onClick: onExport! },
+  });
+  if (latestPayslipAnomaly) todos.push({
+    key: `payslip-anomaly-${latestPayslipAnomaly.payslipId}`, icon: FileWarning, tone: 'info', snoozable: true,
+    text: `Fiche de paie de ${formatPeriod(latestPayslipAnomaly.period)} à vérifier.`,
+    detail: describeAnomaly(latestPayslipAnomaly),
+    primary: onNavigate ? { label: 'Voir mes fiches', onClick: () => onNavigate('payslips') } : undefined,
   });
   if (emergency && !emergency.reached) todos.push({
     key: 'emergency', icon: LifeBuoy, tone: 'info', snoozable: true,
@@ -655,12 +709,28 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalC
         </div>
       </Card>
 
+      {/* Bilan de la paie précédente, une fois, jusqu'à validation. */}
+      {showPayReview && payReview && (
+        <PayReviewCard review={payReview} onAction={onNavigate} onValidate={() => onValidatePayReview?.(payReview.key)} />
+      )}
+
       {/* 2. Ce qu'il y a à faire. */}
       <TodoList items={todos} />
 
       {/* 3. Le mois en cours et ce qui arrive. */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
         {savingsCard}
+
+        {goodMonths && goodMonths.months.length > 0 && (
+          <GoodMonthsCard
+            summary={goodMonths}
+            today={today}
+            milestones={milestones}
+            next={upcomingMilestone}
+            fresh={freshMilestones}
+            onAcknowledge={onMarkMilestonesSeen ? () => onMarkMilestonesSeen(freshMilestones.map(m => m.id)) : undefined}
+          />
+        )}
 
         {emergency && (
           <Card title="Épargne de précaution" icon={LifeBuoy} action={

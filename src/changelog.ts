@@ -15,6 +15,18 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '2026.10.07-4',
+    date: '2026-10-07',
+    title: 'Bons mois, jalons et point de paie',
+    items: [
+      "Accueil : une carte « Bons mois » suit ce que vous mettez de côté depuis la paie (500 € par défaut), votre série de bons mois et votre joker de l'année, qui couvre un mois plus difficile.",
+      "Vos jalons (premier bon mois, épargne de précaution, 10 000 € d'épargne…) sont réunis dans « Voir vos jalons » ; chaque nouveau jalon est signalé une seule fois.",
+      "Après chaque paie, un « Point de paie » résume le mois écoulé : versements, retraits, compte par compte. Validez-le pour le ranger.",
+      "Fiches de paie : une fiche nettement différente des précédentes est signalée, pour vérifier une prime, des heures supplémentaires ou une absence. Le seuil et l'affichage se règlent dans Paramètres, « Motivation ».",
+      "Notifications : le bilan du 1er du mois devient le « point de paie », envoyé le jour de la paie suivante et regroupé avec le rappel de paie pour ne pas en recevoir deux.",
+    ],
+  },
+  {
     version: '2026.10.07-3',
     date: '2026-10-07',
     title: 'Actualiser : plus simple',

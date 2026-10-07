@@ -16,6 +16,8 @@ import { describeEvolution } from '../lib/chartData';
 import { AreaSeriesChart, type AreaRow } from './charts/AreaSeriesChart';
 import { ChartFrame } from './charts/ChartFrame';
 import { DataTable, type Column } from './ui/DataTable';
+import { detectPayslipAnomalies } from '../lib/motivation';
+import { describeAnomaly } from './motivation/text';
 
 interface PayslipsProps {
   payslips: PayslipRecord[];
@@ -109,6 +111,8 @@ export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, 
       .sort((a, b) => a.period.localeCompare(b.period))
       .map(p => ({ ...p, label: monthLabel(p.period) })),
     [payslips]);
+  // Contrôle des fiches : écart net avec la médiane des fiches précédentes.
+  const anomalies = useMemo(() => new Map(detectPayslipAnomalies(payslips).map(a => [a.payslipId, a])), [payslips]);
   const netRows = useMemo<AreaRow[]>(() => chartData.map(p => ({ label: p.label, title: formatPeriod(p.period), net: p.net })), [chartData]);
   const netColumns: Column<(typeof chartData)[number]>[] = [
     { key: 'period', header: 'Mois', cell: p => formatPeriod(p.period) },
@@ -353,12 +357,15 @@ export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, 
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {[...payslips].sort((a, b) => (b.extracted.period || '').localeCompare(a.extracted.period || '')).map(p => {
                   const isActive = p.id === activePayslipId;
+                  const anomaly = anomalies.get(p.id);
                   return (
-                  <tr key={p.id} className={`hover:bg-slate-50 dark:hover:bg-slate-800 ${isActive ? 'bg-amber-50/60 dark:bg-amber-950/20' : ''}`}>
+                  <React.Fragment key={p.id}>
+                  <tr className={`hover:bg-slate-50 dark:hover:bg-slate-800 ${isActive ? 'bg-amber-50/60 dark:bg-amber-950/20' : ''}`}>
                     <td className="px-3 sm:px-6 py-3">
-                      <div className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                      <div className="font-bold text-slate-800 dark:text-slate-100 flex flex-wrap items-center gap-x-2 gap-y-1">
                         {p.extracted.period ? formatPeriod(p.extracted.period) : '—'}
                         {isActive && <span className="text-[11px] font-black uppercase bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300 px-1.5 py-0.5 rounded-sm">Référence du Pilotage</span>}
+                        {anomaly && <span className="text-[11px] font-medium bg-tertiary-container text-on-tertiary-container px-1.5 py-0.5 rounded-sm inline-flex items-center gap-1 whitespace-nowrap"><AlertTriangle className="w-3 h-3" aria-hidden="true" /> À vérifier</span>}
                       </div>
                       <div className="text-[11px] uppercase text-slate-500 dark:text-slate-400 font-bold">{p.extracted.employer || p.fileName}</div>
                     </td>
@@ -376,6 +383,17 @@ export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, 
                       </div>
                     </td>
                   </tr>
+                  {anomaly && (
+                    <tr className={isActive ? 'bg-amber-50/60 dark:bg-amber-950/20' : ''}>
+                      <td colSpan={4} className="px-3 sm:px-6 pb-3 pt-0">
+                        <p className="text-xs text-on-surface-variant flex items-start gap-1.5 bg-surface-container rounded-lg p-2.5">
+                          <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-px text-on-tertiary-container" aria-hidden="true" />
+                          <span><span className="sr-only">Fiche de {p.extracted.period ? formatPeriod(p.extracted.period) : ''} à vérifier : </span>{describeAnomaly(anomaly)}</span>
+                        </p>
+                      </td>
+                    </tr>
+                  )}
+                  </React.Fragment>
                   );
                 })}
               </tbody>

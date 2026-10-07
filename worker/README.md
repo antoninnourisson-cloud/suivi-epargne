@@ -6,7 +6,9 @@ Deux fonctions, et seulement deux :
    délivre à l'app des jetons d'accès d'une heure. Tu ne te reconnectes plus, même en PWA.
 2. **Notifications push** — chaque jour à 7 h UTC, il relit ton fichier Drive et t'envoie les
    rappels : échéances récurrentes, révision des taux réglementés, intérêts parentaux de
-   décembre, soldes non actualisés depuis 30 jours, jour de paie… Les dates sont celles de
+   décembre, soldes non actualisés depuis 30 jours, jour de paie, point de paie (bilan de la
+   paie précédente, replié dans le rappel du jour de paie quand les deux tombent le même
+   jour)… Les dates sont celles de
    Paris (heure d'été comprise). Chaque rappel n'est envoyé qu'une fois.
 
 L'app reste hébergée sur GitHub Pages. Tant que `VITE_BACKEND_URL` n'est pas défini, elle

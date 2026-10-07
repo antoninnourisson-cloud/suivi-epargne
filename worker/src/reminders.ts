@@ -31,6 +31,8 @@ import { formatISODay } from '../../src/lib/dates';
 import { frenchDay } from '../../src/lib/format';
 import { DEFAULT_FISCAL_CONFIG } from '../../src/constants';
 import { lepTimelineFromData, describeLepTimeline } from '../../src/lib/lep';
+import { computeGoodMonths, computePayReview, motivationSettings } from '../../src/lib/motivation';
+import { isReminderEnabled } from '../../src/lib/notificationPrefs';
 import type { PushMessage } from './webpush';
 
 export interface Reminder {
@@ -74,6 +76,20 @@ const pad2 = (n: number) => String(n).padStart(2, '0');
 // Numéro de jour absolu d'une date civile : différences en jours exactes, sans heure d'été.
 const dayNumber = (y: number, m: number, d: number) => Date.UTC(y, m - 1, d) / 86_400_000;
 const dayNumberOfLocal = (d: Date) => dayNumber(d.getFullYear(), d.getMonth() + 1, d.getDate());
+
+/**
+ * Intérêts acquis entre le lendemain de `from` et `to` inclus, même à cheval sur deux années
+ * (computeAccruedInterest compte depuis le 1er janvier ; une année passée compte en entier).
+ */
+const interestBetween = (accounts: GlobalAppData['accounts'], from: Date, to: Date): number => {
+  let total = 0;
+  for (const a of accounts) {
+    for (let y = from.getFullYear(); y <= to.getFullYear(); y++) {
+      total += computeAccruedInterest(a, y, to) - (y === from.getFullYear() ? computeAccruedInterest(a, y, from) : 0);
+    }
+  }
+  return total;
+};
 
 /**
  * Rappels du jour. `today` est la date civile à Paris ; un `Date` est accepté comme instant
@@ -246,14 +262,85 @@ export const computeReminders = (data: GlobalAppData, today: CivilDate | Date, a
   }
 
 
-  // 7. Bilan du mois écoulé (1er au 3 du mois, une fois) : épargne placée face au plan,
-  //    évolution de l'épargne nette, intérêts acquis.
-  if (D <= 3 && accounts.length > 0) {
+  // 7. Point de paie : bilan de la fenêtre de paie qui vient de se terminer (src/lib/motivation,
+  //    les mêmes chiffres que l'app). Envoyé le premier jour de la nouvelle fenêtre, avec
+  //    PAYDAY_WINDOW_DAYS jours de rattrapage si le cron a manqué ; la clé `recap:<paie>`
+  //    garantit un seul envoi par paie.
+  //
+  //    Fusion avec le rappel du jour de paie (une seule notification ce jour-là) : quand le
+  //    rappel `payday:` est émis aujourd'hui, que les deux types sont actifs et que la fenêtre
+  //    bilan se termine exactement à cette paie, le bilan est replié en une phrase à la fin du
+  //    rappel de paie et AUCUN `recap:` n'est émis. Les deux ont la même fenêtre de 3 jours
+  //    comptée depuis le même jour : chaque jour de rattrapage refait la même fusion, et le
+  //    rappel de paie (déjà envoyé ou non) est dédoublonné par sa propre clé. Rien ne peut donc
+  //    partir en double, ni le bilan arriver seul plus tard. Si la fenêtre s'est terminée un
+  //    autre jour (fiche de paie enregistrée avant le jour de paie), le bilan part seul.
+  //
+  //    Sans jour de paie ni fiche de paie (fenêtres calendaires), ou sans fenêtre suivie :
+  //    l'ancien bilan du mois calendaire, du 1er au 3 du mois.
+  const prefs = data.config?.notificationPrefs;
+  const motivation = motivationSettings(data.config);
+  const plan = data.config?.paydayAmount ?? computeMonthlySavingsCapacity(data);
+  const goodMonths = computeGoodMonths({
+    accounts,
+    today: todayKey,
+    paydayDay: payday && payday >= 1 && payday <= 31 ? payday : undefined,
+    payslips: data.payslips,
+    threshold: motivation.threshold,
+    trackingStartISO: data.config?.trackingStartDate,
+  });
+  const review = computePayReview({ accounts, goodMonths, today: todayKey, plan, trackingStartISO: data.config?.trackingStartDate });
+  const reviewWindow = review && goodMonths.months.find(m => m.key === review.key && m.start === review.start);
+  if (review && reviewWindow && reviewWindow.source !== 'calendar') {
+    const [ey, em, ed] = review.end.split('-').map(Number);
+    const sinceEnd = todayN - dayNumber(ey, em, ed);
+    if (sinceEnd >= 0 && sinceEnd < PAYDAY_WINDOW_DAYS) {
+      const [sy, sm, sd] = review.start.split('-').map(Number);
+      const lastDay = new Date(ey, em - 1, ed - 1);   // dernier jour de la fenêtre (fin exclue)
+      const beforeStart = new Date(sy, sm - 1, sd - 1); // veille de la fenêtre
+      const ownedEnd = computeAccountBalanceAtDate(accounts, formatISODay(lastDay));
+      const ownedStart = computeAccountBalanceAtDate(accounts, formatISODay(beforeStart));
+      const pct = ownedStart > 0 ? ((ownedEnd - ownedStart) / ownedStart) * 100 : 0;
+      const interest = interestBetween(accounts, beforeStart, lastDay);
+      const month = MONTH_NAMES[Number(review.key.slice(5, 7)) - 1];
+      const saved = `${review.saved >= 0 ? '+' : ''}${eur(review.saved)}`;
+      // Gamification désactivée : ni « bon mois » ni « série ». Pas de mention d'un mois
+      // raté non plus (pas de pression), seulement les chiffres.
+      const good = motivation.enabled && review.good;
+      const streak = motivation.enabled && goodMonths.streak >= 2 ? goodMonths.streak : 0;
+      const paydayReminder = out.find(r => r.key.startsWith('payday:'));
+      const sameDayAsPayday = paydayReminder && payday && review.end === formatISODay(payPeriodOf(payday, now).payDate);
+      if (paydayReminder && sameDayAsPayday && isReminderEnabled(paydayReminder.key, prefs) && isReminderEnabled(`recap:${review.key}`, prefs)) {
+        paydayReminder.message = {
+          ...paydayReminder.message,
+          body: `${paydayReminder.message.body} Paie précédente : ${saved} mis de côté${good ? ', bon mois ✓' : ''}${streak ? `, série de ${streak}` : ''}.`,
+        };
+      } else {
+        const parts = [
+          `${saved} mis de côté sur la paie de ${month}${good || review.plan ? ` (${[
+            ...(review.plan ? [`objectif ${eur(review.plan)}`] : []),
+            ...(good ? ['bon mois ✓'] : []),
+          ].join(', ')})` : ''}`,
+          ...(streak ? [`série de ${streak}`] : []),
+          `épargne ${eur(ownedEnd)} (${pct >= 0 ? '+' : ''}${pct.toLocaleString('fr-FR', { maximumFractionDigits: 1 })} %)`,
+          ...(interest >= 1 ? [`≈ ${eur(interest)} d'intérêts`] : []),
+        ];
+        out.push({
+          key: `recap:${review.key}`,
+          message: {
+            title: `Point de paie de ${month}`,
+            body: parts.join(' · ') + '.',
+            url: link('dashboard'),
+            tag: 'monthly-recap',
+          },
+        });
+      }
+    }
+  } else if (D <= 3 && accounts.length > 0) {
     const prevEnd = new Date(Y, M, 0);          // dernier jour du mois écoulé
     const prevStart = new Date(prevEnd.getFullYear(), prevEnd.getMonth(), 1);
     const beforeStart = new Date(prevEnd.getFullYear(), prevEnd.getMonth(), 0); // veille du mois écoulé
     const saved = computeMonthSavedAmount(accounts, prevEnd, data.config?.trackingStartDate);
-    const plan = data.config?.paydayAmount ?? computeMonthlySavingsCapacity(data);
     const ownedEnd = computeAccountBalanceAtDate(accounts, formatISODay(prevEnd));
     const ownedStart = computeAccountBalanceAtDate(accounts, formatISODay(beforeStart));
     const year = prevEnd.getFullYear();
@@ -407,7 +494,7 @@ const DISCREET_BODIES: Record<string, string> = {
   payday: 'Votre rappel de paie est prêt.',
   'payday-followup': 'Des virements de paie restent à faire ou à cocher.',
   sub: 'Un prélèvement approche : le détail est dans l’app.',
-  recap: 'Le bilan du mois est prêt.',
+  recap: 'Le point de paie est prêt.',
   donations: 'Le récapitulatif de vos dons est prêt.',
   'restitution-prep': 'La restitution approche : le détail est dans l’app.',
   'restitution-day': 'C’est le jour de la restitution : le détail est dans l’app.',

@@ -1,7 +1,7 @@
 // ================================================
 // FILE: src/App.tsx
 // ================================================
-import React, { useState, useEffect, useMemo, useRef, Suspense } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback, Suspense } from 'react';
 import { SavingsAccount, AccountMovement, PayslipRecord } from './types';
 import { usePortfolioData } from './hooks/usePortfolioData';
 import { useTheme } from './hooks/useTheme';
@@ -41,6 +41,7 @@ import { computeEmergencyFund, DEFAULT_EMERGENCY_MONTHS } from './lib/planning';
 import { buildAgenda } from './lib/agenda';
 import { TaxReturnHelper } from './components/TaxReturnHelper';
 import { SoloPlanCard } from './components/SoloPlanCard';
+import { MotivationSettings } from './components/motivation/MotivationSettings';
 import {
   LogOut,
   Loader2, Settings as SettingsIcon, AlertTriangle, RotateCw,
@@ -204,6 +205,20 @@ const App: React.FC = () => {
     () => computeEmergencyFund(data.accounts, totalFixedCharges(data.expenses, data.subscriptions) + (data.leisureBudget || 0), data.config.emergencyMonths ?? DEFAULT_EMERGENCY_MONTHS),
     [data.accounts, data.expenses, data.subscriptions, data.leisureBudget, data.config.emergencyMonths]
   );
+
+  // Motivation : jalons déjà montrés et points de paie validés (synchronisés sur Drive).
+  const { patchConfig } = data;
+  const milestonesSeenRef = useRef(data.config.milestonesSeen);
+  milestonesSeenRef.current = data.config.milestonesSeen;
+  const payReviewsDoneRef = useRef(data.config.payReviewsDone);
+  payReviewsDoneRef.current = data.config.payReviewsDone;
+  const markMilestonesSeen = useCallback((ids: string[]) => {
+    patchConfig({ milestonesSeen: [...new Set([...(milestonesSeenRef.current ?? []), ...ids])] });
+  }, [patchConfig]);
+  const validatePayReview = useCallback((key: string) => {
+    // Les 24 derniers suffisent : un point de paie ne revient jamais sur une paie plus ancienne.
+    patchConfig({ payReviewsDone: [...(payReviewsDoneRef.current ?? []).filter(k => k !== key), key].slice(-24) });
+  }, [patchConfig]);
 
   // Pastille sur l'icône de l'app installée : nombre de choses à faire.
   useEffect(() => {
@@ -809,7 +824,10 @@ const App: React.FC = () => {
             <ErrorBoundary resetKey={view}>
             <Suspense fallback={<ViewLoader />}>
             {view === 'dashboard' && fiscalWatch.proposals.length > 0 && <div className="mb-6">{fiscalWatchCard(true)}</div>}
-            {view === 'dashboard' && <Dashboard accounts={data.accounts} history={data.history} expenses={allCharges} fiscalConfig={data.fiscalConfig} workBenefits={data.workBenefits} onDeleteAccount={handleDeleteAccount} config={dashboardConfig} monthPlan={monthPlan} monthlyPay={monthlyPay} paydayDay={data.paydayDay} trackingStartDate={data.trackingStartDate} payRaise={payRaise && !payRaiseHandled ? { delta: payRaise.delta, period: payRaise.latest.extracted.period || '', hasFixedAmount: data.paydayAmount !== undefined } : null} onAcceptPayRaise={acceptPayRaise} onDismissPayRaise={dismissPayRaise} subscriptions={data.subscriptions} onUpdateFiscalConfig={data.setFiscalConfig} onUpdateAccounts={data.setAccounts} onOpenSettings={() => setView('settings')} recurringMovements={data.recurringMovements} onRecordRecurring={(r, date) => handleQuickAdd(r.accountId, r.amount, r.type, r.label, date)} onNavigate={setView} onAddAccount={() => { setView('accounts'); setEditingAccount(undefined); setShowForm(true); }} lastExportAt={data.config.lastExportAt} onExport={() => { data.exportData(); data.patchConfig({ lastExportAt: localTodayISO() }); }} emergency={emergency} onSetEmergencyMonths={m => data.patchConfig({ emergencyMonths: m })} agendaNext={agendaNext} lepTimeline={lepTimeline} />}
+            {view === 'dashboard' && <Dashboard accounts={data.accounts} history={data.history} expenses={allCharges} fiscalConfig={data.fiscalConfig} workBenefits={data.workBenefits} onDeleteAccount={handleDeleteAccount} config={dashboardConfig} monthPlan={monthPlan} monthlyPay={monthlyPay} paydayDay={data.paydayDay} trackingStartDate={data.trackingStartDate} payRaise={payRaise && !payRaiseHandled ? { delta: payRaise.delta, period: payRaise.latest.extracted.period || '', hasFixedAmount: data.paydayAmount !== undefined } : null} onAcceptPayRaise={acceptPayRaise} onDismissPayRaise={dismissPayRaise} subscriptions={data.subscriptions} onUpdateFiscalConfig={data.setFiscalConfig} onUpdateAccounts={data.setAccounts} onOpenSettings={() => setView('settings')} recurringMovements={data.recurringMovements} onRecordRecurring={(r, date) => handleQuickAdd(r.accountId, r.amount, r.type, r.label, date)} onNavigate={setView} onAddAccount={() => { setView('accounts'); setEditingAccount(undefined); setShowForm(true); }} lastExportAt={data.config.lastExportAt} onExport={() => { data.exportData(); data.patchConfig({ lastExportAt: localTodayISO() }); }} emergency={emergency} onSetEmergencyMonths={m => data.patchConfig({ emergencyMonths: m })} agendaNext={agendaNext} lepTimeline={lepTimeline}
+              payslips={data.payslips} gamification={data.config.gamification} goodMonthThreshold={data.config.goodMonthThreshold}
+              milestonesSeen={data.config.milestonesSeen} payReviewsDone={data.config.payReviewsDone} rfrByYear={data.config.rfrByYear}
+              restitutionDoneOn={data.parentalRestitution?.done?.date} onMarkMilestonesSeen={markMilestonesSeen} onValidatePayReview={validatePayReview} />}
 
             {view === 'pilot' && <AssistantPilot
                 accounts={data.accounts}
@@ -937,6 +955,7 @@ const App: React.FC = () => {
                       onSetParts={parts => data.setFiscalConfig(prev => ({ ...prev, lepHouseholdParts: parts }))} />}
                     securitySlot={<ServerSecurityPanel discreet={!!data.config.discreetNotifications} onToggleDiscreet={v => data.patchConfig({ discreetNotifications: v || undefined })} confirm={askConfirm}
                       onSignedOutEverywhere={() => { setIsAuthenticated(false); data.resetData(); addToast({ message: 'Tous les appareils sont déconnectés', kind: 'success' }); }} />}
+                    motivationSlot={<MotivationSettings gamification={data.config.gamification} goodMonthThreshold={data.config.goodMonthThreshold} onChange={patch => data.patchConfig(patch)} />}
                     paydayDay={data.paydayDay}
                     onOpenPayday={() => setView('pilot')}
                     onSave={(newFiscal, newBenefits, newGeminiKey, newPickerKey) => {

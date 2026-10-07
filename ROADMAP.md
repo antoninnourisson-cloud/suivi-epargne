@@ -29,13 +29,13 @@ Fait : corrections immédiates, accessibilité urgente, filet de sécurité (tes
 5. Graphiques relookés Material, chacun avec son tableau accessible.
 6. Pages publiques (présentation, confidentialité) au même style.
 
-### Phase 2 : motivation (prochaine)
+### Phase 2 : motivation (faite)
 1. Bons mois : au moins 500 € mis de côté sur 30 jours à partir de chaque paie (seuil réglable, désactivable).
 2. Jalons et séries : précaution atteinte, livret plein, série de paies tenues (un joker par an).
 3. Point de paie : bilan à chaque paie (prévu / réalisé, un enseignement, une action).
 4. Contrôle des fiches de paie : alerte si une fiche s'écarte nettement de la médiane des six précédentes.
 
-### Phase 3 : solidité avant la restitution
+### Phase 3 : solidité avant la restitution (prochaine)
 1. Écriture Drive vérifiée : plus de modification perdue entre deux appareils.
 2. Restitution, virements et annulations sortis d'`App.tsx` en commandes testées.
 3. Répétition générale de la restitution en mode démo.

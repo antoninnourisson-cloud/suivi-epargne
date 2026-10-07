@@ -15,4 +15,10 @@ describe('préférences de notifications', () => {
     expect(categoryOfKey('payday:2026-09')?.id).toBe('payday');
     expect(categoryOfKey('restitution-day:2027-01-01')?.id).toBe('parents');
   });
+  it('le point de paie garde l’id et le préfixe « recap » (préférences existantes conservées)', () => {
+    const cat = categoryOfKey('recap:2026-09');
+    expect(cat?.id).toBe('recap');
+    expect(cat?.label).toBe('Point de paie (bilan de la paie précédente)');
+    expect(isReminderEnabled('recap:2026-09', { recap: false })).toBe(false);
+  });
 });

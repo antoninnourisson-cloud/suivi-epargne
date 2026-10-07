@@ -147,6 +147,73 @@ describe('computeReminders', () => {
     });
   });
 
+  describe('point de paie', () => {
+    // Paie le 27 : la fenêtre « paie de septembre » va du 27 sept. au 26 oct. inclus.
+    const acc = {
+      id: 'la', name: 'Livret A', type: AccountType.LIVRET_A, institution: 'B',
+      totalAmount: 1620, ownedAmount: 1620, parentalCapital: 0, interestRate: 3,
+      movements: [
+        { id: 'a', date: '2026-09-01', amount: 1000, label: 'x', type: 'IN' as const },
+        { id: 'b', date: '2026-10-05', amount: 620, label: 'x', type: 'IN' as const },
+      ],
+    };
+    const data = (config: Partial<GlobalAppData['config']> = {}) => base({
+      accounts: [acc],
+      config: { ...base().config, paydayDay: 27, paydayAmount: 650, ...config },
+    });
+    const at = (d: GlobalAppData, day: number, month = 10) => computeReminders(d, { year: 2026, month, day }, APP);
+
+    it('part le premier jour de la nouvelle fenêtre avec les chiffres de la paie écoulée', () => {
+      const r = at(data({ notificationPrefs: { payday: false } }), 27).find(x => x.key === 'recap:2026-09');
+      expect(r?.message.title).toBe('Point de paie de septembre');
+      expect(r?.message.body).toMatch(/^\+620\s€ mis de côté sur la paie de septembre \(objectif 650\s€, bon mois ✓\) · série de 2 · épargne 1\s620\s€ \(\+62 %\) · ≈ \d+\s€ d'intérêts\.$/);
+      expect(r?.message.url).toBe(APP);
+    });
+
+    it('rattrape 3 jours un cron manqué, puis se tait ; plus de bilan calendaire le 1er', () => {
+      const keys = (day: number, month = 10) => at(data({ notificationPrefs: { payday: false } }), day, month).map(x => x.key).filter(k => k.startsWith('recap:'));
+      expect(keys(26)).toEqual([]);
+      expect(keys(29)).toEqual(['recap:2026-09']);
+      expect(keys(30)).toEqual([]);
+      expect(keys(1)).toEqual([]); // 1er octobre : la paie d'août s'est terminée le 27 septembre
+    });
+
+    it('sans gamification : ni « bon mois » ni « série », les chiffres restent', () => {
+      const r = at(data({ gamification: false, notificationPrefs: { payday: false } }), 27).find(x => x.key === 'recap:2026-09');
+      expect(r?.message.body).toMatch(/^\+620\s€ mis de côté sur la paie de septembre \(objectif 650\s€\) · épargne/);
+      expect(r?.message.body).not.toMatch(/bon mois|série/);
+    });
+
+    it('le jour de paie, une seule notification : le bilan est replié dans le rappel de paie', () => {
+      for (const day of [27, 28, 29]) {
+        const r = at(data(), day);
+        expect(r.some(x => x.key.startsWith('recap:'))).toBe(false);
+        const pay = r.find(x => x.key === 'payday:2026-10');
+        expect(pay?.message.body).toMatch(/Paie précédente : \+620\s€ mis de côté, bon mois ✓, série de 2\.$/);
+      }
+      const off = at(data({ gamification: false }), 27).find(x => x.key === 'payday:2026-10');
+      expect(off?.message.body).toMatch(/Paie précédente : \+620\s€ mis de côté\.$/);
+    });
+
+    it('bilan désactivé : le rappel de paie reste tel quel', () => {
+      const r = at(data({ notificationPrefs: { recap: false } }), 27);
+      expect(r.find(x => x.key === 'payday:2026-10')?.message.body).not.toContain('Paie précédente');
+    });
+
+    it('sans jour de paie ni fiche de paie : bilan du mois calendaire du 1er au 3', () => {
+      const d = data({ paydayDay: undefined });
+      const r = at(d, 1).find(x => x.key.startsWith('recap:'));
+      expect(r?.key).toBe('recap:2026-09');
+      expect(r?.message.title).toBe('Bilan de septembre');
+      expect(at(d, 27).some(x => x.key.startsWith('recap:'))).toBe(false);
+    });
+
+    it('en mode discret, aucun montant', () => {
+      const [r] = applyDiscreetMode(at(data({ notificationPrefs: { payday: false } }), 27).filter(x => x.key.startsWith('recap:')));
+      expect(r.message).toMatchObject({ title: 'Point de paie de septembre', body: 'Le point de paie est prêt.' });
+    });
+  });
+
   describe('relevés annuels', () => {
     const pea = { ...livret, id: 'pea', name: 'PEA', type: AccountType.PEA, totalDeposits: 800 };
     it('rappelle mi-janvier les placements non actualisés, pas les livrets', () => {
@@ -315,7 +382,7 @@ describe('mode discret', () => {
     expect(out.map(x => x.message.body)).toEqual([
       'Une échéance est à enregistrer dans l’app.',
       'Un prélèvement approche : le détail est dans l’app.',
-      'Le bilan du mois est prêt.',
+      'Le point de paie est prêt.',
       'Révision du 1er août : pensez à mettre à jour Livret A.', // sans montant : inchangé
     ]);
     expect(out.map(x => x.message.title)).toEqual(['Échéance : Épargne auto', 'Prélèvement demain : Netflix', 'Bilan de septembre', 'Taux réglementés révisés']);

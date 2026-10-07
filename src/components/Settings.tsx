@@ -32,13 +32,14 @@ interface SettingsProps {
   fiscalWatchSlot?: React.ReactNode;
   securitySlot?: React.ReactNode;
   taxNoticeSlot?: React.ReactNode;
+  motivationSlot?: React.ReactNode;
   notificationPrefs?: Record<string, boolean>;
   onChangeNotificationPrefs?: (p: Record<string, boolean>) => void;
   paydayDay?: number;
   onOpenPayday?: () => void;
 }
 
-export const Settings: React.FC<SettingsProps> = ({ payslips = [], config, workBenefits, geminiApiKey, pickerApiKey, onSave, onExport, onImport, paydayDay, onOpenPayday, backupSlot, fiscalWatchSlot, securitySlot, taxNoticeSlot, notificationPrefs, onChangeNotificationPrefs }) => {
+export const Settings: React.FC<SettingsProps> = ({ payslips = [], config, workBenefits, geminiApiKey, pickerApiKey, onSave, onExport, onImport, paydayDay, onOpenPayday, backupSlot, fiscalWatchSlot, securitySlot, taxNoticeSlot, motivationSlot, notificationPrefs, onChangeNotificationPrefs }) => {
   const [importMsg, setImportMsg] = useState<string | null>(null);
   // L'import écrase TOUT (comptes, mouvements, objectifs, fiches de paie, réglages) puis
   // resynchronise sur Drive : il faut une confirmation explicite, la boîte de sélection de
@@ -299,6 +300,8 @@ export const Settings: React.FC<SettingsProps> = ({ payslips = [], config, workB
 
         {/* SECTION NOTIFICATIONS (visible seulement si l'app est reliée au serveur) */}
         <NotificationSettings paydayDay={paydayDay} onOpenPayday={onOpenPayday} prefs={notificationPrefs} onChangePrefs={onChangeNotificationPrefs} />
+
+        {motivationSlot}
 
         {securitySlot && <div className="lg:col-span-2">{securitySlot}</div>}
 
