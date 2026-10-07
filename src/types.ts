@@ -324,6 +324,15 @@ export interface GlobalAppData {
     rfrByYear?: Record<string, number>;
     // Dernier export JSON téléchargé (rappel trimestriel).
     lastExportAt?: string;
+    // Motivation (voir src/lib/motivation.ts) : bons mois, séries, jalons, point de paie.
+    // Absent = activé ; false = tout est masqué.
+    gamification?: boolean;
+    // Seuil d'un « bon mois » : argent mis de côté sur une paie (défaut 500 €).
+    goodMonthThreshold?: number;
+    // Jalons déjà montrés comme « nouveaux » (célébrés une seule fois, sur tous les appareils).
+    milestonesSeen?: string[];
+    // Points de paie validés (clés 'YYYY-MM' de la paie).
+    payReviewsDone?: string[];
   };
   goals?: SavingsGoal[];
   lastView?: string;
