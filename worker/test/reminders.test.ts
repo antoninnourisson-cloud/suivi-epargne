@@ -304,7 +304,7 @@ describe('computeReminders', () => {
     it('annonce le bilan début janvier, une fois', () => {
       const r = computeReminders(base({ accounts: [livret] }), new Date(2027, 0, 2, 9), APP).find(x => x.key === 'year-review:2026');
       expect(r?.message.title).toBe('Votre bilan 2026');
-      expect(r?.message.url).toBe(`${APP}?view=history`);
+      expect(r?.message.url).toBe(`${APP}?view=history&year=2026`);
       expect(computeReminders(base({ accounts: [livret] }), new Date(2027, 0, 10, 9), APP).some(x => x.key.startsWith('year-review'))).toBe(false);
     });
   });

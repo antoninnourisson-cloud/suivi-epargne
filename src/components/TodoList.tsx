@@ -4,6 +4,8 @@
 import React, { useState } from 'react';
 import { ChevronDown, Clock, ListTodo } from 'lucide-react';
 import { Button, Card, Chip } from './ui';
+import { formatEUR } from '../lib/format';
+import { sortAlerts, type AlertGain } from '../lib/alerts';
 
 export interface TodoSpec {
   key: string;
@@ -18,7 +20,26 @@ export interface TodoSpec {
   extra?: React.ReactNode;
   /** Masque l'alerte 7 jours. Absent = pas de « Plus tard » (l'alerte a sa propre sortie). */
   snoozable?: boolean;
+  /** Ce que l'alerte vaut en euros : puce « +39 €/an », et rang dans la liste. */
+  gain?: AlertGain;
 }
+
+const PER: Record<AlertGain['per'], { short: string; long: string }> = {
+  an: { short: '/an', long: 'par an' },
+  mois: { short: '/mois', long: 'par mois' },
+  once: { short: '', long: 'une fois' },
+};
+
+/** Puce dorée « +39 €/an » ; le texte complet est lu par les lecteurs d'écran. */
+const GainChip: React.FC<{ gain: AlertGain }> = ({ gain }) => {
+  const amount = formatEUR(Math.round(gain.amount), 0);
+  return (
+    <span className="inline-flex items-center h-6 px-2 rounded-sm bg-tertiary-container text-on-tertiary-container text-xs font-medium tabular-nums whitespace-nowrap" data-testid="gain-chip">
+      <span aria-hidden="true">+{amount}{PER[gain.per].short}</span>
+      <span className="sr-only">Gain estimé : {amount} {gain.label || PER[gain.per].long}</span>
+    </span>
+  );
+};
 
 const SNOOZE_KEY = 'todo_snoozed';
 const SHOWN_BY_DEFAULT = 2;
@@ -31,8 +52,8 @@ export const TodoList: React.FC<{ items: TodoSpec[] }> = ({ items }) => {
   const now = Date.now();
   const visible = items.filter(i => !(snoozed[i.key] > now));
   if (visible.length === 0) return null;
-  // Actions avant informations.
-  const sorted = [...visible].sort((a, b) => (a.tone === b.tone ? 0 : a.tone === 'action' ? -1 : 1));
+  // Actions avant informations ; dans chaque groupe, la plus grosse somme en euros d'abord.
+  const sorted = sortAlerts(visible);
   const shown = showAll ? sorted : sorted.slice(0, SHOWN_BY_DEFAULT);
 
   const snooze = (key: string) => {
@@ -69,6 +90,7 @@ export const TodoList: React.FC<{ items: TodoSpec[] }> = ({ items }) => {
                     </span>
                     <div className="flex-1 min-w-48 pt-1.5">
                       <p className="font-medium text-on-surface">{item.text}</p>
+                      {item.gain && <p className="mt-1.5"><GainChip gain={item.gain} /></p>}
                       {item.detail && <p className="text-xs mt-1 text-on-surface-variant">{item.detail}</p>}
                     </div>
                   </div>

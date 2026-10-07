@@ -5,7 +5,7 @@ import { LATEST_VERSION } from '../src/changelog';
 
 const SCREENS = [
   'Accueil', 'Actualiser les soldes', 'Mes comptes', 'Virements', 'Journal', 'Pilotage', 'Abonnements',
-  'Fiches de paie', 'Dons et impôts', 'Rendement', 'Historique', 'Agenda', 'Part parentale', 'Paramètres',
+  'Fiches de paie', 'Dons et impôts', 'Rendement', 'Historique', 'Et si…', 'Agenda', 'Part parentale', 'Paramètres',
 ];
 
 const openDemo = async (page: Page) => {

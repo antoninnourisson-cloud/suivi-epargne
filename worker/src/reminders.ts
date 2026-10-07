@@ -475,7 +475,8 @@ export const computeReminders = (data: GlobalAppData, today: CivilDate | Date, a
       message: {
         title: `Votre bilan ${y}`,
         body: `${review.saved >= 0 ? '+' : ''}${eur(review.saved)} mis de côté, ${eur(review.interest)} d'intérêts${review.parentalInterest >= 1 ? ` (dont ${eur(review.parentalInterest)} offerts par vos parents)` : ''}. Le détail dans Historique.`,
-        url: link('history'),
+        // Ouvre directement « Votre année » de l'année écoulée (lu par Historique).
+        url: `${link('history')}&year=${y}`,
         tag: 'year-review',
       },
     });

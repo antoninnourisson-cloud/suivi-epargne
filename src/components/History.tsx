@@ -4,6 +4,7 @@ import { parseISODate } from '../lib/dates';
 import { LineChart as LineChartIcon, ArrowUpRight, ArrowDownRight, Minus, Wallet, Receipt } from 'lucide-react';
 import { formatEUR } from '../lib/format';
 import { YearReviewCard } from './YearReviewCard';
+import { YearInReviewCard } from './year/YearInReviewCard';
 import type { GlobalAppData } from '../types';
 import { useIsDark, chartTheme } from '../lib/chartTheme';
 import { describeEvolution } from '../lib/chartData';
@@ -79,7 +80,10 @@ export const History: React.FC<HistoryProps> = ({ history, expensesHistory, revi
         <h2 className="text-2xl font-black text-slate-800 dark:text-slate-100 flex items-center gap-2 mb-1"><LineChartIcon className="w-6 h-6 text-indigo-600" aria-hidden="true" /> Historique du patrimoine</h2>
         <p className="text-sm text-slate-600 dark:text-slate-300">Un point est enregistré chaque mois automatiquement.</p>
       </div>
-      {reviewData && <YearReviewCard data={reviewData} />}
+      {/* « Votre année » (récapitulatif raconté) ; motivation désactivée : on garde aussi
+          le bilan en chiffres bruts, comme avant. */}
+      {reviewData && <YearInReviewCard data={reviewData} />}
+      {reviewData && reviewData.config?.gamification === false && <YearReviewCard data={reviewData} />}
 
       <div role="tablist" onKeyDown={onTablistKeyDown} aria-label="Historique" className="flex gap-4 border-b border-slate-200 dark:border-slate-700">
         <button role="tab" aria-selected={tab === 'patrimoine'} tabIndex={tab === 'patrimoine' ? 0 : -1} onClick={() => setTab('patrimoine')} className={`pb-2 px-4 font-bold text-sm flex items-center gap-2 ${tab === 'patrimoine' ? 'text-indigo-700 dark:text-indigo-300 border-b-2 border-indigo-600' : 'text-slate-600 dark:text-slate-300'}`}><Wallet className="w-4 h-4" /> Patrimoine</button>

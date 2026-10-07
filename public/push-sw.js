@@ -37,7 +37,7 @@ self.addEventListener('notificationclick', (event) => {
       // écran, sans la recharger.
       for (const w of windows) {
         if (w.url.startsWith(self.registration.scope) && 'focus' in w) {
-          w.postMessage({ type: 'open-view', view });
+          w.postMessage({ type: 'open-view', view, year: target.searchParams.get('year') });
           return w.focus();
         }
       }

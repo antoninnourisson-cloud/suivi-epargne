@@ -48,7 +48,10 @@ export const computeMonthlySavingsCapacity = (data: GlobalAppData): number => {
   return computeSavingsCapacity(superNet, totalFixed, c.leisureBudget ?? 0, c.projectSavings ?? 0);
 };
 
-const formatEUR2 = (n: number) => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(n);
+// Formateur créé une fois : le simulateur appelle le plan de placement des dizaines de
+// milliers de fois (fourchette), et construire un Intl.NumberFormat à chaque appel coûtait cher.
+const EUR_NO_CENTS = new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 });
+const formatEUR2 = (n: number) => EUR_NO_CENTS.format(n);
 
 export interface PlacementStep {
   accountId?: string;     // absent pour la suggestion « Ouvrir un PEA/AV »

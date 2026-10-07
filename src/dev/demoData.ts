@@ -63,7 +63,8 @@ export const DEMO_DATA: GlobalAppData = {
       movements: [...lddsMoves, mv('ldds-out-1', afterPay(1, 12), 200, 'Réparation voiture', 'OUT')] },
     { id: 'demo-av', name: 'Assurance vie', institution: 'Assureur Démo', type: AccountType.ASSURANCE_VIE, totalAmount: 4300, ownedAmount: 4300, parentalCapital: 0, interestRate: 2.6, openingDate: '2024-06-15', totalDeposits: 4000,
       movements: avMoves },
-    { id: 'demo-cc', name: 'Compte courant', institution: 'Banque Démo', type: AccountType.COMPTE_COURANT, totalAmount: 1400, ownedAmount: 1400, parentalCapital: 0, interestRate: 0, movements: [] },
+    // Compte courant bien au-dessus d'un mois et demi de dépenses : l'alerte « argent qui dort ».
+    { id: 'demo-cc', name: 'Compte courant', institution: 'Banque Démo', type: AccountType.COMPTE_COURANT, totalAmount: 3900, ownedAmount: 3900, parentalCapital: 0, interestRate: 0, movements: [] },
   ],
   expenses: [
     { id: 'e1', name: 'Loyer', amount: 750 },
@@ -80,7 +81,7 @@ export const DEMO_DATA: GlobalAppData = {
   config: {
     grossAnnual: 32000, leisureBudget: 250, projectSavings: 100, taxRateManual: 0, extraMonthlyIncome: 0, paydayDay: PAYDAY,
     // Jalons déjà vus : « Un livret au plafond » (le LEP) reste à célébrer dans la démo.
-    milestonesSeen: ['good-month-1', 'streak-3', 'streak-6', 'emergency-3', 'emergency-6', 'savings-10000'],
+    milestonesSeen: ['good-month-1', 'streak-3', 'streak-6', 'emergency-3', 'emergency-6', 'savings-10000', 'savings-25000'],
   },
   parentalRestitution: { plannedDate: '2027-01-01' },
 };

@@ -40,12 +40,12 @@ Fait : corrections immédiates, accessibilité urgente, filet de sécurité (tes
 2. Restitution, virements et annulations sortis d'`App.tsx` en commandes testées.
 3. Répétition générale de la restitution en mode démo.
 
-### Phase 4 : passage en solo (prochaine)
+### Phase 4 : passage en solo (faite, sauf ce qui attend la restitution de janvier)
 1. Restitution, mode solo, nettoyage de l'ancienne adresse github.io (serveur, client OAuth, clé du Picker).
 2. Simulateur « Et si… » et alertes unifiées chiffrées en euros.
 3. « Votre année Pécule » (bilan annuel).
 
-### Phase 5 : ouverture sur invitation
+### Phase 5 : ouverture sur invitation (prochaine)
 - Invitations à usage unique avec date d'expiration, accès révocable (remplace `ALLOWED_EMAILS`).
 - Rappels quotidiens répartis dans une file (Cloudflare Queues) ; offre Workers à 5 $/mois si le nombre de comptes le justifie.
 - Accueil guidé, partie « parents » facultative et masquée par défaut ; lecture Gemini : clé personnelle ou serveur, à trancher.

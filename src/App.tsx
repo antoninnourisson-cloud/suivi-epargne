@@ -65,6 +65,7 @@ const TransferManager = lazyWithRetry(() => import('./components/TransferManager
 const Settings = lazyWithRetry(() => import('./components/Settings').then(m => ({ default: m.Settings })));
 const Yield = lazyWithRetry(() => import('./components/Yield').then(m => ({ default: m.Yield })));
 const History = lazyWithRetry(() => import('./components/History').then(m => ({ default: m.History })));
+const Simulator = lazyWithRetry(() => import('./components/Simulator').then(m => ({ default: m.Simulator })));
 const ParentalShare = lazyWithRetry(() => import('./components/ParentalShare').then(m => ({ default: m.ParentalShare })));
 const Payslips = lazyWithRetry(() => import('./components/Payslips').then(m => ({ default: m.Payslips })));
 
@@ -318,7 +319,16 @@ const App: React.FC = () => {
     if (!('serviceWorker' in navigator)) return;
     const onMessage = (e: MessageEvent) => {
       const target = e.data && e.data.type === 'open-view' ? e.data.view as View : null;
-      if (target && VALID_VIEWS.includes(target)) { deepLinkedRef.current = true; setView(target); }
+      if (!target || !VALID_VIEWS.includes(target)) return;
+      // « Votre année » (notification de janvier) : l'année passe par l'adresse, lue par
+      // Historique à l'ouverture, et par un événement s'il est déjà affiché.
+      const year = typeof e.data.year === 'string' && /^\d{4}$/.test(e.data.year) ? e.data.year : null;
+      if (year) {
+        window.history.replaceState(window.history.state, '', `${window.location.pathname}?year=${year}`);
+        window.dispatchEvent(new CustomEvent('pecule:open-year', { detail: Number(year) }));
+      }
+      deepLinkedRef.current = true;
+      setView(target);
     };
     navigator.serviceWorker.addEventListener('message', onMessage);
     return () => navigator.serviceWorker.removeEventListener('message', onMessage);
@@ -756,7 +766,7 @@ const App: React.FC = () => {
             {view === 'dashboard' && <Dashboard accounts={data.accounts} history={data.history} expenses={allCharges} fiscalConfig={data.fiscalConfig} workBenefits={data.workBenefits} onDeleteAccount={handleDeleteAccount} config={dashboardConfig} monthPlan={monthPlan} monthlyPay={monthlyPay} paydayDay={data.paydayDay} trackingStartDate={data.trackingStartDate} payRaise={payRaise && !payRaiseHandled ? { delta: payRaise.delta, period: payRaise.latest.extracted.period || '', hasFixedAmount: data.paydayAmount !== undefined } : null} onAcceptPayRaise={acceptPayRaise} onDismissPayRaise={dismissPayRaise} subscriptions={data.subscriptions} onUpdateFiscalConfig={data.setFiscalConfig} onUpdateAccounts={data.setAccounts} onOpenSettings={() => setView('settings')} recurringMovements={data.recurringMovements} onRecordRecurring={(r, date) => handleQuickAdd(r.accountId, r.amount, r.type, r.label, date)} onNavigate={setView} onAddAccount={() => { setView('accounts'); setEditingAccount(undefined); setShowForm(true); }} lastExportAt={data.config.lastExportAt} onExport={() => { data.exportData(); data.patchConfig({ lastExportAt: localTodayISO() }); }} emergency={emergency} onSetEmergencyMonths={m => data.patchConfig({ emergencyMonths: m })} agendaNext={agendaNext} lepTimeline={lepTimeline}
               payslips={data.payslips} gamification={data.config.gamification} goodMonthThreshold={data.config.goodMonthThreshold}
               milestonesSeen={data.config.milestonesSeen} payReviewsDone={data.config.payReviewsDone} rfrByYear={data.config.rfrByYear}
-              restitutionDoneOn={data.parentalRestitution?.done?.date} onMarkMilestonesSeen={markMilestonesSeen} onValidatePayReview={validatePayReview} />}
+              restitutionDoneOn={data.parentalRestitution?.done?.date} restitutionPlannedDate={data.parentalRestitution?.plannedDate} onMarkMilestonesSeen={markMilestonesSeen} onValidatePayReview={validatePayReview} />}
 
             {view === 'pilot' && <AssistantPilot
                 accounts={data.accounts}
@@ -799,6 +809,7 @@ const App: React.FC = () => {
             {view === 'update' && <AccountUpdate accounts={data.accounts} onUpdateAccountsComplex={data.updateAccountsWithMovements} lastSavedAt={data.lastSavedAt} onAddAccount={() => { setView('accounts'); setEditingAccount(undefined); setShowForm(true); }} />}
 
             {view === 'yield' && <Yield accounts={data.accounts} fiscalConfig={data.fiscalConfig} monthPlan={monthPlan} savingsSplit={data.savingsSplit} restitutionInMonths={restitutionInMonths} />}
+            {view === 'simulator' && <Simulator accounts={data.accounts} fiscalConfig={data.fiscalConfig} monthPlan={monthPlan} savingsSplit={data.savingsSplit} paydayDay={data.paydayDay} payslips={data.payslips} trackingStartDate={data.trackingStartDate} parentalRestitution={data.parentalRestitution} />}
             {view === 'history' && <History history={data.history} expensesHistory={data.expensesHistory} reviewData={fullData} />}
             {view === 'journal' && <Journal
                 accounts={data.accounts}

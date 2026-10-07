@@ -10,11 +10,11 @@ import { TodoList, TodoSpec } from './TodoList';
 import type { View } from '../navigation';
 import type { EmergencyFund } from '../lib/planning';
 import type { AgendaEvent } from '../lib/agenda';
-import { Sprout, LifeBuoy, Download, CalendarDays, ChevronDown, ChartLine } from 'lucide-react';
+import { Sprout, LifeBuoy, Download, CalendarDays, ChevronDown, ChartLine, Wallet, ArrowRightLeft, Gift } from 'lucide-react';
 import { lazyWithRetry } from './ErrorBoundary';
 import { SavingsAccount, PortfolioSnapshot, AccountType, Expense, FiscalConfig, WorkBenefits, RecurringMovement, Subscription, PayslipRecord } from '../types';
 import { Landmark, CalendarClock, Save, AlertTriangle, Trash2, Clock, TrendingUp, TrendingDown, PiggyBank, Percent, ShieldAlert, Repeat, FileWarning } from 'lucide-react';
-import { computeAccruedParentalInterest, computeRecentSavingsRate, computeAccountBalanceAtDate, findStaleRegulatedRates, findDueRecurring, computeMonthSavedAmount, computeSavedSince, payPeriodOf, computeSavingsRateHistory, computeUnlockCost, findFiscalReview, applyTaxScale, nextSubscriptionDate, findAvRateUpdatesDue } from '../lib/finance';
+import { computeAccruedParentalInterest, computeRecentSavingsRate, computeAccountBalanceAtDate, findStaleRegulatedRates, findDueRecurring, computeMonthSavedAmount, computeSavedSince, payPeriodOf, computeSavingsRateHistory, computeUnlockCost, findFiscalReview, applyTaxScale, nextSubscriptionDate, findAvRateUpdatesDue, suggestedRestitutionDate } from '../lib/finance';
 import { parseISODate, formatISODay, daysBetween, localTodayISO } from '../lib/dates';
 import { Button, Card, DeltaBadge, MoneyText, PageHeader, SegmentedButton, Sparkline, StatTile } from './ui';
 import { AvailabilityBar, type AvailabilitySegment } from './dashboard/AvailabilityBar';
@@ -24,10 +24,10 @@ import { InstallPrompt } from './InstallPrompt';
 import { RegulatedRatesEditor } from './RegulatedRatesEditor';
 import { signedAmount, round2 } from '../lib/money';
 import { groupByInstitution } from '../lib/chartData';
-import { computeGoodMonths, computeMilestones, computePayReview, detectPayslipAnomalies, motivationSettings, nextMilestone } from '../lib/motivation';
+import { computeGoodMonths, computeMilestones, computePayReview, motivationSettings, nextMilestone } from '../lib/motivation';
+import { computeAlerts, type AlertKind } from '../lib/alerts';
 import { GoodMonthsCard } from './motivation/GoodMonthsCard';
 import { PayReviewCard } from './motivation/PayReviewCard';
-import { describeAnomaly } from './motivation/text';
 
 interface DashboardProps {
   accounts: SavingsAccount[];
@@ -79,11 +79,14 @@ interface DashboardProps {
   payReviewsDone?: string[];
   rfrByYear?: Record<string, number>;
   restitutionDoneOn?: string;
+  // Date prévue de la restitution (à passer depuis App) ; à défaut, tant que les parents ont
+  // du capital et que rien n'est fait, le 1er janvier suivant (date conseillée).
+  restitutionPlannedDate?: string;
   onMarkMilestonesSeen?: (ids: string[]) => void;
   onValidatePayReview?: (key: string) => void;
 }
 
-export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalConfig, onDeleteAccount, recurringMovements = [], onRecordRecurring, monthPlan, monthlyPay = 0, paydayDay, trackingStartDate, subscriptions = [], onUpdateFiscalConfig, onOpenSettings, onUpdateAccounts, payRaise, onAcceptPayRaise, onDismissPayRaise, onNavigate, onAddAccount, lastExportAt, onExport, emergency, onSetEmergencyMonths, agendaNext = [], lepTimeline, payslips = [], gamification, goodMonthThreshold, milestonesSeen, payReviewsDone, rfrByYear, restitutionDoneOn, onMarkMilestonesSeen, onValidatePayReview }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalConfig, onDeleteAccount, recurringMovements = [], onRecordRecurring, monthPlan, monthlyPay = 0, paydayDay, trackingStartDate, subscriptions = [], onUpdateFiscalConfig, onOpenSettings, onUpdateAccounts, payRaise, onAcceptPayRaise, onDismissPayRaise, onNavigate, onAddAccount, lastExportAt, onExport, emergency, onSetEmergencyMonths, agendaNext = [], lepTimeline, payslips = [], gamification, goodMonthThreshold, milestonesSeen, payReviewsDone, rfrByYear, restitutionDoneOn, restitutionPlannedDate, onMarkMilestonesSeen, onValidatePayReview }) => {
   const [dateRange, setDateRange] = useState<{ start: string; end: string }>(() => {
     try {
         const stored = localStorage.getItem('dashboard_date_range');
@@ -453,12 +456,22 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalC
     [goodMonths, accounts, today, monthPlan, trackingStartDate]
   );
   const showPayReview = !!payReview && !(payReviewsDone || []).includes(payReview.key);
-  // Contrôle des fiches de paie (toujours actif : une sécurité, pas un jeu).
-  const latestPayslipAnomaly = useMemo(() => {
-    const anomalies = detectPayslipAnomalies(payslips);
-    const latest = payslips.filter(p => p.reviewed && p.extracted?.period).sort((a, b) => (b.extracted.period as string).localeCompare(a.extracted.period as string))[0];
-    return latest ? anomalies.find(a => a.payslipId === latest.id) : undefined;
-  }, [payslips]);
+  // Alertes chiffrées en euros (lib/alerts) : compte courant dormant, meilleur taux, livret
+  // bientôt plein, place libérée par la restitution, et le contrôle des fiches de paie
+  // (toujours actif : une sécurité, pas un jeu).
+  const hasParentalCapital = accounts.some(a => a.parentalCapital > 0);
+  const alerts = useMemo(() => computeAlerts({
+    accounts,
+    fiscalConfig,
+    today: parseISODate(today),
+    monthlySpending,
+    monthlyPlan: monthPlan,
+    lepEligible: !(lepTimeline && (lepTimeline.status === 'closing' || lepTimeline.status === 'closed-due')),
+    restitution: restitutionDoneOn ? { done: true }
+      : restitutionPlannedDate ? { plannedDate: restitutionPlannedDate }
+      : hasParentalCapital ? { plannedDate: suggestedRestitutionDate(parseISODate(today)) } : undefined,
+    payslips,
+  }), [accounts, fiscalConfig, today, monthlySpending, monthPlan, lepTimeline, restitutionDoneOn, restitutionPlannedDate, hasParentalCapital, payslips]);
 
   const exportSession = () => {
     const now = new Date();
@@ -569,7 +582,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalC
     primary: onNavigate ? { label: 'Mes comptes', onClick: () => onNavigate('accounts') } : undefined,
     secondary: { label: 'Taux inchangé', onClick: confirmAvRates },
   });
-  for (const a of ceilingAlerts) todos.push({
+  // Un livret dont la date de plafond est prévue n'a pas besoin, en plus, de son pourcentage.
+  const forecastFull = new Set(alerts.filter(a => a.kind === 'livret-full').map(a => a.accountId));
+  for (const a of ceilingAlerts.filter(c => !forecastFull.has(c.id))) todos.push({
     key: `ceiling-${a.id}-${Math.floor(a.pct / 5)}`, icon: AlertTriangle, tone: 'info', snoozable: true,
     text: `${a.name} est rempli à ${Math.round(a.pct)} % : il reste ${formatEUR(a.remaining, 0)} avant le plafond.`,
     primary: onNavigate ? { label: 'Voir le plan', onClick: () => onNavigate('pilot') } : undefined,
@@ -580,11 +595,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalC
     detail: 'Pécule garde déjà une copie mensuelle sur votre Drive ; celle-ci reste chez vous.',
     primary: { label: 'Télécharger', onClick: onExport! },
   });
-  if (latestPayslipAnomaly) todos.push({
-    key: `payslip-anomaly-${latestPayslipAnomaly.payslipId}`, icon: FileWarning, tone: 'info', snoozable: true,
-    text: `Fiche de paie de ${formatPeriod(latestPayslipAnomaly.period)} à vérifier.`,
-    detail: describeAnomaly(latestPayslipAnomaly),
-    primary: onNavigate ? { label: 'Voir mes fiches', onClick: () => onNavigate('payslips') } : undefined,
+  const ALERT_ICONS: Record<AlertKind, TodoSpec['icon']> = {
+    'dormant-cash': Wallet, 'better-rate': ArrowRightLeft, 'livret-full': AlertTriangle, 'restitution-room': Gift, 'payslip-anomaly': FileWarning,
+  };
+  for (const a of alerts) todos.push({
+    key: a.id, icon: ALERT_ICONS[a.kind], tone: a.tone, snoozable: true,
+    text: a.title, detail: a.detail, gain: a.gain,
+    primary: onNavigate && a.action ? { label: a.action.label, onClick: () => onNavigate(a.action!.view) } : undefined,
   });
   if (emergency && !emergency.reached) todos.push({
     key: 'emergency', icon: LifeBuoy, tone: 'info', snoozable: true,

@@ -15,6 +15,16 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '2026.10.07-6',
+    date: '2026-10-07',
+    title: 'Et si…, alertes en euros et votre année',
+    items: [
+      "Nouvel écran « Et si… » (Analyses) : simulez un achat, une pause ou un autre montant d'épargne, et voyez votre épargne dans 1 à 5 ans, avec une fourchette tirée de vos propres mois passés.",
+      "« À faire » chiffre ce que vous gagneriez : argent qui dort sur le compte courant, compte mieux rémunéré qui a de la place, livret bientôt plein, place libérée après la restitution.",
+      "Historique : « Votre année » raconte votre année d'épargne en quelques pages (mis de côté, intérêts, bons mois, meilleur mois, jalons, cap sur l'année suivante).",
+    ],
+  },
+  {
     version: '2026.10.07-5',
     date: '2026-10-07',
     title: 'Plus sûr entre deux appareils',

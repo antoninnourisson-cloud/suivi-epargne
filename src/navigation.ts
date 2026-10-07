@@ -2,13 +2,13 @@
 // « Plus » (mobile), liens profonds. Ajouter un écran = une ligne ici.
 import {
   LayoutDashboard, RefreshCcw, Wallet, ArrowRightLeft, ScrollText, ShieldCheck, CalendarClock,
-  FileText, HandHeart, Coins, LineChart, CalendarDays, Users, Settings as SettingsIcon,
+  FileText, HandHeart, Coins, LineChart, FlaskConical, CalendarDays, Users, Settings as SettingsIcon,
 } from 'lucide-react';
 import type { ComponentType } from 'react';
 
 export const VIEWS = [
   'dashboard', 'update', 'accounts', 'transfers', 'journal', 'pilot', 'subscriptions', 'payslips',
-  'donations', 'yield', 'history', 'agenda', 'parental', 'settings',
+  'donations', 'yield', 'history', 'simulator', 'agenda', 'parental', 'settings',
 ] as const;
 export type View = typeof VIEWS[number];
 export const isView = (v: unknown): v is View => typeof v === 'string' && (VIEWS as readonly string[]).includes(v);
@@ -38,6 +38,7 @@ export const NAV_ITEMS: NavItem[] = [
   { key: 'donations', label: 'Dons et impôts', icon: HandHeart, section: 'Budget' },
   { key: 'yield', label: 'Rendement', icon: Coins, section: 'Analyses' },
   { key: 'history', label: 'Historique', icon: LineChart, section: 'Analyses' },
+  { key: 'simulator', label: 'Et si…', icon: FlaskConical, section: 'Analyses' },
   { key: 'agenda', label: 'Agenda', icon: CalendarDays, section: 'Analyses' },
   { key: 'parental', label: 'Part parentale', icon: Users, section: 'Analyses' },
   { key: 'settings', label: 'Paramètres', icon: SettingsIcon },
