@@ -19,6 +19,11 @@ export const FISCAL_SOURCE_URLS: { url: string; topic: string }[] = [
 
 const MAX_CHARS = 20000;
 
+const HTML_ENTITIES: Record<string, string> = {
+  nbsp: ' ', euro: '€', amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", rsquo: "'",
+  eacute: 'é', egrave: 'è', agrave: 'à',
+};
+
 /** Texte lisible d'une page HTML : sans scripts, styles, menus ni pieds de page. */
 export const htmlToText = (html: string, maxChars = MAX_CHARS): string => {
   let h = html;
@@ -27,9 +32,15 @@ export const htmlToText = (html: string, maxChars = MAX_CHARS): string => {
   h = h.replace(/<(script|style|noscript|svg|nav|footer|header|form)[\s\S]*?<\/\1>/gi, ' ');
   h = h.replace(/<br\s*\/?>|<\/(p|li|h[1-6]|tr|div|section)>/gi, '\n');
   h = h.replace(/<[^>]+>/g, ' ');
-  h = h.replace(/&nbsp;|&#160;|&#8239;/g, ' ').replace(/&euro;/g, '€').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"').replace(/&#39;|&rsquo;|&apos;/g, "'").replace(/&eacute;/g, 'é').replace(/&egrave;/g, 'è').replace(/&agrave;/g, 'à')
-    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)));
+  // Entités décodées en UNE passe : « &amp;lt; » doit donner « &lt; », pas « < » (un
+  // décodage en plusieurs remplacements successifs décodait deux fois, alerte CodeQL).
+  h = h.replace(/&(#\d+|[a-z]+);/gi, (m, e: string) => {
+    if (e[0] === '#') {
+      const n = Number(e.slice(1));
+      return n === 160 || n === 8239 ? ' ' : n === 39 ? "'" : String.fromCharCode(n);
+    }
+    return HTML_ENTITIES[e.toLowerCase()] ?? m;
+  });
   return h.replace(/[ \t  ]+/g, ' ').replace(/\n\s*\n+/g, '\n').trim().slice(0, maxChars);
 };
 

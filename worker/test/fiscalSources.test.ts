@@ -20,3 +20,12 @@ describe('sources de la veille fiscale', () => {
     expect(r.filter(x => !x.ok).length).toBe(FISCAL_SOURCE_URLS.length - 1);
   });
 });
+
+describe('htmlToText : entités HTML', () => {
+  it('décode en une seule passe (pas de double décodage)', () => {
+    expect(htmlToText('<p>a &amp;lt; b</p>')).toBe('a &lt; b');
+    expect(htmlToText('<p>22&nbsp;950&#8239;&euro; &eacute;t&eacute; l&#39;an</p>')).toBe("22 950 € été l'an");
+    expect(htmlToText('<p>&inconnu; &#233;</p>')).toBe('&inconnu; é');
+  });
+});
+
