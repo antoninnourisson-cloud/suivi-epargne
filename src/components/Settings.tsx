@@ -286,7 +286,7 @@ export const Settings: React.FC<SettingsProps> = ({ payslips = [], config, workB
                             maxLength={8}
                             value={pinDraft}
                             onChange={e => setPinDraft(e.target.value.replace(/\D/g, ''))}
-                            placeholder="Nouveau code (4-8 chiffres)"
+                            placeholder="Nouveau code (6 à 8 chiffres)"
                             className="flex-1 p-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg font-bold text-slate-800 dark:text-slate-100"
                             autoFocus
                         />

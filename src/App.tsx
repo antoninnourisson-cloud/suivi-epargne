@@ -41,7 +41,8 @@ import { QuickAddFab } from './components/QuickAddFab';
 import { useFiscalWatch } from './hooks/useFiscalWatch';
 import { FiscalWatchCard } from './components/FiscalWatchCard';
 import type { FiscalProposal } from './lib/fiscalWatch';
-import { DriveBackupsPanel, ServerSecurityPanel } from './components/SettingsPanels';
+import { DriveBackupsPanel, ServerSecurityPanel, CloudBackupPanel } from './components/SettingsPanels';
+import { maybeAutoUpload } from './services/cloudBackup';
 import { computeEmergencyFund, DEFAULT_EMERGENCY_MONTHS } from './lib/planning';
 import { buildAgenda } from './lib/agenda';
 import { TaxReturnHelper } from './components/TaxReturnHelper';
@@ -233,6 +234,17 @@ const App: React.FC = () => {
     const n = computeBadgeCount(fullData);
     (n > 0 ? nav.setAppBadge?.(n) : nav.clearAppBadge?.())?.catch(() => { /* non pris en charge */ });
   }, [fullData, isAuthenticated, data.isLoadingData]);
+
+  // Sauvegarde de secours chiffrée (serveur) : au plus une fois par semaine, si les données
+  // ont changé. Attend 30 s de calme après le chargement ou la dernière modification, ne
+  // bloque jamais l'écran, et ne part jamais d'un état douteux (erreur, conflit, copie locale).
+  const cloudBackupReady = isAuthenticated && !locked && !data.isLoadingData && !data.syncError && !data.syncConflict
+    && !data.sessionExpired && !data.appOutdated && !data.localBackup;
+  useEffect(() => {
+    if (!cloudBackupReady || !isBackendEnabled()) return;
+    const t = setTimeout(() => { void maybeAutoUpload(fullData); }, 30_000);
+    return () => clearTimeout(t);
+  }, [cloudBackupReady, fullData]);
 
   // Hausse de salaire repérée sur les fiches de paie (proposée une seule fois par fiche).
   const payRaise = useMemo(() => {
@@ -882,7 +894,10 @@ const App: React.FC = () => {
                     pickerApiKey={data.pickerApiKey}
                     onExport={() => { data.exportData(); data.patchConfig({ lastExportAt: localTodayISO() }); }}
                     onImport={data.importData}
-                    backupSlot={<DriveBackupsPanel list={data.listDriveBackups} restore={data.restoreDriveBackup} confirm={(t, m, ok) => askConfirm(t, m, ok, true)} />}
+                    backupSlot={<>
+                      <DriveBackupsPanel list={data.listDriveBackups} restore={data.restoreDriveBackup} confirm={(t, m, ok) => askConfirm(t, m, ok, true)} />
+                      <CloudBackupPanel getData={data.buildData} onImport={data.importData} confirm={askConfirm} />
+                    </>}
                     fiscalWatchSlot={fiscalWatchCard(false)}
                     taxNoticeSlot={<TaxNoticePanel geminiApiKey={data.geminiApiKey} rfrByYear={data.config.rfrByYear || {}} householdParts={data.fiscalConfig.lepHouseholdParts}
                       onSave={(y, v) => data.patchConfig({ rfrByYear: { ...(data.config.rfrByYear || {}), [String(y)]: v } })}

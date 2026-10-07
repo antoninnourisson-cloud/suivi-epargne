@@ -1,0 +1,153 @@
+name: Surveillance
+
+# Vérifie chaque matin que Pécule répond : site, pages publiques, serveur (et sa tâche
+# quotidienne), certificat TLS, en-têtes de sécurité. En cas de problème, ouvre (ou complète)
+# une issue « panne » : GitHub envoie alors un e-mail. Quand tout repasse au vert, l'issue
+# est commentée puis fermée. Voir MAINTENANCE.md, « Surveillance ».
+on:
+  schedule:
+    # 06:30 UTC : avant la tâche quotidienne du serveur (07:00 UTC), dont on vérifie le
+    # passage de la veille.
+    - cron: '30 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: monitor
+  cancel-in-progress: false
+
+env:
+  SITE: https://pecule-app.com
+  HOST: pecule-app.com
+  # Tâche quotidienne du serveur jugée en retard au-delà de ce délai (elle tourne à 07:00 UTC).
+  CRON_MAX_AGE_HOURS: 26
+  CERT_MIN_DAYS: 14
+
+jobs:
+  monitor:
+    name: Vérifications en production
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Lecture de l'adresse du serveur
+        # Seul .env.production est récupéré : l'adresse du serveur n'est écrite qu'à un endroit.
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          sparse-checkout: .env.production
+          sparse-checkout-cone-mode: false
+
+      - name: Vérifications
+        id: checks
+        shell: bash
+        run: |
+          set -uo pipefail
+          : > failures.md
+          : > notices.md
+          fail()   { echo "- **Échec** : $1" >> failures.md; echo "::error::$1"; }
+          notice() { echo "- $1" >> notices.md; echo "::notice::$1"; }
+          ok()     { echo "OK : $1"; }
+          CURL=(curl -sS --max-time 20 --retry 2 --retry-delay 5 --retry-all-errors)
+
+          # 1. Page d'accueil : 200 et le nom de l'app dans la page.
+          code=$("${CURL[@]}" -o home.html -w '%{http_code}' "$SITE/" || echo 000)
+          if [ "$code" != 200 ]; then fail "Accueil $SITE/ : code HTTP $code (attendu 200)"
+          elif ! grep -q 'Pécule' home.html; then fail "Accueil $SITE/ : la page ne contient pas « Pécule »"
+          else ok "Accueil"; fi
+
+          # 2. Pages publiques (présentation, exigée par Google ; confidentialité).
+          for p in presentation.html confidentialite.html; do
+            code=$("${CURL[@]}" -o /dev/null -w '%{http_code}' "$SITE/$p" || echo 000)
+            if [ "$code" = 200 ]; then ok "$p"; else fail "$SITE/$p : code HTTP $code (attendu 200)"; fi
+          done
+
+          # 3. Serveur : GET /status (public, sans donnée utilisateur) + tâche quotidienne.
+          api=$(grep -m1 '^VITE_BACKEND_URL=' .env.production | cut -d= -f2- | tr -d '\r' || true)
+          if [ -z "$api" ]; then
+            fail "Adresse du serveur introuvable dans .env.production"
+          else
+            code=$("${CURL[@]}" -o status.json -w '%{http_code}' "$api/status" || echo 000)
+            if [ "$code" != 200 ] || ! jq -e '.ok == true' status.json > /dev/null 2>&1; then
+              fail "Serveur $api/status : code HTTP $code ou réponse inattendue"
+            else
+              ok "Serveur"
+              last=$(jq -r '.cron.lastRunAt // empty' status.json)
+              cron_ok=$(jq -r '.cron.ok' status.json)
+              if [ -z "$last" ]; then
+                notice "Tâche quotidienne du serveur : aucun passage enregistré pour l'instant"
+              else
+                age_h=$(( ($(date -u +%s) - $(date -u -d "$last" +%s)) / 3600 ))
+                if [ "$cron_ok" = false ]; then fail "Tâche quotidienne du serveur : le dernier passage ($last) a échoué (détail : Cloudflare → Workers → suivi-epargne-api → Logs)"
+                elif [ "$age_h" -gt "$CRON_MAX_AGE_HOURS" ]; then fail "Tâche quotidienne du serveur : dernier passage il y a ${age_h} h ($last)"
+                else ok "Tâche quotidienne ($last)"; fi
+              fi
+            fi
+          fi
+
+          # 4. Certificat TLS : expire dans plus de CERT_MIN_DAYS jours.
+          end=$(echo | timeout 20 openssl s_client -servername "$HOST" -connect "$HOST:443" 2>/dev/null | openssl x509 -noout -enddate 2>/dev/null | cut -d= -f2 || true)
+          if [ -z "$end" ]; then
+            fail "Certificat TLS de $HOST : illisible (connexion HTTPS impossible ?)"
+          else
+            days=$(( ($(date -u -d "$end" +%s) - $(date -u +%s)) / 86400 ))
+            if [ "$days" -lt "$CERT_MIN_DAYS" ]; then fail "Certificat TLS de $HOST : expire dans ${days} jours ($end)"
+            else ok "Certificat TLS ($days jours restants)"; fi
+          fi
+
+          # 5. En-têtes de sécurité (Worker edge/) : simple information tant que le DNS
+          #    Cloudflare n'est pas passé en « Proxied ».
+          headers=$("${CURL[@]}" -I "$SITE/" || true)
+          if echo "$headers" | grep -qi '^strict-transport-security:'; then ok "En-tête HSTS"
+          else notice "En-tête Strict-Transport-Security absent : le Worker edge n'est pas (encore) actif (DNS en « DNS only » ?)"; fi
+
+          if [ -s failures.md ]; then echo "failed=true" >> "$GITHUB_OUTPUT"; else echo "failed=false" >> "$GITHUB_OUTPUT"; fi
+          {
+            echo '### Surveillance de Pécule'
+            echo
+            if [ -s failures.md ]; then cat failures.md; else echo 'Tout va bien.'; fi
+            cat notices.md
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Issue « panne »
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          FAILED: ${{ steps.checks.outputs.failed }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          now=$(TZ=Europe/Paris date '+%d/%m/%Y à %H:%M')
+          issue=$(gh issue list --label panne --state open --limit 1 --json number --jq '.[0].number // empty' 2>/dev/null || true)
+          if [ "$FAILED" = true ]; then
+            {
+              echo "La surveillance quotidienne du $now a détecté un problème sur Pécule :"
+              echo
+              cat failures.md
+              if [ -s notices.md ]; then echo; echo "Pour information :"; echo; cat notices.md; fi
+              echo
+              echo "Journal complet : $RUN_URL"
+              echo
+              echo "Que faire : voir MAINTENANCE.md, « Procédures en cas de panne ». Cette issue sera fermée automatiquement quand tout refonctionnera."
+            } > body.md
+            if [ -n "$issue" ]; then
+              gh issue comment "$issue" --body-file body.md
+            else
+              gh label create panne --color B60205 --description "Problème détecté par la surveillance" 2>/dev/null || true
+              gh issue create --title "Panne détectée le $now" --label panne --body-file body.md
+            fi
+          elif [ -n "$issue" ]; then
+            gh issue comment "$issue" --body "Tout refonctionne (vérification du $now) : issue fermée automatiquement. Journal : $RUN_URL"
+            gh issue close "$issue" --reason completed
+          fi
+
+      - name: Résultat
+        if: ${{ steps.checks.outputs.failed == 'true' }}
+        run: |
+          echo "::error::Au moins une vérification a échoué (voir l'issue « panne »)."
+          exit 1

@@ -7,7 +7,7 @@ import jsxA11y from 'eslint-plugin-jsx-a11y';
 import globals from 'globals';
 
 export default tseslint.config(
-  { ignores: ['dist', 'node_modules', 'worker/node_modules', 'worker/.wrangler', 'public/push-sw.js', 'dev-dist'] },
+  { ignores: ['dist', 'node_modules', 'worker/node_modules', 'worker/.wrangler', 'edge/node_modules', 'edge/.wrangler', 'public/push-sw.js', 'dev-dist'] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
@@ -30,7 +30,7 @@ export default tseslint.config(
   // Règles qui lisent les types : une promesse oubliée (ni attendue ni rattrapée) est le
   // bug typique d'une synchronisation, une erreur réseau passerait alors en silence.
   {
-    files: ['src/**/*.{ts,tsx}', 'worker/src/**/*.ts'],
+    files: ['src/**/*.{ts,tsx}', 'worker/src/**/*.ts', 'edge/src/**/*.ts'],
     languageOptions: { parserOptions: { projectService: true, tsconfigRootDir: import.meta.dirname } },
     rules: {
       '@typescript-eslint/no-floating-promises': 'error',
@@ -39,5 +39,5 @@ export default tseslint.config(
     },
   },
   { files: ['**/*.{js,mjs,cjs}'], languageOptions: { globals: { ...globals.node } } },
-  { files: ['**/*.test.ts', '**/*.test.tsx', 'worker/test/**'], rules: { '@typescript-eslint/no-explicit-any': 'off' } },
+  { files: ['**/*.test.ts', '**/*.test.tsx', 'worker/test/**', 'edge/test/**'], rules: { '@typescript-eslint/no-explicit-any': 'off' } },
 );

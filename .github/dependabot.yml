@@ -28,6 +28,18 @@ updates:
       - dependency-name: '*'
         update-types: ['version-update:semver-major']
 
+  - package-ecosystem: npm
+    directory: /edge
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 5
+    groups:
+      edge-minor-patch:
+        update-types: [minor, patch]
+    ignore:
+      - dependency-name: '*'
+        update-types: ['version-update:semver-major']
+
   - package-ecosystem: github-actions
     directory: /
     schedule:

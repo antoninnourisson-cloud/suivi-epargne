@@ -19,6 +19,7 @@
 //   push:<sub>        abonnements push des appareils (subscriptions.ts)
 //   sent:<sub>:<k>    rappels déjà envoyés (dédoublonnage, ~400 jours)
 //   health:cron       compte rendu de la dernière tâche quotidienne
+//   backup:<sub>:<date>  sauvegarde de secours CHIFFRÉE PAR L'APP (illisible ici), 8 au plus, 1 an
 // Le state OAuth n'est plus stocké : il est signé (HMAC) et lié au navigateur par cookie.
 // ================================================
 import { sha256b64url, encryptString, decryptString, randomToken } from './crypto';
@@ -70,7 +71,7 @@ const corsHeaders = (req: Request, env: Env): Record<string, string> => {
   if (!origin || !allowedOrigins(env).includes(origin)) return {};
   return {
     'Access-Control-Allow-Origin': origin,
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
     'Access-Control-Allow-Headers': 'Authorization, Content-Type',
     'Access-Control-Max-Age': '86400',
     Vary: 'Origin',
@@ -153,17 +154,29 @@ const pruneOrphanSubscriptions = async (env: Env, list: StoredSubscription[]): P
   return alive;
 };
 
-/** Efface TOUT ce que le serveur sait d'un utilisateur. */
-export const purgeUser = async (store: KVNamespace, sub: string, alsoSessionHash?: string): Promise<void> => {
+const deletePrefix = async (store: KVNamespace, prefix: string): Promise<number> => {
+  let cursor: string | undefined;
+  let n = 0;
+  do {
+    const page = await store.list({ prefix, cursor });
+    for (const k of page.keys) { await store.delete(k.name); n++; }
+    cursor = page.list_complete ? undefined : page.cursor;
+  } while (cursor);
+  return n;
+};
+
+/**
+ * Efface TOUT ce que le serveur sait d'un utilisateur. Les sauvegardes de secours
+ * chiffrées partent aussi, sauf `keepBackups` : purge AUTOMATIQUE sur accès Google révoqué
+ * ou expiré — la copie de secours doit survivre à une reconnexion forcée ; elle s'efface
+ * d'elle-même au bout d'un an (BACKUP_TTL) et le serveur ne peut pas la lire.
+ */
+export const purgeUser = async (store: KVNamespace, sub: string, alsoSessionHash?: string, opts: { keepBackups?: boolean } = {}): Promise<void> => {
   await deleteAllSessions(store, sub, alsoSessionHash);
   await store.delete(`user:${sub}`);
   await store.delete(pushKey(sub));
-  let cursor: string | undefined;
-  do {
-    const page = await store.list({ prefix: `sent:${sub}:`, cursor });
-    for (const k of page.keys) await store.delete(k.name);
-    cursor = page.list_complete ? undefined : page.cursor;
-  } while (cursor);
+  await deletePrefix(store, `sent:${sub}:`);
+  if (!opts.keepBackups) await deletePrefix(store, backupPrefix(sub));
 };
 
 // ---------- Routes : connexion ----------
@@ -275,8 +288,9 @@ const handleToken = async (req: Request, env: Env): Promise<Response> => {
     return json(req, env, tokens);
   } catch (e) {
     if (isInvalidGrant(e)) {
-      // Accès révoqué côté Google (ou refresh token expiré) : on efface tout.
-      await purgeUser(env.STORE, s.session.sub, s.hash);
+      // Accès révoqué côté Google (ou refresh token expiré) : on efface tout, sauf la
+      // sauvegarde de secours chiffrée (voir purgeUser).
+      await purgeUser(env.STORE, s.session.sub, s.hash, { keepBackups: true });
       return json(req, env, { error: 'REAUTH_REQUIRED' }, 401);
     }
     console.error('token refresh failed', e);
@@ -421,6 +435,89 @@ const handleHealth = async (req: Request, env: Env): Promise<Response> => {
   return json(req, env, health ?? { lastRunAt: null, ok: null, usersProcessed: 0 });
 };
 
+/**
+ * Sonde publique de la surveillance quotidienne (.github/workflows/monitor.yml) : le serveur
+ * répond, et la dernière tâche quotidienne a-t-elle réussi ? Volontairement sans session et
+ * sans détail (ni message d'erreur, ni nombre d'utilisateurs) : rien sur les utilisateurs.
+ */
+const handleStatus = async (req: Request, env: Env): Promise<Response> => {
+  const health = await env.STORE.get<CronHealth>('health:cron', 'json');
+  return json(req, env, { ok: true, cron: { lastRunAt: health?.lastRunAt ?? null, ok: health?.ok ?? null } });
+};
+
+// ---------- Routes : sauvegarde de secours chiffrée ----------
+// L'app chiffre ses données AVANT l'envoi (AES-256-GCM, clé dérivée d'un code de secours
+// que seul l'utilisateur détient : src/lib/cloudBackupCrypto.ts). Le serveur ne garde
+// qu'un texte chiffré opaque : il en contrôle la forme et la taille, jamais le contenu.
+//   PUT    /backup        enregistre la copie du jour (remplace celle du même jour)
+//   GET    /backup        dates des copies gardées, la plus récente d'abord
+//   GET    /backup/:date  une copie (texte chiffré)
+//   DELETE /backup        efface toutes les copies
+
+export const BACKUP_MAX_BYTES = 2 * 1024 * 1024;
+export const BACKUP_KEEP = 8;
+const BACKUP_TTL = 365 * DAY;
+const backupPrefix = (sub: string) => `backup:${sub}:`;
+const BACKUP_DATE = /^\d{4}-\d{2}-\d{2}$/;
+const B64URL_FIELD = /^[A-Za-z0-9_-]+$/;
+
+/** Copie reconstruite champ par champ (rien d'autre n'est stocké), ou `null` si la forme est fausse. */
+const parseBackupBody = (b: Record<string, unknown>): Record<string, unknown> | null => {
+  if (b.format !== 'pecule-backup' || typeof b.v !== 'number' || !Number.isInteger(b.v) || b.v < 1 || b.v > 99) return null;
+  for (const k of ['salt', 'kcv', 'iv', 'ct']) if (typeof b[k] !== 'string' || !B64URL_FIELD.test(b[k] as string)) return null;
+  for (const k of ['kdf', 'cipher', 'zip', 'createdAt']) if (typeof b[k] !== 'string' || (b[k] as string).length > 40) return null;
+  const { format, v, kdf, cipher, zip, salt, kcv, iv, ct, createdAt } = b;
+  return { format, v, kdf, cipher, zip, salt, kcv, iv, ct, createdAt };
+};
+
+const listBackupDates = async (env: Env, sub: string): Promise<string[]> => {
+  const prefix = backupPrefix(sub);
+  const dates: string[] = [];
+  let cursor: string | undefined;
+  do {
+    const page = await env.STORE.list({ prefix, cursor });
+    for (const k of page.keys) dates.push(k.name.slice(prefix.length));
+    cursor = page.list_complete ? undefined : page.cursor;
+  } while (cursor);
+  return dates.filter(d => BACKUP_DATE.test(d)).sort().reverse();
+};
+
+const handleBackupPut = async (req: Request, env: Env, sub: string): Promise<Response> => {
+  // En plus du limiteur par IP (point d'entrée), un limiteur par compte : protège le quota
+  // d'écritures KV gratuit même depuis plusieurs adresses.
+  if (await rateLimited(env.API_LIMITER, `backup:${sub}`)) return json(req, env, { error: 'RATE_LIMITED' }, 429, { 'Retry-After': '60' });
+  const blob = parseBackupBody(await readJsonBody(req, BACKUP_MAX_BYTES));
+  if (!blob) return json(req, env, { error: 'INVALID_BACKUP' }, 400);
+  const c = parisCivilDate(new Date());
+  const date = `${c.year}-${String(c.month).padStart(2, '0')}-${String(c.day).padStart(2, '0')}`;
+  await env.STORE.put(`${backupPrefix(sub)}${date}`, JSON.stringify(blob), { expirationTtl: BACKUP_TTL });
+  const dates = await listBackupDates(env, sub);
+  if (!dates.includes(date)) dates.unshift(date); // liste KV parfois en retard sur l'écriture
+  for (const old of dates.slice(BACKUP_KEEP)) await env.STORE.delete(`${backupPrefix(sub)}${old}`);
+  return json(req, env, { ok: true, date, dates: dates.slice(0, BACKUP_KEEP) });
+};
+
+/** Routes /backup, ou `null` si la requête ne les concerne pas. */
+const backupRoute = async (req: Request, env: Env, url: URL): Promise<Response | null> => {
+  const m = /^\/backup(?:\/([^/]+))?$/.exec(url.pathname);
+  if (!m) return null;
+  const s = await readSession(req, env);
+  if (!s) return json(req, env, { error: 'REAUTH_REQUIRED' }, 401);
+  const sub = s.session.sub;
+  const date = m[1];
+  if (date === undefined) {
+    if (req.method === 'PUT') return handleBackupPut(req, env, sub);
+    if (req.method === 'GET') return json(req, env, { dates: await listBackupDates(env, sub) });
+    if (req.method === 'DELETE') return json(req, env, { ok: true, deleted: await deletePrefix(env.STORE, backupPrefix(sub)) });
+  } else if (req.method === 'GET') {
+    if (!BACKUP_DATE.test(date)) return json(req, env, { error: 'NOT_FOUND' }, 404);
+    const stored = await env.STORE.get(`${backupPrefix(sub)}${date}`);
+    if (!stored) return json(req, env, { error: 'NOT_FOUND' }, 404);
+    return json(req, env, JSON.parse(stored));
+  }
+  return json(req, env, { error: 'METHOD_NOT_ALLOWED' }, 405);
+};
+
 // ---------- Tâche quotidienne ----------
 
 const RECONNECT_MESSAGE = (env: Env): PushMessage => ({
@@ -446,8 +543,9 @@ const remindUser = async (env: Env, sub: string, now: Date): Promise<void> => {
     accessToken = (await accessTokenFor(env, sub)).access_token;
   } catch (e) {
     if (isInvalidGrant(e)) {
-      // Accès Google révoqué : plus rien à faire pour ce compte, on efface tout.
-      await purgeUser(env.STORE, sub);
+      // Accès Google révoqué : plus rien à faire pour ce compte, on efface tout (sauf la
+      // sauvegarde de secours chiffrée, voir purgeUser).
+      await purgeUser(env.STORE, sub, undefined, { keepBackups: true });
       return;
     }
     console.error('cannot refresh token for reminders', e);
@@ -507,8 +605,11 @@ const rateLimited = async (limiter: RateLimit | undefined, key: string): Promise
 };
 
 const route = async (req: Request, env: Env, url: URL, r: string): Promise<Response> => {
+  const backup = await backupRoute(req, env, url);
+  if (backup) return backup;
   switch (r) {
     case 'GET /health': return handleHealth(req, env);
+    case 'GET /status': return handleStatus(req, env);
     case 'GET /fiscal-sources': return handleFiscalSources(req, env);
     case 'GET /auth/start': return handleAuthStart(req, env, url);
     case 'GET /auth/callback': {

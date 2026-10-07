@@ -44,6 +44,7 @@ jobs:
           cache-dependency-path: |
             package-lock.json
             worker/package-lock.json
+            edge/package-lock.json
 
       - name: Installation des dépendances (app)
         # npm ci : installation exacte d'après package-lock.json (reproductible).
@@ -53,13 +54,16 @@ jobs:
         # Nécessaire à la vérification des types du Worker (@cloudflare/workers-types).
         run: npm ci --prefix worker
 
+      - name: Installation des dépendances (en-têtes de sécurité, edge/)
+        run: npm ci --prefix edge
+
       - name: Lint (ESLint)
         run: npm run lint
 
-      - name: Vérification des types (app + serveur)
+      - name: Vérification des types (app + serveur + edge)
         run: npm run typecheck
 
-      - name: Tests (app + serveur) et couverture
+      - name: Tests (app + serveur + edge) et couverture
         # Échoue si la couverture du cœur métier (src/lib, worker/src) passe sous les seuils
         # de vitest.config.ts.
         run: npm run test:coverage
@@ -107,3 +111,4 @@ jobs:
         run: |
           npm audit --audit-level=moderate
           npm audit --prefix worker --audit-level=moderate
+          npm audit --prefix edge --audit-level=moderate

@@ -16,5 +16,5 @@
     "noFallthroughCasesInSwitch": true,
     "noImplicitOverride": true
   },
-  "exclude": ["node_modules", "dist", "worker"]
+  "exclude": ["node_modules", "dist", "worker", "edge"]
 }

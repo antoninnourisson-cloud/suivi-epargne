@@ -28,6 +28,7 @@ dist-ssr
 worker/.dev.vars
 worker/node_modules
 worker/.wrangler
+edge/.wrangler
 
 # Tests
 coverage/

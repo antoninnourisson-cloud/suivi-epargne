@@ -1,31 +1,30 @@
-name: Déploiement du serveur (Worker)
+name: Déploiement des en-têtes de sécurité (Worker edge)
 
-# Déploie le Worker Cloudflare quand son code change, ou celui qu'il partage avec l'app
-# (src/lib, types, constantes : le Worker les importe pour lire le fichier Drive et calculer
-# les rappels). Tant que le secret CLOUDFLARE_API_TOKEN n'existe pas dans le dépôt, le job
-# de déploiement est simplement sauté (« skipped ») : rien n'échoue.
+# Déploie edge/ (Worker « pecule-edge », routes pecule-app.com/* et www.pecule-app.com/*),
+# qui ajoute les en-têtes de sécurité devant GitHub Pages. Voir MAINTENANCE.md § 8.
+# Les routes s'attachent à la zone Cloudflare même si les enregistrements DNS sont encore en
+# « DNS only » : le déploiement réussit, le Worker ne sert simplement qu'une fois le DNS
+# passé en « Proxied ». Sans les secrets CLOUDFLARE_*, le déploiement est sauté.
 on:
   push:
     branches: [main]
     paths:
-      - 'worker/**'
-      - 'src/lib/**'
-      - 'src/types.ts'
-      - 'src/constants.ts'
+      - 'edge/**'
+      - '.github/workflows/edge.yml'
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: worker
+  group: edge
   cancel-in-progress: false
 
 jobs:
   checks:
     name: Types et tests
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
     outputs:
       cloudflare: ${{ steps.secrets.outputs.cloudflare }}
     steps:
@@ -41,32 +40,28 @@ jobs:
           cache: npm
           cache-dependency-path: |
             package-lock.json
-            worker/package-lock.json
             edge/package-lock.json
 
       - name: Installation des dépendances
-        # edge/ : `npm run typecheck` vérifie aussi le Worker des en-têtes de sécurité.
+        # Les tests d'edge/ tournent avec le Vitest de la racine (comme ceux du serveur).
         run: |
           npm ci
-          npm ci --prefix worker
           npm ci --prefix edge
 
-      - name: Vérification des types (app + serveur)
-        run: npm run typecheck
+      - name: Vérification des types
+        run: npx tsc --noEmit -p edge
 
-      - name: Tests (app + serveur)
-        run: npm test
+      - name: Tests
+        run: npx vitest run edge/
 
       - name: Secrets Cloudflare présents ?
         id: secrets
-        # `secrets` est interdit dans le `if` d'un job : on passe par une variable
-        # d'environnement d'étape, exposée en sortie du job.
         env:
           HAS_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN != '' && secrets.CLOUDFLARE_ACCOUNT_ID != '' }}
         run: |
           echo "cloudflare=${HAS_TOKEN}" >> "$GITHUB_OUTPUT"
           if [ "$HAS_TOKEN" != "true" ]; then
-            echo "::notice::Secrets CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID absents : déploiement du Worker sauté."
+            echo "::notice::Secrets CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID absents : déploiement du Worker edge sauté."
           fi
 
   deploy:
@@ -86,15 +81,17 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: npm
-          cache-dependency-path: worker/package-lock.json
+          cache-dependency-path: edge/package-lock.json
 
       - name: Installation de wrangler (version du lockfile)
-        run: npm ci --prefix worker
+        run: npm ci --prefix edge
 
       - name: Déploiement
+        # Le jeton doit avoir, en plus des droits du Worker serveur :
+        # Zone → Workers Routes → Edit (et Zone → Zone → Read) sur pecule-app.com.
         uses: cloudflare/wrangler-action@953926a2e2182532811c01a25e53647d93bf07c0 # v4
         with:
-          workingDirectory: worker
+          workingDirectory: edge
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: deploy --message "${{ github.sha }}"

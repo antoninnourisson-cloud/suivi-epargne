@@ -1,0 +1,19 @@
+# Worker « de bordure » de Pécule : se place devant GitHub Pages sur pecule-app.com pour
+# ajouter les en-têtes de sécurité HTTP que GitHub Pages ne permet pas de configurer
+# (HSTS, anti-iframe, Permissions-Policy...). Il ne touche ni au contenu ni au cache.
+# Déploiement automatique : .github/workflows/edge.yml. Explications : MAINTENANCE.md § 8.
+#
+# Les routes ne s'activent QUE si les enregistrements DNS du domaine sont « Proxied »
+# (nuage orange) dans Cloudflare. En « DNS only », le Worker est déployé mais jamais appelé :
+# le site reste servi directement par GitHub Pages, sans ces en-têtes.
+name = "pecule-edge"
+main = "src/index.ts"
+compatibility_date = "2025-06-01"
+
+# Pas d'adresse *.workers.dev : ce Worker n'a de sens que devant le domaine.
+workers_dev = false
+
+routes = [
+  { pattern = "pecule-app.com/*", zone_name = "pecule-app.com" },
+  { pattern = "www.pecule-app.com/*", zone_name = "pecule-app.com" },
+]

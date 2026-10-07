@@ -15,6 +15,17 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '2026.10.07-7',
+    date: '2026-10-07',
+    title: 'Sauvegarde de secours et site mieux protégé',
+    items: [
+      "Paramètres : nouvelle « Sauvegarde de secours chiffrée ». Une copie de vos données part chaque semaine sur le serveur, chiffrée avec un code de secours que vous seul détenez : le serveur ne peut pas la lire.",
+      "En cas de problème avec votre fichier Drive, « Restaurer » remet une de ces copies (les 8 dernières sont gardées).",
+      "Le site envoie désormais des protections de sécurité supplémentaires à votre navigateur, et sa disponibilité est vérifiée chaque jour.",
+      "Une adresse de contact : contact@pecule-app.com.",
+    ],
+  },
+  {
     version: '2026.10.07-6',
     date: '2026-10-07',
     title: 'Et si…, alertes en euros et votre année',
@@ -43,7 +54,8 @@ export const CHANGELOG: ChangelogEntry[] = [
       "Accueil : une carte « Bons mois » suit ce que vous mettez de côté depuis la paie (500 € par défaut), votre série de bons mois et votre joker de l'année, qui couvre un mois plus difficile.",
       "Vos jalons (premier bon mois, épargne de précaution, 10 000 € d'épargne…) sont réunis dans « Voir vos jalons » ; chaque nouveau jalon est signalé une seule fois.",
       "Après chaque paie, un « Point de paie » résume le mois écoulé : versements, retraits, compte par compte. Validez-le pour le ranger.",
-      "Fiches de paie : une fiche nettement différente des précédentes est signalée, pour vérifier une prime, des heures supplémentaires ou une absence. Le seuil et l'affichage se règlent dans Paramètres, « Motivation ».",
+      "Fiches de paie : une fiche nettement différente des précédentes est signalée, pour vérifier une prime, des heures supplémentaires ou une absence.",
+      "Paramètres, « Motivation » : activez ou non les bons mois et jalons, et choisissez le seuil d'un bon mois.",
       "Notifications : le bilan du 1er du mois devient le « point de paie », envoyé le jour de la paie suivante et regroupé avec le rappel de paie pour ne pas en recevoir deux.",
     ],
   },

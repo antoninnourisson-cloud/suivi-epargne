@@ -14,7 +14,7 @@
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "e2e": "playwright test",
-    "typecheck": "tsc --noEmit && tsc --noEmit -p worker",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p worker && tsc --noEmit -p edge",
     "test:watch": "vitest",
     "theme": "esbuild scripts/m3-theme.mjs --bundle --platform=node --format=esm --log-level=error --outfile=node_modules/.cache/m3-theme.mjs && node node_modules/.cache/m3-theme.mjs",
     "lint": "eslint . --max-warnings=0"

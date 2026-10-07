@@ -86,6 +86,7 @@ L'app continue de fonctionner sans serveur (session Google d'une heure, pas de n
 1. **Paramètres → Copies mensuelles sur Drive** : choisir une copie `suivi_epargne_backup_AAAA-MM.json` (12 mois gardés) et la restaurer (confirmation demandée).
 2. À défaut : historique des versions du fichier dans Google Drive (30 jours), ou un export JSON fait auparavant (Paramètres → « Importer un fichier »).
 3. Les copies supprimées vont à la corbeille Drive (récupérables 30 jours).
+4. **Dernier recours : sauvegarde de secours chiffrée** (si elle a été activée). Drive reste la source principale ; cette copie, gardée par le Worker (clés KV `backup:<sub>:<AAAA-MM-JJ>`, 8 copies au plus, effacées d'elles-mêmes après 1 an), est chiffrée par l'app avant l'envoi (format `pecule-backup` v1 : AES-256-GCM, clé dérivée par HKDF-SHA-256 du **code de secours** de 28 caractères et d'un sel stocké avec la copie ; `src/lib/cloudBackupCrypto.ts`). Le code n'est affiché qu'à l'activation et n'est enregistré nulle part, ni sur Drive ni sur le serveur. Pour restaurer, sur n'importe quel appareil connecté au serveur : Paramètres → Sauvegarde des données → « Restaurer », choisir la date, saisir le code ; la copie déchiffrée passe par le même contrôle qu'un import de fichier, puis est réécrite sur Drive. **Code perdu = copies définitivement illisibles** (personne ne peut les ouvrir, pas même le serveur) : désactiver puis réactiver la fonction pour obtenir un nouveau code, les anciennes copies étant effacées. Une purge automatique sur accès Google révoqué garde ces copies ; « Supprimer mes données serveur » et « Désactiver » les effacent.
 
 ### Clé Gemini divulguée
 1. Sur [Google AI Studio](https://aistudio.google.com/apikey), **révoquer** la clé et en créer une nouvelle.
@@ -119,7 +120,47 @@ Au-delà, Cloudflare refuse les requêtes jusqu'au lendemain : l'app retombe sur
 ## 8. Nom de domaine
 
 - **pecule-app.com**, acheté chez Cloudflare (registrar et DNS). Renouvellement automatique : vérifier une fois par an que le moyen de paiement est valide (Cloudflare → Domain Registration).
-- L'app est servie par **GitHub Pages** (Settings → Pages → Custom domain), via les enregistrements A/AAAA de GitHub dans le DNS Cloudflare, en mode « DNS only ». Le domaine est vérifié dans les paramètres GitHub du compte (enregistrement TXT `_github-pages-challenge-…`) : personne d'autre ne peut le rattacher à un autre dépôt.
+- L'app est servie par **GitHub Pages** (Settings → Pages → Custom domain), via les enregistrements A/AAAA de GitHub dans le DNS Cloudflare (en « DNS only » à l'origine ; à passer en « Proxied » pour activer les en-têtes de sécurité, voir plus bas). Le domaine est vérifié dans les paramètres GitHub du compte (enregistrement TXT `_github-pages-challenge-…`) : personne d'autre ne peut le rattacher à un autre dépôt.
 - L'ancienne adresse `antoninnourisson-cloud.github.io/suivi-epargne/` redirige vers le domaine. Une app installée depuis l'ancienne adresse affiche « Pécule a déménagé » (`src/components/MovedNotice.tsx`).
 - **Début 2027** : retirer `LEGACY_APP_URL` de `worker/wrangler.toml`, l'origine `https://antoninnourisson-cloud.github.io` du client OAuth Google et de la clé du Picker.
+
+### En-têtes de sécurité (Worker `pecule-edge`, dossier `edge/`)
+
+GitHub Pages ne permet pas de choisir ses en-têtes HTTP. Un petit Worker Cloudflare, `pecule-edge` ([`edge/src/index.ts`](edge/src/index.ts)), se place devant lui sur les routes `pecule-app.com/*` et `www.pecule-app.com/*` : il relaie chaque requête telle quelle à GitHub Pages et ajoute seulement à la réponse :
+
+| En-tête | Valeur | Pourquoi |
+|---|---|---|
+| `Strict-Transport-Security` | `max-age=31536000; includeSubDomains` | HTTPS obligatoire pendant un an (pas de `preload` pour l'instant : quasi irréversible) |
+| `X-Content-Type-Options` | `nosniff` | le navigateur ne devine pas le type des fichiers |
+| `X-Frame-Options` + `Content-Security-Policy` | `DENY` + `frame-ancestors 'none'` | l'app ne peut pas être affichée dans une iframe (clickjacking) |
+| `Referrer-Policy` | `strict-origin-when-cross-origin` | pas d'adresse complète transmise aux autres sites |
+| `Permissions-Policy` | caméra, micro, position, paiement, USB, FLoC désactivés | l'app n'en a pas besoin |
+| `Cross-Origin-Opener-Policy` | `same-origin-allow-popups` | isole la fenêtre de l'app ; `same-origin` casserait la fenêtre de connexion Google (valeur recommandée par Google pour les fenêtres surgissantes) |
+
+`www.pecule-app.com` est redirigé (301) vers `https://pecule-app.com`, chemin et paramètres conservés. Le Worker ne modifie ni le contenu, ni le statut, ni le cache ; les requêtes autres que GET/HEAD passent sans modification. La politique de contenu complète (CSP) reste dans la balise `<meta>` d'`index.html`, seule source de vérité : le Worker n'ajoute que `frame-ancestors`, qu'une balise `<meta>` ne peut pas exprimer.
+
+**Déploiement** : automatique par [`edge.yml`](.github/workflows/edge.yml) à chaque push sur `main` touchant `edge/` (mêmes secrets que le serveur). Le jeton `CLOUDFLARE_API_TOKEN` doit avoir en plus **Zone → Workers Routes → Edit** (et **Zone → Zone → Read**) sur `pecule-app.com`. À la main : `npm run deploy` dans `edge/`.
+
+**Réglages Cloudflare nécessaires** (sans eux, le Worker est déployé mais jamais appelé) :
+
+1. **DNS → Records** : passer en **« Proxied »** (nuage orange) les enregistrements `A` et `AAAA` de `pecule-app.com` (adresses GitHub `185.199.108-111.153` et `2606:50c0:8000-8003::153`), et l'enregistrement `www` s'il existe. Laisser le `TXT _github-pages-challenge-…` tel quel.
+2. **SSL/TLS → Overview** : mode **« Full (strict) »**. Jamais « Flexible » : Cloudflare parlerait en HTTP à GitHub, qui redirige vers HTTPS, d'où une boucle de redirections.
+3. Vérifier : `curl -I https://pecule-app.com/` doit afficher `strict-transport-security`, `x-frame-options: DENY`, etc., et `curl -I https://www.pecule-app.com/x` un `301` vers `https://pecule-app.com/x`. La surveillance quotidienne le vérifie aussi.
+
+**Si le certificat de GitHub ne se renouvelle plus** : derrière le proxy, GitHub voit les adresses de Cloudflare au lieu des siennes et peut refuser de renouveler son certificat (Settings → Pages affiche alors une erreur de DNS ; en « Full (strict) », le site renvoie l'erreur Cloudflare **526**). Remède : repasser temporairement les enregistrements en **« DNS only »**, attendre que Settings → Pages indique un certificat valide (« Enforce HTTPS » cochable), puis les remettre en « Proxied ». En « DNS only », le site marche normalement, simplement sans ces en-têtes.
+
+**Désactiver en urgence** : repasser les enregistrements en « DNS only » (effet en quelques minutes), ou supprimer les routes dans Workers & Pages → `pecule-edge` → Settings → Domains & Routes.
+
+## 9. Surveillance
+
+[`monitor.yml`](.github/workflows/monitor.yml) tourne chaque matin à 6 h 30 UTC (et à la demande : Actions → *Surveillance* → Run workflow). Il vérifie :
+
+- l'accueil `https://pecule-app.com/` (code 200 et « Pécule » dans la page), `presentation.html` et `confidentialite.html` ;
+- le serveur : `GET /status` (public, sans aucune donnée utilisateur : `{"ok":true,"cron":{"lastRunAt","ok"}}`) ; la tâche quotidienne de la veille doit avoir réussi et dater de moins de 26 h ;
+- le certificat TLS de `pecule-app.com` : plus de 14 jours avant expiration ;
+- l'en-tête HSTS du Worker edge : simple information tant que le DNS n'est pas en « Proxied ».
+
+En cas d'échec, une issue étiquetée **`panne`** est ouverte (ou complétée d'un commentaire si elle est déjà ouverte) avec la liste des vérifications en échec : GitHub envoie un e-mail. Quand tout refonctionne, l'issue est commentée puis fermée automatiquement. Pour ne pas manquer ces e-mails : GitHub → Settings → Notifications → « Issues » activé, et suivre le dépôt (Watch).
+
+Attention : GitHub suspend les tâches planifiées d'un dépôt public sans activité depuis 60 jours (un e-mail prévient avant). Il suffit alors de cliquer « Enable workflow » dans l'onglet Actions.
 

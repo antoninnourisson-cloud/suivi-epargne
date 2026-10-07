@@ -132,6 +132,10 @@ Toutes les routes marquées 🔒 exigent `Authorization: Bearer <session>` ; san
 | `GET /push/devices` 🔒 | — | `{"devices":[{"id","host","createdAt","current"}]}` |
 | `POST /push/remove` 🔒 | `{"id"}` ou `{"endpoint"}` | `{"ok":true,"removed":bool,"devices":n}` |
 | `POST /push/test` 🔒 | — | `{"ok":bool,"delivered":n}` |
+| `GET /status` | — | `{"ok","cron":{"lastRunAt","ok"}}` (surveillance, sans donnée personnelle) |
+| `PUT /backup` 🔒 | copie chiffrée (≤ 2 Mo) | `{"date"}` ; 8 copies gardées |
+| `GET /backup` 🔒 | — | dates des copies ; `GET /backup/:date` : la copie chiffrée |
+| `DELETE /backup` 🔒 | — | supprime toutes les copies |
 | `GET /health` 🔒 | — | `{"lastRunAt","ok","usersProcessed","error"?}` (dernière tâche quotidienne) |
 
 ## Tout révoquer d'un coup

@@ -173,10 +173,11 @@ Liste complète et raisons : [MAINTENANCE.md §1](MAINTENANCE.md#1-invariants-à
   - `id_token` vérifié ;
   - liste blanche `ALLOWED_EMAILS` ;
   - limitation de débit par IP ;
-  - corps des requêtes limités à 4 Ko ;
+  - corps des requêtes limités à 4 Ko (2 Mo pour la sauvegarde de secours) ;
   - push chiffré de bout en bout (RFC 8291).
+- **Sauvegarde de secours chiffrée de bout en bout** (facultative, Paramètres) : l'app chiffre ses données (AES-256-GCM, clé dérivée par HKDF-SHA-256 d'un code de secours de 128 bits montré une seule fois) avant de les confier au Worker (KV, 8 copies au plus, 1 an chacune). Le serveur ne voit ni le code ni la clé ; l'appareil garde seulement une clé non exportable, limitée au chiffrement, pour l'envoi hebdomadaire. Sans le code, les copies sont illisibles. Code : [`src/lib/cloudBackupCrypto.ts`](src/lib/cloudBackupCrypto.ts), [`src/services/cloudBackup.ts`](src/services/cloudBackup.ts).
 - **Sur l'appareil** : verrou biométrique ou PIN, copie locale chiffrée par une clé non exportable, clé Gemini propre à l'appareil.
-- **Tout révoquer** : « Déconnecter tous les appareils » et « Supprimer mes données serveur » dans Paramètres, ou myaccount.google.com/permissions.
+- **Tout révoquer** : « Déconnecter tous les appareils » et « Supprimer mes données serveur » dans Paramètres, ou myaccount.google.com/permissions (ce dernier garde la sauvegarde de secours chiffrée : « Désactiver » ou « Supprimer mes données serveur » l'efface).
 - **Tiers** : les fiches de paie et l'avis d'imposition envoyés à Gemini contiennent des données personnelles. Avec une clé gratuite, Google peut s'en servir. Voir les [règles de confidentialité](https://pecule-app.com/confidentialite.html).
 
 Signaler une faille : voir [SECURITY.md](SECURITY.md).
@@ -222,6 +223,8 @@ Avant chaque mise à jour visible, ajoute une entrée **en tête** de [`src/chan
 | [`ci.yml`](.github/workflows/ci.yml) · *Vérifications* | PR, push sur `main`, chaque lundi à 6 h UTC, appel par `deploy.yml` | lint, types, tests, build (tailles dans le résumé), audit des dépendances de production (informatif) |
 | [`deploy.yml`](.github/workflows/deploy.yml) · *GitHub Pages* | push sur `main` | `ci.yml` → build → GitHub Pages → tag `v<version>` et Release avec les puces du changelog (une fois par version) |
 | [`worker.yml`](.github/workflows/worker.yml) · *Serveur* | push sur `main` touchant `worker/`, `src/lib/`, `src/types.ts` ou `src/constants.ts`, ou lancement manuel | types, tests, puis `wrangler deploy` |
+| [`edge.yml`](.github/workflows/edge.yml) · *En-têtes de sécurité* | push sur `main` touchant `edge/`, ou lancement manuel | types, tests, puis `wrangler deploy` du Worker `pecule-edge` (HSTS, anti-iframe… devant GitHub Pages ; actif une fois le DNS Cloudflare en « Proxied », voir [MAINTENANCE.md](MAINTENANCE.md#8-nom-de-domaine)) |
+| [`monitor.yml`](.github/workflows/monitor.yml) · *Surveillance* | chaque jour à 6 h 30 UTC, ou lancement manuel | site, pages publiques, serveur (`/status`), certificat TLS, HSTS ; ouvre/ferme une issue `panne` |
 
 - **App** : l'URL du serveur est dans [`.env.production`](.env.production). Le commit déployé est injecté au build (`__BUILD_SHA__`).
 - **Serveur** : le déploiement est automatique dès que les secrets du dépôt **`CLOUDFLARE_API_TOKEN`** et **`CLOUDFLARE_ACCOUNT_ID`** existent (Settings → Secrets and variables → Actions). Sans eux, le job est sauté, et `npm run deploy` dans `worker/` reste possible. Les secrets du Worker (`GOOGLE_CLIENT_SECRET`, `ENCRYPTION_KEY`, `VAPID_*`, `ALLOWED_EMAILS`) se posent avec `npm run setup-secrets` : voir [worker/README.md](worker/README.md).
