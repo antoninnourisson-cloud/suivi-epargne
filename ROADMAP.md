@@ -51,8 +51,11 @@ Fait : corrections immédiates, accessibilité urgente, filet de sécurité (tes
 - Accueil guidé, partie « parents » facultative et masquée par défaut ; lecture Gemini : clé personnelle ou serveur, à trancher.
 - Mentions légales (LCEN), contact dédié, confidentialité multi-utilisateurs (RGPD), remontée d'erreurs anonyme, code de conduite (Contributor Covenant 2.1, contact de signalement non personnel).
 
-### Phase 6 : app Android sur le Play Store (après l'ouverture sur invitation)
-En attendant, Pécule s'installe déjà comme une vraie app Android via Chrome (« Installer l'application » : Chrome crée un WebAPK). Le compte Google Play est créé (frais payés une fois pour toutes). Règle Google pour les comptes personnels : avant toute publication, un test fermé avec **au moins 12 testeurs inscrits pendant 14 jours consécutifs**, qui utilisent vraiment l'app. Les personnes invitées (phase 5) seront ces testeurs. Reste à faire : paquet signé via PWABuilder (clé gardée par l'utilisateur), `/.well-known/assetlinks.json` sur le domaine, fiche Play Store, formulaire « sécurité des données », déclaration des fonctionnalités financières.
+### Phase 6 : wiki GitHub
+Remplir le wiki du dépôt : guide d'utilisation (premiers pas, paie et Pilotage, comptes et Actualiser, parents et restitution, motivation, simulateur, notifications, sauvegardes et conflits, confidentialité), FAQ, et pages pour contribuer (architecture, invariants, déploiement, veille fiscale). Le README et MAINTENANCE restent la référence technique ; le wiki s'adresse d'abord aux utilisateurs.
+
+### Abandonné
+- **App Android sur le Play Store** (octobre 2026) : Google impose aux comptes personnels un test fermé de 12 testeurs pendant 14 jours. Pécule reste une PWA, qui s'installe déjà comme une vraie app Android via Chrome (« Installer l'application »).
 
 ### En continu
 - Architecture : montants en centimes, store et moteur de synchronisation, paquet `domain/` partagé avec le serveur.
