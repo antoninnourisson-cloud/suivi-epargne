@@ -45,14 +45,14 @@ Fait : corrections immédiates, accessibilité urgente, filet de sécurité (tes
 2. Simulateur « Et si… » et alertes unifiées chiffrées en euros.
 3. « Votre année Pécule » (bilan annuel).
 
-### Phase 5 : app Android (Trusted Web Activity)
-`/.well-known/assetlinks.json` sur le domaine, projet Android signé (PWABuilder ou Bubblewrap), compte Google Play (25 $), fiche de confidentialité, période de test fermé.
-
-### Phase 6 : ouverture sur invitation
+### Phase 5 : ouverture sur invitation
 - Invitations à usage unique avec date d'expiration, accès révocable (remplace `ALLOWED_EMAILS`).
 - Rappels quotidiens répartis dans une file (Cloudflare Queues) ; offre Workers à 5 $/mois si le nombre de comptes le justifie.
 - Accueil guidé, partie « parents » facultative et masquée par défaut ; lecture Gemini : clé personnelle ou serveur, à trancher.
 - Mentions légales (LCEN), contact dédié, confidentialité multi-utilisateurs (RGPD), remontée d'erreurs anonyme, code de conduite (Contributor Covenant 2.1, contact de signalement non personnel).
+
+### Phase 6 : app Android sur le Play Store (après l'ouverture sur invitation)
+En attendant, Pécule s'installe déjà comme une vraie app Android via Chrome (« Installer l'application » : Chrome crée un WebAPK). Le compte Google Play est créé (frais payés une fois pour toutes). Règle Google pour les comptes personnels : avant toute publication, un test fermé avec **au moins 12 testeurs inscrits pendant 14 jours consécutifs**, qui utilisent vraiment l'app. Les personnes invitées (phase 5) seront ces testeurs. Reste à faire : paquet signé via PWABuilder (clé gardée par l'utilisateur), `/.well-known/assetlinks.json` sur le domaine, fiche Play Store, formulaire « sécurité des données », déclaration des fonctionnalités financières.
 
 ### En continu
 - Architecture : montants en centimes, store et moteur de synchronisation, paquet `domain/` partagé avec le serveur.
