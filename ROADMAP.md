@@ -45,16 +45,18 @@ Fait : corrections immédiates, accessibilité urgente, filet de sécurité (tes
 2. Simulateur « Et si… » et alertes unifiées chiffrées en euros.
 3. « Votre année Pécule » (bilan annuel).
 
-### Phase 5 : ouverture sur invitation (prochaine)
-- Invitations à usage unique avec date d'expiration, accès révocable (remplace `ALLOWED_EMAILS`).
-- Rappels quotidiens répartis dans une file (Cloudflare Queues) ; offre Workers à 5 $/mois si le nombre de comptes le justifie.
-- Accueil guidé, partie « parents » facultative et masquée par défaut ; lecture Gemini : clé personnelle ou serveur, à trancher.
-- Mentions légales (LCEN), contact dédié, confidentialité multi-utilisateurs (RGPD), remontée d'erreurs anonyme, code de conduite (Contributor Covenant 2.1, contact de signalement non personnel).
+### Phase 5 : infrastructure (en cours)
+1. Adresse de contact sur le domaine (redirection e-mail Cloudflare), puis code de conduite et contacts de SECURITY/CONTRIBUTING.
+2. Cloudflare devant le site : en-têtes de sécurité HTTP (HSTS, anti-iframe, politique de permissions).
+3. Seconde sauvegarde chiffrée chez Cloudflare (chiffrée dans l'app, illisible pour le serveur).
+4. Surveillance quotidienne du site et du serveur (GitHub Actions, issue ouverte en cas de panne).
+5. Veille fiscale côté serveur avec l'IA de Cloudflare, si l'offre gratuite suffit et que la qualité tient.
 
 ### Phase 6 : wiki GitHub
 Remplir le wiki du dépôt : guide d'utilisation (premiers pas, paie et Pilotage, comptes et Actualiser, parents et restitution, motivation, simulateur, notifications, sauvegardes et conflits, confidentialité), FAQ, et pages pour contribuer (architecture, invariants, déploiement, veille fiscale). Le README et MAINTENANCE restent la référence technique ; le wiki s'adresse d'abord aux utilisateurs.
 
 ### Abandonné
+- **Ouverture à d'autres utilisateurs sur invitation** (octobre 2026) : liée au Play Store, abandonnée avec lui. Pécule reste une app personnelle.
 - **App Android sur le Play Store** (octobre 2026) : Google impose aux comptes personnels un test fermé de 12 testeurs pendant 14 jours. Pécule reste une PWA, qui s'installe déjà comme une vraie app Android via Chrome (« Installer l'application »).
 
 ### En continu
