@@ -135,7 +135,6 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
     patchAdjust(id, { amount: '' });
   };
 
-  const soloMode = !accounts.some(a => a.parentalCapital > 0);
 
   const changedCount = accounts.filter(account => {
     const u = updates[account.id] ?? draftFrom(account);
@@ -232,7 +231,6 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
               draft={updates[account.id] ?? draftFrom(account)}
               adjust={adjustFor(account.id)}
               adjustError={adjustErrors[account.id]}
-              soloMode={soloMode}
               today={today}
               expanded={expanded.has(account.id)}
               onToggle={() => toggle(account.id)}

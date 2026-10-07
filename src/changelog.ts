@@ -15,6 +15,14 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '2026.10.07-3',
+    date: '2026-10-07',
+    title: 'Actualiser : plus simple',
+    items: [
+      "La part des parents n'apparaît plus que sur les comptes qui en ont une.",
+    ],
+  },
+  {
     version: '2026.10.07-2',
     date: '2026-10-07',
     title: 'Accueil, Pilotage et Actualiser redessinés',

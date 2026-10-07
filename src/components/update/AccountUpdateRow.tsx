@@ -17,8 +17,6 @@ interface AccountUpdateRowProps {
   draft: Draft;
   adjust: Adjust;
   adjustError?: string | null;
-  /** Plus aucun compte n'a de part parentale : son champ n'est montré que s'il est non nul. */
-  soloMode: boolean;
   today: string;
   expanded: boolean;
   onToggle: () => void;
@@ -51,7 +49,7 @@ const SummaryLine: React.FC<{ label: string; icon: React.ComponentType<{ classNa
 );
 
 export const AccountUpdateRow: React.FC<AccountUpdateRowProps> = ({
-  account, draft: u, adjust: a, adjustError, soloMode, today, expanded, onToggle,
+  account, draft: u, adjust: a, adjustError, today, expanded, onToggle,
   onOwnedChange, onParentalChange, onBankTotalChange, onDepositsChange, onDateChange, onPatchAdjust, onApplyAdjust,
 }) => {
   const panelId = useId();
@@ -68,7 +66,8 @@ export const AccountUpdateRow: React.FC<AccountUpdateRowProps> = ({
   const depositsChanged = tracked && depositsDraft !== null && depositsDraft !== account.totalDeposits;
   const isChanged = diffOwned !== 0 || diffParental !== 0 || depositsChanged;
 
-  const showParental = !soloMode || parental > 0;
+  // Part des parents : seulement sur les comptes qui en ont une (ou si une valeur est saisie).
+  const showParental = account.parentalCapital > 0 || parental > 0;
   // « Total affiché par la banque » n'a de sens que s'il y a une part parentale à déduire.
   const bankAvailable = parental > 0;
   const activeMode: EntryMode = mode === 'bank' && !bankAvailable ? 'balance' : mode;
@@ -188,12 +187,14 @@ export const AccountUpdateRow: React.FC<AccountUpdateRowProps> = ({
                 value={a.sign === 1 ? 'plus' : 'minus'}
                 onChange={v => onPatchAdjust({ sign: v === 'plus' ? 1 : -1 })}
               />
-              <SegmentedButton<'owned' | 'parental'>
-                label={`Part concernée sur ${account.name}`}
-                options={[{ value: 'owned', label: 'Ma part' }, { value: 'parental', label: 'Parents' }]}
-                value={a.target}
-                onChange={v => onPatchAdjust({ target: v })}
-              />
+              {account.parentalCapital > 0 && (
+                <SegmentedButton<'owned' | 'parental'>
+                  label={`Part concernée sur ${account.name}`}
+                  options={[{ value: 'owned', label: 'Ma part' }, { value: 'parental', label: 'Parents' }]}
+                  value={a.target}
+                  onChange={v => onPatchAdjust({ target: v })}
+                />
+              )}
             </div>
             <div className="flex flex-wrap items-start gap-3">
               <TextField
