@@ -15,6 +15,16 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '2026.10.07',
+    date: '2026-10-07',
+    title: 'Nouveau look Material',
+    items: [
+      "Pécule adopte Material 3, le style des applications Google : couleurs douces tirées du vert sapin, formes arrondies, police Google Sans Flex.",
+      "Nouvelle navigation : menu latéral et barre du bas avec repère de l'écran actif, bouton « Ajouter » plus visible.",
+      "Fenêtres et messages redessinés ; en mode sombre, les boutons principaux passent en vert clair pour mieux ressortir.",
+    ],
+  },
+  {
     version: '2026.10.02-9',
     date: '2026-10-02',
     title: 'Connexion Google sans avertissement',

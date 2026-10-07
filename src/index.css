@@ -1,69 +1,67 @@
 @import 'tailwindcss';
+@import './theme/m3.css';
 
 @custom-variant dark (&:is(.dark *));
 
-/* Inter, hébergée avec l'app (hors ligne, sans appel à Google Fonts) : latin et latin étendu
-   seulement, le navigateur ne charge que le fichier dont il a besoin. */
+/* Google Sans Flex (police de Material 3 Expressive, licence OFL), hébergée avec l'app :
+   hors ligne et sans appel à Google Fonts. Axe de graisse seulement, latin et latin étendu ;
+   le navigateur ne charge que le fichier dont il a besoin. */
 @font-face {
-  font-family: 'Inter Variable';
+  font-family: 'Google Sans Flex';
   font-style: normal;
   font-display: swap;
-  font-weight: 100 900;
-  src: url('../node_modules/@fontsource-variable/inter/files/inter-latin-wght-normal.woff2') format('woff2-variations');
+  font-weight: 100 1000;
+  src: url('../node_modules/@fontsource-variable/google-sans-flex/files/google-sans-flex-latin-wght-normal.woff2') format('woff2-variations');
   unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
 }
 @font-face {
-  font-family: 'Inter Variable';
+  font-family: 'Google Sans Flex';
   font-style: normal;
   font-display: swap;
-  font-weight: 100 900;
-  src: url('../node_modules/@fontsource-variable/inter/files/inter-latin-ext-wght-normal.woff2') format('woff2-variations');
+  font-weight: 100 1000;
+  src: url('../node_modules/@fontsource-variable/google-sans-flex/files/google-sans-flex-latin-ext-wght-normal.woff2') format('woff2-variations');
   unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF;
 }
 
+/* Material 3 Expressive. Les couleurs viennent de src/theme/m3.css (généré) ; ici, la
+   typographie, les formes, l'élévation et le mouvement. */
 @theme {
-  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --color-indigo-50: #f0f7f2;
-  --color-indigo-100: #dcede2;
-  --color-indigo-200: #b9dbc6;
-  --color-indigo-300: #8cc2a3;
-  --color-indigo-400: #5ca37d;
-  --color-indigo-500: #3b8560;
-  --color-indigo-600: #2a6b4b;
-  --color-indigo-700: #1f553b;
-  --color-indigo-800: #18432f;
-  --color-indigo-900: #14532d;
-  --color-indigo-950: #0a1f15;
-  --color-indigo: #14532d;
+  --font-sans: 'Google Sans Flex', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
 
-  --color-slate-50: #fafaf9;
-  --color-slate-100: #f5f5f4;
-  --color-slate-200: #e7e5e4;
-  --color-slate-300: #d6d3d1;
-  --color-slate-400: #a8a29e;
-  --color-slate-500: #78716c;
-  --color-slate-600: #57534e;
-  --color-slate-700: #44403c;
-  --color-slate-800: #292524;
-  --color-slate-900: #1c1917;
-  --color-slate-950: #0c0a09;
+  --color-creme: var(--md-tertiary-container);
 
-  --color-sapin-50: #f0f7f2;
-  --color-sapin-100: #dcede2;
-  --color-sapin-200: #b9dbc6;
-  --color-sapin-300: #8cc2a3;
-  --color-sapin-400: #5ca37d;
-  --color-sapin-500: #3b8560;
-  --color-sapin-600: #2a6b4b;
-  --color-sapin-700: #1f553b;
-  --color-sapin-800: #18432f;
-  --color-sapin-900: #14532d;
-  --color-sapin-950: #0a1f15;
-  --color-sapin: #14532d;
+  /* Graisses : Material emploie 400 à 700. Les anciens « black » deviennent du gras franc. */
+  --font-weight-black: 700;
+  --font-weight-extrabold: 680;
+  --font-weight-bold: 600;
+  --font-weight-semibold: 560;
 
-  --color-creme: #fef3c7;
+  /* Formes Material : 4 (très petit), 8 (petit), 12 (moyen), 16 (grand), 20 (grand+),
+     28 (très grand). */
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-2xl: 20px;
+  --radius-3xl: 28px;
 
-  --animate-fade-in: fade-in 0.2s ease-out;
+  /* Élévation : Material s'appuie d'abord sur les teintes de surface ; ombres discrètes. */
+  --shadow-xs: 0 0 #0000;
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.3), 0 1px 3px 1px rgb(0 0 0 / 0.15);
+  --shadow-md: 0 1px 2px 0 rgb(0 0 0 / 0.3), 0 2px 6px 2px rgb(0 0 0 / 0.15);
+  --shadow-lg: 0 1px 3px 0 rgb(0 0 0 / 0.3), 0 4px 8px 3px rgb(0 0 0 / 0.15);
+  --shadow-xl: 0 2px 3px 0 rgb(0 0 0 / 0.3), 0 6px 10px 4px rgb(0 0 0 / 0.15);
+  --shadow-2xl: 0 4px 4px 0 rgb(0 0 0 / 0.3), 0 8px 12px 6px rgb(0 0 0 / 0.15);
+
+  /* Mouvement : courbes « emphasized » de Material. */
+  --ease-in: cubic-bezier(0.3, 0, 0.8, 0.15);
+  --ease-out: cubic-bezier(0.05, 0.7, 0.1, 1);
+  --ease-in-out: cubic-bezier(0.2, 0, 0, 1);
+  --default-transition-duration: 200ms;
+  --default-transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
+
+  --animate-fade-in: fade-in 0.25s cubic-bezier(0.05, 0.7, 0.1, 1);
 
   @keyframes fade-in {
     0% {
@@ -96,14 +94,13 @@
 /* Pécule : le vert sapin des petits textes d'accent est trop sombre sur fond sombre. Si un
    élément n'a pas sa propre teinte de mode sombre, on l'éclaircit ici. */
 .dark .text-indigo-500:not([class*="dark:text-"]),
-.dark .text-indigo-600:not([class*="dark:text-"]) { color: #5ca37d; }
+.dark .text-indigo-600:not([class*="dark:text-"]) { color: var(--color-indigo-300); }
 .dark .text-indigo-700:not([class*="dark:text-"]),
-.dark .text-indigo-800:not([class*="dark:text-"]) { color: #8cc2a3; }
+.dark .text-indigo-800:not([class*="dark:text-"]) { color: var(--color-indigo-200); }
 
 /* Focus clavier toujours visible, y compris sur les champs qui retirent le contour
    natif (`outline-none`) : sélecteur plus précis que la classe utilitaire. */
-html :focus-visible { outline: 2px solid #2a6b4b; outline-offset: 2px; }
-html.dark :focus-visible { outline-color: #8cc2a3; }
+html :focus-visible { outline: 3px solid var(--md-primary); outline-offset: 2px; }
 
 /* Gains, pertes et alertes : teintes foncées (contraste AA sur fond clair). En mode sombre,
    sans teinte dédiée, on les éclaircit. */
@@ -127,4 +124,29 @@ body { font-variant-numeric: tabular-nums; }
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* ---------- Material 3 : réglages globaux ---------- */
+
+body { background: var(--md-surface); color: var(--md-on-surface); }
+::selection { background: var(--md-secondary-container); color: var(--md-on-secondary-container); }
+
+/* Libellés : Material les écrit en minuscules (casse de phrase), pas en capitales. */
+.uppercase { text-transform: none; letter-spacing: 0.01em; }
+
+/* Boutons d'action en pilule, comme les boutons Material (plein, tonal, danger). Les
+   onglets, interrupteurs et segments (role, aria-pressed) gardent leur forme. */
+:is(button, a, label):not([role]):not([aria-pressed]):is(
+  [class~="bg-indigo-600"], [class~="bg-indigo-700"], [class~="bg-rose-600"], [class~="bg-rose-700"],
+  [class~="bg-amber-600"], [class~="bg-amber-700"], [class~="bg-orange-700"], [class~="bg-emerald-600"],
+  [class~="bg-slate-100"], [class~="bg-slate-200"], [class~="bg-indigo-50"], [class~="bg-indigo-100"]
+) { border-radius: 9999px; }
+
+/* Mode sombre : boutons pleins en couleur « primary » claire, texte foncé (Material 3). */
+html.dark :is(button, a, label):not([role]):not([aria-pressed]):is([class~="bg-indigo-600"], [class~="bg-indigo-700"]) {
+  background-color: var(--md-primary);
+  color: var(--md-on-primary);
+}
+html.dark :is(button, a, label):not([role]):not([aria-pressed]):is([class~="bg-indigo-600"], [class~="bg-indigo-700"]):hover {
+  background-color: color-mix(in srgb, var(--md-primary) 92%, var(--md-on-primary));
 }

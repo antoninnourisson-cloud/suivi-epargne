@@ -75,9 +75,9 @@ const NavButton = ({ active, onClick, icon: Icon, label }: { active: boolean; on
     <button
       onClick={onClick}
       aria-current={active ? 'page' : undefined}
-      className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-bold transition-all rounded-xl mb-1 ${active ? 'bg-creme text-sapin shadow-lg shadow-black/10' : 'text-emerald-50/85 hover:bg-white/10 hover:text-white focus-visible:bg-white/10'}`}
+      className={`w-full h-12 flex items-center gap-3 px-4 text-sm transition-colors rounded-full ${active ? 'bg-secondary-container text-on-secondary-container font-bold' : 'font-medium text-on-surface-variant hover:bg-on-surface/8 hover:text-on-surface'}`}
     >
-      <Icon className={`w-5 h-5 ${active ? 'text-sapin' : 'text-emerald-100/75'}`} />
+      <Icon className="w-5 h-5 shrink-0" aria-hidden="true" />
       {label}
     </button>
 );
@@ -682,9 +682,9 @@ const App: React.FC = () => {
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-sapin flex flex-col items-center justify-center p-4">
-        <div className="bg-white dark:bg-slate-800 p-8 rounded-3xl shadow-2xl max-w-md w-full text-center">
+        <div className="bg-surface-container-low text-on-surface p-8 rounded-3xl shadow-xl max-w-md w-full text-center">
           <Logo className="w-16 h-16 mx-auto mb-6 shadow-lg" />
-          <h1 className="text-2xl font-black text-slate-900 dark:text-slate-100 mb-1">Pécule</h1>
+          <h1 className="text-[32px] leading-10 font-bold text-on-surface mb-1">Pécule</h1>
           <p className="text-sm font-bold text-indigo-700 dark:text-indigo-300 mb-4">Faites pousser votre épargne</p>
           <p className="text-slate-500 dark:text-slate-400 mb-8">Vos données sont stockées en sécurité sur votre Google Drive personnel.</p>
           {apiError ? (
@@ -694,7 +694,7 @@ const App: React.FC = () => {
               <button onClick={() => window.location.reload()} className="w-full py-2.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-sm font-black">Recharger l'application</button>
             </div>
           ) : !isApiLoaded ? <div className="flex justify-center gap-2 text-indigo-600 font-bold"><Loader2 className="animate-spin" aria-hidden="true"/> Connexion à Google…</div> :
-            <button onClick={handleLogin} className="w-full flex justify-center gap-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 py-4 rounded-xl font-bold hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 transition-colors">Continuer avec Google</button>
+            <button onClick={handleLogin} className="w-full h-12 flex items-center justify-center gap-3 bg-transparent border border-outline rounded-full font-medium hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 transition-colors">Continuer avec Google</button>
           }
         </div>
         <p className="mt-4 text-xs font-bold text-emerald-50/85 flex gap-4 justify-center">
@@ -710,57 +710,57 @@ const App: React.FC = () => {
 
   return (
     <ToastContext.Provider value={addToast}>
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-900 flex flex-col md:flex-row font-sans text-slate-900 dark:text-slate-100">
+    <div className="min-h-screen bg-surface flex flex-col md:flex-row font-sans text-on-surface">
       <a href="#contenu" onClick={e => { e.preventDefault(); mainRef.current?.focus(); }}
         className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-100 focus:px-4 focus:py-2 focus:rounded-lg focus:bg-white focus:text-slate-900 focus:font-bold focus:shadow-lg">
         Aller au contenu
       </a>
-      <aside className="hidden md:flex bg-sapin text-white w-full md:w-64 shrink-0 flex-col">
-        <div className="p-6 border-b border-white/10">
-          <h1 className="text-xl font-black flex items-center gap-2"><Logo className="w-8 h-8 ring-1 ring-white/20" /> Pécule</h1>
-          <div className="mt-2 text-[11px] uppercase text-emerald-100/70 font-bold tracking-wider flex items-center justify-between gap-2">
+      <aside className="hidden md:flex bg-surface-container-low text-on-surface w-full md:w-72 shrink-0 flex-col">
+        <div className="px-7 pt-6 pb-3">
+          <h1 className="text-2xl font-bold text-primary dark:text-on-surface flex items-center gap-3"><Logo className="w-9 h-9" /> Pécule</h1>
+          <div className="mt-3 text-xs text-on-surface-variant font-medium flex items-center justify-between gap-2">
             <div className="flex items-center gap-2" title={data.lastSavedAt ? `Dernière écriture confirmée sur Drive : ${data.lastSavedAt.toLocaleTimeString('fr-FR')}` : undefined}>
               <div className={`w-2 h-2 rounded-full shrink-0 ${data.isOffline ? 'bg-slate-400' : data.isSaving ? 'bg-amber-500 animate-pulse' : data.syncError || data.syncConflict ? 'bg-rose-500' : 'bg-emerald-500'}`}></div>
               {data.isOffline ? 'Hors ligne' : data.isSaving ? 'Sauvegarde...' : data.syncError ? 'Erreur sync' : data.syncConflict ? 'Conflit' : data.lastSavedAt ? `Sur Drive à ${data.lastSavedAt.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}` : 'Synchronisé'}
             </div>
-            <button onClick={toggleTheme} className="text-emerald-100/70 hover:text-white" title={isDark ? 'Passer en clair' : 'Passer en sombre'} aria-label={isDark ? 'Passer en clair' : 'Passer en sombre'}>
-              {isDark ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
+            <button onClick={toggleTheme} className="p-2 -m-2 rounded-full text-on-surface-variant hover:bg-on-surface/8" title={isDark ? 'Passer en clair' : 'Passer en sombre'} aria-label={isDark ? 'Passer en clair' : 'Passer en sombre'}>
+              {isDark ? <Sun className="w-4 h-4" aria-hidden="true" /> : <Moon className="w-4 h-4" aria-hidden="true" />}
             </button>
           </div>
         </div>
-        <nav aria-label="Navigation principale" className="flex-1 p-4 overflow-y-auto">
+        <nav aria-label="Navigation principale" className="flex-1 px-3 pb-3 overflow-y-auto space-y-0.5">
           {NAV_ITEMS.filter(i => !i.section && i.key !== 'settings').map(i => <NavButton key={i.key} active={view === i.key} onClick={() => setView(i.key)} icon={i.icon} label={i.label} />)}
           {NAV_SECTIONS.map(section => (
             <React.Fragment key={section}>
-              <div className="pt-6 pb-2 text-[11px] font-black text-emerald-100/70 uppercase px-4 tracking-widest">{section}</div>
+              <div className="pt-5 pb-2 px-4 text-sm font-medium text-on-surface-variant">{section}</div>
               {NAV_ITEMS.filter(i => i.section === section && (i.key !== 'parental' || showParentalScreen)).map(i => <NavButton key={i.key} active={view === i.key} onClick={() => setView(i.key)} icon={i.icon} label={i.label} />)}
             </React.Fragment>
           ))}
-          <div className="my-4 border-t border-white/10 mx-4"></div>
+          <div className="my-3 border-t border-outline-variant mx-4"></div>
           <NavButton active={view === 'settings'} onClick={() => setView('settings')} icon={SettingsIcon} label="Paramètres" />
         </nav>
-        <div className="p-4 border-t border-white/10">
-            <button onClick={handleLogout} className="w-full flex items-center gap-3 px-4 py-3 text-rose-300 hover:bg-white/10 rounded-xl font-bold text-sm transition-colors"><LogOut className="w-5 h-5"/> Déconnexion</button>
-            <button onClick={() => setView('settings')} className="w-full mt-1 px-4 text-left text-[11px] font-bold text-emerald-100/60 hover:text-white" title="Historique des mises à jour dans Paramètres">Pécule · version {LATEST_VERSION}{typeof __BUILD_SHA__ !== "undefined" && __BUILD_SHA__ !== "dev" ? ` · ${__BUILD_SHA__}` : ""}</button>
+        <div className="px-3 py-3 border-t border-outline-variant">
+            <button onClick={handleLogout} className="w-full h-12 flex items-center gap-3 px-4 text-error hover:bg-error/8 rounded-full font-medium text-sm transition-colors"><LogOut className="w-5 h-5" aria-hidden="true" /> Déconnexion</button>
+            <button onClick={() => setView('settings')} className="w-full mt-1 px-4 text-left text-[11px] font-medium text-on-surface-variant hover:text-on-surface" title="Historique des mises à jour dans Paramètres">Pécule · version {LATEST_VERSION}{typeof __BUILD_SHA__ !== "undefined" && __BUILD_SHA__ !== "dev" ? ` · ${__BUILD_SHA__}` : ""}</button>
         </div>
       </aside>
 
       {/* Header compact mobile (la sidebar est masquée en dessous de md) */}
-      <header className="md:hidden sticky top-0 z-30 bg-sapin text-white px-4 py-3 flex items-center justify-between">
-        <h1 className="text-base font-black flex items-center gap-2"><Logo className="w-6 h-6 ring-1 ring-white/20" /> Pécule</h1>
+      <header className="md:hidden sticky top-0 z-30 bg-surface-container text-on-surface px-4 h-16 flex items-center justify-between">
+        <h1 className="text-[22px] font-bold text-primary dark:text-on-surface flex items-center gap-2"><Logo className="w-8 h-8" /> Pécule</h1>
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1.5" title={data.lastSavedAt ? `Dernière écriture confirmée sur Drive : ${data.lastSavedAt.toLocaleTimeString('fr-FR')}` : undefined}>
             <div className={`w-2 h-2 rounded-full shrink-0 ${data.isOffline ? 'bg-slate-400' : data.isSaving ? 'bg-amber-500 animate-pulse' : data.syncError || data.syncConflict ? 'bg-rose-500' : 'bg-emerald-500'}`}></div>
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">
+            <span className="text-xs font-medium text-on-surface-variant">
               {data.isOffline ? 'Hors ligne' : data.isSaving ? 'Sauvegarde...' : data.syncError ? 'Erreur' : data.syncConflict ? 'Conflit' : data.lastSavedAt ? data.lastSavedAt.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : 'Sync'}
             </span>
           </div>
-          <button onClick={toggleTheme} className="p-2.5 -m-1 text-slate-400" title="Thème" aria-label="Changer de thème">{isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}</button>
-          <button onClick={() => setDialog({ open: true, kind: 'confirm', title: 'Se déconnecter ?', message: 'Les données restent sur votre Drive ; il faudra vous reconnecter avec Google.', confirmLabel: 'Se déconnecter', onConfirm: () => { void handleLogout(); } })} className="p-2.5 -m-1 text-rose-300" aria-label="Se déconnecter"><LogOut className="w-4 h-4" /></button>
+          <button onClick={toggleTheme} className="p-2.5 -m-1 rounded-full text-on-surface-variant hover:bg-on-surface/8" title="Thème" aria-label="Changer de thème">{isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}</button>
+          <button onClick={() => setDialog({ open: true, kind: 'confirm', title: 'Se déconnecter ?', message: 'Les données restent sur votre Drive ; il faudra vous reconnecter avec Google.', confirmLabel: 'Se déconnecter', onConfirm: () => { void handleLogout(); } })} className="p-2.5 -m-1 rounded-full text-error hover:bg-error/8" aria-label="Se déconnecter"><LogOut className="w-4 h-4" /></button>
         </div>
       </header>
 
-      <main ref={mainRef} id="contenu" tabIndex={-1} className="outline-none flex-1 p-4 md:p-8 overflow-y-auto relative h-dvh pb-40 md:pb-24">
+      <main ref={mainRef} id="contenu" tabIndex={-1} className="outline-none flex-1 bg-surface p-4 md:p-8 overflow-y-auto relative h-dvh pb-40 md:pb-24">
 
         <div className="max-w-7xl mx-auto pb-20">
             {/* --- BANNIÈRES DE SYNCHRONISATION --- */}
@@ -772,7 +772,7 @@ const App: React.FC = () => {
             {data.appOutdated && (
               <div role="alert" className="mb-4 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-xl p-4 flex items-center justify-between gap-4">
                 <div className="flex items-center gap-2 text-amber-800 dark:text-amber-300 text-sm font-bold"><AlertTriangle className="w-5 h-5 shrink-0"/> Vos données ont été enregistrées par une version plus récente de Pécule. Mettez l'app à jour : rien ne sera enregistré d'ici là.</div>
-                <button onClick={() => window.location.reload()} className="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-lg font-bold text-sm shrink-0">Mettre à jour</button>
+                <button onClick={() => window.location.reload()} className="bg-amber-700 hover:bg-amber-800 text-white px-4 py-2 rounded-lg font-bold text-sm shrink-0">Mettre à jour</button>
               </div>
             )}
             {data.sessionExpired && (

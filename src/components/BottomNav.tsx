@@ -14,9 +14,12 @@ interface BottomNavProps {
 }
 
 const TabButton: React.FC<{ active: boolean; onClick: () => void; icon: NavItem['icon']; label: string; current?: boolean }> = ({ active, onClick, icon: Icon, label, current }) => (
-  <button onClick={onClick} aria-current={current ? 'page' : undefined} className="flex-1 flex flex-col items-center justify-center gap-0.5 py-2 min-h-[52px]">
-    <Icon className={`w-5 h-5 ${active ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-500 dark:text-slate-400'}`} />
-    <span className={`text-[11px] font-bold ${active ? 'text-indigo-700 dark:text-indigo-300' : 'text-slate-500 dark:text-slate-400'}`}>{label}</span>
+  // Barre de navigation Material 3 : l'onglet actif porte un indicateur en pilule.
+  <button onClick={onClick} aria-current={current ? 'page' : undefined} className="group flex-1 flex flex-col items-center justify-center gap-1 pt-3 pb-4 min-h-20">
+    <span className={`h-8 w-16 rounded-full flex items-center justify-center transition-colors ${active ? 'bg-secondary-container text-on-secondary-container' : 'text-on-surface-variant group-hover:bg-on-surface/8'}`}>
+      <Icon className="w-5 h-5" aria-hidden="true" />
+    </span>
+    <span className={`text-xs ${active ? 'font-bold text-on-surface' : 'font-medium text-on-surface-variant'}`}>{label}</span>
   </button>
 );
 
@@ -28,7 +31,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ view, setView, moreOpen, s
   const go = (v: View) => { setView(v); setMoreOpen(false); };
   return (
     <>
-      <nav aria-label="Navigation principale" className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 flex pb-[env(safe-area-inset-bottom)]">
+      <nav aria-label="Navigation principale" className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-surface-container flex pb-[env(safe-area-inset-bottom)]">
         {tabs.map(t => <TabButton key={t.key} active={view === t.key} current={view === t.key} onClick={() => setView(t.key)} icon={t.icon} label={t.short ?? t.label} />)}
         <TabButton active={moreOpen || inMore} onClick={() => setMoreOpen(true)} icon={MoreHorizontal} label="Plus" />
       </nav>

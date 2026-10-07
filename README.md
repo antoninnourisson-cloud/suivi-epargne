@@ -262,7 +262,7 @@ Avant chaque mise à jour visible, ajoute une entrée **en tête** de [`src/chan
 └── .nvmrc · .env.production
 ```
 
-**Identité visuelle** : vert sapin `#14532d`, or `#fbbf24`, crème `#fef3c7`, gris chauds (stone). Dans `src/index.css` (bloc `@theme`), l'échelle `indigo` pointe vers le sapin : les classes `indigo-*` du code sont donc **vertes**. Logo vectoriel : `src/components/Logo.tsx`.
+**Identité visuelle** : Material 3 Expressive, couleur source vert sapin `#14532d` (variante « fidélité »), or `#fbbf24` en tertiaire. La palette est générée par `npm run theme` (`scripts/m3-theme.mjs` → `src/theme/m3.css`) : les échelles Tailwind `indigo` (couleur principale) et `slate`/`gray`/`stone` (neutres) pointent vers les tons Material, et les rôles Material sont disponibles en classes (`bg-surface-container`, `text-on-surface-variant`…). Formes, graisses, élévations et mouvements dans `src/index.css`. Police Google Sans Flex. Logo vectoriel : `src/components/Logo.tsx`.
 
 ## Installer l'app sur mobile
 
@@ -284,6 +284,7 @@ Le nom « Pécule » et le logo ne sont pas couverts par la licence : une versio
 - Conception et développement : Antonin Nourisson.
 - Construit avec [React](https://react.dev/), [Vite](https://vite.dev/), [Tailwind CSS](https://tailwindcss.com/), [Recharts](https://recharts.org/), [Lucide](https://lucide.dev/), [vite-plugin-pwa](https://vite-pwa-org.netlify.app/) et [Cloudflare Workers](https://workers.cloudflare.com/).
 - Données fiscales de référence : [service-public.gouv.fr](https://www.service-public.gouv.fr/). Extraction de documents : Google Gemini.
-- Police : [Inter](https://rsms.me/inter/) (SIL Open Font License), hébergée avec l'app.
+- Police : [Google Sans Flex](https://fonts.google.com/specimen/Google+Sans+Flex) (SIL Open Font License), hébergée avec l'app.
+- Design : [Material 3 Expressive](https://m3.material.io/) ; palette générée avec [material-color-utilities](https://github.com/material-foundation/material-color-utilities).
 
 <sub>Pécule n'est pas un conseiller financier : les calculs sont des estimations à vérifier auprès des sources officielles.</sub>

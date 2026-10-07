@@ -59,8 +59,9 @@ export default defineConfig({
         name: 'Pécule',
         short_name: 'Pécule',
         description: 'Faites pousser votre épargne : comptes, paie, intérêts et fiscalité, données sur votre Google Drive',
-        theme_color: '#14532d',
-        background_color: '#14532d',
+        // Surfaces Material 3 (src/theme/m3.css) : barre de titre et écran de lancement.
+        theme_color: '#ecefe9',
+        background_color: '#f8faf4',
         display: 'standalone',
         orientation: 'portrait',
         // Relatifs pour matcher le `base` ci-dessus, quel que soit le sous-dossier

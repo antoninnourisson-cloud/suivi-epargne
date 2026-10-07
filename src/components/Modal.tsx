@@ -53,7 +53,7 @@ export const Modal: React.FC<ModalProps> = ({ open, onClose, label, children, va
   const sheet = variant === 'sheet';
   return (
     <div
-      className={`fixed inset-0 z-70 flex ${sheet ? 'items-end sm:items-center' : 'items-center p-4'} justify-center bg-slate-900/50 backdrop-blur-xs animate-fade-in`}
+      className={`fixed inset-0 z-70 flex ${sheet ? 'items-end sm:items-center' : 'items-center p-4'} justify-center bg-scrim/40 animate-fade-in`}
       onClick={onClose}
     >
       <div
@@ -63,8 +63,11 @@ export const Modal: React.FC<ModalProps> = ({ open, onClose, label, children, va
         aria-label={label}
         tabIndex={-1}
         onClick={e => e.stopPropagation()}
-        className={`bg-white dark:bg-slate-800 shadow-2xl w-full outline-hidden ${sheet ? 'rounded-t-3xl sm:rounded-3xl max-h-[85vh] overflow-y-auto pb-[env(safe-area-inset-bottom)]' : 'rounded-2xl max-h-[90vh] overflow-y-auto'} ${className}`}
+        // Material 3 : boîte de dialogue (coins de 28 px, surface « container high ») ou
+        // feuille du bas, avec sa poignée.
+        className={`bg-surface-container-high text-on-surface shadow-xl w-full outline-hidden rounded-3xl max-h-[90vh] overflow-y-auto ${sheet ? 'max-sm:rounded-b-none max-sm:max-h-[85vh] pb-[env(safe-area-inset-bottom)]' : ''} ${className}`}
       >
+        {sheet && <div className="sm:hidden flex justify-center pt-3 -mb-1" aria-hidden="true"><span className="h-1 w-8 rounded-full bg-on-surface-variant/40" /></div>}
         {children}
       </div>
     </div>

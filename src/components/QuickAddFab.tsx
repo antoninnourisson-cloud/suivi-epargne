@@ -23,7 +23,7 @@ export const QuickAddFab: React.FC<{ scrollRef: React.RefObject<HTMLElement | nu
   return (
     <button
       onClick={onClick}
-      className={`fixed bottom-[calc(5rem+env(safe-area-inset-bottom))] md:bottom-6 right-4 z-40 h-14 pl-4 pr-5 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-black/20 flex items-center gap-2 font-black transition-all duration-200 ${hidden ? 'translate-y-24 opacity-0 pointer-events-none' : 'hover:scale-105'}`}
+      className={`fixed bottom-[calc(6rem+env(safe-area-inset-bottom))] md:bottom-6 right-4 z-40 h-14 pl-4 pr-5 rounded-xl bg-primary-container text-on-primary-container shadow-lg hover:shadow-xl flex items-center gap-3 font-medium transition-all duration-300 ${hidden ? 'translate-y-28 opacity-0 pointer-events-none' : ''}`}
       aria-label="Ajouter un mouvement"
     >
       <Plus className="w-6 h-6" aria-hidden="true" /> <span className="text-sm">Ajouter</span>

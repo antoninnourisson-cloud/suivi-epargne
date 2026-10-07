@@ -35,7 +35,7 @@ export const ToastContainer: React.FC<{ toasts: ToastItem[]; onDismiss: (id: str
   // La zone existe toujours (même vide) : les lecteurs d'écran n'annoncent que ce qui
   // apparaît dans une zone « live » déjà présente. Sur mobile, au-dessus de la barre du bas.
   return (
-    <div role="status" aria-live="polite" className="fixed bottom-[calc(5.5rem+env(safe-area-inset-bottom))] md:bottom-4 left-1/2 -translate-x-1/2 md:left-auto md:right-4 md:translate-x-0 z-60 flex flex-col gap-2 w-[calc(100%-2rem)] max-w-sm pointer-events-none">
+    <div role="status" aria-live="polite" className="fixed bottom-[calc(6.5rem+env(safe-area-inset-bottom))] md:bottom-4 left-1/2 -translate-x-1/2 md:left-auto md:right-4 md:translate-x-0 z-60 flex flex-col gap-2 w-[calc(100%-2rem)] max-w-sm pointer-events-none">
       {toasts.map(t => <ToastView key={t.id} t={t} onDismiss={onDismiss} />)}
     </div>
   );
@@ -57,21 +57,20 @@ const ToastView: React.FC<{ t: ToastItem; onDismiss: (id: string) => void }> = (
       role={t.kind === 'error' ? 'alert' : undefined}
       onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}
       onFocus={() => setPaused(true)} onBlur={() => setPaused(false)}
-      className={`pointer-events-auto flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg text-sm font-bold animate-in slide-in-from-bottom-2 ${
-        t.kind === 'error' ? 'bg-rose-700 text-white' : 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900'
-      }`}
+      // Snackbar Material 3 : surface inversée, coins de 4 px, action dans la couleur inverse.
+      className="pointer-events-auto min-h-12 flex items-center gap-3 pl-4 pr-2 py-2 rounded-xs shadow-md text-sm bg-inverse-surface text-inverse-on-surface animate-fade-in"
     >
-      {t.kind === 'error' ? <AlertCircle className="w-4 h-4 shrink-0" aria-hidden="true" /> : <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400 dark:text-emerald-700" aria-hidden="true" />}
+      {t.kind === 'error' ? <AlertCircle className="w-5 h-5 shrink-0 text-rose-300 dark:text-rose-700" aria-hidden="true" /> : <CheckCircle2 className="w-5 h-5 shrink-0 text-inverse-primary" aria-hidden="true" />}
       <span className="flex-1">{t.message}</span>
       {t.action && (
         <button
           onClick={() => { t.action!.onClick(); onDismiss(t.id); }}
-          className="text-indigo-300 dark:text-indigo-700 underline underline-offset-2 hover:no-underline shrink-0"
+          className="h-10 px-3 rounded-full font-medium text-inverse-primary hover:bg-inverse-primary/10 shrink-0"
         >
           {t.action.label}
         </button>
       )}
-      <button onClick={() => onDismiss(t.id)} aria-label="Fermer la notification" className="p-2 -m-1 opacity-70 hover:opacity-100 shrink-0"><X className="w-4 h-4" aria-hidden="true" /></button>
+      <button onClick={() => onDismiss(t.id)} aria-label="Fermer la notification" className="p-2 rounded-full opacity-80 hover:opacity-100 hover:bg-inverse-on-surface/10 shrink-0"><X className="w-4 h-4" aria-hidden="true" /></button>
     </div>
   );
 };
