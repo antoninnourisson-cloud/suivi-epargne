@@ -17,28 +17,47 @@
 - **Plus aucun envoi d'e-mail** : l'autorisation Gmail (`gmail.send`) est retirée de la connexion Google, qui ne demande plus aucune portée sensible.
 - **Préférences de notification par type**, **avantages salariaux d'après les fiches de paie**, **LEP : alerte avant fermeture et lecture de l'avis d'imposition**, **veille fiscale hebdomadaire** (Gemini propose, vous validez).
 
-## En cours : plan d'action de l'audit 360° (octobre 2026)
+## Feuille de route (par phases, sans dates)
 
-1. **Corrections immédiates** : confidentialité (avis d'imposition), historique daté, documentation, licence AGPL v3, CONTRIBUTING, SECURITY, police Inter hébergée avec l'app, Vitest 5.
-2. **Accessibilité urgente** (WCAG 2.2 AA) : contrastes, lien d'évitement, titres d'écran, toast « Annuler », champs, import de fichier, mouvement réduit.
-3. **Filet de sécurité** : couverture de tests avec seuils, tests de bout en bout en mode démo, lint strict, contrôles sur les virements et l'ajout rapide, validation par schéma aux entrées.
-4. **Design system et refonte** : jetons sémantiques, composants `ui/`, graphiques SVG maison, refonte Accueil, Pilotage et Actualiser.
-5. **Produit** : point de paie (bilan calé sur le 27), jalons et séries (gamification sobre), contrôle des fiches de paie, puis simulateur « Et si… » et alertes unifiées.
-6. **Architecture** : commandes sorties d'`App.tsx`, store et moteur de synchronisation, montants en centimes, paquet `domain/` partagé avec le serveur.
-7. **Hébergement** : origine dédiée (domaine ou Cloudflare Pages), en-têtes de sécurité HTTP.
+Fait : corrections immédiates, accessibilité urgente, filet de sécurité (tests, lint strict, contrôles), retrait des e-mails, marque Google validée, domaine pecule-app.com, passage visuel Material 3 Expressive.
 
-## Plus tard
+### Phase 1 : interface (en cours)
+1. Bibliothèque de composants Material (`src/components/ui/`) : Card, StatTile, MoneyText, DeltaBadge, DataTable, TextField, SegmentedButton, Tabs, Chip, EmptyState, PageHeader, Sparkline. Conversion progressive des boutons et cartes faits main.
+2. Accueil : un chiffre principal (variation + petite courbe SVG), deux tâches au plus, le reste replié.
+3. Pilotage : « À placer ce mois » d'abord, puis « D'où vient ce chiffre ».
+4. Actualiser : une ligne repliable par compte.
+5. Graphiques relookés Material, chacun avec son tableau accessible.
+6. Pages publiques (présentation, confidentialité) au même style.
 
-- **App Android sur le Play Store** (Trusted Web Activity, via PWABuilder ou Bubblewrap) : la même app que pecule-app.com, en plein écran, mises à jour sans republier. À faire : `/.well-known/assetlinks.json` sur le domaine, projet Android signé, compte développeur Google Play (25 $), fiche de confidentialité et période de test fermé.
-- **Ouverture à d'autres utilisateurs, sur invitation seulement** (après l'app Android), environ 3 à 5 jours :
-  - inscription uniquement par invitation : je crée une invitation (lien à usage unique, avec une date d'expiration), le serveur remplace la liste fixe `ALLOWED_EMAILS` par les comptes invités, et je peux retirer un accès ;
-  - rappels quotidiens répartis dans une file (Cloudflare Queues) au lieu d'un seul passage, sinon on atteint la limite de 50 appels par passage vers 10 comptes ; passer à l'offre Workers à 5 $/mois quand le nombre de comptes le justifie ;
-  - accueil guidé au premier lancement, et la part des parents et la restitution facultatives, masquées par défaut ;
-  - lecture des documents par Gemini : rester sur la clé personnelle (facultatif) ou passer par le serveur ;
-  - mentions légales (LCEN : éditeur, hébergeur), contact dédié, page de confidentialité mise à jour pour plusieurs utilisateurs (RGPD) ;
-  - remontée d'erreurs anonyme, et le code de conduite si le dépôt reçoit des contributions.
-- **TypeScript 7** : à faire quand typescript-eslint le prendra en charge (aujourd'hui jusqu'à 6.0, déjà en place).
-- **Code de conduite** (`CODE_OF_CONDUCT.md`, Contributor Covenant 2.1 en français) : choisir d'abord un contact de signalement qui ne soit pas l'adresse personnelle (par exemple une adresse redirigée sur pecule-app.com).
+### Phase 2 : motivation
+1. Bons mois : au moins 500 € mis de côté sur 30 jours à partir de chaque paie (seuil réglable, désactivable).
+2. Jalons et séries : précaution atteinte, livret plein, série de paies tenues (un joker par an).
+3. Point de paie : bilan à chaque paie (prévu / réalisé, un enseignement, une action).
+4. Contrôle des fiches de paie : alerte si une fiche s'écarte nettement de la médiane des six précédentes.
+
+### Phase 3 : solidité avant la restitution
+1. Écriture Drive vérifiée : plus de modification perdue entre deux appareils.
+2. Restitution, virements et annulations sortis d'`App.tsx` en commandes testées.
+3. Répétition générale de la restitution en mode démo.
+
+### Phase 4 : passage en solo
+1. Restitution, mode solo, nettoyage de l'ancienne adresse github.io (serveur, client OAuth, clé du Picker).
+2. Simulateur « Et si… » et alertes unifiées chiffrées en euros.
+3. « Votre année Pécule » (bilan annuel).
+
+### Phase 5 : app Android (Trusted Web Activity)
+`/.well-known/assetlinks.json` sur le domaine, projet Android signé (PWABuilder ou Bubblewrap), compte Google Play (25 $), fiche de confidentialité, période de test fermé.
+
+### Phase 6 : ouverture sur invitation
+- Invitations à usage unique avec date d'expiration, accès révocable (remplace `ALLOWED_EMAILS`).
+- Rappels quotidiens répartis dans une file (Cloudflare Queues) ; offre Workers à 5 $/mois si le nombre de comptes le justifie.
+- Accueil guidé, partie « parents » facultative et masquée par défaut ; lecture Gemini : clé personnelle ou serveur, à trancher.
+- Mentions légales (LCEN), contact dédié, confidentialité multi-utilisateurs (RGPD), remontée d'erreurs anonyme, code de conduite (Contributor Covenant 2.1, contact de signalement non personnel).
+
+### En continu
+- Architecture : montants en centimes, store et moteur de synchronisation, paquet `domain/` partagé avec le serveur.
+- Maintenance : versions majeures (Vite 8, Node 24), TypeScript 7 dès que typescript-eslint le prend en charge, en-têtes de sécurité HTTP via Cloudflare.
+- Pistes : « Demander à Pécule » (assistant), données chiffrées de bout en bout chez Cloudflare.
 
 ## Notes techniques à ne pas perdre
 
