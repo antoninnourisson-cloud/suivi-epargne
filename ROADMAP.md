@@ -55,6 +55,14 @@ Fait : corrections immédiates, accessibilité urgente, filet de sécurité (tes
 ### Phase 6 : wiki GitHub
 Remplir le wiki du dépôt : guide d'utilisation (premiers pas, paie et Pilotage, comptes et Actualiser, parents et restitution, motivation, simulateur, notifications, sauvegardes et conflits, confidentialité), FAQ, et pages pour contribuer (architecture, invariants, déploiement, veille fiscale). Le README et MAINTENANCE restent la référence technique ; le wiki s'adresse d'abord aux utilisateurs.
 
+### Phase 7 : point final (en dernier, une fois tout le reste bouclé)
+Grand ménage et remise à plat de tout ce qui entoure le code :
+- code : fichiers, exports et dépendances inutilisés, commentaires périmés, duplications restantes ;
+- documentation : README, MAINTENANCE, CONTRIBUTING, SECURITY, ROADMAP, worker/README, wiki ;
+- règles GitHub : protection de la branche principale, modèles d'issues et de PR, Dependabot (dont `edge/`), étiquettes ;
+- règles de l'app et pages publiques : confidentialité, présentation, mentions dans l'app ;
+- vérification finale : tests, couverture, accessibilité, sécurité.
+
 ### Abandonné
 - **Ouverture à d'autres utilisateurs sur invitation** (octobre 2026) : liée au Play Store, abandonnée avec lui. Pécule reste une app personnelle.
 - **App Android sur le Play Store** (octobre 2026) : Google impose aux comptes personnels un test fermé de 12 testeurs pendant 14 jours. Pécule reste une PWA, qui s'installe déjà comme une vraie app Android via Chrome (« Installer l'application »).
