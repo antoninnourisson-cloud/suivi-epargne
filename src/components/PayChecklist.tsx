@@ -10,7 +10,9 @@ import { PayChecklist as PayChecklistData, PayChecklistLine } from '../types';
 import { PayTransfer, PlacementStep, buildPayLines, payPeriodOf } from '../lib/finance';
 import { formatEUR, toInputAmount } from '../lib/format';
 import { parseFrenchNumber } from '../lib/numbers';
-import { Wallet, Info, CheckCircle2, RotateCcw, PiggyBank } from 'lucide-react';
+import { Info, CheckCircle2, RotateCcw, PiggyBank, ArrowRightLeft } from 'lucide-react';
+import { Card, MoneyText } from './ui';
+import { placementReason } from '../lib/pilotView';
 
 interface PayChecklistProps {
   superNet: number;
@@ -23,14 +25,15 @@ interface PayChecklistProps {
   // Enregistre un versement réel sur un compte de l'app ; renvoie l'id du mouvement créé.
   onRecordDeposit: (accountId: string, amount: number) => string | undefined;
   onCancelDeposit: (accountId: string, movementId: string) => void;
-  children?: React.ReactNode; // réglage du rappel du jour de paie
+  children?: React.ReactNode; // contenu ajouté en bas de la carte
+  customSplit?: boolean;       // répartition personnalisée : change le « pourquoi » de chaque compte
   paydayDay?: number;          // la liste suit la paie, pas le mois calendaire
 }
 
 const MONTHS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
 
 export const PayChecklist: React.FC<PayChecklistProps> = ({
-  superNet, transfers, steps, totalToInvest, shortfall, checklist, onChange, onRecordDeposit, onCancelDeposit, children, paydayDay,
+  superNet, transfers, steps, totalToInvest, shortfall, checklist, onChange, onRecordDeposit, onCancelDeposit, children, paydayDay, customSplit = false,
 }) => {
   const now = new Date();
   const period = payPeriodOf(paydayDay, now);
@@ -88,35 +91,49 @@ export const PayChecklist: React.FC<PayChecklistProps> = ({
     setDrafts(d => ({ ...d, [l.key]: toInputAmount(entry?.amount ?? l.amount) }));
   };
 
+  const reasonFor = (l: PayChecklistLine) => {
+    if (l.kind !== 'saving') return undefined;
+    const step = steps.find(st => !st.alert && st.accountId === l.accountId);
+    return step ? placementReason(step, customSplit) : undefined;
+  };
+
   const renderLine = (l: PayChecklistLine & { detail?: string }) => {
     const entry = done[l.key];
     const isDone = !!entry;
     const varied = isDone && Math.abs(entry.amount - l.amount) >= 0.005;
     const invalid = !isDone && draftAmount(l) === null;
+    const reason = reasonFor(l);
+    // « Livret A · Livret A · 1,7 % » : le type répète souvent le nom du compte.
+    const detail = l.detail === l.label ? undefined : l.detail?.startsWith(`${l.label} · `) ? l.detail.slice(l.label.length + 3) : l.detail;
+    const status = isDone
+      ? `${entry.alreadyRecorded ? 'Déjà enregistré' : l.kind === 'saving' ? 'Versement enregistré' : 'Fait'}${varied ? ` : ${formatEUR(entry.amount)} (prévu ${formatEUR(l.amount)})` : ''}`
+      : (l.kind === 'saving' ? 'Cocher enregistre le versement sur le compte' : 'À faire');
     return (
-      <div key={l.key} className={`flex items-center gap-3 text-sm p-2 rounded-lg ${isDone ? 'bg-emerald-50 dark:bg-emerald-950/30' : 'bg-slate-50 dark:bg-slate-900'}`}>
+      <li key={l.key} className={`flex items-start gap-3 py-3 ${isDone ? 'opacity-90' : ''}`}>
         <input
           type="checkbox"
           checked={isDone}
           disabled={invalid}
           onChange={() => (isDone ? uncheck(l) : check(l))}
           aria-label={`${l.label} : ${isDone ? 'fait' : 'à faire'}`}
-          className="w-5 h-5 shrink-0 accent-emerald-600"
+          className="mt-0.5 w-5 h-5 shrink-0 accent-indigo-600 dark:accent-indigo-300"
         />
         <div className="flex-1 min-w-0">
-          <p className={`font-bold truncate ${isDone ? 'text-emerald-800 dark:text-emerald-300' : 'text-slate-700 dark:text-slate-200'}`}>{l.label}</p>
-          <p className="text-[11px] text-slate-500 dark:text-slate-400">
-            {l.detail && <>{l.detail} · </>}
-            {isDone
-              ? `${entry.alreadyRecorded ? 'déjà enregistré' : l.kind === 'saving' ? 'versement enregistré' : 'fait'}${varied ? ` : ${formatEUR(entry.amount)} (prévu ${formatEUR(l.amount)})` : ''}`
-              : (l.kind === 'saving' ? 'cocher enregistre le versement sur le compte' : 'à faire')}
+          <p className="text-sm font-medium text-on-surface break-words">
+            {l.label}
+            {detail && <span className="ml-2 text-xs font-normal text-on-surface-variant">{detail}</span>}
+          </p>
+          {reason && <p className="text-xs text-on-surface-variant mt-0.5">{reason}</p>}
+          <p className={`text-xs mt-0.5 flex flex-wrap items-center gap-x-2 ${isDone ? 'text-emerald-700 dark:text-emerald-300' : 'text-on-surface-variant'}`}>
+            {isDone && <CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" />}
+            <span>{status}</span>
             {!isDone && l.kind === 'saving' && !invalid && (
-              <button type="button" onClick={() => check(l, true)} className="ml-2 font-bold text-indigo-600 dark:text-indigo-300 hover:underline">Déjà enregistré ?</button>
+              <button type="button" onClick={() => check(l, true)} className="font-medium text-indigo-700 dark:text-indigo-200 hover:underline">Déjà enregistré ?</button>
             )}
           </p>
         </div>
         {isDone ? (
-          <span className="font-mono font-bold text-emerald-700 dark:text-emerald-300 shrink-0">{formatEUR(entry.amount)}</span>
+          <MoneyText value={entry.amount} className="shrink-0 text-sm font-medium text-on-surface pt-0.5" />
         ) : (
           <label className="flex items-center gap-1 shrink-0">
             <span className="sr-only">Montant réel de {l.label}</span>
@@ -126,60 +143,74 @@ export const PayChecklist: React.FC<PayChecklistProps> = ({
               value={drafts[l.key] ?? toInputAmount(l.amount)}
               onChange={e => setDrafts(d => ({ ...d, [l.key]: e.target.value }))}
               onKeyDown={e => { if (e.key === 'Enter') check(l); }}
-              className={`w-24 p-1.5 text-right font-mono font-bold bg-white dark:bg-slate-800 border rounded-lg ${invalid ? 'border-rose-400' : 'border-slate-200 dark:border-slate-700'} text-slate-700 dark:text-slate-200`}
+              aria-invalid={invalid || undefined}
+              className="w-24 h-9 px-2 text-right text-sm tabular-nums font-medium rounded-xs bg-transparent border border-outline text-on-surface hover:border-on-surface focus:border-indigo-600 dark:focus:border-indigo-300 focus:border-2 outline-none aria-[invalid=true]:border-error aria-[invalid=true]:border-2"
             />
-            <span className="text-slate-500 dark:text-slate-400 font-bold">€</span>
+            <span className="text-sm text-on-surface-variant" aria-hidden="true">€</span>
           </label>
         )}
-      </div>
+      </li>
     );
   };
 
   const totalLines = lines.length;
+  const savingTotal = frozen ? savingLines.reduce((s, l) => s + l.amount, 0) : totalToInvest;
+  const transferTotal = transferLines.reduce((s, l) => s + l.amount, 0);
+  const progress = totalLines > 0 && (
+    <span className={`inline-flex items-center gap-1 h-7 px-2.5 rounded-sm text-xs font-medium tabular-nums ${doneCount === totalLines ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-200' : 'bg-secondary-container text-on-secondary-container'}`}>
+      {doneCount === totalLines ? <><CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" /> Tout est fait</> : `${doneCount}/${totalLines} faits`}
+    </span>
+  );
   return (
-    <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xs lg:col-span-2">
-      <div className="flex flex-wrap items-start justify-between gap-3 mb-1">
-        <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 flex items-center gap-2"><Wallet className="w-5 h-5 text-indigo-600" /> Votre paie, virement par virement</h3>
-        {totalLines > 0 && (
-          <span className={`text-xs font-black px-2.5 py-1 rounded-full ${doneCount === totalLines ? 'bg-emerald-600 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'}`}>
-            {doneCount === totalLines ? <span className="inline-flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" /> Tout est fait</span> : `${doneCount}/${totalLines} faits`}
-          </span>
-        )}
-      </div>
-      <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
-        Paie de {periodLabel} : {formatEUR(superNet)}. Cochez chaque virement une fois fait ; si le montant réel diffère, corrigez-le avant de cocher.
-        {' '}Ajoutez une charge fixe par virement sortant (ex. « Revolut commun »), sans détailler ce qu'elle paie.
+    <Card title="Où le placer" icon={PiggyBank} action={progress}>
+      <p className="text-sm text-on-surface-variant -mt-2 mb-4">
+        Paie de {periodLabel} : <MoneyText value={superNet} />. Cochez chaque virement une fois fait ; si le montant réel diffère, corrigez-le avant de cocher.
       </p>
 
-      <div className="space-y-2">
-        {transferLines.map(renderLine)}
+      <div className="flex items-baseline justify-between gap-3 border-b border-outline-variant pb-2">
+        <h4 className="text-sm font-medium text-on-surface">Sur vos comptes d'épargne</h4>
+        <MoneyText value={savingTotal} className="text-sm font-medium text-on-surface" />
       </div>
-
-      <div className="mt-4 flex items-center justify-between gap-3">
-        <p className="text-sm font-black text-emerald-700 dark:text-emerald-300 flex items-center gap-2"><PiggyBank className="w-4 h-4" /> Épargne</p>
-        <p className="font-mono font-black text-emerald-700 dark:text-emerald-300">{formatEUR(frozen ? savingLines.reduce((s, l) => s + l.amount, 0) : totalToInvest)}</p>
-      </div>
-      <div className="space-y-2 mt-2">
+      <ul className="divide-y divide-outline-variant">
         {savingLines.map(renderLine)}
-        {!frozen && suggestions.map(st => (
-          <p key={st.accountName} className="text-xs font-bold text-amber-700 dark:text-amber-300 p-2 rounded-lg bg-amber-50 dark:bg-amber-950/40">{st.hint}</p>
-        ))}
-        {savingLines.length === 0 && suggestions.length === 0 && <p className="text-sm text-slate-500 dark:text-slate-400 italic">Rien à placer ce mois-ci.</p>}
-      </div>
+      </ul>
+      {!frozen && suggestions.length > 0 && (
+        <div className="mt-2 space-y-2">
+          {suggestions.map(st => (
+            <p key={st.accountName} className="text-sm text-on-tertiary-container bg-tertiary-container rounded-xl p-3 flex items-start gap-2">
+              <Info className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />{st.hint}
+            </p>
+          ))}
+        </div>
+      )}
+      {savingLines.length === 0 && suggestions.length === 0 && <p className="text-sm text-on-surface-variant py-3">Rien à placer ce mois-ci.</p>}
+
+      {transferLines.length > 0 && (
+        <>
+          <div className="mt-6 flex items-baseline justify-between gap-3 border-b border-outline-variant pb-2">
+            <h4 className="text-sm font-medium text-on-surface flex items-center gap-2"><ArrowRightLeft className="w-4 h-4 text-on-surface-variant" aria-hidden="true" /> Avant l'épargne : les virements de la paie</h4>
+            <MoneyText value={transferTotal} className="text-sm font-medium text-on-surface" />
+          </div>
+          <ul className="divide-y divide-outline-variant">
+            {transferLines.map(renderLine)}
+          </ul>
+          <p className="text-xs text-on-surface-variant mt-1">Ajoutez une charge fixe par virement sortant (ex. « Revolut commun »), sans détailler ce qu'elle paie.</p>
+        </>
+      )}
 
       {shortfall > 0 && (
-        <p className="mt-3 text-xs font-bold text-rose-700 flex items-center gap-1"><Info className="w-3.5 h-3.5" /> Il manque {formatEUR(shortfall)} : les virements et l'épargne prévus dépassent la paie.</p>
+        <p role="status" className="mt-4 text-sm font-medium text-error flex items-center gap-2"><Info className="w-4 h-4 shrink-0" aria-hidden="true" /> Il manque {formatEUR(shortfall)} : les virements et l'épargne prévus dépassent la paie.</p>
       )}
       {frozen && doneCount === 0 && (
-        <button type="button" onClick={() => onChange(undefined)} className="mt-3 text-xs font-bold text-indigo-600 hover:underline flex items-center gap-1">
-          <RotateCcw className="w-3 h-3" /> Recalculer le plan sur les soldes actuels
+        <button type="button" onClick={() => onChange(undefined)} className="mt-4 h-10 px-3 -ml-3 rounded-full text-sm font-medium text-indigo-700 dark:text-indigo-200 hover:bg-indigo-600/8 inline-flex items-center gap-2">
+          <RotateCcw className="w-4 h-4" aria-hidden="true" /> Recalculer le plan sur les soldes actuels
         </button>
       )}
       {frozen && doneCount > 0 && (
-        <p className="mt-3 text-[11px] text-slate-500 dark:text-slate-400">Plan figé pour la paie de {periodLabel} depuis le premier virement coché. Il repartira des soldes du moment à la prochaine paie.</p>
+        <p className="mt-4 text-xs text-on-surface-variant">Plan figé pour la paie de {periodLabel} depuis le premier virement coché. Il repartira des soldes du moment à la prochaine paie.</p>
       )}
 
       {children}
-    </div>
+    </Card>
   );
 };

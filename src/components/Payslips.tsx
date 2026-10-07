@@ -5,7 +5,6 @@
 // via l'API Gemini, à la demande explicite (chaque clic consomme le quota de l'utilisateur).
 // ================================================
 import React, { useMemo, useState } from 'react';
-import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend } from 'recharts';
 import { PayslipRecord, PayslipExtractedData } from '../types';
 import { openDrivePicker, downloadFileAsBase64 } from '../services/googleDriveService';
 import { extractPayslipData, GeminiError } from '../services/geminiService';
@@ -13,6 +12,10 @@ import { parseFrenchNumber } from '../lib/numbers';
 import { FileText, Upload, Sparkles, Trash2, ExternalLink, AlertTriangle, Check, X, Loader2, KeyRound, TrendingUp, Wand2 } from 'lucide-react';
 import { formatEUR, formatPeriod } from '../lib/format';
 import { useIsDark, chartTheme } from '../lib/chartTheme';
+import { describeEvolution } from '../lib/chartData';
+import { AreaSeriesChart, type AreaRow } from './charts/AreaSeriesChart';
+import { ChartFrame } from './charts/ChartFrame';
+import { DataTable, type Column } from './ui/DataTable';
 
 interface PayslipsProps {
   payslips: PayslipRecord[];
@@ -106,6 +109,12 @@ export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, 
       .sort((a, b) => a.period.localeCompare(b.period))
       .map(p => ({ ...p, label: monthLabel(p.period) })),
     [payslips]);
+  const netRows = useMemo<AreaRow[]>(() => chartData.map(p => ({ label: p.label, title: formatPeriod(p.period), net: p.net })), [chartData]);
+  const netColumns: Column<(typeof chartData)[number]>[] = [
+    { key: 'period', header: 'Mois', cell: p => formatPeriod(p.period) },
+    { key: 'net', header: 'Net', numeric: true, cell: p => fmt(p.net) },
+    { key: 'brut', header: 'Brut', numeric: true, cell: p => fmt(p.brut) },
+  ];
 
   const handlePick = async () => {
     if (!pickerApiKey) return;
@@ -310,24 +319,15 @@ export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, 
 
       {/* --- ÉVOLUTION DU NET --- */}
       {chartData.length >= 2 && !draft && (
-        <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xs">
-          <h3 className="font-black text-slate-800 dark:text-slate-100 flex items-center gap-2 mb-4"><TrendingUp className="w-5 h-5 text-indigo-600" /> Évolution du net</h3>
-          <div className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="gNet" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={t.brand} stopOpacity={0.6} /><stop offset="95%" stopColor={t.brand} stopOpacity={0.05} /></linearGradient>
-                </defs>
-                <XAxis dataKey="label" tick={{ fontSize: 11, fill: t.tick }} stroke={t.grid} />
-                <YAxis tickFormatter={(v) => formatEUR(v, 0)} tick={{ fontSize: 11, fill: t.tick }} stroke={t.grid} />
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={t.grid} />
-                <RechartsTooltip formatter={(v, name) => [fmt(Number(v)), name === 'net' ? 'Net' : 'Brut']} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', background: t.tooltipBg, color: t.tooltipText }} labelStyle={{ color: t.tooltipLabel, fontWeight: 700 }} labelFormatter={(l) => formatPeriod(String(l))} />
-                <Legend formatter={(v) => (v === 'net' ? 'Net' : 'Brut')} wrapperStyle={{ fontSize: 12 }} />
-                <Area type="monotone" dataKey="net" stroke={t.brand} fill="url(#gNet)" strokeWidth={2} />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
+        <section aria-labelledby="payslips-net-title" className="bg-surface-container-lowest dark:bg-surface-container-low p-5 sm:p-6 rounded-2xl border border-outline-variant">
+          <h3 id="payslips-net-title" className="text-base font-medium text-on-surface flex items-center gap-2 mb-2"><TrendingUp className="w-5 h-5 text-indigo-600 dark:text-indigo-300" aria-hidden="true" /> Évolution du net</h3>
+          <ChartFrame
+            summary={describeEvolution('Votre salaire net', chartData[0].net, chartData[chartData.length - 1].net, chartData[0].period, chartData[chartData.length - 1].period, 'm')}
+            table={<DataTable caption="Salaire net et brut, fiche par fiche" columns={netColumns} rows={chartData} rowKey={p => p.period} />}
+          >
+            <AreaSeriesChart data={netRows} series={[{ key: 'net', label: 'Net', color: t.brand }]} />
+          </ChartFrame>
+        </section>
       )}
 
       {/* --- HISTORIQUE --- */}

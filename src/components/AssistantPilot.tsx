@@ -1,5 +1,5 @@
 // src/components/AssistantPilot.tsx
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useId } from 'react';
 import { SavingsAccount, Expense, AccountType, FiscalConfig, WorkBenefits, PayslipRecord, Subscription, PayChecklist as PayChecklistData } from '../types';
 import { PayChecklist } from './PayChecklist';
 import { SavingsSplitEditor } from './SavingsSplitEditor';
@@ -8,10 +8,16 @@ import { parseISODate } from '../lib/dates';
 import { parseFrenchNumber, safeNumber } from '../lib/numbers';
 import { NumberInput } from './NumberInput';
 import { isBackendEnabled } from '../services/backendService';
-import { Calculator, TrendingUp, Lock, Unlock, Info, Plus, Trash2, Hourglass, Coins, BarChart3, X, Check, FileCheck2, Wand2, BellRing } from 'lucide-react';
+import { Calculator, Receipt, Info, Plus, Trash2, Coins, FileCheck2, Wand2, BellRing, PieChart, SlidersHorizontal, Sigma } from 'lucide-react';
 import { formatEUR, formatPeriod, formatRate } from '../lib/format';
 import { useUndoableRemove } from './Toast';
-import { onTablistKeyDown } from '../lib/tablist';
+import { buildWaterfall, heroContext, AmountSource } from '../lib/pilotView';
+import { Button, MoneyText, PageHeader, StatTile, Tabs, TextField, fieldClass } from './ui';
+import { Disclosure } from './pilot/Disclosure';
+import { BudgetWaterfall } from './pilot/BudgetWaterfall';
+import { BookletFill } from './pilot/BookletFill';
+import { SurvivalCard } from './pilot/SurvivalCard';
+import { FiscalClock } from './pilot/FiscalClock';
 
 
 interface AssistantPilotProps {
@@ -189,7 +195,9 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
     // que la notification, la relance, l'agenda et la jauge du mois).
     const finalCapacity = manualParsed ?? paydayAmount ?? theoreticalCapacity;
     const totalToInvest = Math.max(0, finalCapacity + externalSavings);
-    return { totalFixed, subscriptionsFixed, theoreticalCapacity, finalCapacity, totalToInvest };
+    // Pour l'affichage seulement : d'où vient le montant retenu.
+    const source: AmountSource = manualParsed !== null ? 'manual' : paydayAmount !== undefined ? 'payday' : 'calc';
+    return { manualFixed, totalFixed, subscriptionsFixed, theoreticalCapacity, finalCapacity, totalToInvest, source };
   }, [effectiveSuperNetForCalc, expenses, subscriptionCharges, leisureBudget, projectSavings, manualSavingsCapacity, externalSavings, paydayAmount]);
 
   const payTransfers = useMemo(
@@ -240,10 +248,7 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
     // version omettait years/months/days/monthlyBurn et l'écran affichait littéralement
     // "m j" et "Avec € de charges fixes".
     if (monthlyBurn === 0) {
-      return {
-        infinite: true, years: 0, months: 0, days: 0, monthlyBurn: 0, totalMonths: Infinity,
-        color: "text-slate-500 dark:text-slate-400", bg: "bg-slate-50 dark:bg-slate-900", border: "border-slate-200 dark:border-slate-700",
-      };
+      return { infinite: true, years: 0, months: 0, days: 0, monthlyBurn: 0, totalMonths: Infinity };
     }
 
     const totalMonths = liquidMoney / monthlyBurn;
@@ -251,11 +256,7 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
     const months = Math.floor(totalMonths % 12);
     const days = Math.floor((totalMonths * 30) % 30);
 
-    let color = 'text-emerald-700 dark:text-emerald-300'; let border = 'border-emerald-200 dark:border-emerald-900'; let bg = 'bg-emerald-50 dark:bg-emerald-950/30';
-    if (totalMonths < 3) { color = 'text-rose-700 dark:text-rose-300'; border = 'border-rose-200 dark:border-rose-900'; bg = 'bg-rose-50 dark:bg-rose-950/30'; }
-    else if (totalMonths < 6) { color = 'text-orange-700 dark:text-orange-300'; border = 'border-orange-200 dark:border-orange-900'; bg = 'bg-orange-50 dark:bg-orange-950/30'; }
-
-    return { infinite: false, years, months, days, color, border, bg, monthlyBurn, totalMonths };
+    return { infinite: false, years, months, days, monthlyBurn, totalMonths };
   }, [accounts, budgetData.totalFixed]);
 
   const fiscalClock = useMemo(() => {
@@ -292,283 +293,335 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
     }).filter(item => item !== null);
   }, [accounts, fiscalConfig]);
 
-  return (
-    <div className="space-y-8 animate-fade-in pb-20">
-      <h2 className="sr-only">Pilotage</h2>
-      <div role="tablist" onKeyDown={onTablistKeyDown} aria-label="Pilotage" className="flex gap-4 border-b border-slate-200 dark:border-slate-700">
-        <button role="tab" aria-selected={activeTab === 'budget'} tabIndex={activeTab === 'budget' ? 0 : -1} onClick={() => setActiveTab('budget')} className={`pb-2 px-4 font-bold text-sm ${activeTab === 'budget' ? 'text-indigo-700 dark:text-indigo-300 border-b-2 border-indigo-600' : 'text-slate-600 dark:text-slate-300'}`}>Pilotage budgétaire</button>
-        <button role="tab" aria-selected={activeTab === 'fiscal'} tabIndex={activeTab === 'fiscal' ? 0 : -1} onClick={() => setActiveTab('fiscal')} className={`pb-2 px-4 font-bold text-sm ${activeTab === 'fiscal' ? 'text-indigo-700 dark:text-indigo-300 border-b-2 border-indigo-600' : 'text-slate-600 dark:text-slate-300'}`}>Horloge fiscale</button>
+
+  // Montant à placer : expliqué en une phrase (hero) puis ligne par ligne (D'où vient ce chiffre).
+  const payLabel = display.isReal
+    ? (effectiveSuperNet === undefined ? 'Paie nette du mois (estimation)' : 'Net réel perçu (fiche de paie)')
+    : 'Paie nette du mois, après impôt';
+  const waterfall = useMemo(() => buildWaterfall({
+    pay: effectiveSuperNetForCalc,
+    payLabel,
+    manualFixed: budgetData.manualFixed,
+    subscriptionsFixed: budgetData.subscriptionsFixed,
+    leisureBudget,
+    projectSavings,
+    theoreticalCapacity: budgetData.theoreticalCapacity,
+    source: budgetData.source,
+    retained: budgetData.finalCapacity,
+    externalSavings,
+    totalToInvest: budgetData.totalToInvest,
+  }), [effectiveSuperNetForCalc, payLabel, budgetData, leisureBudget, projectSavings, externalSavings]);
+  const heroSentence = heroContext({
+    pay: effectiveSuperNetForCalc,
+    source: budgetData.source,
+    theoreticalCapacity: budgetData.theoreticalCapacity,
+    externalSavings,
+    totalToInvest: budgetData.totalToInvest,
+    finalCapacity: budgetData.finalCapacity,
+  });
+  const shortfall = Math.max(0, -budgetData.finalCapacity, -budgetData.theoreticalCapacity, paydayAmount !== undefined && manualSavingsCapacity === null ? paydayAmount - Math.max(0, budgetData.theoreticalCapacity) : 0);
+  const customSplit = activeSavingsSplit({ savingsSplit, savingsSplitFrom }) !== undefined;
+  const plannedSpending = budgetData.totalFixed + leisureBudget + projectSavings;
+  const paydaySelectId = useId();
+
+  const readOnlyValue = (label: string, value: React.ReactNode) => (
+    <div>
+      <p className="text-sm font-medium text-on-surface-variant mb-1.5">{label}</p>
+      <p className="h-14 px-4 flex items-center rounded-xs bg-surface-container text-base text-on-surface tabular-nums">{value}</p>
+    </div>
+  );
+  const detailRow = (label: React.ReactNode, value: React.ReactNode, strong = false, ruled = strong) => (
+    <div className={`flex justify-between gap-4 py-1.5 ${strong ? 'font-medium text-on-surface' : 'text-on-surface-variant'} ${ruled ? 'border-t border-outline-variant mt-1 pt-2' : ''}`}>
+      <dt>{label}</dt>
+      <dd className="tabular-nums text-right whitespace-nowrap text-on-surface">{value}</dd>
+    </div>
+  );
+
+  const budgetTab = (
+    <div className="space-y-6">
+      {/* a. La réponse : combien placer ce mois-ci. */}
+      <section aria-label="À placer ce mois" className="rounded-3xl bg-secondary-container p-6 sm:p-8">
+        <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-6">
+          <StatTile size="hero" label="À placer ce mois" value={<MoneyText value={budgetData.totalToInvest} />} />
+          <dl className="grid grid-cols-2 gap-x-8 gap-y-1 text-sm">
+            <dt className="text-on-surface-variant">Paie du mois</dt>
+            <dt className="text-on-surface-variant">Dépenses prévues</dt>
+            <dd className="text-lg text-on-surface"><MoneyText value={effectiveSuperNetForCalc} decimals={0} /></dd>
+            <dd className="text-lg text-on-surface"><MoneyText value={plannedSpending} decimals={0} /></dd>
+          </dl>
+        </div>
+        <p className="mt-4 text-sm text-on-surface-variant max-w-2xl">{heroSentence}</p>
+      </section>
+
+      {/* b. Où le placer, virement par virement. */}
+      <PayChecklist
+        superNet={effectiveSuperNetForCalc}
+        transfers={payTransfers}
+        steps={strategy}
+        totalToInvest={budgetData.totalToInvest}
+        shortfall={shortfall}
+        checklist={payChecklist}
+        onChange={onPayChecklistChange}
+        onRecordDeposit={onRecordPayDeposit}
+        onCancelDeposit={onCancelPayDeposit}
+        paydayDay={paydayDay}
+        customSplit={customSplit}
+      />
+
+      {/* c. D'où vient ce chiffre. */}
+      <Disclosure title="D'où vient ce chiffre" icon={Sigma} summary={<MoneyText value={budgetData.totalToInvest} />}>
+        <BudgetWaterfall rows={waterfall} />
+        <p className="mt-3 text-xs text-on-surface-variant">Le détail de votre salaire (brut, charges, impôt) et tous les montants se règlent dans « Mes paramètres », plus bas.</p>
+      </Disclosure>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <BookletFill booklets={bookletStats} />
+        <SurvivalCard survival={survival} />
       </div>
 
-      {activeTab === 'budget' && (
-        <>
-          <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xs">
-            <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-2"><Calculator className="w-5 h-5 text-indigo-600" /> Revenus et salaire</h3>
+      {/* d. Les réglages, repliés par groupe. */}
+      <section aria-labelledby="pilot-settings-title" className="pt-2">
+        <h3 id="pilot-settings-title" className="text-lg font-medium text-on-surface flex items-center gap-2"><SlidersHorizontal className="w-5 h-5 text-indigo-600 dark:text-indigo-300" aria-hidden="true" /> Mes paramètres</h3>
+        <p className="text-sm text-on-surface-variant mt-1 mb-4">Salaire, charges et budgets : le montant à placer se recalcule dès que vous les modifiez.</p>
+        <div className="rounded-2xl border border-outline-variant bg-surface-container-lowest dark:bg-surface-container-low divide-y divide-outline-variant overflow-hidden">
 
+          <Disclosure appearance="plain" headingLevel={4} title="Revenus et salaire" icon={Calculator} summary={effectiveSuperNet === undefined ? '—' : `${formatEUR(effectiveSuperNet, 0)} nets par mois`}>
             {activePayslip && (
-              <div className="mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-xl p-3">
-                <div className="flex items-center gap-2 text-amber-800 dark:text-amber-300 text-xs font-bold">
-                  <FileCheck2 className="w-4 h-4 shrink-0" />
+              <div className="mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl bg-tertiary-container text-on-tertiary-container p-3">
+                <p className="flex items-start gap-2 text-sm">
+                  <FileCheck2 className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />
                   Chiffres exacts de votre fiche de {activePayslip.extracted.period ? formatPeriod(activePayslip.extracted.period) : 'paie'} ({activePayslip.extracted.employer || activePayslip.fileName}) — recopiés tels quels, sans calcul.
-                </div>
-                <button onClick={onClearActivePayslip} className="flex items-center gap-1 text-xs font-bold text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900 px-3 py-1.5 rounded-lg shrink-0"><Wand2 className="w-3.5 h-3.5" /> Repasser en estimation</button>
+                </p>
+                <Button variant="text" onClick={onClearActivePayslip} className="shrink-0"><Wand2 className="w-4 h-4" aria-hidden="true" /> Repasser en estimation</Button>
               </div>
             )}
 
             {activePayslip && display.effectiveMonthlyTax === undefined && (
-              <div className="mb-4 text-xs text-rose-700 dark:text-rose-400 font-bold flex items-center gap-2">
-                <Info className="w-3.5 h-3.5 shrink-0" />
-                Cette fiche n'a pas encore l'impôt réellement prélevé / le net payé (extraite avant l'ajout de ces champs) : "Net réel perçu" affiche "—" plutôt qu'une estimation. Réimportez-la depuis Drive pour compléter.
-              </div>
+              <p className="mb-4 text-sm text-error flex items-start gap-2">
+                <Info className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />
+                Cette fiche n'a pas encore l'impôt réellement prélevé / le net payé (extraite avant l'ajout de ces champs) : « Net réel perçu » affiche « — » plutôt qu'une estimation. Réimportez-la depuis Drive pour compléter.
+              </p>
             )}
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-              <div className="bg-slate-50 dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-700"><label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Brut annuel</label><NumberInput ariaLabel="Brut annuel" value={Math.round(grossAnnual)} onChange={updateFromGrossAnnual} min={0} suffix="€" className="w-full bg-transparent font-black text-slate-800 dark:text-slate-100 text-lg outline-hidden" /></div>
-              <div className="bg-slate-50 dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
-                <label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Brut mensuel</label>
-                {activePayslip
-                  ? <p className="font-black text-slate-800 dark:text-slate-100 text-lg">{showEUR(display.grossMonth)}</p>
-                  : <NumberInput value={Math.round(autoValues.grossMonth)} onChange={updateFromGrossMonth} min={0} className="w-full bg-transparent font-black text-slate-800 dark:text-slate-100 text-lg outline-hidden" />}
-              </div>
-              <div className="bg-indigo-50 dark:bg-indigo-950/40 p-3 rounded-xl border border-indigo-100 dark:border-indigo-900">
-                <label className="text-[11px] font-black text-indigo-600 dark:text-indigo-400 uppercase">Net avant impôt</label>
-                {activePayslip
-                  ? <p className="font-black text-indigo-700 dark:text-indigo-300 text-lg">{showEUR(display.netBeforeTax)}</p>
-                  : <NumberInput value={Math.round(autoValues.netBeforeTax * 100)/100} onChange={updateFromNet} min={0} className="w-full bg-transparent font-black text-indigo-700 dark:text-indigo-300 text-lg outline-hidden" />}
-              </div>
-              <div className="bg-emerald-50 dark:bg-emerald-950/40 p-3 rounded-xl border border-emerald-100 dark:border-emerald-900 relative">
-                <label className="text-[11px] font-black text-emerald-700 dark:text-emerald-400 uppercase flex items-center gap-1">{activePayslip ? 'Net réel perçu' : 'Reste à vivre'}</label>
-                <button type="button" onClick={() => setShowDetails(!showDetails)} aria-expanded={showDetails} className="absolute top-2 right-2 text-[11px] font-bold text-emerald-800 dark:text-emerald-300 underline flex items-center gap-1"><Info className="w-3 h-3" aria-hidden="true" /> {showDetails ? 'Masquer' : 'Voir le détail'}</button>
-                <p className="font-black text-emerald-700 dark:text-emerald-300 text-2xl">{showEUR(effectiveSuperNet)}</p>
-              </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <TextField label="Brut annuel" render={p => <NumberInput id={p.id} describedBy={p.describedBy} invalid={p.invalid} value={Math.round(grossAnnual)} onChange={updateFromGrossAnnual} min={0} suffix="€" className={`${p.className} tabular-nums`} />} />
+              {activePayslip
+                ? readOnlyValue('Brut mensuel', showEUR(display.grossMonth))
+                : <TextField label="Brut mensuel" render={p => <NumberInput id={p.id} describedBy={p.describedBy} invalid={p.invalid} value={Math.round(autoValues.grossMonth)} onChange={updateFromGrossMonth} min={0} suffix="€" className={`${p.className} tabular-nums`} />} />}
+              {activePayslip
+                ? readOnlyValue('Net avant impôt', showEUR(display.netBeforeTax))
+                : <TextField label="Net avant impôt" render={p => <NumberInput id={p.id} describedBy={p.describedBy} invalid={p.invalid} value={Math.round(autoValues.netBeforeTax * 100) / 100} onChange={updateFromNet} min={0} suffix="€" className={`${p.className} tabular-nums`} />} />}
+              {readOnlyValue(activePayslip ? 'Net réel perçu' : 'Reste à vivre', showEUR(effectiveSuperNet))}
             </div>
+
+            <button
+              type="button"
+              onClick={() => setShowDetails(!showDetails)}
+              aria-expanded={showDetails}
+              aria-controls="pilot-salary-detail"
+              className="mt-3 h-10 px-3 -ml-3 rounded-full text-sm font-medium text-indigo-700 dark:text-indigo-200 hover:bg-indigo-600/8 inline-flex items-center gap-2"
+            >
+              <Info className="w-4 h-4" aria-hidden="true" /> {showDetails ? 'Masquer le détail du salaire' : 'Voir le détail du salaire'}
+            </button>
 
             {showDetails && (
-              <div className="bg-white dark:bg-slate-800 p-4 rounded-xl text-xs space-y-3 border border-slate-200 dark:border-slate-700 animate-in slide-in-from-top-2 shadow-inner mb-4">
-                 <div className="flex justify-between font-bold border-b pb-1"><span>Salaire brut mensuel</span> <span>{showEUR(display.grossMonth)}</span></div>
-                 <div className="flex justify-between text-rose-700 dark:text-rose-300"><span>Charges salariales{!activePayslip && ` (${formatRate(Math.round(fiscalConfig.salaryChargesRate*10000)/100)})`}</span> <span>- {showEUR(display.socialCharges)}</span></div>
-                 <div className="flex justify-between text-emerald-700 dark:text-emerald-400"><span>Remboursement Navigo</span> <span>+ {showEUR(display.navigoGain)}</span></div>
-                 {(activePayslip ? display.mutuelleCost !== undefined : workBenefits.mutuelle.active) && <div className="flex justify-between text-rose-700 dark:text-rose-300"><span>Mutuelle (part salarié)</span><span>- {showEUR(display.mutuelleCost)}</span></div>}
-                 {(activePayslip ? display.swileCost !== undefined : workBenefits.mealVouchers.active) && <div className="flex justify-between text-rose-700 dark:text-rose-300"><span>Titres-restaurant (part salarié)</span><span>- {showEUR(display.swileCost)}</span></div>}
-                 <div className="flex justify-between font-bold text-indigo-700 dark:text-indigo-300 pt-1 border-t border-slate-100 dark:border-slate-800"><span>= Net cash avant impôt</span> <span>{showEUR(display.superNetRaw)}</span></div>
-                 <div className="bg-amber-50 dark:bg-amber-950/30 p-2 rounded-lg border border-amber-100 dark:border-amber-900">
-                    <div className="flex justify-between items-center mb-2"><span className="text-amber-800 dark:text-amber-300 font-bold">{activePayslip ? 'Impôt réellement prélevé' : 'Impôt à la source'}</span><span className="text-amber-700 dark:text-amber-400 font-mono font-black">- {showEUR(display.effectiveMonthlyTax)}</span></div>
-                    {activePayslip ? (
-                      <p className="text-[11px] text-slate-500 dark:text-slate-400">Taux réel constaté : <strong>{display.autoRate !== undefined ? formatRate(Math.round(display.autoRate*10)/10) : '—'}</strong> (montant tel que retenu sur la fiche, pas une estimation)</p>
-                    ) : (
-                    <div className="flex items-center justify-between text-[11px] gap-2">
-                        <div className="flex flex-col"><span className="text-slate-500 dark:text-slate-400">Taux du barème (Auto) : <strong>{formatRate(Math.round(autoValues.autoRate*10)/10)}</strong></span>{taxRateManual > 0 && <span className="text-amber-700 dark:text-amber-400">Force à : <strong>{formatRate(taxRateManual)}</strong></span>}</div>
-                        <div className="flex items-center gap-1"><label className="text-slate-500 dark:text-slate-400">Forcer taux :</label><NumberInput ariaLabel="Forcer taux :" value={taxRateManual} onChange={setTaxRateManual} min={0} className="w-12 p-1 text-right bg-white dark:bg-slate-800 border border-amber-200 rounded-sm font-bold outline-hidden" placeholder="Auto"/><span className="text-slate-500 dark:text-slate-400">%</span></div>
+              <div id="pilot-salary-detail" className="mt-2 rounded-xl bg-surface-container p-4 text-sm max-w-xl">
+                <dl>
+                  {detailRow('Salaire brut mensuel', showEUR(display.grossMonth), true, false)}
+                  {detailRow(<>Charges salariales{!activePayslip && ` (${formatRate(Math.round(fiscalConfig.salaryChargesRate * 10000) / 100)})`}</>, <>− {showEUR(display.socialCharges)}</>)}
+                  {detailRow('Remboursement Navigo', <>+ {showEUR(display.navigoGain)}</>)}
+                  {(activePayslip ? display.mutuelleCost !== undefined : workBenefits.mutuelle.active) && detailRow('Mutuelle (part salarié)', <>− {showEUR(display.mutuelleCost)}</>)}
+                  {(activePayslip ? display.swileCost !== undefined : workBenefits.mealVouchers.active) && detailRow('Titres-restaurant (part salarié)', <>− {showEUR(display.swileCost)}</>)}
+                  {detailRow('= Net cash avant impôt', showEUR(display.superNetRaw), true)}
+                  {detailRow(activePayslip ? 'Impôt réellement prélevé' : 'Impôt à la source', <>− {showEUR(display.effectiveMonthlyTax)}</>)}
+                  {activePayslip && detailRow('= Net réel perçu', showEUR(effectiveSuperNet), true)}
+                </dl>
+                {activePayslip ? (
+                  <p className="mt-3 text-xs text-on-surface-variant">Taux réel constaté : <strong className="font-medium text-on-surface">{display.autoRate !== undefined ? formatRate(Math.round(display.autoRate * 10) / 10) : '—'}</strong> (montant tel que retenu sur la fiche, pas une estimation)</p>
+                ) : (
+                  <div className="mt-3 pt-3 border-t border-outline-variant flex flex-wrap items-end justify-between gap-4">
+                    <div className="text-xs text-on-surface-variant">
+                      <p>Taux du barème (automatique) : <strong className="font-medium text-on-surface">{formatRate(Math.round(autoValues.autoRate * 10) / 10)}</strong></p>
+                      {taxRateManual > 0 && <p className="mt-0.5">Taux forcé à : <strong className="font-medium text-on-surface">{formatRate(taxRateManual)}</strong></p>}
                     </div>
-                    )}
-                 </div>
-                 {activePayslip && <div className="flex justify-between font-bold text-emerald-700 pt-1 border-t border-slate-100 dark:border-slate-800"><span>= Net réel perçu</span> <span>{showEUR(effectiveSuperNet)}</span></div>}
+                    <TextField
+                      label="Forcer le taux (%)"
+                      supporting="0 = automatique"
+                      className="w-44"
+                      render={p => <NumberInput id={p.id} describedBy={p.describedBy} invalid={p.invalid} value={taxRateManual} onChange={setTaxRateManual} min={0} suffix="%" placeholder="Auto" className={`${p.className} tabular-nums`} />}
+                    />
+                  </div>
+                )}
               </div>
             )}
-          </div>
+          </Disclosure>
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-1 bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xs">
-              <div className="flex justify-between items-center mb-4">
-                  <h4 className="font-bold text-slate-700 dark:text-slate-200 flex items-center gap-2"><TrendingUp className="w-4 h-4 text-rose-500"/> Charges fixes</h4>
-                  <button onClick={() => setIsAddingExpense(true)} aria-label="Ajouter une charge fixe" className="p-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-sm hover:bg-slate-200 dark:hover:bg-slate-600"><Plus className="w-4 h-4"/></button>
-              </div>
-              
-              {/* Formulaire Ajout Rapide */}
-              {isAddingExpense && (
-                  <div className="bg-indigo-50 dark:bg-indigo-950/30 p-2 rounded-lg mb-2 flex flex-col gap-2">
-                      <input type="text" aria-label="Nom de la charge" placeholder="Loyer" className="p-2 rounded-sm text-sm border border-indigo-100 dark:border-indigo-900 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100" value={newExpenseName} onChange={e => setNewExpenseName(e.target.value)} autoFocus />
-                      <div className="flex gap-1">
-                          <input type="text" inputMode="decimal" aria-label="Montant mensuel" placeholder="750" className="p-2 rounded-sm text-sm border border-indigo-100 dark:border-indigo-900 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 w-24" value={newExpenseAmount} onChange={e => setNewExpenseAmount(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') handleAddExpense(); }} />
-                          <button onClick={handleAddExpense} aria-label="Ajouter la charge" className="flex-1 bg-indigo-600 text-white rounded-sm flex items-center justify-center"><Check className="w-4 h-4"/></button>
-                          <button onClick={() => setIsAddingExpense(false)} aria-label="Annuler" className="bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-sm px-2"><X className="w-4 h-4"/></button>
-                      </div>
-                  </div>
+          <Disclosure appearance="plain" headingLevel={4} title="Charges fixes et abonnements" icon={Receipt} summary={`${formatEUR(budgetData.totalFixed, 0)} par mois`}>
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
+              <h5 className="text-sm font-medium text-on-surface">Charges saisies</h5>
+              {!isAddingExpense && (
+                <Button variant="tonal" onClick={() => setIsAddingExpense(true)} className="h-9 px-4"><Plus className="w-4 h-4" aria-hidden="true" /> Ajouter une charge fixe</Button>
               )}
+            </div>
 
-              <div className="space-y-2 max-h-60 overflow-y-auto pr-2">
-                  {expenses.map(e => (
-                      <div key={e.id} className="flex justify-between items-center text-sm p-2 bg-slate-50 dark:bg-slate-900 rounded-sm group gap-2">
-                          <span className="min-w-0 truncate">
-                            {e.name}
-                            {e.paymentMethod && <span className="ml-2 text-[11px] font-bold uppercase text-slate-500 dark:text-slate-400">{e.paymentMethod}</span>}
-                          </span>
-                          <div className="flex items-center gap-1 shrink-0">
-                              <span className="font-mono font-bold">{formatEUR(e.amount)}</span>
-                              {/* Visible en permanence sur tactile (pas de hover sur mobile : sans le
-                                  préfixe `md:`, l'icône restait invisible et la dépense indélétable). */}
-                              <button
-                                type="button"
-                                aria-label={`Supprimer la charge ${e.name}`}
-                                onClick={() => removeWithUndo(expenses, e, onUpdateExpenses, `Charge « ${e.name} » supprimée`)}
-                                className="p-2 -m-1 text-slate-400 hover:text-rose-500 opacity-100 md:opacity-0 md:group-hover:opacity-100 focus:opacity-100 transition-opacity"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                          </div>
-                      </div>
-                  ))}
-                  {expenses.length === 0 && <p className="text-xs text-slate-500 dark:text-slate-400 italic p-2">Aucune charge saisie.</p>}
-              </div>
-              {expenses.some(e => duplicateNames.has(e.id)) && (
-                <p className="mt-2 text-[11px] font-bold text-amber-700 dark:text-amber-400 flex items-start gap-1"><Info className="w-3 h-3 shrink-0 mt-0.5" /> {expenses.filter(e => duplicateNames.has(e.id)).map(e => e.name).join(', ')} : aussi dans vos abonnements, donc compté deux fois. Supprimez la charge saisie.</p>
-              )}
-              <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-700">
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Abonnements (automatique)</p>
-                  <button type="button" onClick={onOpenSubscriptions} className="text-[11px] font-bold text-indigo-600 hover:underline">Gérer</button>
+            {isAddingExpense && (
+              <div className="rounded-xl bg-surface-container p-4 mb-3 grid grid-cols-1 sm:grid-cols-[1fr_10rem] gap-3">
+                <TextField label="Nom de la charge" placeholder="Loyer" value={newExpenseName} onChange={e => setNewExpenseName(e.target.value)} autoFocus />
+                <TextField label="Montant mensuel" inputMode="decimal" placeholder="750" suffix="€" value={newExpenseAmount} onChange={e => setNewExpenseAmount(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') handleAddExpense(); }} />
+                <div className="sm:col-span-2 flex justify-end gap-2">
+                  <Button variant="text" onClick={() => setIsAddingExpense(false)}>Annuler</Button>
+                  <Button onClick={handleAddExpense}>Ajouter la charge</Button>
                 </div>
-                {subscriptionCharges.length > 0 ? (
-                  <div className="space-y-2 max-h-48 overflow-y-auto pr-2">
-                    {subscriptionCharges.map(c => (
-                      <div key={c.id} className="flex justify-between items-center text-sm p-2 bg-indigo-50/60 dark:bg-indigo-950/30 rounded-sm gap-2">
-                        <span className="min-w-0 truncate">
-                          {c.name}
-                          {c.paymentMethod && <span className="ml-2 text-[11px] font-bold uppercase text-slate-500 dark:text-slate-400">{c.paymentMethod}</span>}
-                        </span>
-                        <span className="font-mono font-bold shrink-0">{formatEUR(c.amount)}</span>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-xs text-slate-500 dark:text-slate-400 italic">Aucun abonnement actif.</p>
+              </div>
+            )}
+
+            {expenses.length > 0 ? (
+              <ul className="divide-y divide-outline-variant max-h-72 overflow-y-auto">
+                {expenses.map(e => (
+                  <li key={e.id} className="flex items-center gap-3 py-1.5 text-sm">
+                    <span className="flex-1 min-w-0 truncate text-on-surface">
+                      {e.name}
+                      {e.paymentMethod && <span className="ml-2 text-xs text-on-surface-variant">{e.paymentMethod}</span>}
+                    </span>
+                    <MoneyText value={e.amount} className="text-on-surface" />
+                    <button
+                      type="button"
+                      aria-label={`Supprimer la charge ${e.name}`}
+                      onClick={() => removeWithUndo(expenses, e, onUpdateExpenses, `Charge « ${e.name} » supprimée`)}
+                      className="w-10 h-10 shrink-0 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-on-surface/8 hover:text-error"
+                    >
+                      <Trash2 className="w-4 h-4" aria-hidden="true" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-on-surface-variant py-2">Aucune charge saisie.</p>
+            )}
+            {expenses.some(e => duplicateNames.has(e.id)) && (
+              <p className="mt-2 text-sm text-on-tertiary-container bg-tertiary-container rounded-xl p-3 flex items-start gap-2"><Info className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" /> {expenses.filter(e => duplicateNames.has(e.id)).map(e => e.name).join(', ')} : aussi dans vos abonnements, donc compté deux fois. Supprimez la charge saisie.</p>
+            )}
+
+            <div className="mt-5 flex flex-wrap items-center justify-between gap-3 mb-1">
+              <h5 className="text-sm font-medium text-on-surface">Abonnements (automatique)</h5>
+              <Button variant="text" onClick={onOpenSubscriptions} className="h-9 px-3">Gérer les abonnements</Button>
+            </div>
+            {subscriptionCharges.length > 0 ? (
+              <ul className="divide-y divide-outline-variant max-h-60 overflow-y-auto">
+                {subscriptionCharges.map(c => (
+                  <li key={c.id} className="flex items-center gap-3 py-2.5 text-sm">
+                    <span className="flex-1 min-w-0 truncate text-on-surface">
+                      {c.name}
+                      {c.paymentMethod && <span className="ml-2 text-xs text-on-surface-variant">{c.paymentMethod}</span>}
+                    </span>
+                    <MoneyText value={c.amount} className="text-on-surface pr-3" />
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-on-surface-variant py-2">Aucun abonnement actif.</p>
+            )}
+            <p className="text-xs text-on-surface-variant mt-1">Seuls les abonnements mensuels (et hebdomadaires) comptent ici. Les annuels, semestriels et trimestriels ne font que déclencher un rappel avant le prélèvement.</p>
+
+            <div className="mt-4 pt-3 border-t border-outline-variant flex justify-between gap-3 text-sm font-medium text-on-surface">
+              <span>Total des charges</span>
+              <MoneyText value={budgetData.totalFixed} className="pr-3" />
+            </div>
+          </Disclosure>
+
+          <Disclosure appearance="plain" headingLevel={4} title="Budgets et montant du mois" icon={Coins} summary={`${formatEUR(leisureBudget, 0)} plaisir · ${formatEUR(projectSavings, 0)} projets`}>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <TextField label="Argent plaisir" supporting="Ce qui reste sur le compte courant pour le mois." render={p => <NumberInput id={p.id} describedBy={p.describedBy} invalid={p.invalid} value={leisureBudget} onChange={setLeisureBudget} min={0} suffix="€" className={`${p.className} tabular-nums`} />} />
+              <TextField label="Épargne projets" supporting="Mise de côté pour un projet, avant le placement." render={p => <NumberInput id={p.id} describedBy={p.describedBy} invalid={p.invalid} value={projectSavings} onChange={setProjectSavings} min={0} suffix="€" className={`${p.className} tabular-nums`} />} />
+              <div>
+                <TextField
+                  id="savings-capacity"
+                  label="Capacité d'épargne du mois"
+                  inputMode="decimal"
+                  suffix="€"
+                  className="tabular-nums"
+                  value={manualSavingsCapacity !== null ? manualSavingsCapacity : String(Math.round(paydayAmount ?? budgetData.theoreticalCapacity))}
+                  onChange={e => setManualSavingsCapacity(e.target.value)}
+                  supporting={paydayAmount !== undefined && manualSavingsCapacity === null
+                    ? `Montant fixé dans le rappel de paie (capacité calculée : ${formatEUR(budgetData.theoreticalCapacity, 0)}).`
+                    : `Calculée : ${formatEUR(budgetData.theoreticalCapacity, 0)}. Modifiez-la si ce mois est différent.`}
+                />
+                {manualSavingsCapacity !== null && (
+                  <Button variant="text" onClick={() => setManualSavingsCapacity(null)} className="mt-1 h-9 px-3">Revenir au calcul</Button>
                 )}
-                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">Seuls les abonnements mensuels (et hebdomadaires) comptent ici. Les annuels, semestriels et trimestriels ne font que déclencher un rappel avant le prélèvement.</p>
               </div>
-              <div className="mt-4 pt-4 border-t flex justify-between font-black text-rose-700"><span>Total des charges</span><span>{formatEUR(budgetData.totalFixed)}</span></div>
-            </div>
-
-            <div className="lg:col-span-2 space-y-6">
-              <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xs grid grid-cols-2 gap-4">
-                  <div><label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Argent plaisir</label><NumberInput ariaLabel="Argent plaisir" value={leisureBudget} onChange={setLeisureBudget} min={0} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
-                  <div><label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Épargne projets</label><NumberInput ariaLabel="Épargne projets" value={projectSavings} onChange={setProjectSavings} min={0} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
-              </div>
-
-              <div className="bg-sapin p-6 rounded-2xl shadow-lg text-white grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
-                  <div>
-                      <label htmlFor="savings-capacity" className="text-emerald-100/80 text-xs font-bold uppercase mb-2 block">Capacité d'épargne réelle</label>
-                      <div className="flex items-baseline gap-2">
-                          <input id="savings-capacity" type="text" inputMode="decimal" value={manualSavingsCapacity !== null ? manualSavingsCapacity : String(Math.round(paydayAmount ?? budgetData.theoreticalCapacity))} onChange={(e) => setManualSavingsCapacity(e.target.value)} className="bg-transparent text-5xl font-black text-creme w-40 outline-hidden border-b border-white/30 focus:border-amber-300" />
-                          <span className="text-xl">€</span>
-                      </div>
-                      {paydayAmount !== undefined && manualSavingsCapacity === null && (
-                        <p className="text-[11px] text-emerald-100/80 mt-1">Montant fixé dans le rappel de paie (capacité calculée : {formatEUR(budgetData.theoreticalCapacity, 0)}).</p>
-                      )}
-                  </div>
-                  <div className="bg-white/10 p-4 rounded-xl border border-white/15">
-                      <label className="text-[11px] font-black text-amber-200 uppercase flex items-center gap-2"><Coins className="w-3 h-3" aria-hidden="true" /> Somme en plus à placer ce mois-ci</label>
-                      <NumberInput ariaLabel="Somme en plus à placer ce mois-ci (prime, cadeau…)" value={externalSavings} onChange={setExternalSavings} className="w-full bg-black/20 border border-white/20 rounded-lg p-2 mt-2 text-white font-bold focus:ring-2 focus:ring-amber-300 outline-hidden" />
-                      <p className="text-[11px] text-emerald-100/80 mt-1">Prime, cadeau, remboursement… ajouté au plan de placement.</p>
-                  </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <PayChecklist
-              superNet={effectiveSuperNetForCalc}
-              transfers={payTransfers}
-              steps={strategy}
-              totalToInvest={budgetData.totalToInvest}
-              shortfall={Math.max(0, -budgetData.finalCapacity, -budgetData.theoreticalCapacity, paydayAmount !== undefined && manualSavingsCapacity === null ? paydayAmount - Math.max(0, budgetData.theoreticalCapacity) : 0)}
-              checklist={payChecklist}
-              onChange={onPayChecklistChange}
-              onRecordDeposit={onRecordPayDeposit}
-              onCancelDeposit={onCancelPayDeposit}
-              paydayDay={paydayDay}
-            >
-              <SavingsSplitEditor
-                accounts={accounts}
-                split={savingsSplit}
-                from={savingsSplitFrom}
-                sampleAmount={budgetData.totalToInvest}
-                fiscalConfig={fiscalConfig}
-                onChange={onSavingsSplitChange}
+              <TextField
+                label="Somme en plus à placer ce mois-ci"
+                supporting="Prime, cadeau, remboursement… ajouté au plan de placement."
+                render={p => <NumberInput id={p.id} describedBy={p.describedBy} invalid={p.invalid} value={externalSavings} onChange={setExternalSavings} suffix="€" className={`${p.className} tabular-nums`} />}
               />
-               {isBackendEnabled() && (
-                 <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-700 space-y-3">
-                   <p className="text-sm font-bold text-slate-700 dark:text-slate-200 flex items-center gap-2"><BellRing className="w-4 h-4 text-indigo-600" /> Rappel le jour de paie</p>
-                   <div className="flex flex-wrap items-center gap-3">
-                     <select
-                       value={paydayDay ?? ''}
-                       onChange={(e) => setPaydayDay(e.target.value ? Number(e.target.value) : undefined)}
-                       className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-lg p-2 text-sm font-bold text-slate-700 dark:text-slate-200"
-                     >
-                       <option value="">Désactivé</option>
-                       {Array.from({ length: 31 }, (_, i) => i + 1).map(d => <option key={d} value={d}>Le {d} du mois</option>)}
-                     </select>
-                     {paydayDay !== undefined && (
-                       <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
-                         Montant
-                         <input
-                           type="text"
-                           inputMode="decimal"
-                           value={paydayAmountDraft}
-                           placeholder={`${formatEUR(Math.max(0, budgetData.theoreticalCapacity), 0)} (calculé)`}
-                           onChange={(e) => {
-                             setPaydayAmountDraft(e.target.value);
-                             const v = e.target.value.trim() === '' ? undefined : parseFrenchNumber(e.target.value);
-                             if (v === undefined) setPaydayAmount(undefined);
-                             else if (v !== null && v >= 0) setPaydayAmount(v);
-                           }}
-                           className="w-32 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-lg p-2 font-bold text-slate-700 dark:text-slate-200"
-                         />
-                         €
-                       </label>
-                     )}
-                   </div>
-                   <p className="text-xs text-slate-500 dark:text-slate-400">
-                     Une notification ce jour-là avec la répartition ci-dessus, recalculée sur vos soldes du moment. Sans montant saisi, c'est la capacité d'épargne calculée qui est utilisée. Les notifications doivent être activées sur l'appareil (Paramètres).
-                   </p>
-                 </div>
-               )}
-            </PayChecklist>
-
-            <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xs space-y-6">
-               <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-2 flex items-center gap-2"><BarChart3 className="w-5 h-5 text-indigo-600" /> Remplissage des livrets</h3>
-               {bookletStats.map(b => (<div key={b.id} className="space-y-2"><div className="flex justify-between text-sm font-bold text-slate-700 dark:text-slate-200"><span>{b?.name}</span><span>{Math.round(b?.totalPct || 0)}%</span></div><div className="w-full h-3 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden flex"><div className="h-full bg-amber-400" style={{ width: `${b?.parentPct}%` }} title={`Parents : ${formatEUR(b?.parentAmount || 0)}`}></div><div className="h-full bg-indigo-600" style={{ width: `${b?.ownedPct}%` }} title={`Moi : ${formatEUR(b?.ownedAmount || 0)}`}></div></div><div className="flex justify-between text-[11px] text-slate-500 dark:text-slate-400 font-bold">{b.parentAmount > 0 && <span className="text-amber-700 dark:text-amber-400">Parents {formatEUR(b.parentAmount)}</span>}<span className="text-indigo-600">Moi {formatEUR(b?.ownedAmount || 0)}</span>{b.parentAmount > 0 && b.ownedAmount > 0 && <span className="text-slate-600 dark:text-slate-300">Total {formatEUR(b.parentAmount + b.ownedAmount)}</span>}<span>Max {formatEUR(b?.ceiling || 0)}</span></div>{b.monthsToFull !== null && <p className="text-[11px] text-slate-500 dark:text-slate-400">Plein dans ~{b.monthsToFull} mois au rythme actuel</p>}{b.totalPct >= 100 && <p className="text-[11px] font-bold text-emerald-700 dark:text-emerald-400">Plein</p>}</div>))}
             </div>
-          </div>
+          </Disclosure>
 
-          <div className={`p-8 rounded-3xl border-2 shadow-xs text-center transition-colors ${survival.bg} ${survival.border}`}>
-            <h3 className="text-sm font-black uppercase tracking-widest opacity-60 mb-4 flex justify-center items-center gap-2"><Hourglass className="w-4 h-4" /> Durée de survie</h3>
-            <div className={`text-6xl font-black ${survival.color} mb-2`}>{survival.infinite ? '∞' : <>{survival.years > 0 && <span>{survival.years} an{survival.years > 1 ? 's' : ''} </span>}{survival.months} mois{survival.years === 0 && survival.days > 0 && <span className="text-3xl"> {survival.days} j</span>}</>}</div>
-            <p className={`font-bold ${survival.color} opacity-80`}>{survival.infinite ? 'Aucune charge fixe renseignée' : `Sans revenu, avec ${formatEUR(survival.monthlyBurn)} de charges fixes par mois`}</p>
-          </div>
-        </>
-      )}
+          <Disclosure appearance="plain" headingLevel={4} title="Répartition de l'épargne" icon={PieChart} summary={customSplit ? 'Personnalisée' : 'Automatique'}>
+            <SavingsSplitEditor
+              accounts={accounts}
+              split={savingsSplit}
+              from={savingsSplitFrom}
+              sampleAmount={budgetData.totalToInvest}
+              fiscalConfig={fiscalConfig}
+              onChange={onSavingsSplitChange}
+            />
+          </Disclosure>
 
-      {activeTab === 'fiscal' && (
-        <>
-          {fiscalClock.length > 0 ? (
-            <>
-              <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xs flex flex-wrap items-center gap-x-8 gap-y-2">
+          {isBackendEnabled() && (
+            <Disclosure appearance="plain" headingLevel={4} title="Rappel le jour de paie" icon={BellRing} summary={paydayDay !== undefined ? `Le ${paydayDay} du mois` : 'Désactivé'}>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-xl">
                 <div>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400 uppercase font-bold">Comptes suivis</p>
-                  <p className="font-black text-2xl text-slate-800 dark:text-slate-100">{fiscalClock.length}</p>
+                  <label htmlFor={paydaySelectId} className="block text-sm font-medium text-on-surface-variant mb-1.5">Jour du rappel</label>
+                  <select
+                    id={paydaySelectId}
+                    value={paydayDay ?? ''}
+                    onChange={(e) => setPaydayDay(e.target.value ? Number(e.target.value) : undefined)}
+                    className={`${fieldClass} dark:bg-surface-container-low`}
+                  >
+                    <option value="">Désactivé</option>
+                    {Array.from({ length: 31 }, (_, i) => i + 1).map(d => <option key={d} value={d}>Le {d} du mois</option>)}
+                  </select>
                 </div>
-                <div>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400 uppercase font-bold">Disponibles</p>
-                  <p className="font-black text-2xl text-emerald-700">{fiscalClock.filter((i) => i.isAvailable).length}</p>
-                </div>
-                <div>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400 uppercase font-bold">Encore bloqués</p>
-                  <p className="font-black text-2xl text-indigo-600">{fiscalClock.filter((i) => !i.isAvailable).length}</p>
-                </div>
+                {paydayDay !== undefined && (
+                  <TextField
+                    label="Montant"
+                    inputMode="decimal"
+                    suffix="€"
+                    className="tabular-nums"
+                    value={paydayAmountDraft}
+                    placeholder={`${formatEUR(Math.max(0, budgetData.theoreticalCapacity), 0)} (calculé)`}
+                    onChange={(e) => {
+                      setPaydayAmountDraft(e.target.value);
+                      const v = e.target.value.trim() === '' ? undefined : parseFrenchNumber(e.target.value);
+                      if (v === undefined) setPaydayAmount(undefined);
+                      else if (v !== null && v >= 0) setPaydayAmount(v);
+                    }}
+                  />
+                )}
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {fiscalClock.map((item) => (<div key={item.id} className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xs relative overflow-hidden"><div className={`absolute top-0 right-0 p-16 opacity-5 rounded-full -mr-8 -mt-8 ${item.isAvailable ? 'bg-emerald-500' : 'bg-indigo-500'}`}></div><div className="flex justify-between items-start mb-4"><div className={`p-3 rounded-xl ${item.isAvailable ? 'bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}>{item.isAvailable ? <Unlock className="w-6 h-6" /> : <Lock className="w-6 h-6" />}</div><span className="text-[11px] font-black uppercase bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded-sm text-slate-500 dark:text-slate-400">{item.type}</span></div><h4 className="font-bold text-slate-800 dark:text-slate-100 text-lg mb-1">{item.name}</h4><div className="border-t border-slate-100 dark:border-slate-800 pt-4 mt-4"><div className="flex justify-between items-end"><div><p className="text-[11px] text-slate-500 dark:text-slate-400 uppercase font-bold">Échéance</p><p className="font-bold text-slate-700 dark:text-slate-200">{item.date}</p></div><div className={`text-right font-black text-xl ${item.isAvailable ? 'text-emerald-700' : 'text-indigo-600'}`}>{item.timeLeft}</div></div></div></div>))}
-              </div>
-            </>
-          ) : (
-            <div className="bg-white dark:bg-slate-800 border border-dashed border-slate-200 dark:border-slate-700 rounded-2xl p-12 flex flex-col items-center justify-center text-center gap-2">
-              <Hourglass className="w-8 h-8 text-slate-300 dark:text-slate-600" />
-              <p className="text-slate-500 dark:text-slate-400 font-bold">Aucun compte fiscal à échéance pour l'instant.</p>
-              <p className="text-slate-500 dark:text-slate-400 text-sm">Les PEA, PEE et assurances-vie avec une date d'ouverture apparaîtront ici.</p>
-            </div>
+              <p className="mt-3 text-sm text-on-surface-variant">
+                Une notification ce jour-là avec la répartition ci-dessus, recalculée sur vos soldes du moment. Sans montant saisi, c'est la capacité d'épargne calculée qui est utilisée. Les notifications doivent être activées sur l'appareil (Paramètres).
+              </p>
+            </Disclosure>
           )}
-        </>
-      )}
+        </div>
+      </section>
+    </div>
+  );
+
+  return (
+    <div className="animate-fade-in pb-20">
+      <PageHeader title="Pilotage" subtitle="Combien placer ce mois-ci, sur quels comptes, et pourquoi." />
+      <Tabs
+        label="Pilotage"
+        value={activeTab}
+        onChange={setActiveTab}
+        tabs={[{ value: 'budget', label: 'Pilotage budgétaire' }, { value: 'fiscal', label: 'Horloge fiscale' }]}
+      >
+        {activeTab === 'budget' ? budgetTab : <FiscalClock items={fiscalClock} />}
+      </Tabs>
     </div>
   );
 };

@@ -1,5 +1,4 @@
 import React, { useMemo, useState } from 'react';
-import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend } from 'recharts';
 import { PortfolioSnapshot, ExpenseSnapshot } from '../types';
 import { parseISODate } from '../lib/dates';
 import { LineChart as LineChartIcon, ArrowUpRight, ArrowDownRight, Minus, Wallet, Receipt } from 'lucide-react';
@@ -7,6 +6,11 @@ import { formatEUR } from '../lib/format';
 import { YearReviewCard } from './YearReviewCard';
 import type { GlobalAppData } from '../types';
 import { useIsDark, chartTheme } from '../lib/chartTheme';
+import { describeEvolution } from '../lib/chartData';
+import { AreaSeriesChart, type AreaRow, type AreaSeries } from './charts/AreaSeriesChart';
+import { ChartFrame } from './charts/ChartFrame';
+import { ChartLegend } from './charts/ChartParts';
+import { DataTable, type Column } from './ui/DataTable';
 import { onTablistKeyDown } from '../lib/tablist';
 
 interface HistoryProps {
@@ -21,15 +25,35 @@ const monthLabel = (iso: string) => {
   const d = parseISODate(iso); // parse LOCAL : new Date('YYYY-MM-DD') est minuit UTC et decale le mois affiche
   return d.toLocaleDateString('fr-FR', { month: 'short', year: '2-digit' });
 };
+const monthLong = (iso: string) => parseISODate(iso).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
 
 export const History: React.FC<HistoryProps> = ({ history, expensesHistory, reviewData }) => {
   const t = chartTheme(useIsDark());
   const [tab, setTab] = useState<'patrimoine' | 'charges'>('patrimoine');
   const sorted = useMemo(() => [...history].sort((a, b) => a.date.localeCompare(b.date)), [history]);
-  const chartData = useMemo(() => sorted.map(s => ({ ...s, label: monthLabel(s.date) })), [sorted]);
+  // Votre part (sapin) + capital de vos parents (or), empilés : leur somme est le total.
+  const chartData = useMemo<AreaRow[]>(() => sorted.map(s => ({
+    label: monthLabel(s.date), title: monthLong(s.date), date: s.date,
+    owned: s.ownedAmount, parents: Math.max(0, s.totalAmount - s.ownedAmount),
+  })), [sorted]);
+  const wealthSeries: AreaSeries[] = [
+    { key: 'owned', label: 'Votre part', color: t.brand },
+    { key: 'parents', label: 'Capital de vos parents', color: t.gold },
+  ];
+  const showParents = sorted.some(s => s.totalAmount - s.ownedAmount > 0.5);
+  const wealthColumns: Column<PortfolioSnapshot>[] = [
+    { key: 'date', header: 'Mois', cell: r => monthLong(r.date) },
+    { key: 'owned', header: 'Votre part', numeric: true, cell: r => fmt(r.ownedAmount) },
+    ...(showParents ? [{ key: 'parents', header: 'Capital de vos parents', numeric: true, cell: (r: PortfolioSnapshot) => fmt(Math.max(0, r.totalAmount - r.ownedAmount)) }] : []),
+    { key: 'total', header: 'Total', numeric: true, cell: r => fmt(r.totalAmount) },
+  ];
 
   const expensesSorted = useMemo(() => [...expensesHistory].sort((a, b) => a.date.localeCompare(b.date)), [expensesHistory]);
-  const expensesChartData = useMemo(() => expensesSorted.map(s => ({ ...s, label: monthLabel(s.date) })), [expensesSorted]);
+  const expensesChartData = useMemo<AreaRow[]>(() => expensesSorted.map(s => ({ label: monthLabel(s.date), title: monthLong(s.date), total: s.total })), [expensesSorted]);
+  const expensesColumns: Column<ExpenseSnapshot>[] = [
+    { key: 'date', header: 'Mois', cell: r => monthLong(r.date) },
+    { key: 'total', header: 'Charges fixes', numeric: true, cell: r => fmt(r.total) },
+  ];
 
   const deltas = useMemo(() => {
     const rows: { date: string; total: number; owned: number; deltaTotal: number | null; monthsGap: number }[] = [];
@@ -81,23 +105,23 @@ export const History: React.FC<HistoryProps> = ({ history, expensesHistory, revi
       ) : (
         <>
 
-          <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xs h-96">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="gTotal" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={t.brand} stopOpacity={0.6} /><stop offset="95%" stopColor={t.brand} stopOpacity={0.05} /></linearGradient>
-                  <linearGradient id="gOwned" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={t.gold} stopOpacity={0.5} /><stop offset="95%" stopColor={t.gold} stopOpacity={0.05} /></linearGradient>
-                </defs>
-                <XAxis dataKey="label" tick={{ fontSize: 11, fill: t.tick }} stroke={t.grid} />
-                <YAxis tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 11, fill: t.tick }} stroke={t.grid} />
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={t.grid} />
-                <RechartsTooltip formatter={(v, name) => [fmt(Number(v)), name === 'totalAmount' ? 'Total' : 'Ma part']} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', background: t.tooltipBg, color: t.tooltipText }} labelStyle={{ color: t.tooltipLabel, fontWeight: 700 }} />
-                <Legend formatter={(v) => (v === 'totalAmount' ? 'Total' : 'Ma part')} wrapperStyle={{ fontSize: 12 }} />
-                <Area type="monotone" dataKey="totalAmount" stroke={t.brand} fill="url(#gTotal)" strokeWidth={2} />
-                <Area type="monotone" dataKey="ownedAmount" stroke={t.gold} fill="url(#gOwned)" strokeWidth={2} />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
+          <section aria-labelledby="history-chart-title" className="bg-surface-container-lowest dark:bg-surface-container-low p-5 sm:p-6 rounded-2xl border border-outline-variant">
+            <h3 id="history-chart-title" className="text-base font-medium text-on-surface mb-2">Évolution de votre patrimoine</h3>
+            <ChartFrame
+              chartClassName="h-72 sm:h-80"
+              summary={<>
+                {describeEvolution('Votre part', first.ownedAmount, latest.ownedAmount, first.date, latest.date)}
+                {showParents && ` Avec le capital de vos parents, le total atteint ${fmt(latest.totalAmount)}.`}
+              </>}
+              legend={showParents ? <ChartLegend label={`Valeurs de ${monthLong(latest.date)}`} items={[
+                { key: 'owned', label: 'Votre part', color: t.brand, value: fmt(latest.ownedAmount) },
+                { key: 'parents', label: 'Capital de vos parents', color: t.gold, value: fmt(Math.max(0, latest.totalAmount - latest.ownedAmount)) },
+              ]} /> : undefined}
+              table={<DataTable caption="Votre patrimoine mois par mois" columns={wealthColumns} rows={sorted} rowKey={r => r.date} />}
+            >
+              <AreaSeriesChart data={chartData} series={showParents ? wealthSeries : wealthSeries.slice(0, 1)} stacked={showParents} totalLabel={showParents ? 'Total' : undefined} />
+            </ChartFrame>
+          </section>
 
           <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xs overflow-hidden">
             <div className="overflow-x-auto">
@@ -142,20 +166,16 @@ export const History: React.FC<HistoryProps> = ({ history, expensesHistory, revi
             L'historique des charges se construit au fil des mois, à mesure que vous ajustez vos dépenses fixes.
           </div>
         ) : (
-          <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xs h-96">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={expensesChartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="gCharges" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#ef4444" stopOpacity={0.5} /><stop offset="95%" stopColor="#ef4444" stopOpacity={0.05} /></linearGradient>
-                </defs>
-                <XAxis dataKey="label" tick={{ fontSize: 11, fill: t.tick }} stroke={t.grid} />
-                <YAxis tickFormatter={(v) => formatEUR(v, 0)} tick={{ fontSize: 11, fill: t.tick }} stroke={t.grid} />
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={t.grid} />
-                <RechartsTooltip formatter={(v) => [fmt(Number(v)), 'Charges fixes']} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', background: t.tooltipBg, color: t.tooltipText }} labelStyle={{ color: t.tooltipLabel, fontWeight: 700 }} />
-                <Area type="monotone" dataKey="total" stroke="#ef4444" fill="url(#gCharges)" strokeWidth={2} />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
+          <section aria-labelledby="charges-chart-title" className="bg-surface-container-lowest dark:bg-surface-container-low p-5 sm:p-6 rounded-2xl border border-outline-variant">
+            <h3 id="charges-chart-title" className="text-base font-medium text-on-surface mb-2">Évolution de vos charges fixes</h3>
+            <ChartFrame
+              chartClassName="h-72 sm:h-80"
+              summary={describeEvolution('Vos charges fixes', expensesSorted[0].total, expensesSorted[expensesSorted.length - 1].total, expensesSorted[0].date, expensesSorted[expensesSorted.length - 1].date, 'fp')}
+              table={<DataTable caption="Vos charges fixes mois par mois" columns={expensesColumns} rows={expensesSorted} rowKey={r => r.date} />}
+            >
+              <AreaSeriesChart data={expensesChartData} series={[{ key: 'total', label: 'Charges fixes', color: t.terracotta }]} />
+            </ChartFrame>
+          </section>
         )
       )}
     </div>

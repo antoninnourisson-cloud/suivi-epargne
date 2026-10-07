@@ -10,17 +10,20 @@ import { TodoList, TodoSpec } from './TodoList';
 import type { View } from '../navigation';
 import type { EmergencyFund } from '../lib/planning';
 import type { AgendaEvent } from '../lib/agenda';
-import { Sprout, LifeBuoy, Download, CalendarDays } from 'lucide-react';
+import { Sprout, LifeBuoy, Download, CalendarDays, ChevronDown, ChartLine } from 'lucide-react';
 import { lazyWithRetry } from './ErrorBoundary';
 import { SavingsAccount, PortfolioSnapshot, AccountType, Expense, FiscalConfig, WorkBenefits, RecurringMovement, Subscription } from '../types';
 import { Landmark, CalendarClock, Save, AlertTriangle, Trash2, Clock, TrendingUp, TrendingDown, PiggyBank, Percent, ShieldAlert, Repeat } from 'lucide-react';
 import { computeAccruedParentalInterest, computeRecentSavingsRate, computeAccountBalanceAtDate, findStaleRegulatedRates, findDueRecurring, computeMonthSavedAmount, computeSavedSince, payPeriodOf, computeSavingsRateHistory, computeUnlockCost, findFiscalReview, applyTaxScale, nextSubscriptionDate, findAvRateUpdatesDue } from '../lib/finance';
 import { parseISODate, formatISODay, daysBetween, localTodayISO } from '../lib/dates';
-import { Button } from './Button';
+import { Button, Card, DeltaBadge, MoneyText, PageHeader, SegmentedButton, Sparkline, StatTile } from './ui';
+import { AvailabilityBar, type AvailabilitySegment } from './dashboard/AvailabilityBar';
+import { homeSparkline, deltaOverDays } from '../lib/homeSeries';
 import { formatEUR, formatSignedEUR, frenchDay, formatPeriod } from '../lib/format';
 import { InstallPrompt } from './InstallPrompt';
 import { RegulatedRatesEditor } from './RegulatedRatesEditor';
 import { signedAmount, round2 } from '../lib/money';
+import { groupByInstitution } from '../lib/chartData';
 
 interface DashboardProps {
   accounts: SavingsAccount[];
@@ -82,7 +85,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalC
   });
 
   useEffect(() => {
-    localStorage.setItem('dashboard_date_range', JSON.stringify(dateRange));
+    try { localStorage.setItem('dashboard_date_range', JSON.stringify(dateRange)); } catch { /* non mémorisé */ }
   }, [dateRange]);
 
   // Part possédée À CE JOUR : les mouvements datés dans le futur sont neutralisés, comme
@@ -338,6 +341,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalC
 
   const fmtEUR = (v: number) => formatEUR(v, 0);
 
+  // --- CHIFFRE PRINCIPAL : TENDANCE ---
+  // Votre part à une date passée, même convention que la projection (mouvements rembobinés).
+  const today = localTodayISO();
+  const balanceAt = useCallback((iso: string) => computeAccountBalanceAtDate(accounts, iso), [accounts]);
+  const spark = useMemo(() => homeSparkline({ history, current: mySavings, today, balanceAt }), [history, mySavings, today, balanceAt]);
+  const delta30 = useMemo(() => deltaOverDays(mySavings, balanceAt, today), [mySavings, balanceAt, today]);
+
+  // « Plus de détails » (projection, graphiques) : replié par défaut, choix mémorisé.
+  const [moreOpen, setMoreOpen] = useState(() => { try { return localStorage.getItem('home_more_open') === '1'; } catch { return false; } });
+  const toggleMore = () => setMoreOpen(o => { try { localStorage.setItem('home_more_open', o ? '0' : '1'); } catch { /* non mémorisé */ } return !o; });
+
   // --- RAPPEL DE RÉVISION DES TAUX RÉGLEMENTÉS (1er février / 1er août) ---
   // Masquable par révision (clé locale) : si le taux n'a en fait pas bougé, l'utilisateur
   // écarte le rappel une fois et ne le revoit qu'à la révision suivante.
@@ -389,15 +403,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalC
     return totalAnnualParental > 1 ? totalAnnualParental : null;
   }, [accounts]);
 
-  // Regroupement insensible aux espaces et à la casse : « BPVF » et « BPVF  » formaient
-  // deux barres distinctes.
-  const dataByInstitution = Object.values(accounts.reduce((acc, curr) => {
-    const name = (curr.institution || 'Sans établissement').trim().replace(/\s+/g, ' ');
-    const key = name.toLowerCase();
-    if (!acc[key]) acc[key] = { name, value: 0 };
-    acc[key].value += curr.ownedAmount;
-    return acc;
-  }, {} as Record<string, { name: string, value: number }>));
+  // Par établissement, avec la même convention « à ce jour » que les cartes (mouvements
+  // futurs exclus) ; regroupement insensible aux espaces et à la casse.
+  const dataByInstitution = groupByInstitution(accounts, ownedToday);
 
   // Couleur par compte : rang de son identifiant (trié), donc stable quand l'ordre
   // d'affichage change, et jamais deux comptes de la même couleur jusqu'à dix comptes.
@@ -422,29 +430,28 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalC
     document.body.removeChild(link);
   };
 
-  const StatCard = ({ title, amount, subtext, extra, hero }: { title: string; amount: number; subtext?: string; extra?: React.ReactNode; hero?: React.ReactNode }) => (
-    <div className="bg-white dark:bg-slate-800 p-4 md:p-6 rounded-2xl shadow-xs border border-slate-200 dark:border-slate-700 min-w-0">
-      <p className="text-slate-600 dark:text-slate-300 text-xs md:text-sm font-bold">{title}</p>
-      <p className={`${hero ? 'text-3xl md:text-4xl' : 'text-xl md:text-2xl'} font-black text-slate-800 dark:text-slate-100 mt-1 tabular-nums`}>{formatEUR(amount, 0)}</p>
-      {subtext && <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 font-bold">{subtext}</p>}
-      {hero}
-      {extra}
-    </div>
-  );
-
   if (accounts.length === 0) return (
-    <section aria-labelledby="welcome-title" className="max-w-xl mx-auto bg-white dark:bg-slate-800 rounded-3xl border border-slate-200 dark:border-slate-700 p-8 mt-6 text-center shadow-xs">
-      <Sprout className="w-10 h-10 text-indigo-600 mx-auto mb-3" aria-hidden="true" />
-      <h2 id="welcome-title" className="text-2xl font-black text-slate-800 dark:text-slate-100">Bienvenue dans Pécule</h2>
-      <p className="text-slate-600 dark:text-slate-300 mt-2">Trois étapes pour faire pousser votre épargne :</p>
-      <ol className="text-left mt-6 space-y-3 text-sm text-slate-700 dark:text-slate-200">
-        <li className="flex gap-3"><span className="w-6 h-6 rounded-full bg-indigo-600 text-white text-xs font-black flex items-center justify-center shrink-0">1</span> Ajoutez vos comptes (Livret A, LEP, assurance vie…) avec leur solde.</li>
-        <li className="flex gap-3"><span className="w-6 h-6 rounded-full bg-indigo-600 text-white text-xs font-black flex items-center justify-center shrink-0">2</span> Indiquez votre salaire et vos charges dans le Pilotage.</li>
-        <li className="flex gap-3"><span className="w-6 h-6 rounded-full bg-indigo-600 text-white text-xs font-black flex items-center justify-center shrink-0">3</span> Choisissez votre jour de paie : Pécule vous dira quoi placer, et où.</li>
+    <section aria-labelledby="welcome-title" className="max-w-xl mx-auto mt-6 rounded-3xl bg-surface-container-low border border-outline-variant p-8 text-center text-on-surface">
+      <span className="mx-auto mb-4 w-14 h-14 rounded-2xl bg-primary-container text-on-primary-container flex items-center justify-center">
+        <Sprout className="w-7 h-7" aria-hidden="true" />
+      </span>
+      <h2 id="welcome-title" className="text-[28px] leading-9 font-normal text-on-surface">Bienvenue dans Pécule</h2>
+      <p className="text-on-surface-variant mt-2">Trois étapes pour faire pousser votre épargne :</p>
+      <ol className="text-left mt-6 space-y-3 text-sm text-on-surface">
+        {[
+          'Ajoutez vos comptes (Livret A, LEP, assurance vie…) avec leur solde.',
+          'Indiquez votre salaire et vos charges dans le Pilotage.',
+          'Choisissez votre jour de paie : Pécule vous dira quoi placer, et où.',
+        ].map((step, i) => (
+          <li key={i} className="flex gap-3">
+            <span className="w-6 h-6 rounded-full bg-primary text-on-primary text-xs font-medium tabular-nums flex items-center justify-center shrink-0" aria-hidden="true">{i + 1}</span>
+            <span className="pt-0.5">{step}</span>
+          </li>
+        ))}
       </ol>
       <div className="mt-8 flex flex-col sm:flex-row gap-2 justify-center">
-        {onAddAccount && <button onClick={onAddAccount} className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-xl font-black">Ajouter mon premier compte</button>}
-        {onNavigate && <button onClick={() => onNavigate('pilot')} className="px-6 py-3 rounded-xl font-bold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-700">Ouvrir le Pilotage</button>}
+        {onAddAccount && <Button onClick={onAddAccount}>Ajouter mon premier compte</Button>}
+        {onNavigate && <Button variant="tonal" onClick={() => onNavigate('pilot')}>Ouvrir le Pilotage</Button>}
       </div>
     </section>
   );
@@ -531,218 +538,256 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalC
     detail: 'Gardez-la sur des livrets disponibles à tout moment avant de placer sur l\'assurance vie.',
   });
 
-  return (
-    <div className="space-y-6">
-      <h2 className="sr-only">Accueil</h2>
-      <InstallPrompt />
 
-      <TodoList items={todos} />
+  const progressTrack = 'h-2 rounded-full bg-surface-container-highest overflow-hidden';
+  const dateFieldClass = 'h-10 px-3 rounded-xs border border-outline bg-transparent text-sm text-on-surface tabular-nums hover:border-on-surface focus:border-indigo-600 dark:focus:border-indigo-300 outline-none dark:[color-scheme:dark]';
 
-      <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 md:gap-4">
-        <div className="col-span-2"><StatCard title="Mon épargne nette" amount={mySavings} subtext="Votre part, hors capital de vos parents" hero={monthDelta !== null ? <p className={`text-xs font-bold mt-1 ${monthDelta >= 0 ? 'text-emerald-700 dark:text-emerald-300' : 'text-rose-700 dark:text-rose-300'}`}>{formatSignedEUR(monthDelta, 0)} depuis le début du mois</p> : undefined} /></div>
-        <StatCard title="Disponible tout de suite" amount={availabilityStats.available} subtext="Livrets et comptes courants" />
-        {availabilityStats.taxLocked > 0 && <StatCard title="Disponible avec impôt" amount={availabilityStats.taxLocked} subtext="Assurance vie et PEA récents" extra={availabilityStats.taxLocked > 0 && (
-          <div className="mt-2 space-y-0.5 text-[11px] text-slate-600 dark:text-slate-300">
-            {unlockCost.extraTax >= 1 && <p>Tout retirer aujourd'hui : <b>≈ {formatEUR(unlockCost.extraTax, 0)}</b> d'impôt en plus qu'après la maturité.</p>}
-            {unlockCost.closesPea && <p className="text-rose-700 dark:text-rose-400 font-bold">Un retrait clôturerait votre PEA.</p>}
-            {unlockCost.nextFree && <p>Libre de surcoût le <b>{parseISODate(unlockCost.nextFree.date).toLocaleDateString('fr-FR')}</b> ({unlockCost.nextFree.name}).</p>}
-            {unlockCost.unknown.length > 0 && <p className="text-slate-500 dark:text-slate-400">Versements à renseigner pour chiffrer : {unlockCost.unknown.join(', ')}.</p>}
+  // --- CARTE « PLACÉ DEPUIS LA PAIE » (jauge du mois + taux d'épargne) ---
+  const savingsCard = ((monthPlan !== undefined && monthPlan > 0) || monthlyPay > 0) && (() => {
+    const hasPlan = monthPlan !== undefined && monthPlan > 0;
+    const plan = monthPlan || 0;
+    const now = new Date();
+    const periodEnd = payPeriod
+      ? new Date(payPeriod.payDate.getFullYear(), payPeriod.payDate.getMonth() + 1, Math.min(paydayDay!, new Date(payPeriod.payDate.getFullYear(), payPeriod.payDate.getMonth() + 2, 0).getDate()))
+      : new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    const daysLeft = Math.max(0, daysBetween(now, periodEnd));
+    const gaugeTitle = payPeriod ? `Placé depuis la paie du ${frenchDay(payPeriod.payDate)}` : 'Placé ce mois-ci';
+    const pct = hasPlan ? Math.max(0, Math.min(100, (monthSaved / plan) * 100)) : 0;
+    const done = hasPlan && monthSaved >= plan;
+    const maxRate = Math.max(1, ...rateHistory.map(m => Math.abs(m.rate)));
+    const MONTH_INITIALS = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'];
+    return (
+      <Card title={gaugeTitle} icon={PiggyBank} action={
+        <p className="text-base font-medium text-on-surface tabular-nums whitespace-nowrap">
+          {monthSaved < 0 ? formatSignedEUR(monthSaved, 0) : fmtEUR(monthSaved)}
+          {hasPlan && <span className="text-on-surface-variant font-normal"> / {fmtEUR(plan)}</span>}
+        </p>
+      }>
+        {hasPlan && (
+          <div className={progressTrack} role="progressbar" aria-label={gaugeTitle} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(pct)}>
+            <div className={`h-full rounded-full ${done ? 'bg-emerald-600 dark:bg-emerald-400' : 'bg-primary'}`} style={{ width: `${pct}%` }} />
           </div>
-        )} />}
-        {availabilityStats.hardLocked > 0 && <StatCard title="Bloqué" amount={availabilityStats.hardLocked} subtext="Retraite, épargne salariale" />}
-      </div>
-
-      {/* Sur grand écran, les cartes se rangent sur deux colonnes au lieu de s'étirer. */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
-      {emergency && (
-        <section aria-labelledby="emergency-title" className="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-xs border border-slate-200 dark:border-slate-700">
-          <div className="flex items-baseline justify-between gap-3 mb-2">
-            <h3 id="emergency-title" className="text-sm font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2"><LifeBuoy className="w-4 h-4 text-indigo-600" aria-hidden="true" /> Épargne de précaution</h3>
-            <p className="text-sm font-black text-slate-700 dark:text-slate-200">{fmtEUR(emergency.current)} <span className="text-slate-500 dark:text-slate-400 font-bold">/ {fmtEUR(emergency.target)}</span></p>
-          </div>
-          <div className="h-2.5 rounded-full bg-slate-100 dark:bg-slate-700 overflow-hidden" role="progressbar" aria-label="Épargne de précaution" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(emergency.pct)}>
-            <div className={`h-full rounded-full ${emergency.reached ? 'bg-emerald-500' : 'bg-indigo-600'}`} style={{ width: `${emergency.pct}%` }} />
-          </div>
-          <p className="text-xs text-slate-600 dark:text-slate-300 mt-2">
-            {emergency.reached ? 'Atteinte. ' : `Il manque ${fmtEUR(emergency.missing)}. `}
-            {emergency.months} mois de dépenses ({fmtEUR(emergency.monthlySpending)} par mois), sur vos livrets et comptes courants, votre part seulement.
+        )}
+        {hasPlan && (
+          <p className="text-sm text-on-surface-variant mt-2">
+            {done ? 'Objectif atteint.'
+              : monthSaved < 0 ? `Vous avez plus retiré que versé (${fmtEUR(monthSaved)}).`
+              : `Reste ${fmtEUR(plan - monthSaved)} à placer, ${daysLeft} jour${daysLeft > 1 ? 's' : ''} avant ${payPeriod ? 'la prochaine paie' : 'la fin du mois'}.`}
           </p>
-          {onSetEmergencyMonths && (
-            <div className="mt-3 flex items-center gap-2" role="group" aria-label="Nombre de mois">
-              {[3, 6].map(m => (
-                <button key={m} onClick={() => onSetEmergencyMonths(m)} aria-pressed={emergency.months === m} className={`px-3 py-1 rounded-full text-xs font-bold border ${emergency.months === m ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'}`}>{m} mois</button>
-              ))}
-            </div>
-          )}
-        </section>
-      )}
-
-      {agendaNext.length > 0 && (
-        <section aria-labelledby="agenda-next-title" className="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-xs border border-slate-200 dark:border-slate-700">
-          <div className="flex items-baseline justify-between gap-3 mb-2">
-            <h3 id="agenda-next-title" className="text-sm font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2"><CalendarDays className="w-4 h-4 text-indigo-600" aria-hidden="true" /> Prochaines échéances</h3>
-            {onNavigate && <button onClick={() => onNavigate('agenda')} className="text-xs font-bold text-indigo-700 dark:text-indigo-300 hover:underline">Tout voir</button>}
-          </div>
-          <ul className="divide-y divide-slate-100 dark:divide-slate-700">
-            {agendaNext.map(e => (
-              <li key={`${e.date}-${e.title}`} className="flex items-center justify-between gap-3 py-1.5 text-sm">
-                <span className="min-w-0 truncate text-slate-700 dark:text-slate-200 font-bold">{e.title}</span>
-                <span className="shrink-0 text-xs text-slate-500 dark:text-slate-400">{frenchDay(parseISODate(e.date), true)}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-      {upcomingDebits.length > 0 && (
-        <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-xs border border-slate-200 dark:border-slate-700">
-          <div className="flex items-baseline justify-between gap-3 mb-2">
-            <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2"><CalendarClock className="w-4 h-4 text-indigo-600" /> Prélèvements des 7 prochains jours</h3>
-            <p className="text-sm font-black text-slate-700 dark:text-slate-200">{formatEUR(upcomingDebits.reduce((sum, x) => sum + x.s.amount, 0))}</p>
-          </div>
-          <ul className="divide-y divide-slate-100 dark:divide-slate-700">
-            {upcomingDebits.map(({ s, date, inDays }) => (
-              <li key={s.id} className="flex items-center justify-between gap-3 py-1.5 text-sm">
-                <span className="min-w-0 truncate text-slate-700 dark:text-slate-200">
-                  <b>{s.name}</b>{s.debitAccount && <span className="text-slate-500 dark:text-slate-400"> · {s.debitAccount}</span>}
-                </span>
-                <span className="shrink-0 text-right">
-                  <span className="font-mono font-bold text-slate-700 dark:text-slate-200">{formatEUR(s.amount)}</span>
-                  <span className="block text-[11px] text-slate-500 dark:text-slate-400">{inDays === 0 ? "aujourd'hui" : inDays === 1 ? 'demain' : frenchDay(date, true)}</span>
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {((monthPlan !== undefined && monthPlan > 0) || monthlyPay > 0) && (() => {
-        const hasPlan = monthPlan !== undefined && monthPlan > 0;
-        const plan = monthPlan || 0;
-        const now = new Date();
-        const periodEnd = payPeriod
-          ? new Date(payPeriod.payDate.getFullYear(), payPeriod.payDate.getMonth() + 1, Math.min(paydayDay!, new Date(payPeriod.payDate.getFullYear(), payPeriod.payDate.getMonth() + 2, 0).getDate()))
-          : new Date(now.getFullYear(), now.getMonth() + 1, 1);
-        const daysLeft = Math.max(0, daysBetween(now, periodEnd));
-        const gaugeTitle = payPeriod ? `Placé depuis la paie du ${frenchDay(payPeriod.payDate)}` : 'Placé ce mois-ci';
-        const pct = hasPlan ? Math.max(0, Math.min(100, (monthSaved / plan) * 100)) : 0;
-        const done = hasPlan && monthSaved >= plan;
-        const maxRate = Math.max(1, ...rateHistory.map(m => Math.abs(m.rate)));
-        const MONTH_INITIALS = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'];
-        return (
-          <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-xs border border-slate-200 dark:border-slate-700">
-            <div className="flex items-baseline justify-between gap-3 mb-2">
-              <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2"><PiggyBank className="w-4 h-4 text-indigo-600" /> {gaugeTitle}</h3>
-              <p className="text-sm font-black text-slate-700 dark:text-slate-200">{monthSaved < 0 ? formatSignedEUR(monthSaved, 0) : fmtEUR(monthSaved)}{hasPlan && <span className="text-slate-500 dark:text-slate-400 font-bold"> / {fmtEUR(plan)}</span>}</p>
-            </div>
-            {hasPlan && (
-              <div className="h-2.5 rounded-full bg-slate-100 dark:bg-slate-700 overflow-hidden" role="progressbar" aria-label={gaugeTitle} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(pct)}>
-                <div className={`h-full rounded-full ${done ? 'bg-emerald-500' : 'bg-indigo-600'}`} style={{ width: `${pct}%` }} />
-              </div>
-            )}
-            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-2">
-              {!hasPlan ? '' : done ? 'Objectif atteint. '
-                : monthSaved < 0 ? `Vous avez plus retiré que versé (${fmtEUR(monthSaved)}). `
-                : `Reste ${fmtEUR(plan - monthSaved)} à placer, ${daysLeft} jour${daysLeft > 1 ? 's' : ''} avant ${payPeriod ? 'la prochaine paie' : 'la fin du mois'}.`}
-            </p>
-            {monthlyPay > 0 && (
-              <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-700">
-                <div className="flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-1 sm:gap-3 mb-2">
-                  <p className="text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5 whitespace-nowrap"><Percent className="w-3.5 h-3.5 text-indigo-600" /> Taux d'épargne</p>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Ce mois-ci <b className="text-slate-800 dark:text-slate-100">{Math.round(rateHistory[rateHistory.length - 1]?.rate ?? 0)} %</b>
-                    {avgRate !== null && <> · moyenne 12 mois <b className="text-slate-800 dark:text-slate-100">{Math.round(avgRate)} %</b></>}
-                  </p>
-                </div>
-                <div className="flex items-end gap-1 h-16">
-                  {rateHistory.map((m, i) => {
-                    const h = Math.max(2, (Math.abs(m.rate) / maxRate) * 100);
-                    const current = i === rateHistory.length - 1;
-                    const monthName = parseISODate(`${m.month}-01`).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
-                    return (
-                      <button type="button" key={m.month} onClick={() => setRateMonth(rateMonth === m.month ? null : m.month)} aria-pressed={rateMonth === m.month}
-                        aria-label={`${monthName}${current ? ' (en cours)' : ''} : ${Math.round(m.rate)} %, ${fmtEUR(m.saved)}${m.rate < 0 ? ', retrait net' : ''}`}
-                        className="flex-1 flex flex-col items-center justify-end h-full gap-1 rounded-sm focus-visible:ring-2 focus-visible:ring-indigo-500">
-                        <div className={`w-full rounded-xs ${m.rate < 0 ? 'bg-rose-500' : current ? 'bg-indigo-300 dark:bg-indigo-700 bg-[repeating-linear-gradient(45deg,transparent,transparent_3px,rgba(255,255,255,.35)_3px,rgba(255,255,255,.35)_5px)]' : 'bg-indigo-600'} ${rateMonth === m.month ? 'ring-2 ring-amber-400' : ''}`} style={{ height: `${h}%` }} />
-                        <span className={`text-[11px] font-bold ${current ? 'text-slate-800 dark:text-slate-100 underline' : 'text-slate-500 dark:text-slate-400'}`}>{MONTH_INITIALS[Number(m.month.slice(5)) - 1]}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-                <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 min-h-5" aria-live="polite">
-                  {(() => { const m = rateHistory.find(x => x.month === rateMonth); return m ? `${parseISODate(`${m.month}-01`).toLocaleDateString('fr-FR', { month: 'long' })} : ${Math.round(m.rate)} % de la paie, ${formatSignedEUR(m.saved, 0)}.` : `Touchez un mois pour le détail. Part de votre paie (${fmtEUR(monthlyPay)}) mise de côté ; mois en cours hachuré, retraits en rouge.`; })()}
-                </p>
-              </div>
-            )}
-          </div>
-        );
-      })()}
-
-      {projection && (
-        <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-xs border border-slate-200 dark:border-slate-700">
-          <div className="flex items-center gap-2 mb-4">
-            <div className="p-2 rounded-lg bg-indigo-600"><TrendingUp className="w-4 h-4 text-white" /></div>
-            <div>
-              <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100">Projection de trajectoire</h3>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                Extrapolation du rythme réel des 90 derniers jours ({projection.monthlyRate >= 0 ? '+' : ''}{fmtEUR(projection.monthlyRate)}/mois) — une estimation, pas une garantie.
+        )}
+        {monthlyPay > 0 && (
+          <div className={hasPlan ? 'mt-5 pt-4 border-t border-outline-variant' : ''}>
+            <div className="flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-1 sm:gap-3 mb-3">
+              <p className="text-sm font-medium text-on-surface flex items-center gap-1.5 whitespace-nowrap"><Percent className="w-4 h-4 text-indigo-600 dark:text-indigo-300" aria-hidden="true" /> Taux d'épargne</p>
+              <p className="text-sm text-on-surface-variant">
+                Ce mois-ci <span className="font-medium text-on-surface tabular-nums whitespace-nowrap">{Math.round(rateHistory[rateHistory.length - 1]?.rate ?? 0)} %</span>
+                {avgRate !== null && <> · moyenne 12 mois <span className="font-medium text-on-surface tabular-nums whitespace-nowrap">{Math.round(avgRate)} %</span></>}
               </p>
             </div>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="p-4 rounded-lg bg-slate-50 dark:bg-slate-900">
-              <p className="text-[11px] uppercase font-bold text-slate-500 dark:text-slate-400 tracking-wide">Dans 6 mois</p>
-              <p className="text-xl font-black text-slate-800 dark:text-slate-100 mt-1">{fmtEUR(projection.in6)}</p>
+            <div className="flex items-end gap-1 h-20">
+              {rateHistory.map((m, i) => {
+                const h = Math.max(2, (Math.abs(m.rate) / maxRate) * 100);
+                const current = i === rateHistory.length - 1;
+                const monthName = parseISODate(`${m.month}-01`).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+                return (
+                  <button type="button" key={m.month} onClick={() => setRateMonth(rateMonth === m.month ? null : m.month)} aria-pressed={rateMonth === m.month}
+                    aria-label={`${monthName}${current ? ' (en cours)' : ''} : ${Math.round(m.rate)} %, ${fmtEUR(m.saved)}${m.rate < 0 ? ', retrait net' : ''}`}
+                    className="flex-1 flex flex-col items-center justify-end h-full gap-1 rounded-xs focus-visible:ring-2 focus-visible:ring-indigo-500">
+                    <div className={`w-full rounded-t-xs ${m.rate < 0 ? 'bg-rose-500 dark:bg-rose-400' : current ? 'bg-indigo-300 dark:bg-indigo-700 bg-[repeating-linear-gradient(45deg,transparent,transparent_3px,rgba(255,255,255,.35)_3px,rgba(255,255,255,.35)_5px)]' : 'bg-indigo-600 dark:bg-indigo-300'} ${rateMonth === m.month ? 'ring-2 ring-tertiary ring-offset-1 ring-offset-surface-container-lowest' : ''}`} style={{ height: `${h}%` }} />
+                    <span className={`text-[11px] font-medium ${current ? 'text-on-surface underline' : 'text-on-surface-variant'}`}>{MONTH_INITIALS[Number(m.month.slice(5)) - 1]}</span>
+                  </button>
+                );
+              })}
             </div>
-            <div className="p-4 rounded-lg bg-slate-50 dark:bg-slate-900">
-              <p className="text-[11px] uppercase font-bold text-slate-500 dark:text-slate-400 tracking-wide">Dans 12 mois</p>
-              <p className="text-xl font-black text-slate-800 dark:text-slate-100 mt-1">{fmtEUR(projection.in12)}</p>
-            </div>
+            <p className="text-xs text-on-surface-variant mt-2 min-h-5" aria-live="polite">
+              {(() => { const m = rateHistory.find(x => x.month === rateMonth); return m ? `${parseISODate(`${m.month}-01`).toLocaleDateString('fr-FR', { month: 'long' })} : ${Math.round(m.rate)} % de la paie, ${formatSignedEUR(m.saved, 0)}.` : `Touchez un mois pour le détail. Part de votre paie (${fmtEUR(monthlyPay)}) mise de côté ; mois en cours hachuré, retraits en rouge.`; })()}
+            </p>
           </div>
+        )}
+      </Card>
+    );
+  })();
 
-          {projection.drift && (
-            <div className={`mt-4 flex items-start gap-2 p-3 rounded-lg text-xs font-bold ${projection.drift.changeRatio < 0 ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300' : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300'}`}>
-              {projection.drift.changeRatio < 0
-                ? <TrendingDown className="w-4 h-4 shrink-0 mt-0.5" />
-                : <TrendingUp className="w-4 h-4 shrink-0 mt-0.5" />}
-              <span>
-                Votre rythme d'épargne a {projection.drift.changeRatio < 0 ? 'ralenti' : 'accéléré'} de {Math.abs(Math.round(projection.drift.changeRatio * 100))}%
-                par rapport au trimestre précédent ({fmtEUR(projection.drift.previousMonthlyRate)}/mois → {fmtEUR(projection.monthlyRate)}/mois).
-              </span>
+  const availabilitySegments: AvailabilitySegment[] = [
+    { key: 'available', label: 'Disponible tout de suite', hint: 'Livrets et comptes courants', amount: availabilityStats.available, color: 'bg-primary' },
+    ...(availabilityStats.taxLocked > 0 ? [{ key: 'tax', label: 'Disponible avec impôt', hint: 'Assurance vie et PEA récents', amount: availabilityStats.taxLocked, color: 'bg-tertiary', hatch: 'light' as const }] : []),
+    ...(availabilityStats.hardLocked > 0 ? [{ key: 'locked', label: 'Bloqué', hint: 'Retraite, épargne salariale', amount: availabilityStats.hardLocked, color: 'bg-outline', hatch: 'dense' as const }] : []),
+  ];
+  const moreSummary = `${projection ? 'Projection, évolution' : 'Évolution'} et répartition par établissement`;
+  const showUnlockDetails = availabilityStats.taxLocked > 0 && (unlockCost.extraTax >= 1 || unlockCost.closesPea || !!unlockCost.nextFree || unlockCost.unknown.length > 0);
+
+  return (
+    <div className="space-y-6">
+      <PageHeader visuallyHidden title="Accueil" />
+      <InstallPrompt />
+
+      {/* 1. Où j'en suis : le chiffre principal, sa tendance et sa disponibilité. */}
+      <Card variant="elevated" aria-label="Mon épargne nette">
+        <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
+          <StatTile
+            size="hero"
+            label="Mon épargne nette"
+            value={formatEUR(mySavings, 0)}
+            delta={<DeltaBadge value={delta30} period="sur 30 jours" />}
+            hint={<>
+              Votre part, hors capital de vos parents
+              {monthDelta !== null && <> · <MoneyText value={monthDelta} signed decimals={0} tone="auto" className="font-medium" /> depuis le début du mois</>}
+            </>}
+          />
+          {spark.length >= 2 && (
+            <div className="shrink-0 flex flex-col items-start sm:items-end gap-1">
+              <Sparkline values={spark} width={200} height={56} className="max-w-full" />
+              <p className="text-xs text-on-surface-variant">Tendance sur {spark.length} mois</p>
             </div>
           )}
         </div>
-      )}
+        <div className="mt-6 pt-5 border-t border-outline-variant">
+          <AvailabilityBar segments={availabilitySegments}>
+            {showUnlockDetails && (
+              <div className="mt-4 rounded-xl bg-surface-container p-3 text-sm text-on-surface-variant space-y-1">
+                {unlockCost.extraTax >= 1 && <p>Tout retirer aujourd'hui : <span className="font-medium text-on-surface tabular-nums">≈ {formatEUR(unlockCost.extraTax, 0)}</span> d'impôt en plus qu'après la maturité.</p>}
+                {unlockCost.closesPea && <p className="flex items-center gap-1.5 text-error font-medium"><AlertTriangle className="w-4 h-4 shrink-0" aria-hidden="true" /> Un retrait clôturerait votre PEA.</p>}
+                {unlockCost.nextFree && <p>Libre de surcoût le <span className="font-medium text-on-surface tabular-nums">{parseISODate(unlockCost.nextFree.date).toLocaleDateString('fr-FR')}</span> ({unlockCost.nextFree.name}).</p>}
+                {unlockCost.unknown.length > 0 && <p>Versements à renseigner pour chiffrer : {unlockCost.unknown.join(', ')}.</p>}
+              </div>
+            )}
+          </AvailabilityBar>
+        </div>
+      </Card>
 
-      <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-xs border border-slate-200 dark:border-slate-700 xl:col-span-2">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 mb-4">
-          <div>
-            <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">Évolution de mon épargne nette</h3>
-            {accounts.some(a => isConstrainedAccount(a.type)) && <p className="text-[11px] text-slate-500 dark:text-slate-400">Zones hachurées : épargne disponible seulement avec impôt ou bloquée.</p>}
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <input type="date" value={dateRange.start} onChange={(e) => setDateRange((prev) => ({ ...prev, start: e.target.value }))} aria-label="Début de la période" className="bg-slate-50 dark:bg-slate-900 text-sm border border-slate-200 dark:border-slate-700 p-2 rounded-lg" />
-            <span className="text-slate-500 dark:text-slate-400 text-sm">à</span>
-            <input type="date" value={dateRange.end} onChange={(e) => setDateRange((prev) => ({ ...prev, end: e.target.value }))} aria-label="Fin de la période" className="bg-slate-50 dark:bg-slate-900 text-sm border border-slate-200 dark:border-slate-700 p-2 rounded-lg" />
-            <Button onClick={exportSession} variant="secondary" className="text-xs h-9 gap-2">
-              <Save className="w-4 h-4 text-indigo-600" /> Export CSV
-            </Button>
-          </div>
-        </div>
-        <div className="h-80">
-        <Suspense fallback={<div className="h-full w-full rounded-lg bg-slate-100 dark:bg-slate-900 animate-pulse" aria-hidden />}>
-          <StackedSavingsChart stackedData={stackedData} accounts={accounts} getAccountColor={getAccountColor} isConstrainedAccount={isConstrainedAccount} />
-        </Suspense>
-        </div>
+      {/* 2. Ce qu'il y a à faire. */}
+      <TodoList items={todos} />
+
+      {/* 3. Le mois en cours et ce qui arrive. */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+        {savingsCard}
+
+        {emergency && (
+          <Card title="Épargne de précaution" icon={LifeBuoy} action={
+            <p className="text-base font-medium text-on-surface tabular-nums whitespace-nowrap">{fmtEUR(emergency.current)} <span className="text-on-surface-variant font-normal">/ {fmtEUR(emergency.target)}</span></p>
+          }>
+            <div className={progressTrack} role="progressbar" aria-label="Épargne de précaution" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(emergency.pct)}>
+              <div className={`h-full rounded-full ${emergency.reached ? 'bg-emerald-600 dark:bg-emerald-400' : 'bg-primary'}`} style={{ width: `${emergency.pct}%` }} />
+            </div>
+            <p className="text-sm text-on-surface-variant mt-2">
+              {emergency.reached ? 'Atteinte. ' : `Il manque ${fmtEUR(emergency.missing)}. `}
+              {emergency.months} mois de dépenses ({fmtEUR(emergency.monthlySpending)} par mois), sur vos livrets et comptes courants, votre part seulement.
+            </p>
+            {onSetEmergencyMonths && (
+              <SegmentedButton
+                className="mt-4"
+                label="Nombre de mois"
+                options={[{ value: '3', label: '3 mois' }, { value: '6', label: '6 mois' }]}
+                value={String(emergency.months)}
+                onChange={v => onSetEmergencyMonths(Number(v))}
+              />
+            )}
+          </Card>
+        )}
+
+        {agendaNext.length > 0 && (
+          <Card title="Prochaines échéances" icon={CalendarDays} action={onNavigate && <Button variant="text" onClick={() => onNavigate('agenda')} className="-my-2">Tout voir</Button>}>
+            <ul className="divide-y divide-outline-variant -my-2">
+              {agendaNext.map(e => (
+                <li key={`${e.date}-${e.title}`} className="flex items-center justify-between gap-3 py-2.5 text-sm">
+                  <span className="min-w-0 truncate text-on-surface font-medium">{e.title}</span>
+                  <span className="shrink-0 text-on-surface-variant tabular-nums">{frenchDay(parseISODate(e.date), true)}</span>
+                </li>
+              ))}
+            </ul>
+          </Card>
+        )}
+
+        {upcomingDebits.length > 0 && (
+          <Card title="Prélèvements des 7 prochains jours" icon={CalendarClock} action={
+            <p className="text-base font-medium text-on-surface tabular-nums whitespace-nowrap"><span className="sr-only">Total : </span>{formatEUR(upcomingDebits.reduce((sum, x) => sum + x.s.amount, 0))}</p>
+          }>
+            <ul className="divide-y divide-outline-variant -my-2">
+              {upcomingDebits.map(({ s, date, inDays }) => (
+                <li key={s.id} className="flex items-center justify-between gap-3 py-2.5 text-sm">
+                  <span className="min-w-0 truncate">
+                    <span className="font-medium text-on-surface">{s.name}</span>{s.debitAccount && <span className="text-on-surface-variant"> · {s.debitAccount}</span>}
+                  </span>
+                  <span className="shrink-0 text-right">
+                    <MoneyText value={s.amount} className="font-medium text-on-surface" />
+                    <span className="block text-xs text-on-surface-variant">{inDays === 0 ? "aujourd'hui" : inDays === 1 ? 'demain' : frenchDay(date, true)}</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </Card>
+        )}
       </div>
 
-      <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-xs border border-slate-200 dark:border-slate-700">
-        <h3 className="text-sm font-bold text-slate-600 dark:text-slate-300 mb-4">Par établissement</h3>
-        <div style={{ height: Math.max(120, dataByInstitution.length * 44) }}>
-        <Suspense fallback={<div className="h-full w-full rounded-lg bg-slate-100 dark:bg-slate-900 animate-pulse" aria-hidden />}>
-          <InstitutionChart data={dataByInstitution} />
-        </Suspense>
-        </div>
-      </div>
+      {/* 4. Pour aller plus loin : repliable, mémorisé. */}
+      <div>
+        <button
+          type="button"
+          onClick={toggleMore}
+          aria-expanded={moreOpen}
+          aria-controls="home-more"
+          className="w-full flex items-center justify-between gap-3 px-5 py-3 rounded-2xl border border-outline-variant text-left hover:bg-on-surface/4 transition-colors"
+        >
+          <span className="min-w-0">
+            <span className="block text-base font-medium text-on-surface">Plus de détails</span>
+            <span className="block text-sm text-on-surface-variant">{moreSummary}</span>
+          </span>
+          <ChevronDown className={`w-5 h-5 shrink-0 text-on-surface-variant transition-transform ${moreOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
+        </button>
+
+        {moreOpen && (
+          <div id="home-more" className="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+            {projection && (
+              <Card title="Projection de trajectoire" icon={TrendingUp}>
+                <p className="text-sm text-on-surface-variant -mt-2 mb-4">
+                  Extrapolation du rythme réel des 90 derniers jours ({projection.monthlyRate >= 0 ? '+' : ''}{fmtEUR(projection.monthlyRate)} par mois) : une estimation, pas une garantie.
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  <StatTile className="p-4 rounded-xl bg-surface-container" label="Dans 6 mois" value={fmtEUR(projection.in6)} />
+                  <StatTile className="p-4 rounded-xl bg-surface-container" label="Dans 12 mois" value={fmtEUR(projection.in12)} />
+                </div>
+                {projection.drift && (
+                  <div className={`mt-4 flex items-start gap-2 p-3 rounded-xl text-sm ${projection.drift.changeRatio < 0 ? 'bg-tertiary-container text-on-tertiary-container' : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-200'}`}>
+                    {projection.drift.changeRatio < 0
+                      ? <TrendingDown className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />
+                      : <TrendingUp className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />}
+                    <span>
+                      Votre rythme d'épargne a {projection.drift.changeRatio < 0 ? 'ralenti' : 'accéléré'} de {Math.abs(Math.round(projection.drift.changeRatio * 100))} %
+                      par rapport au trimestre précédent ({fmtEUR(projection.drift.previousMonthlyRate)} par mois → {fmtEUR(projection.monthlyRate)} par mois).
+                    </span>
+                  </div>
+                )}
+              </Card>
+            )}
+
+            <Card title="Par établissement" icon={Landmark}>
+              <div style={{ height: Math.max(190, dataByInstitution.length * 44 + 70) }}>
+                <Suspense fallback={<div className="h-full w-full rounded-xl bg-surface-container animate-pulse" aria-hidden />}>
+                  <InstitutionChart data={dataByInstitution} />
+                </Suspense>
+              </div>
+            </Card>
+
+            <Card className="lg:col-span-2" title="Évolution de mon épargne nette" icon={ChartLine}>
+              <div className="flex flex-col gap-3 -mt-2 mb-4">
+                <p className="text-sm text-on-surface-variant">
+                  {accounts.some(a => isConstrainedAccount(a.type)) ? 'Zones hachurées : épargne disponible seulement avec impôt ou bloquée.' : 'Votre part, compte par compte.'}
+                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <input type="date" value={dateRange.start} onChange={(e) => setDateRange((prev) => ({ ...prev, start: e.target.value }))} aria-label="Début de la période" className={dateFieldClass} />
+                  <span className="text-on-surface-variant text-sm">à</span>
+                  <input type="date" value={dateRange.end} onChange={(e) => setDateRange((prev) => ({ ...prev, end: e.target.value }))} aria-label="Fin de la période" className={dateFieldClass} />
+                  <Button variant="tonal" onClick={exportSession}><Save className="w-4 h-4" aria-hidden="true" /> Export CSV</Button>
+                </div>
+              </div>
+              <div className="h-80">
+                <Suspense fallback={<div className="h-full w-full rounded-xl bg-surface-container animate-pulse" aria-hidden />}>
+                  <StackedSavingsChart stackedData={stackedData} accounts={accounts} getAccountColor={getAccountColor} isConstrainedAccount={isConstrainedAccount} />
+                </Suspense>
+              </div>
+            </Card>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -7,10 +7,10 @@
 import React, { useMemo, useState } from 'react';
 import { SavingsAccount, AccountType, FiscalConfig } from '../types';
 import { computePlacementStrategy, missingSplitAccounts } from '../lib/finance';
-import { formatEUR } from '../lib/format';
 import { parseFrenchNumber } from '../lib/numbers';
 import { parseISODate } from '../lib/dates';
-import { PieChart, Plus, X } from 'lucide-react';
+import { Plus, X, Info } from 'lucide-react';
+import { SegmentedButton, MoneyText } from './ui';
 
 type Split = { accountId: string; pct: number }[];
 
@@ -47,21 +47,22 @@ export const SavingsSplitEditor: React.FC<Props> = ({ accounts, split, from, sam
   };
 
   return (
-    <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-700 space-y-3">
-      <p className="text-sm font-bold text-slate-700 dark:text-slate-200 flex items-center gap-2"><PieChart className="w-4 h-4 text-indigo-600" /> Répartition de l'épargne</p>
-      <div className="flex rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 w-fit" role="group" aria-label="Mode de répartition">
-        <button type="button" onClick={() => onChange(undefined, undefined)} aria-pressed={!custom} className={`px-3 py-2 text-xs font-black ${!custom ? 'bg-indigo-600 text-white' : 'bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}>Automatique</button>
-        <button type="button" onClick={() => !custom && enableCustom()} aria-pressed={custom} className={`px-3 py-2 text-xs font-black ${custom ? 'bg-indigo-600 text-white' : 'bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}>Personnalisée</button>
-      </div>
+    <div className="space-y-4">
+      <SegmentedButton
+        label="Mode de répartition"
+        value={custom ? 'custom' : 'auto'}
+        onChange={v => { if (v === 'auto') onChange(undefined, undefined); else if (!custom) enableCustom(); }}
+        options={[{ value: 'auto', label: 'Automatique' }, { value: 'custom', label: 'Personnalisée' }]}
+      />
 
       {missingSplitAccounts(split, accounts).length > 0 && (
-        <p className="text-xs font-bold text-amber-700 dark:text-amber-300 p-2 rounded-lg bg-amber-50 dark:bg-amber-950/40">
+        <p className="text-sm text-on-tertiary-container bg-tertiary-container rounded-xl p-3">
           Un compte de votre répartition a été supprimé : sa part est redistribuée sur les autres.{' '}
-          <button type="button" onClick={() => { setDrafts({}); setRows(split!.filter(r => accounts.some(a => a.id === r.accountId))); }} className="underline">Le retirer</button>
+          <button type="button" onClick={() => { setDrafts({}); setRows(split!.filter(r => accounts.some(a => a.id === r.accountId))); }} className="underline font-medium">Le retirer</button>
         </p>
       )}
       {!custom ? (
-        <p className="text-xs text-slate-500 dark:text-slate-400">Meilleur taux d'abord : livrets jusqu'à leur plafond, puis le reste sur vos autres placements.</p>
+        <p className="text-sm text-on-surface-variant">Meilleur taux d'abord : livrets jusqu'à leur plafond, puis le reste sur vos autres placements.</p>
       ) : (
         <>
           <div className="space-y-2">
@@ -70,7 +71,7 @@ export const SavingsSplitEditor: React.FC<Props> = ({ accounts, split, from, sam
                 <select
                   value={row.accountId}
                   onChange={e => setRows(split!.map((r, j) => (j === i ? { ...r, accountId: e.target.value } : r)))}
-                  className="flex-1 min-w-0 p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-bold text-slate-700 dark:text-slate-200"
+                  className="flex-1 min-w-0 h-10 px-3 rounded-xs bg-transparent border border-outline text-sm text-on-surface hover:border-on-surface focus:border-indigo-600 dark:focus:border-indigo-300 focus:border-2 outline-none dark:bg-surface-container-low"
                   aria-label="Compte"
                 >
                   {eligible.filter(a => a.id === row.accountId || !split!.some(r => r.accountId === a.id)).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
@@ -85,32 +86,37 @@ export const SavingsSplitEditor: React.FC<Props> = ({ accounts, split, from, sam
                     if (v !== null && v >= 0) setRows(split!.map((r, j) => (j === i ? { ...r, pct: v } : r)));
                   }}
                   onBlur={() => setDrafts(d => { const { [i]: _, ...rest } = d; return rest; })}
-                  className="w-16 p-2 text-right bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-bold text-slate-700 dark:text-slate-200"
+                  className="w-20 text-right tabular-nums h-10 px-3 rounded-xs bg-transparent border border-outline text-sm text-on-surface hover:border-on-surface focus:border-indigo-600 dark:focus:border-indigo-300 focus:border-2 outline-none"
                   aria-label="Pourcentage"
                 />
-                <span className="text-sm font-bold text-slate-500 dark:text-slate-400">%</span>
-                <button type="button" onClick={() => { setDrafts({}); setRows(split!.filter((_, j) => j !== i)); }} aria-label="Retirer" className="p-1.5 text-slate-400 hover:text-rose-500"><X className="w-4 h-4" /></button>
+                <span className="text-sm text-on-surface-variant" aria-hidden="true">%</span>
+                <button type="button" onClick={() => { setDrafts({}); setRows(split!.filter((_, j) => j !== i)); }} aria-label="Retirer ce compte de la répartition" className="w-10 h-10 shrink-0 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-on-surface/8 hover:text-error"><X className="w-5 h-5" aria-hidden="true" /></button>
               </div>
             ))}
           </div>
           <div className="flex flex-wrap items-center gap-3">
             {split!.length < eligible.length && (
-              <button type="button" onClick={() => setRows([...split!, { accountId: eligible.find(a => !split!.some(r => r.accountId === a.id))!.id, pct: 0 }])} className="text-xs font-bold text-indigo-600 dark:text-indigo-300 hover:underline flex items-center gap-1"><Plus className="w-3 h-3" /> Ajouter un compte</button>
+              <button type="button" onClick={() => setRows([...split!, { accountId: eligible.find(a => !split!.some(r => r.accountId === a.id))!.id, pct: 0 }])} className="h-10 px-3 -ml-3 rounded-full text-sm font-medium text-indigo-700 dark:text-indigo-200 hover:bg-indigo-600/8 inline-flex items-center gap-2"><Plus className="w-4 h-4" aria-hidden="true" /> Ajouter un compte</button>
             )}
-            <span className={`text-xs font-bold ${Math.abs(total - 100) < 0.01 ? 'text-emerald-700' : 'text-amber-700'}`}>
+            <span className={`text-sm tabular-nums ${Math.abs(total - 100) < 0.01 ? 'text-on-surface-variant' : 'text-on-tertiary-container bg-tertiary-container rounded-sm px-2 py-0.5'}`}>
               Total : {total.toLocaleString('fr-FR')} %{Math.abs(total - 100) >= 0.01 && ' (ramené à 100 % dans le calcul)'}
             </span>
           </div>
-          <label className="flex flex-wrap items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
+          <label className="flex flex-wrap items-center gap-2 text-sm text-on-surface-variant">
             À partir du
-            <input type="date" value={from || ''} onChange={e => onChange(split, e.target.value || undefined)} className="p-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" />
-            <span className="text-slate-500 dark:text-slate-400">{from ? `(plan automatique jusqu'au ${parseISODate(from).toLocaleDateString('fr-FR')})` : '(vide = dès maintenant)'}</span>
+            <input type="date" value={from || ''} onChange={e => onChange(split, e.target.value || undefined)} className="h-10 px-3 rounded-xs bg-transparent border border-outline text-sm text-on-surface hover:border-on-surface focus:border-indigo-600 dark:focus:border-indigo-300 focus:border-2 outline-none dark:[color-scheme:dark]" />
+            <span className="text-xs">{from ? `(plan automatique jusqu'au ${parseISODate(from).toLocaleDateString('fr-FR')})` : '(vide = dès maintenant)'}</span>
           </label>
           {preview.length > 0 && (
-            <p className="text-xs text-slate-600 dark:text-slate-300">
-              Sur {formatEUR(sample)} : {preview.filter(p => !p.infoOnly).map(p => `${formatEUR(p.fillAmount, 0)} ${p.accountName}`).join(', ')}.
-              {preview.filter(p => p.infoOnly && p.hint).map(p => <span key={p.accountName} className="block text-amber-700 dark:text-amber-300 font-bold">{p.hint}</span>)}
-            </p>
+            <div className="rounded-xl bg-surface-container p-3 text-sm">
+              <p className="text-on-surface-variant mb-1">Exemple sur <MoneyText value={sample} /> :</p>
+              <ul className="space-y-0.5">
+                {preview.filter(p => !p.infoOnly).map(p => (
+                  <li key={p.accountName} className="flex justify-between gap-3 text-on-surface"><span className="min-w-0 truncate">{p.accountName}</span><MoneyText value={p.fillAmount} decimals={0} /></li>
+                ))}
+              </ul>
+              {preview.filter(p => p.infoOnly && p.hint).map(p => <p key={p.accountName} className="mt-2 text-on-tertiary-container bg-tertiary-container rounded-lg p-2 flex items-start gap-2"><Info className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />{p.hint}</p>)}
+            </div>
           )}
         </>
       )}

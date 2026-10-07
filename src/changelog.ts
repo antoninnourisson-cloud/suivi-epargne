@@ -15,6 +15,17 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '2026.10.07-2',
+    date: '2026-10-07',
+    title: 'Accueil, Pilotage et Actualiser redessinés',
+    items: [
+      "Accueil : votre épargne en grand, avec sa variation sur 30 jours et sa courbe sur un an, puis une barre « disponible / avec impôt / bloqué ». Les détails moins utiles sont repliés dans « Plus de détails ».",
+      "Pilotage : « À placer ce mois » d'abord, puis où le placer et d'où vient ce chiffre ; vos réglages sont rangés plus bas, par thème.",
+      "Actualiser les soldes : une ligne par compte, à déplier ; la variation s'affiche dès la saisie, et « Tout enregistrer » n'est actif qu'après une modification.",
+      "Graphiques redessinés, chacun avec une phrase de synthèse et un bouton « Voir les données ». « Par établissement » précise qu'il montre votre part, et suit maintenant les mêmes chiffres que les cartes.",
+    ],
+  },
+  {
     version: '2026.10.07',
     date: '2026-10-07',
     title: 'Nouveau look Material',

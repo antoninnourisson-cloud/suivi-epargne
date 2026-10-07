@@ -1,7 +1,9 @@
 // Carte « À faire » de l'accueil : un seul modèle pour toutes les alertes (une phrase, une
-// action principale, « Plus tard »), les trois plus importantes d'abord.
+// action principale, « Plus tard »), les deux plus importantes d'abord, le reste derrière
+// « Voir tout ».
 import React, { useState } from 'react';
-import { ChevronDown, ListTodo } from 'lucide-react';
+import { ChevronDown, Clock, ListTodo } from 'lucide-react';
+import { Button, Card, Chip } from './ui';
 
 export interface TodoSpec {
   key: string;
@@ -19,6 +21,7 @@ export interface TodoSpec {
 }
 
 const SNOOZE_KEY = 'todo_snoozed';
+const SHOWN_BY_DEFAULT = 2;
 const readSnoozed = (): Record<string, number> => { try { return JSON.parse(localStorage.getItem(SNOOZE_KEY) || '{}'); } catch { return {}; } };
 
 export const TodoList: React.FC<{ items: TodoSpec[] }> = ({ items }) => {
@@ -30,7 +33,7 @@ export const TodoList: React.FC<{ items: TodoSpec[] }> = ({ items }) => {
   if (visible.length === 0) return null;
   // Actions avant informations.
   const sorted = [...visible].sort((a, b) => (a.tone === b.tone ? 0 : a.tone === 'action' ? -1 : 1));
-  const shown = showAll ? sorted : sorted.slice(0, 3);
+  const shown = showAll ? sorted : sorted.slice(0, SHOWN_BY_DEFAULT);
 
   const snooze = (key: string) => {
     const next = { ...snoozed, [key]: now + 7 * 86_400_000 };
@@ -38,44 +41,58 @@ export const TodoList: React.FC<{ items: TodoSpec[] }> = ({ items }) => {
     try { localStorage.setItem(SNOOZE_KEY, JSON.stringify(next)); } catch { /* non mémorisé */ }
   };
   const toggle = () => setOpen(o => { try { localStorage.setItem('todo_open', o ? '0' : '1'); } catch { /* idem */ } return !o; });
+  const count = `${visible.length} élément${visible.length > 1 ? 's' : ''}`;
 
   return (
-    <section aria-labelledby="todo-title" className="bg-white dark:bg-slate-800 rounded-2xl shadow-xs border border-slate-200 dark:border-slate-700">
-      <button type="button" onClick={toggle} aria-expanded={open} className="w-full flex items-center justify-between gap-3 p-4 text-left">
-        <span id="todo-title" className="text-sm font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
-          <ListTodo className="w-4 h-4 text-indigo-600" aria-hidden="true" /> À faire
-          <span className="px-2 py-0.5 rounded-full bg-indigo-600 text-white text-[11px] font-black" aria-label={`${visible.length} élément${visible.length > 1 ? 's' : ''}`}>{visible.length}</span>
+    <Card variant="filled" padding="none" aria-labelledby="todo-title">
+      <button type="button" onClick={toggle} aria-expanded={open} aria-controls="todo-list" className="w-full flex items-center justify-between gap-3 px-5 py-4 sm:px-6 text-left rounded-2xl hover:bg-on-surface/4 transition-colors">
+        <span className="flex items-center gap-2 min-w-0">
+          <ListTodo className="w-5 h-5 shrink-0 text-indigo-600 dark:text-indigo-300" aria-hidden="true" />
+          <span id="todo-title" className="text-base font-medium text-on-surface">À faire</span>
+          <span className="min-w-6 h-6 px-2 rounded-full bg-primary text-on-primary text-xs font-medium tabular-nums inline-flex items-center justify-center">
+            <span aria-hidden="true">{visible.length}</span>
+            <span className="sr-only">{count}</span>
+          </span>
         </span>
-        <ChevronDown className={`w-4 h-4 text-slate-500 dark:text-slate-400 transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden="true" />
+        <ChevronDown className={`w-5 h-5 shrink-0 text-on-surface-variant transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden="true" />
       </button>
       {open && (
-        <ul className="px-4 pb-4 space-y-2">
-          {shown.map(item => (
-            <li key={item.key} className={`p-3 rounded-xl border text-sm ${item.tone === 'action' ? 'bg-indigo-50/60 dark:bg-indigo-950/30 border-indigo-200 dark:border-indigo-900' : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700'}`}>
-              <div className="flex flex-wrap items-start gap-3">
-                <item.icon className={`w-4 h-4 shrink-0 mt-0.5 ${item.tone === 'action' ? 'text-indigo-700 dark:text-indigo-300' : 'text-slate-500 dark:text-slate-400'}`} aria-hidden="true" />
-                <div className="flex-1 min-w-48 text-slate-800 dark:text-slate-100 font-bold">
-                  {item.text}
-                  {item.detail && <span className="block font-normal text-xs mt-1 text-slate-600 dark:text-slate-300">{item.detail}</span>}
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  {item.secondary && <button onClick={item.secondary.onClick} className="text-xs font-bold text-slate-600 dark:text-slate-300 underline hover:opacity-70 px-1 py-1.5">{item.secondary.label}</button>}
-                  {item.snoozable && <button onClick={() => snooze(item.key)} className="text-xs font-bold text-slate-600 dark:text-slate-300 underline hover:opacity-70 px-1 py-1.5">Plus tard</button>}
-                  {item.primary && <button onClick={item.primary.onClick} className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black">{item.primary.label}</button>}
-                </div>
-              </div>
-              {item.extra && <div className="mt-3">{item.extra}</div>}
-            </li>
-          ))}
-          {sorted.length > 3 && (
-            <li>
-              <button onClick={() => setShowAll(s => !s)} className="w-full text-center text-xs font-bold text-indigo-700 dark:text-indigo-300 py-2 hover:underline">
+        <div id="todo-list" className="px-3 pb-3 sm:px-4 sm:pb-4">
+          <ul className="space-y-2">
+            {shown.map(item => {
+              const isAction = item.tone === 'action';
+              return (
+                <li key={item.key} className="p-4 rounded-xl bg-surface-container-lowest dark:bg-surface-container-low text-sm">
+                  <div className="flex flex-wrap items-start gap-3">
+                    <span className={`w-9 h-9 shrink-0 rounded-full flex items-center justify-center ${isAction ? 'bg-primary-container text-on-primary-container' : 'bg-surface-container-high text-on-surface-variant'}`}>
+                      <item.icon className="w-[18px] h-[18px]" aria-hidden="true" />
+                    </span>
+                    <div className="flex-1 min-w-48 pt-1.5">
+                      <p className="font-medium text-on-surface">{item.text}</p>
+                      {item.detail && <p className="text-xs mt-1 text-on-surface-variant">{item.detail}</p>}
+                    </div>
+                  </div>
+                  {(item.primary || item.secondary || item.snoozable) && (
+                    <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
+                      {item.snoozable && <Chip kind="suggestion" icon={Clock} onClick={() => snooze(item.key)}>Plus tard</Chip>}
+                      {item.secondary && <Button variant="text" onClick={item.secondary.onClick}>{item.secondary.label}</Button>}
+                      {item.primary && <Button variant="tonal" onClick={item.primary.onClick}>{item.primary.label}</Button>}
+                    </div>
+                  )}
+                  {item.extra && <div className="mt-3">{item.extra}</div>}
+                </li>
+              );
+            })}
+          </ul>
+          {sorted.length > SHOWN_BY_DEFAULT && (
+            <div className="mt-2 flex justify-center">
+              <Button variant="text" onClick={() => setShowAll(s => !s)} aria-expanded={showAll}>
                 {showAll ? 'Voir moins' : `Voir tout (${sorted.length})`}
-              </button>
-            </li>
+              </Button>
+            </div>
           )}
-        </ul>
+        </div>
       )}
-    </section>
+    </Card>
   );
 };
