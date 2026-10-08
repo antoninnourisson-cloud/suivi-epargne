@@ -81,7 +81,7 @@ test.describe('Paramètres (démo)', () => {
     await page.addInitScript(v => { try { localStorage.setItem('last_seen_version', v); } catch { /* ignoré */ } }, LATEST_VERSION);
     await page.goto('/?demo=1');
     await expect(page.getByRole('heading', { name: 'Accueil', level: 2 })).toBeAttached();
-    await page.locator('aside').getByRole('button', { name: new RegExp(`version ${LATEST_VERSION.replace(/\./g, '\\.')}`) }).click();
+    await page.locator('aside').getByRole('button', { name: new RegExp(`version ${LATEST_VERSION.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`) }).click();
     await expect(cardButton(page, 'À propos')).toHaveAttribute('aria-expanded', 'true');
     // L'en-tête de la carte est amené à l'écran (son contenu peut dépasser vers le bas).
     await expect(cardButton(page, 'À propos')).toBeInViewport();
