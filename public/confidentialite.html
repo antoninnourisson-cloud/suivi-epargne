@@ -36,7 +36,7 @@
 
   <section>
     <h2>Le serveur de l'application</h2>
-    <p>Un petit serveur (Cloudflare Workers) a trois rôles : maintenir votre connexion Google, envoyer des rappels, et lire chaque semaine des pages publiques de service-public.gouv.fr pour la veille fiscale (aucune donnée vous concernant n'y circule). Si vous l'activez, il garde aussi une sauvegarde de secours chiffrée qu'il ne peut pas lire. Voici <strong>exactement</strong> ce qu'il conserve :</p>
+    <p>Un petit serveur (Cloudflare Workers) a trois rôles : maintenir votre connexion Google, envoyer des rappels, et lire chaque semaine des pages publiques de service-public.gouv.fr pour la veille fiscale : il fait relever les valeurs officielles de ces pages par l'IA de Cloudflare (Workers AI), à qui il n'envoie que ce texte public, jamais de donnée vous concernant. Si vous l'activez, il garde aussi une sauvegarde de secours chiffrée qu'il ne peut pas lire. Voici <strong>exactement</strong> ce qu'il conserve :</p>
     <ul>
       <li><strong>Un jeton Google de longue durée</strong> (« refresh token »), chiffré (AES-256-GCM) avec une clé gardée à part, pour vous éviter de vous reconnecter à chaque ouverture ;</li>
       <li><strong>Votre adresse e-mail et votre identifiant Google</strong>, pour savoir à quel compte appartient ce jeton ;</li>

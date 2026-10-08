@@ -26,9 +26,9 @@ export const clearBackendSession = (): void => {
 
 export interface AccessTokenResponse { access_token: string; expires_in: number }
 
-const call = async (path: string, init: RequestInit = {}, withSession = true): Promise<Response> => {
+const call = async (path: string, init: RequestInit = {}, withSession = true, timeoutMs = 20_000): Promise<Response> => {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 20_000);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   const token = withSession ? getSessionToken() : null;
   try {
     return await fetch(`${BACKEND_URL}${path}`, {
@@ -159,3 +159,31 @@ export const getServerHealth = async (): Promise<ServerHealth> => authedJson<Ser
 export interface FiscalSourceText { url: string; topic: string; text: string; ok: boolean }
 export const getFiscalSources = async (): Promise<FiscalSourceText[]> =>
   (await authedJson<{ sources: FiscalSourceText[] }>('/fiscal-sources')).sources || [];
+
+// --- Veille fiscale du serveur (Workers AI, chaque lundi) : worker/src/fiscalWatchJob.ts ---
+export interface ServerFiscalWatch {
+  checkedAt: string; model: string; ok: boolean;
+  /** Forme FiscalWatchResult (src/lib/fiscalWatch.ts). */
+  values: Record<string, unknown>;
+  sources: { url: string; topic: string; status: string; fields: string[]; rejected: { field: string; reason: string }[]; error?: string }[];
+  neuronsEstimate: number; neuronsUsed?: number;
+}
+/** Dernier résultat de la veille du serveur, ou `null` si elle n'a jamais tourné. */
+export const getServerFiscalWatch = async (): Promise<ServerFiscalWatch | null> => {
+  const res = await call('/fiscal-watch');
+  if (res.status === 404) return null;
+  if (res.status === 401) throw new Error('SESSION_EXPIRED');
+  if (!res.ok) throw new Error(`BACKEND_${res.status}`);
+  return res.json() as Promise<ServerFiscalWatch>;
+};
+/**
+ * Lance la veille du serveur maintenant (une minute au plus). Le serveur la limite à une
+ * exécution toutes les 20 h : il rend alors le dernier résultat (`null` s'il n'y en a pas).
+ */
+export const runServerFiscalWatch = async (): Promise<ServerFiscalWatch | null> => {
+  const res = await call('/fiscal-watch/run', { method: 'POST' }, true, 120_000);
+  if (res.status === 429) return ((await res.json()) as { latest?: ServerFiscalWatch }).latest ?? null;
+  if (res.status === 401) throw new Error('SESSION_EXPIRED');
+  if (!res.ok) throw new Error(`BACKEND_${res.status}`);
+  return res.json() as Promise<ServerFiscalWatch>;
+};

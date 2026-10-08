@@ -165,7 +165,7 @@ const App: React.FC = () => {
     return { taxDue: b.taxAmount, taxableIncome: b.netTaxableYear, beforeAllowance: b.netTaxableBeforeAllowance };
   }, [dashboardConfig, data.fiscalConfig, data.workBenefits, data.grossAnnual]);
 
-  // Veille fiscale hebdomadaire (Gemini + recherche web) : propositions à valider.
+  // Veille fiscale hebdomadaire (serveur + Workers AI, sinon Gemini) : propositions à valider.
   const fiscalWatch = useFiscalWatch(data.geminiApiKey, data.fiscalConfig, data.accounts, isAuthenticated && !data.isLoadingData && !locked);
   const applyFiscalProposal = (p: FiscalProposal) => {
     const next = p.apply({ fiscal: data.fiscalConfig, accounts: data.accounts });
@@ -175,7 +175,8 @@ const App: React.FC = () => {
   };
   const fiscalWatchCard = (compact: boolean) => (
     <FiscalWatchCard compact={compact} proposals={fiscalWatch.proposals} running={fiscalWatch.running} checkedAt={fiscalWatch.checkedAt}
-      lastError={fiscalWatch.lastError} hasKey={fiscalWatch.hasKey} onApply={applyFiscalProposal} onDismiss={fiscalWatch.dismiss} onRun={fiscalWatch.run} />
+      lastError={fiscalWatch.lastError} hasKey={fiscalWatch.hasKey} canRun={fiscalWatch.canRun} source={fiscalWatch.source} runningVia={fiscalWatch.runningVia}
+      serverReport={fiscalWatch.serverReport} onApply={applyFiscalProposal} onDismiss={fiscalWatch.dismiss} onRun={fiscalWatch.run} />
   );
   const askConfirm = (title: string, message: string, onConfirm: () => void | Promise<void>, danger = false) =>
     setDialog({ open: true, kind: 'confirm', title, message, danger, confirmLabel: 'Confirmer', onConfirm: () => { void onConfirm(); } });

@@ -44,6 +44,14 @@ simple = { limit = 60, period = 60 }
 [observability]
 enabled = true
 
-# Rappels quotidiens : 07:00 UTC = 9 h à Paris en été, 8 h en hiver.
+# Workers AI (veille fiscale hebdomadaire, src/fiscalWatchJob.ts). Offre gratuite : 10 000
+# neurones par jour ; une exécution en consomme moins de 6 000 (plafond codé), en pratique
+# autour de 2 000. Rien à créer dans le tableau de bord.
+[ai]
+binding = "AI"
+
+# Deux tâches planifiées, distinguées par event.cron dans src/index.ts (scheduled) :
+#   "0 7 * * *" rappels quotidiens : 07:00 UTC = 9 h à Paris en été, 8 h en hiver ;
+#   "0 5 * * 1" veille fiscale, le lundi à 05:00 UTC (FISCAL_WATCH_CRON, à garder identique).
 [triggers]
-crons = ["0 7 * * *"]
+crons = ["0 7 * * *", "0 5 * * 1"]

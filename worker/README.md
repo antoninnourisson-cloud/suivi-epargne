@@ -11,6 +11,15 @@ Deux fonctions, et seulement deux :
    jour)… Les dates sont celles de
    Paris (heure d'été comprise). Chaque rappel n'est envoyé qu'une fois.
 
+S'y ajoute la **veille fiscale hebdomadaire** (`src/fiscalWatchJob.ts`) : chaque lundi à 5 h UTC,
+le serveur relit les 8 pages officielles de service-public.gouv.fr (`src/fiscalSources.ts`) et
+fait relever par **Cloudflare Workers AI** (`@cf/meta/llama-3.3-70b-instruct-fp8-fast`, mode
+JSON, température 0, une page par appel) les taux, plafonds, prélèvements sociaux, décote et
+barème. Chaque valeur doit figurer dans le texte de la page (nombre suivi de « % » ou « € »),
+sinon elle est écartée. Aucune donnée d'utilisateur n'est envoyée au modèle. Le résultat est
+gardé en KV (`fiscal-watch:latest`) ; l'app le compare à ses paramètres et **propose** les
+écarts (jamais appliqués d'office). Sans résultat de moins de 8 jours, l'app revient à Gemini.
+
 L'app reste hébergée sur GitHub Pages. Tant que `VITE_BACKEND_URL` n'est pas défini, elle
 fonctionne sans serveur, comme avant.
 
@@ -137,6 +146,9 @@ Toutes les routes marquées 🔒 exigent `Authorization: Bearer <session>` ; san
 | `GET /backup` 🔒 | — | dates des copies ; `GET /backup/:date` : la copie chiffrée |
 | `DELETE /backup` 🔒 | — | supprime toutes les copies |
 | `GET /health` 🔒 | — | `{"lastRunAt","ok","usersProcessed","error"?}` (dernière tâche quotidienne) |
+| `GET /fiscal-sources` 🔒 | — | `{"fetchedAt","sources":[{url,topic,text,ok}]}` (texte des pages officielles, cache 3 jours) |
+| `GET /fiscal-watch` 🔒 | — | dernier relevé : `{"checkedAt","model","ok","values","sources":[{url,topic,status,fields,rejected}],"neuronsEstimate","neuronsUsed"?}` ; `404 NOT_YET_RUN` avant le premier |
+| `POST /fiscal-watch/run` 🔒 | — | relance la veille (≤ 1 min) ; `429 TOO_SOON` (+ `latest`) moins de 20 h après un succès ou 6 h après un essai ; `502` si aucune valeur relevée ; `503 AI_UNAVAILABLE` sans binding |
 
 ## Tout révoquer d'un coup
 - Dans l'app : **Supprimer mes données serveur** (`POST /account/delete`) efface tout ce que
@@ -157,7 +169,9 @@ autorisé (rien dans `[vars]`). Les secrets locaux viennent de `.dev.vars`.
 ## Observabilité
 `[observability] enabled = true` : logs et erreurs consultables dans le tableau de bord
 Cloudflare (Workers & Pages → `suivi-epargne-api` → *Logs*), sans `wrangler tail`. Le compte
-rendu de la tâche quotidienne est aussi lisible par l'app (`GET /health`).
+rendu de la tâche quotidienne est aussi lisible par l'app (`GET /health`). La veille fiscale
+journalise `fiscal watch <ok> <n> values <neurones> neurons` ; sa consommation réelle est
+visible dans le tableau de bord (AI → Workers AI).
 
 ## Limites de l'offre gratuite
 | Ressource | Limite gratuite | Usage de Pécule |
@@ -165,6 +179,7 @@ rendu de la tâche quotidienne est aussi lisible par l'app (`GET /health`).
 | Requêtes Worker | 100 000 / jour | quelques dizaines |
 | Écritures KV (put + delete) | 1 000 / jour | ~1 par connexion, 1 par jour et par session utilisée, 1 par rappel envoyé, 1 pour l'état de la tâche |
 | Lectures KV | 100 000 / jour | quelques centaines |
+| Workers AI | 10 000 neurones / jour | une veille ≈ 1 500 à 2 000 neurones (plafond codé : 6 000, pire cas estimé ≈ 2 800), une fois par semaine |
 | CPU | 10 ms par requête | le chiffrement push et la lecture du fichier restent en dessous ; la tâche quotidienne est un cron, plafonné pareil mais l'attente réseau ne compte pas |
 
 Le state OAuth signé et le limiteur natif évitent des écritures KV ; une suppression de compte

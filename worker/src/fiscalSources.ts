@@ -44,7 +44,7 @@ export const htmlToText = (html: string, maxChars = MAX_CHARS): string => {
   return h.replace(/[ \t  ]+/g, ' ').replace(/\n\s*\n+/g, '\n').trim().slice(0, maxChars);
 };
 
-/** `maxChars` : longueur gardée par page (l'app reçoit 20 000 caractères ; la veille du serveur lit la page entière puis n'en garde que les passages utiles). */
+/** `maxChars` : longueur gardée par page (20 000 caractères pour l'app ; la veille du serveur en garde davantage, car la décote et les dons sont en fin de page). */
 export const fetchFiscalSources = async (fetcher: typeof fetch = fetch, maxChars = MAX_CHARS): Promise<FiscalSource[]> =>
   Promise.all(FISCAL_SOURCE_URLS.map(async ({ url, topic }) => {
     try {

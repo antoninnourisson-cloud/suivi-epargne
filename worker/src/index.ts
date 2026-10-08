@@ -20,6 +20,7 @@
 //   sent:<sub>:<k>    rappels déjà envoyés (dédoublonnage, ~400 jours)
 //   health:cron       compte rendu de la dernière tâche quotidienne
 //   backup:<sub>:<date>  sauvegarde de secours CHIFFRÉE PAR L'APP (illisible ici), 8 au plus, 1 an
+//   fiscal-watch:*    veille fiscale hebdomadaire (Workers AI, pages publiques seulement : fiscalWatchJob.ts)
 // Le state OAuth n'est plus stocké : il est signé (HMAC) et lié au navigateur par cookie.
 // ================================================
 import { sha256b64url, encryptString, decryptString, randomToken } from './crypto';
@@ -28,6 +29,7 @@ import {
 } from './google';
 import { sendPush, PushMessage } from './webpush';
 import { fetchFiscalSources, FiscalSource } from './fiscalSources';
+import { AiRunner, FISCAL_WATCH_CRON, LATEST_KEY, FAILURE_KEY, FiscalWatchRun, runAndStoreFiscalWatch, canRunOnDemand } from './fiscalWatchJob';
 import { isReminderEnabled } from '../../src/lib/notificationPrefs';
 import { computeReminders, applyDiscreetMode, isDiscreet, parisCivilDate } from './reminders';
 import {
@@ -55,6 +57,7 @@ export interface Env {
   ALLOWED_EMAILS?: string;       // secret — comptes Google autorisés, séparés par des virgules
   AUTH_LIMITER?: RateLimit;      // binding [[ratelimits]] — /auth/*, /account/delete
   API_LIMITER?: RateLimit;       // binding [[ratelimits]] — /token et le reste de l'API
+  AI?: AiRunner;                 // binding [ai] — Workers AI, pour la veille fiscale
 }
 
 const SENT_TTL = 400 * DAY;
@@ -428,6 +431,30 @@ const handleFiscalSources = async (req: Request, env: Env): Promise<Response> =>
   return json(req, env, payload);
 };
 
+// Veille fiscale du serveur (Workers AI) : dernier résultat, et exécution à la demande
+// (limitée : une toutes les 20 h après un succès, 6 h après un essai, pour le quota gratuit).
+const handleFiscalWatch = async (req: Request, env: Env): Promise<Response> => {
+  const s = await readSession(req, env);
+  if (!s) return json(req, env, { error: 'REAUTH_REQUIRED' }, 401);
+  const latest = await env.STORE.get<FiscalWatchRun>(LATEST_KEY, 'json');
+  const lastFailure = await env.STORE.get<FiscalWatchRun>(FAILURE_KEY, 'json');
+  const failure = lastFailure && (!latest || lastFailure.checkedAt > latest.checkedAt) ? { lastFailure } : {};
+  if (!latest) return json(req, env, { error: 'NOT_YET_RUN', ...failure }, 404);
+  return json(req, env, { ...latest, ...failure });
+};
+
+const handleFiscalWatchRun = async (req: Request, env: Env): Promise<Response> => {
+  const s = await readSession(req, env);
+  if (!s) return json(req, env, { error: 'REAUTH_REQUIRED' }, 401);
+  if (!env.AI) return json(req, env, { error: 'AI_UNAVAILABLE' }, 503);
+  if (!(await canRunOnDemand(env.STORE))) {
+    const latest = await env.STORE.get<FiscalWatchRun>(LATEST_KEY, 'json');
+    return json(req, env, { error: 'TOO_SOON', ...(latest ? { latest } : {}) }, 429, { 'Retry-After': '3600' });
+  }
+  const run = await runAndStoreFiscalWatch(env.STORE, env.AI);
+  return json(req, env, run, run.ok ? 200 : 502);
+};
+
 const handleHealth = async (req: Request, env: Env): Promise<Response> => {
   const s = await readSession(req, env);
   if (!s) return json(req, env, { error: 'REAUTH_REQUIRED' }, 401);
@@ -611,6 +638,8 @@ const route = async (req: Request, env: Env, url: URL, r: string): Promise<Respo
     case 'GET /health': return handleHealth(req, env);
     case 'GET /status': return handleStatus(req, env);
     case 'GET /fiscal-sources': return handleFiscalSources(req, env);
+    case 'GET /fiscal-watch': return handleFiscalWatch(req, env);
+    case 'POST /fiscal-watch/run': return handleFiscalWatchRun(req, env);
     case 'GET /auth/start': return handleAuthStart(req, env, url);
     case 'GET /auth/callback': {
       const res = await handleAuthCallback(req, env, url);
@@ -660,7 +689,15 @@ export default {
     }
   },
 
-  async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
+  async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
+    // Deux crons (wrangler.toml) : la veille fiscale du lundi, et les rappels quotidiens.
+    if (event.cron === FISCAL_WATCH_CRON) {
+      ctx.waitUntil(runAndStoreFiscalWatch(env.STORE, env.AI).then(
+        r => console.log('fiscal watch', r.ok, Object.keys(r.values).length, 'values', r.neuronsUsed ?? r.neuronsEstimate, 'neurons'),
+        e => console.error('fiscal watch failed', e),
+      ));
+      return;
+    }
     ctx.waitUntil(runDailyReminders(env));
   },
 };

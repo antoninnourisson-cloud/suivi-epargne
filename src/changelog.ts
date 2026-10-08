@@ -15,6 +15,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '2026.10.07-8',
+    date: '2026-10-07',
+    title: 'Veille fiscale sans clé Gemini',
+    items: [
+      "La veille fiscale tourne désormais chaque semaine sur le serveur, avec l'IA de Cloudflare : plus besoin de clé Gemini pour qu'elle fonctionne. Gemini reste utilisé en secours si vous avez une clé.",
+      "Paramètres, « Veille fiscale » : « Détail du relevé » montre chaque valeur lue, la phrase exacte de la page officielle, et si elle correspond à celle de l'app. Comme avant, rien n'est modifié sans votre accord.",
+    ],
+  },
+  {
     version: '2026.10.07-7',
     date: '2026-10-07',
     title: 'Sauvegarde de secours et site mieux protégé',
