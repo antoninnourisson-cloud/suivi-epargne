@@ -1,6 +1,6 @@
 # Serveur Pécule (Cloudflare Worker)
 
-Deux fonctions, et seulement deux :
+Ce que le serveur fait, et seulement ça :
 
 1. **Session Google persistante** — le serveur garde ton *refresh token* Google (chiffré) et
    délivre à l'app des jetons d'accès d'une heure. Tu ne te reconnectes plus, même en PWA.
@@ -10,17 +10,25 @@ Deux fonctions, et seulement deux :
    paie précédente, replié dans le rappel du jour de paie quand les deux tombent le même
    jour)… Les dates sont celles de
    Paris (heure d'été comprise). Chaque rappel n'est envoyé qu'une fois.
+3. **Sauvegarde de secours chiffrée** (facultative, `PUT/GET/DELETE /backup`) : l'app chiffre ses
+   données avec une clé dérivée d'un code de secours que le serveur ne reçoit jamais ; il garde
+   les 8 dernières copies, un an chacune, sans pouvoir les lire.
+4. **Veille fiscale hebdomadaire**, détaillée ci-dessous.
 
-S'y ajoute la **veille fiscale hebdomadaire** (`src/fiscalWatchJob.ts`) : chaque lundi à 5 h UTC,
+La **veille fiscale** (`src/fiscalWatchJob.ts`) : chaque lundi à 5 h UTC,
 le serveur relit les 8 pages officielles de service-public.gouv.fr (`src/fiscalSources.ts`) et
 fait relever par **Cloudflare Workers AI** (`@cf/meta/llama-3.3-70b-instruct-fp8-fast`, mode
 JSON, température 0, une page par appel) les taux, plafonds, prélèvements sociaux, décote et
 barème. Chaque valeur doit figurer dans le texte de la page (nombre suivi de « % » ou « € »),
 sinon elle est écartée. Aucune donnée d'utilisateur n'est envoyée au modèle. Le résultat est
 gardé en KV (`fiscal-watch:latest`) ; l'app le compare à ses paramètres et **propose** les
-écarts (jamais appliqués d'office). Sans résultat de moins de 8 jours, l'app revient à Gemini.
+écarts (jamais appliqués d'office), et Paramètres → Veille fiscale → *Détail du relevé* montre
+chaque valeur avec la phrase de la page. À l'ouverture, l'app relance la veille si le dernier
+relevé manque ou date de plus de 8 jours (`POST /fiscal-watch/run`, bridé) ; sans relevé
+récent, elle revient à Gemini (clé de l'appareil).
 
-L'app reste hébergée sur GitHub Pages. Tant que `VITE_BACKEND_URL` n'est pas défini, elle
+L'app reste hébergée sur GitHub Pages (derrière Cloudflare et le Worker des en-têtes `edge/`,
+qui n'a rien à voir avec ce serveur). Tant que `VITE_BACKEND_URL` n'est pas défini, elle
 fonctionne sans serveur, comme avant.
 
 ## Installation (une seule fois)
@@ -69,7 +77,7 @@ Le script génère la clé de chiffrement et les clés de notification, puis les
 directement chez Cloudflare sans jamais les afficher. Il te demande ensuite deux valeurs, en
 saisie masquée :
 - `GOOGLE_CLIENT_SECRET` : le code secret de l'étape 4 ;
-- `ALLOWED_EMAILS` : ton adresse Gmail. Le serveur refuse tout autre compte.
+- `ALLOWED_EMAILS` : l'adresse de ton compte Google. Le serveur refuse tout autre compte.
 
 **Sans terminal pour les secrets personnels** : `npm run setup-secrets -- --generated-only` ne pose
 que les clés générées, sans rien demander. Les deux autres se renseignent ensuite dans le tableau
@@ -95,8 +103,11 @@ d'accueil (Partager → *Sur l'écran d'accueil*).
   sur Drive), chiffré en AES-256-GCM avec une clé stockée à part, dans les
   secrets Cloudflare ; ton e-mail et ton identifiant Google ; les empreintes des sessions ; les
   abonnements push ; des marqueurs « déjà envoyé » (~400 jours) ; l'état de la tâche
-  quotidienne. Pour les notifications, il lit ton fichier de données une fois par jour et n'en
-  garde rien. Il ne stocke aucune donnée financière.
+  quotidienne ; si tu l'as activée, tes sauvegardes de secours **chiffrées par l'app**
+  (illisibles pour lui) ; et des données publiques : le dernier relevé de la veille fiscale
+  (`fiscal-watch:*`) et le texte des pages officielles en cache (`fiscal-sources`, 3 jours).
+  Pour les notifications, il lit ton fichier de données une fois par jour et n'en garde rien.
+  Il ne stocke aucune donnée financière lisible.
 - **Les sessions des appareils** sont stockées hachées (SHA-256) : une fuite du stockage ne
   permet pas de les rejouer. Elles expirent après 30 jours sans utilisation, et **60 jours au
   plus** après la connexion, même utilisées tous les jours. Les sessions d'avant cette règle
@@ -124,7 +135,8 @@ d'accueil (Partager → *Sur l'écran d'accueil*).
 ## API
 
 Toutes les routes marquées 🔒 exigent `Authorization: Bearer <session>` ; sans session valide :
-`401 {"error":"REAUTH_REQUIRED"}`. Corps JSON limités à 4 Ko (`413 {"error":"BODY_TOO_LARGE"}`).
+`401 {"error":"REAUTH_REQUIRED"}`. Corps JSON limités à 4 Ko, 2 Mo pour `PUT /backup`
+(`413 {"error":"BODY_TOO_LARGE"}`).
 
 | Route | Corps | Réponse |
 |---|---|---|
@@ -156,7 +168,9 @@ Toutes les routes marquées 🔒 exigent `Authorization: Bearer <session>` ; san
 - Ou sur <https://myaccount.google.com/permissions>, retire l'accès de l'application. Le
   serveur reçoit alors `invalid_grant` à la demande suivante (ou à la tâche quotidienne) et
   efface tout : jeton, sessions, abonnements, marqueurs. Chaque appareil repasse sur l'écran
-  de connexion.
+  de connexion. Seules les sauvegardes de secours chiffrées restent (illisibles, effacées au
+  bout d'un an), pour pouvoir encore restaurer après reconnexion ; « Désactiver » ou
+  « Supprimer mes données serveur » les efface tout de suite.
 - Si Google refuse le rafraîchissement pour une autre raison (panne, clé changée), la tâche
   quotidienne envoie « Reconnectez-vous à Pécule pour garder vos rappels », au plus une fois
   tous les 3 jours.

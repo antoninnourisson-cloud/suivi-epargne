@@ -30,13 +30,13 @@
 
   <section>
     <h2>Où sont vos données</h2>
-    <p>Toutes les données de l'application (comptes, mouvements, objectifs, réglages) sont enregistrées dans un fichier unique sur <strong>votre propre Google Drive</strong>. L'application n'a accès qu'aux fichiers qu'elle a elle-même créés (autorisation Google « drive.file ») : elle ne voit pas le reste de votre Drive.</p>
+    <p>Toutes les données de l'application (comptes, mouvements, objectifs, réglages) sont enregistrées dans un fichier unique sur <strong>votre propre Google Drive</strong>. L'application n'a accès qu'aux fichiers qu'elle a elle-même créés, et à ceux que vous choisissez de lui ouvrir dans le sélecteur de Google (fiche de paie, avis d'imposition, reçu de don) : c'est l'autorisation Google « drive.file ». Elle ne voit pas le reste de votre Drive, et ne demande aucun accès à vos e-mails.</p>
     <p>Une <strong>copie locale</strong> de ces données est aussi gardée sur chaque appareil où vous utilisez l'application (stockage du navigateur), pour qu'elle s'ouvre vite et fonctionne hors ligne. Elle est <strong>chiffrée</strong> (AES-GCM, clé non exportable propre à l'appareil) et reste sur l'appareil ; la déconnexion ou l'effacement des données du site la supprime.</p>
   </section>
 
   <section>
     <h2>Le serveur de l'application</h2>
-    <p>Un petit serveur (Cloudflare Workers) a trois rôles : maintenir votre connexion Google, envoyer des rappels, et lire chaque semaine des pages publiques de service-public.gouv.fr pour la veille fiscale : il fait relever les valeurs officielles de ces pages par l'IA de Cloudflare (Workers AI), à qui il n'envoie que ce texte public, jamais de donnée vous concernant. Si vous l'activez, il garde aussi une sauvegarde de secours chiffrée qu'il ne peut pas lire. Voici <strong>exactement</strong> ce qu'il conserve :</p>
+    <p>Un petit serveur (Cloudflare Workers) a trois rôles : maintenir votre connexion Google, envoyer des rappels, et tenir la veille fiscale. Si vous l'activez, il garde aussi une sauvegarde de secours chiffrée qu'il ne peut pas lire. Voici <strong>exactement</strong> ce qu'il conserve à votre sujet :</p>
     <ul>
       <li><strong>Un jeton Google de longue durée</strong> (« refresh token »), chiffré (AES-256-GCM) avec une clé gardée à part, pour vous éviter de vous reconnecter à chaque ouverture ;</li>
       <li><strong>Votre adresse e-mail et votre identifiant Google</strong>, pour savoir à quel compte appartient ce jeton ;</li>
@@ -47,7 +47,14 @@
       <li><strong>Vos sauvegardes de secours chiffrées</strong>, seulement si vous activez cette option (voir ci-dessous).</li>
     </ul>
     <p>Une fois par jour, si les notifications sont activées, le serveur <strong>lit votre fichier de données</strong> sur Drive pour calculer les rappels (échéances, révision des taux, jour de paie…). Il n'en <strong>garde rien</strong> : ni copie, ni montant, ni historique. En dehors des sauvegardes de secours chiffrées, qu'il ne peut pas lire, il ne stocke aucune donnée financière.</p>
-    <p>L'accès au serveur est limité au compte Google de son propriétaire.</p>
+    <p>Il garde aussi des données <strong>publiques</strong>, qui ne vous concernent pas : le texte des pages officielles lues pour la veille fiscale (3 jours) et le dernier relevé de cette veille (valeurs officielles, sources, date).</p>
+    <p>L'accès au serveur est limité au compte Google de son propriétaire. Pour bloquer les abus, le nombre de requêtes par adresse IP est limité par Cloudflare ; ces adresses ne sont pas enregistrées par Pécule.</p>
+  </section>
+
+  <section>
+    <h2>Veille fiscale</h2>
+    <p>Chaque lundi, le serveur lit une liste fixe de pages publiques de service-public.gouv.fr et en fait relever les taux, plafonds et barèmes par l'IA de Cloudflare (<strong>Workers AI</strong>). Seul le texte de ces pages publiques est envoyé à l'IA : <strong>aucune donnée vous concernant</strong>, ni montant, ni paramètre de votre fichier. L'application compare ensuite ce relevé à ses propres paramètres, sur votre appareil, et vous propose les différences ; rien n'est modifié sans votre accord.</p>
+    <p>Si le relevé du serveur manque ou date de plus de 8 jours, et si vous avez enregistré une clé Gemini, l'application fait la même vérification avec Gemini (voir ci-dessous).</p>
   </section>
 
   <section>
@@ -75,9 +82,11 @@
         <ul>
           <li><strong>fiches de paie</strong> : le document est envoyé pour en extraire les montants. Il contient des informations personnelles (nom, adresse, numéro de sécurité sociale, employeur, salaire) ;</li>
           <li><strong>avis d'imposition</strong> : le document est envoyé pour en relever le revenu fiscal de référence et le nombre de parts. Il contient aussi des informations personnelles (nom, adresse, numéro fiscal, revenus du foyer) ;</li>
-          <li><strong>veille fiscale</strong> : seuls le texte de pages publiques de service-public.gouv.fr et les valeurs fiscales actuelles de l'application sont envoyés, aucune donnée personnelle.</li>
+          <li><strong>veille fiscale</strong>, en secours seulement : le texte de pages publiques de service-public.gouv.fr (ou, s'il est indisponible, une demande de recherche Google sur les valeurs officielles) ; aucune donnée personnelle, aucun paramètre de votre fichier.</li>
         </ul>
-        Avec l'offre gratuite de Gemini, Google peut utiliser les contenus envoyés pour <strong>améliorer ses modèles</strong>, et des personnes peuvent les relire : n'importez un document que si cela vous convient, ou utilisez une clé d'une offre payante. Rien n'est envoyé sans une action de votre part.</li>
+        Avec l'offre gratuite de Gemini, Google peut utiliser les contenus envoyés pour <strong>améliorer ses modèles</strong>, et des personnes peuvent les relire : n'importez un document que si cela vous convient, ou utilisez une clé d'une offre payante. Aucun document n'est envoyé sans une action de votre part.</li>
+      <li><strong>Cloudflare</strong> : héberge le serveur (Workers, stockage KV, Workers AI) ; gère aussi le nom de domaine pecule-app.com et se place devant le site pour lui ajouter des protections de sécurité (en-têtes HTTP), sans en modifier le contenu ; redirige enfin les messages envoyés à contact@pecule-app.com vers la boîte personnelle du propriétaire. Comme tout hébergeur, Cloudflare voit l'adresse IP et les requêtes techniques ; les journaux d'erreurs du serveur sont conservés quelques jours.</li>
+      <li><strong>GitHub Pages</strong> : héberge les fichiers de l'application (pages, scripts, icônes), sans aucune donnée vous concernant.</li>
       <li><strong>Services de notification</strong> (Google, Apple, Mozilla, Microsoft, selon l'appareil) : ils acheminent les notifications chiffrées sans pouvoir les lire.</li>
     </ul>
     <p>Aucune publicité, aucun outil de mesure d'audience, aucune revente de données.</p>
@@ -90,7 +99,24 @@
       <li>dans l'application, <strong>« Supprimer mes données serveur »</strong> : l'effacement est immédiat et complet, sauvegardes de secours chiffrées comprises, et l'accès est aussi retiré chez Google ;</li>
       <li>ou retirer l'accès de l'application depuis <a href="https://myaccount.google.com/permissions">myaccount.google.com/permissions</a> : le serveur le constate à la demande suivante, ou au plus tard lors de la tâche quotidienne, et efface alors tout, <strong>sauf</strong> les sauvegardes de secours chiffrées (illisibles pour lui, effacées au bout d'un an, ou tout de suite avec « Désactiver »).</li>
     </ul>
-    <p>Le fichier de données reste sur votre Drive, où vous pouvez le supprimer, et la copie locale sur chaque appareil, que la déconnexion efface.</p>
+    <p>Le fichier de données reste sur votre Drive, où vous pouvez le supprimer (ainsi que les copies mensuelles <code>suivi_epargne_backup_…</code>), et la copie locale sur chaque appareil, que la déconnexion efface.</p>
+  </section>
+
+  <section>
+    <h2>Durées de conservation</h2>
+    <ul>
+      <li><strong>Sessions</strong> : 30 jours sans utilisation, 60 jours au plus ;</li>
+      <li><strong>marqueurs « déjà envoyé »</strong> : environ 400 jours ;</li>
+      <li><strong>sauvegardes de secours chiffrées</strong> : 8 copies au plus, un an chacune ;</li>
+      <li><strong>abonnements aux notifications</strong> : jusqu'à leur désactivation ou la déconnexion de l'appareil (ou de tous les appareils) ;</li>
+      <li><strong>jeton Google, e-mail et identifiant</strong> : jusqu'à la suppression de vos données serveur ou le retrait de l'accès chez Google ;</li>
+      <li><strong>votre fichier sur Drive</strong> : tant que vous le gardez ; les copies mensuelles des 12 derniers mois.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Contact</h2>
+    <p>Une question sur ces règles ou sur vos données : <a href="mailto:contact@pecule-app.com">contact@pecule-app.com</a>. Pour signaler une faille de sécurité, suivez la <a href="https://github.com/antoninnourisson-cloud/suivi-epargne/blob/main/SECURITY.md">politique de sécurité</a>.</p>
   </section>
 </main>
 </body>

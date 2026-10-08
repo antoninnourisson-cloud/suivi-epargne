@@ -12,6 +12,7 @@ on:
       - 'src/lib/**'
       - 'src/types.ts'
       - 'src/constants.ts'
+      - '.github/workflows/worker.yml'
   workflow_dispatch:
 
 permissions:

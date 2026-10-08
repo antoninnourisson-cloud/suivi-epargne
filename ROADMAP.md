@@ -15,7 +15,8 @@
 - **Quoi de neuf** : historique des mises à jour en dur (`src/changelog.ts`), affiché une fois après chaque mise à jour.
 - **Déploiement automatique du Worker** depuis GitHub Actions (`.github/workflows/worker.yml`), à chaque push qui touche le code du serveur ou ce qu'il partage avec l'app. Actif dès que les deux secrets du dépôt `CLOUDFLARE_API_TOKEN` et `CLOUDFLARE_ACCOUNT_ID` existent ; d'ici là, le job est sauté et `npm run deploy` reste possible à la main.
 - **Plus aucun envoi d'e-mail** : l'autorisation Gmail (`gmail.send`) est retirée de la connexion Google, qui ne demande plus aucune portée sensible.
-- **Préférences de notification par type**, **avantages salariaux d'après les fiches de paie**, **LEP : alerte avant fermeture et lecture de l'avis d'imposition**, **veille fiscale hebdomadaire** (Gemini propose, vous validez).
+- **Préférences de notification par type**, **avantages salariaux d'après les fiches de paie**, **LEP : alerte avant fermeture et lecture de l'avis d'imposition**, **veille fiscale hebdomadaire** (d'abord avec Gemini ; depuis octobre 2026 sur le serveur avec Cloudflare Workers AI, Gemini en secours ; l'app propose, vous validez).
+- **Octobre 2026** : Material 3 Expressive, motivation (bons mois, jalons, point de paie), simulateur « Et si… », alertes en euros, « Votre année », écriture Drive vérifiée, sauvegarde de secours chiffrée, en-têtes de sécurité, surveillance quotidienne, tests de bout en bout, wiki. Détail par phase ci-dessous.
 
 ## Feuille de route (par phases, sans dates)
 
@@ -52,16 +53,17 @@ Fait : corrections immédiates, accessibilité urgente, filet de sécurité (tes
 4. ✅ Surveillance quotidienne du site et du serveur (GitHub Actions, issue ouverte en cas de panne).
 5. ✅ Veille fiscale côté serveur avec l'IA de Cloudflare (gratuit : ~2 000 neurones par semaine) ; qualité à confirmer sur le premier relevé réel, Gemini en secours.
 
-### Phase 6 : wiki GitHub (rédigé, à relire en phase 7)
+### Phase 6 : wiki GitHub (fait, mis à jour en phase 7)
 Remplir le wiki du dépôt : guide d'utilisation (premiers pas, paie et Pilotage, comptes et Actualiser, parents et restitution, motivation, simulateur, notifications, sauvegardes et conflits, confidentialité), FAQ, et pages pour contribuer (architecture, invariants, déploiement, veille fiscale). Le README et MAINTENANCE restent la référence technique ; le wiki s'adresse d'abord aux utilisateurs.
 
 ### Phase 7 : point final (en dernier, une fois tout le reste bouclé)
 Grand ménage et remise à plat de tout ce qui entoure le code :
-- code : fichiers, exports et dépendances inutilisés, commentaires périmés, duplications restantes ;
-- documentation : README, MAINTENANCE, CONTRIBUTING, SECURITY, ROADMAP, worker/README, wiki ;
-- règles GitHub : protection de la branche principale, modèles d'issues et de PR, Dependabot (dont `edge/`), étiquettes ;
-- règles de l'app et pages publiques : confidentialité, présentation, mentions dans l'app ;
-- vérification finale : tests, couverture, accessibilité, sécurité.
+- code : fichiers, exports et dépendances inutilisés, commentaires périmés, duplications restantes ; Paramètres rangés en cartes repliables ;
+- ✅ documentation : README, MAINTENANCE, CONTRIBUTING, SECURITY, ROADMAP, worker/README, wiki (octobre 2026) ;
+- règles GitHub : ✅ modèles d'issues et de PR, ✅ Dependabot (dont `edge/`), ✅ permissions minimales des workflows ; à régler dans GitHub : protection de la branche principale, étiquettes ;
+- règles de l'app et pages publiques : ✅ confidentialité et présentation (octobre 2026), mentions dans l'app ;
+- vérification finale : tests, couverture, accessibilité, sécurité (audit des dépendances de production : aucune faille en octobre 2026).
+- Après la restitution de janvier 2027 : retrait de l'ancienne adresse github.io (serveur, client OAuth, clé du Picker), mise à jour des textes liés aux parents.
 
 ### Abandonné
 - **Ouverture à d'autres utilisateurs sur invitation** (octobre 2026) : liée au Play Store, abandonnée avec lui. Pécule reste une app personnelle.
@@ -69,8 +71,8 @@ Grand ménage et remise à plat de tout ce qui entoure le code :
 
 ### En continu
 - Architecture : montants en centimes, store et moteur de synchronisation, paquet `domain/` partagé avec le serveur.
-- Maintenance : versions majeures (Vite 8, Node 24), TypeScript 7 dès que typescript-eslint le prend en charge, en-têtes de sécurité HTTP via Cloudflare.
-- Pistes : « Demander à Pécule » (assistant), données chiffrées de bout en bout chez Cloudflare.
+- Maintenance : versions majeures (Vite 8, Node 24), TypeScript 7 dès que typescript-eslint le prend en charge.
+- Pistes : « Demander à Pécule » (assistant).
 
 ## Notes techniques à ne pas perdre
 

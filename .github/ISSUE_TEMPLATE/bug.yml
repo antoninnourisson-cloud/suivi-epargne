@@ -4,7 +4,7 @@ labels: [bug]
 body:
   - type: markdown
     attributes:
-      value: "N'indiquez aucune donnée réelle (montants, documents). Pour une faille de sécurité, suivez plutôt SECURITY.md."
+      value: "N'indiquez aucune donnée réelle (montants, documents) : utilisez si possible le mode démo. Pour une faille de sécurité, suivez plutôt [SECURITY.md](https://github.com/antoninnourisson-cloud/suivi-epargne/blob/main/SECURITY.md). Une question ? contact@pecule-app.com. Les échanges suivent le [code de conduite](https://github.com/antoninnourisson-cloud/suivi-epargne/blob/main/CODE_OF_CONDUCT.md)."
   - type: textarea
     id: what
     attributes:
@@ -21,7 +21,7 @@ body:
     id: version
     attributes:
       label: Version
-      description: "Paramètres → Quoi de neuf (ex. 2026.10.02-6)"
+      description: "Affichée en bas du menu et dans l'historique des mises à jour des Paramètres (ex. 2026.10.08)"
   - type: input
     id: device
     attributes:

@@ -3,3 +3,13 @@ contact_links:
   - name: Faille de sécurité
     url: https://github.com/antoninnourisson-cloud/suivi-epargne/security/advisories/new
     about: Signalement privé, à ne pas publier dans une issue.
+  - name: Guide d'utilisation et questions fréquentes
+    url: https://github.com/antoninnourisson-cloud/suivi-epargne/wiki
+    about: La réponse à votre question y est peut-être déjà.
+  # GitHub n'accepte que des liens http(s) ici : l'adresse figure dans le nom et la description.
+  - name: Contact par e-mail (contact@pecule-app.com)
+    url: https://github.com/antoninnourisson-cloud/suivi-epargne/blob/main/CONTRIBUTING.md#avant-de-commencer
+    about: Pour tout ce qui n'est ni un bug ni une idée, écrivez à contact@pecule-app.com.
+  - name: Code de conduite
+    url: https://github.com/antoninnourisson-cloud/suivi-epargne/blob/main/CODE_OF_CONDUCT.md
+    about: Les règles des échanges autour du projet.

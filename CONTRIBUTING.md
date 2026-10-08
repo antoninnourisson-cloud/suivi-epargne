@@ -11,7 +11,7 @@ Merci de votre intérêt ! Pécule est une application personnelle, mais les sig
 
 ## Installer le projet
 
-Prérequis : Node.js 22 (voir [`.nvmrc`](.nvmrc)).
+Prérequis : Node.js 22 ou plus (version de référence dans [`.nvmrc`](.nvmrc)).
 
 ```bash
 npm ci
@@ -24,14 +24,18 @@ Ouvrez ensuite <http://localhost:5173/?demo=1> : l'app se charge avec des donné
 
 1. Créez une branche depuis `main` (`fix/…`, `feat/…`, `docs/…`).
 2. Faites des commits courts, au présent, qui disent **pourquoi** autant que quoi.
-3. Avant d'ouvrir la pull request, les quatre vérifications de la CI doivent passer en local :
+3. Avant d'ouvrir la pull request, les vérifications de la CI doivent passer en local :
 
    ```bash
-   npm run lint
-   npm run typecheck
-   npm test
+   npm ci --prefix worker && npm ci --prefix edge   # une fois : nécessaires au typecheck
+   npm run lint            # ESLint, règles d'accessibilité comprises
+   npm run typecheck       # app + serveur + edge
+   npm run test:coverage   # tests Vitest et seuils de couverture
+   npm run e2e             # tests de bout en bout (Playwright, mode démo)
    npm run build
    ```
+
+   Pour `npm run e2e`, installez une fois le navigateur : `npx playwright install chromium`. Un nouvel écran ou un nouveau parcours ajoute son test dans `e2e/`.
 
 4. Remplissez le modèle de pull request (ce qui change, comment vous l'avez vérifié).
 
@@ -49,7 +53,8 @@ Elles sont détaillées dans [MAINTENANCE.md](MAINTENANCE.md) (§ 1, *Invariants
 
 ## Style
 
-- TypeScript strict, composants fonctionnels React, Tailwind pour le style.
+- TypeScript strict, composants fonctionnels React, Tailwind 4 pour le style.
+- Design Material 3 Expressive : réutilisez les composants de `src/components/ui/` (Card, StatTile, TextField, Tabs…) et les rôles de couleur Material (`bg-surface-container`, `text-on-surface-variant`…). La palette se régénère avec `npm run theme` (`scripts/m3-theme.mjs` → `src/theme/m3.css`), jamais à la main. Police : Google Sans Flex, hébergée avec l'app.
 - Les textes de l'interface sont en français, vouvoient l'utilisateur et évitent le jargon (« Votre part », pas « ownedAmount »).
 - Accessibilité : chaque champ a un libellé, chaque bouton icône un `aria-label`, chaque modale piège le focus (composant `Modal`).
 - Le fichier `.editorconfig` fixe l'indentation (2 espaces) et les fins de ligne (LF).

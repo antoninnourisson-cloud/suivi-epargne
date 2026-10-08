@@ -40,10 +40,11 @@ Voir aussi : [README.md](README.md) (fonctionnement général), [worker/README.m
    - `date` = la même date au format `AAAA-MM-JJ` ;
    - un titre, et de 1 à 6 phrases simples (`items`).
    Le test `src/changelog.test.ts` vérifie le format, l'ordre et l'unicité.
-2. **Tests** : `npm run typecheck` et `npm test` (app + serveur).
+2. **Vérifications** : `npm run lint`, `npm run typecheck` et `npm run test:coverage` (app + serveur + edge), puis `npm run e2e` si un écran a changé (tests Playwright en mode démo).
 3. **Push sur `main`** :
-   - `deploy.yml` revérifie tout, publie l'app sur GitHub Pages, puis crée le tag `v<version>` et la GitHub Release correspondante (avec les puces du changelog) ;
-   - `worker.yml` redéploie le Worker **automatiquement** si `worker/`, `src/lib/`, `src/types.ts` ou `src/constants.ts` ont changé, **dès que** les secrets GitHub `CLOUDFLARE_API_TOKEN` et `CLOUDFLARE_ACCOUNT_ID` existent. Sans eux, le job est sauté : lancer `npm run deploy` dans `worker/`.
+   - `deploy.yml` revérifie tout (`ci.yml`), publie l'app sur GitHub Pages, puis crée le tag `v<version>` et la GitHub Release correspondante (avec les puces du changelog) ;
+   - `worker.yml` redéploie le Worker **automatiquement** si `worker/`, `src/lib/`, `src/types.ts` ou `src/constants.ts` ont changé, **dès que** les secrets GitHub `CLOUDFLARE_API_TOKEN` et `CLOUDFLARE_ACCOUNT_ID` existent. Sans eux, le job est sauté : lancer `npm run deploy` dans `worker/` ;
+   - `edge.yml` redéploie de même le Worker des en-têtes `pecule-edge` si `edge/` a changé.
 4. Vérifier dans l'onglet **Actions** du dépôt que les runs sont verts, puis ouvrir l'app : la fenêtre « Quoi de neuf » doit s'afficher une fois.
 
 ## 3. Où sont les secrets
@@ -52,8 +53,9 @@ Voir aussi : [README.md](README.md) (fonctionnement général), [worker/README.m
 |---|---|---|
 | `GOOGLE_CLIENT_SECRET`, `ENCRYPTION_KEY`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `ALLOWED_EMAILS` | **Tableau de bord Cloudflare** : Workers & Pages → `suivi-epargne-api` → Paramètres → Variables et secrets | jamais dans le dépôt ; `npm run setup-secrets` (voir worker/README.md) |
 | Client OAuth (identifiant public + code secret) | **Console Google Cloud** : API et services → Identifiants, client commençant par `763862877733-` | l'identifiant est public (dans le code) ; seul le code secret est sensible |
-| `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` | **GitHub** : dépôt → Settings → Secrets and variables → Actions | servent uniquement au déploiement automatique du Worker |
+| `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` | **GitHub** : dépôt → Settings → Secrets and variables → Actions | servent uniquement au déploiement automatique des deux Workers (`suivi-epargne-api` et `pecule-edge` ; pour ce dernier, le jeton a en plus Zone → Workers Routes → Edit sur pecule-app.com) |
 | Clé Gemini | **Sur chaque appareil**, saisie par l'utilisateur dans Paramètres (stockage local) | clé personnelle de l'utilisateur ; jamais sur Drive, jamais sur le serveur |
+| Code de secours de la sauvegarde chiffrée | **Chez l'utilisateur seulement** (affiché une fois à l'activation) | jamais stocké, ni sur l'appareil, ni sur Drive, ni sur le serveur ; perdu = copies illisibles (voir § 5) |
 
 ## 4. Calendrier de l'année
 
@@ -72,7 +74,7 @@ Voir aussi : [README.md](README.md) (fonctionnement général), [worker/README.m
 ## 5. Procédures en cas de panne
 
 ### Compte Cloudflare perdu ou inaccessible
-L'app continue de fonctionner sans serveur (session Google d'une heure, pas de notifications) : rien n'est perdu, les données sont sur Drive.
+L'app continue de fonctionner sans serveur (session Google d'une heure, pas de notifications, veille fiscale par Gemini seulement) : rien n'est perdu, les données sont sur Drive. Seules les copies de la sauvegarde de secours chiffrée disparaissent avec le KV ; la réactiver ensuite (nouveau code). Attention : le domaine pecule-app.com (registrar et DNS) et la redirection de contact@ sont aussi chez Cloudflare.
 1. Créer un nouveau compte Cloudflare et suivre [worker/README.md](worker/README.md) depuis l'étape 1 (nouveau KV, nouveaux secrets).
 2. Mettre à jour l'`id` du KV dans `worker/wrangler.toml`, l'URI de redirection dans la console Google, `VITE_BACKEND_URL` dans `.env.production`, et les secrets GitHub `CLOUDFLARE_*`.
 3. Pousser, puis se reconnecter et réactiver les notifications sur chaque appareil.
@@ -107,9 +109,10 @@ Sur l'écran de verrouillage : **Code oublié**. L'app se déconnecte et efface 
 | Requêtes Worker | 100 000 / jour | quelques dizaines |
 | Écritures KV (put + delete) | 1 000 / jour | ~1 par connexion, 1 par jour et par session utilisée, 1 par rappel envoyé |
 | Lectures KV | 100 000 / jour | quelques centaines |
+| Workers AI | 10 000 neurones / jour | une veille fiscale par semaine, ≈ 1 500 à 2 000 neurones (plafond codé : 6 000) |
 | CPU | 10 ms par requête (cron compris) | en dessous ; l'attente réseau ne compte pas |
 
-Au-delà, Cloudflare refuse les requêtes jusqu'au lendemain : l'app retombe sur le mode sans serveur. Détails dans [worker/README.md](worker/README.md).
+Au-delà, Cloudflare refuse les requêtes jusqu'au lendemain : l'app retombe sur le mode sans serveur (et la veille fiscale sur Gemini). Le Worker `pecule-edge` compte aussi dans les requêtes Worker (une par fichier servi), largement sous la limite pour un seul utilisateur. Détails dans [worker/README.md](worker/README.md).
 
 ## 7. Statut de l'application OAuth Google
 
@@ -121,6 +124,7 @@ Au-delà, Cloudflare refuse les requêtes jusqu'au lendemain : l'app retombe sur
 
 - **pecule-app.com**, acheté chez Cloudflare (registrar et DNS). Renouvellement automatique : vérifier une fois par an que le moyen de paiement est valide (Cloudflare → Domain Registration).
 - L'app est servie par **GitHub Pages** (Settings → Pages → Custom domain), via les enregistrements A/AAAA de GitHub dans le DNS Cloudflare (en « DNS only » à l'origine ; à passer en « Proxied » pour activer les en-têtes de sécurité, voir plus bas). Le domaine est vérifié dans les paramètres GitHub du compte (enregistrement TXT `_github-pages-challenge-…`) : personne d'autre ne peut le rattacher à un autre dépôt.
+- **contact@pecule-app.com** : redirection e-mail Cloudflare (Email → Email Routing) vers la boîte personnelle du propriétaire ; aucune boîte n'est hébergée. Citée dans SECURITY, CONTRIBUTING, le code de conduite, les modèles d'issues, le wiki et les pages publiques. Si la redirection casse (enregistrements MX/TXT modifiés), Cloudflare l'affiche dans Email Routing.
 - L'ancienne adresse `antoninnourisson-cloud.github.io/suivi-epargne/` redirige vers le domaine. Une app installée depuis l'ancienne adresse affiche « Pécule a déménagé » (`src/components/MovedNotice.tsx`).
 - **Début 2027** : retirer `LEGACY_APP_URL` de `worker/wrangler.toml`, l'origine `https://antoninnourisson-cloud.github.io` du client OAuth Google et de la clé du Picker.
 

@@ -2,6 +2,9 @@ name: Idée
 description: Proposer une fonctionnalité ou une amélioration
 labels: [idée]
 body:
+  - type: markdown
+    attributes:
+      value: "Les pistes déjà prévues ou abandonnées sont dans [ROADMAP.md](https://github.com/antoninnourisson-cloud/suivi-epargne/blob/main/ROADMAP.md). Aucune donnée réelle, s'il vous plaît. Une question plutôt qu'une idée ? contact@pecule-app.com. Les échanges suivent le [code de conduite](https://github.com/antoninnourisson-cloud/suivi-epargne/blob/main/CODE_OF_CONDUCT.md)."
   - type: textarea
     id: need
     attributes:
