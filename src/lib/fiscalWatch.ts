@@ -1,13 +1,15 @@
 // ================================================
 // FILE: src/lib/fiscalWatch.ts
-// Veille fiscale : compare les valeurs officielles trouvées par Gemini (recherche web) avec
-// les paramètres de l'app, et produit des PROPOSITIONS. Rien n'est appliqué sans un clic de
+// Veille fiscale : compare les valeurs officielles relevées (par le serveur avec Cloudflare
+// Workers AI, ou par Gemini en secours) avec les paramètres de l'app, et produit des
+// PROPOSITIONS. Rien n'est appliqué sans un clic de
 // l'utilisateur. Les valeurs hors des bornes plausibles sont écartées (une IA peut se
 // tromper ou inventer) et chaque proposition garde sa source pour vérification.
 // ================================================
 import { FiscalConfig, SavingsAccount, TaxBracket } from '../types';
 import { REGULATED_RATE_GROUPS, applyRateChange } from './finance';
 import { localTodayISO } from './dates';
+import { formatRate, plainEUR } from './format';
 
 export interface WatchedValue<T = number> { value: T; source?: string; effectiveDate?: string }
 
@@ -40,8 +42,8 @@ export interface FiscalProposal {
   apply: (s: { fiscal: FiscalConfig; accounts: SavingsAccount[] }) => { fiscal: FiscalConfig; accounts: SavingsAccount[] };
 }
 
-const pct = (n: number) => `${n.toLocaleString('fr-FR', { maximumFractionDigits: 2 })} %`;
-const eur = (n: number) => `${Math.round(n).toLocaleString('fr-FR')} €`;
+const pct = formatRate;
+const eur = plainEUR;
 const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 const inRange = (w: WatchedValue | undefined, min: number, max: number): w is WatchedValue => !!w && isNum(w.value) && w.value >= min && w.value <= max;
 const differs = (a: number | undefined, b: number, tol: number) => a === undefined || Math.abs(a - b) > tol;
@@ -153,7 +155,7 @@ export const diffFiscalWatch = (r: FiscalWatchResult, fiscal: FiscalConfig, acco
   return out;
 };
 
-export const WATCH_INTERVAL_DAYS = 7;
+const WATCH_INTERVAL_DAYS = 7;
 export const isWatchDue = (lastCheckISO: string | undefined, now: Date = new Date()): boolean =>
   !lastCheckISO || now.getTime() - new Date(lastCheckISO).getTime() >= WATCH_INTERVAL_DAYS * 86_400_000;
 

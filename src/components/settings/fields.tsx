@@ -35,7 +35,7 @@ export const SwitchRow: React.FC<SwitchRowProps> = ({ label, hint, checked, onCh
   );
 };
 
-export const Switch: React.FC<{ id?: string; checked: boolean; onChange: (next: boolean) => void; disabled?: boolean; describedBy?: string; label?: string }> = ({ id, checked, onChange, disabled, describedBy, label }) => (
+const Switch: React.FC<{ id?: string; checked: boolean; onChange: (next: boolean) => void; disabled?: boolean; describedBy?: string; label?: string }> = ({ id, checked, onChange, disabled, describedBy, label }) => (
   <button
     id={id}
     type="button"

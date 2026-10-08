@@ -3,7 +3,7 @@
 //
 // Ouvrir une carte depuis ailleurs : `openSettingsSection('tax-notice')` puis afficher
 // l'écran Paramètres. Depuis une adresse : `?view=settings&section=tax-notice`.
-export const SETTINGS_SECTIONS = [
+const SETTINGS_SECTIONS = [
   'benefits', 'fiscal', 'tax-notice', 'fiscal-watch',
   'motivation', 'notifications', 'keys',
   'lock', 'data', 'account',

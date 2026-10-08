@@ -26,7 +26,7 @@ export const parseISODate = (iso: string): Date => {
 };
 
 /** Ramène une date au début de sa journée locale (on compare des jours, pas des instants). */
-export const startOfDay = (d: Date): Date => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+const startOfDay = (d: Date): Date => new Date(d.getFullYear(), d.getMonth(), d.getDate());
 
 /**
  * Formate une date en 'YYYY-MM-DD' LOCAL.

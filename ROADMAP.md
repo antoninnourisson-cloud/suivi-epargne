@@ -58,12 +58,13 @@ Remplir le wiki du dépôt : guide d'utilisation (premiers pas, paie et Pilotage
 
 ### Phase 7 : point final (en dernier, une fois tout le reste bouclé)
 Grand ménage et remise à plat de tout ce qui entoure le code :
-- code : fichiers, exports et dépendances inutilisés, commentaires périmés, duplications restantes ; Paramètres rangés en cartes repliables ;
+- ✅ code (octobre 2026) : exports inutilisés retirés (analyse knip), commentaires périmés corrigés (rôles du serveur, veille fiscale), formatage des montants et accès au stockage local regroupés (`src/lib/format.ts`, `src/lib/storage.ts`) ; Paramètres rangés en cartes repliables ;
+- ✅ accessibilité (octobre 2026) : résultat du simulateur annoncé en une phrase après la saisie, raisons des choix indisponibles, date de restitution vidée signalée, jauge « Bons mois » en euros, annonce des nouveaux jalons, boutons de fermeture de 44 px, niveaux de titres, noms de boutons explicites ;
 - ✅ documentation : README, MAINTENANCE, CONTRIBUTING, SECURITY, ROADMAP, worker/README, wiki (octobre 2026) ;
 - règles GitHub : ✅ modèles d'issues et de PR, ✅ Dependabot (dont `edge/`), ✅ permissions minimales des workflows ; à régler dans GitHub : protection de la branche principale, étiquettes ;
 - règles de l'app et pages publiques : ✅ confidentialité et présentation (octobre 2026), mentions dans l'app ;
-- vérification finale : tests, couverture, accessibilité, sécurité (audit des dépendances de production : aucune faille en octobre 2026).
-- Après la restitution de janvier 2027 : retrait de l'ancienne adresse github.io (serveur, client OAuth, clé du Picker), mise à jour des textes liés aux parents.
+- ✅ vérification finale (octobre 2026) : lint, typage, tests et couverture, build, tests de bout en bout (deux passages sans échec), audit complet des dépendances (app, serveur, edge : aucune faille ; `sharp`, tiré par wrangler, forcé en 0.35.5 par `overrides` dans `worker/` et `edge/`, à retirer dès que wrangler l'embarque) ; tests rendus plus robustes sur machine lente (délais d'attente, démontage des hooks entre tests).
+- Après la restitution de janvier 2027 : enregistrer la restitution et passer en mode solo ; retirer l'ancienne adresse github.io (`LEGACY_APP_URL` dans `worker/wrangler.toml` et `worker/src/security.ts`, avis de déménagement `src/components/MovedNotice.tsx`, origine dans le client OAuth et la clé du Picker) ; mettre à jour les textes liés aux parents (app, pages publiques, wiki).
 
 ### Abandonné
 - **Ouverture à d'autres utilisateurs sur invitation** (octobre 2026) : liée au Play Store, abandonnée avec lui. Pécule reste une app personnelle.

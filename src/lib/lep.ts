@@ -6,6 +6,7 @@
 import { AccountType, FiscalConfig, GlobalAppData } from '../types';
 import { computeIncome } from './finance';
 import { DEFAULT_WORK_BENEFITS } from '../constants';
+import { plainEUR } from './format';
 
 export interface LepIncomeYear { year: number; rfr: number; source: 'avis' | 'fiches' | 'estimation' }
 
@@ -27,7 +28,7 @@ export interface LepTimeline {
 export const lepClosureDate = (secondOverYear: number) => `${secondOverYear + 2}-04-30`;
 
 /** RFR approché à partir du net imposable annuel (abattement de 10 % plafonné et minimum). */
-export const rfrFromNetTaxable = (netTaxable: number, cap = 14555, min = 509) =>
+const rfrFromNetTaxable = (netTaxable: number, cap = 14555, min = 509) =>
   Math.max(0, netTaxable - Math.min(cap, Math.max(Math.min(min, netTaxable), netTaxable * 0.1)));
 
 /**
@@ -93,7 +94,7 @@ const frDate = (iso: string) => {
   const [y, m, d] = iso.split('-').map(Number);
   return new Date(y, m - 1, d).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
 };
-const eur = (n: number) => `${Math.round(n).toLocaleString('fr-FR')} €`;
+const eur = plainEUR;
 
 /** Phrase à afficher (accueil, notification). `null` quand tout va bien. */
 export const describeLepTimeline = (t: LepTimeline | null): { title: string; detail: string } | null => {
@@ -113,7 +114,7 @@ export const describeLepTimeline = (t: LepTimeline | null): { title: string; det
 };
 
 /** Plafond de RFR du foyer : plafond pour une part, plus un montant par demi-part. */
-export const lepHouseholdCeiling = (fiscal: FiscalConfig | undefined): number | undefined => {
+const lepHouseholdCeiling = (fiscal: FiscalConfig | undefined): number | undefined => {
   const base = fiscal?.lepIncomeCeiling;
   if (!base) return undefined;
   const parts = fiscal?.lepHouseholdParts && fiscal.lepHouseholdParts > 0 ? fiscal.lepHouseholdParts : 1;

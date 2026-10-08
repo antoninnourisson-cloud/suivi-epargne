@@ -6,7 +6,7 @@
 import React from 'react';
 import { formatEUR } from '../lib/format';
 
-export const hasTwoShares = (a: { ownedAmount: number; parentalCapital: number }) =>
+const hasTwoShares = (a: { ownedAmount: number; parentalCapital: number }) =>
   a.ownedAmount > 0 && a.parentalCapital > 0;
 
 export const AccountTotal: React.FC<{ account: { ownedAmount: number; parentalCapital: number }; className?: string }> = ({ account, className }) =>

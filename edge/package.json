@@ -15,10 +15,13 @@
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20261002.1",
     "typescript": "~6.0.3",
-    "wrangler": "^4.146.0"
+    "wrangler": "^4.148.0"
   },
   "allowScripts": {
     "esbuild@0.28.1": true,
     "workerd@1.20261006.1": true
+  },
+  "overrides": {
+    "sharp": "^0.35.5"
   }
 }

@@ -210,7 +210,7 @@ export const AccountUpdateRow: React.FC<AccountUpdateRowProps> = ({
                 error={adjustError || undefined}
                 className="w-48"
               />
-              <Button type="button" variant="tonal" onClick={onApplyAdjust} className="mt-7 h-14 sm:h-10 sm:mt-[34px]">Appliquer</Button>
+              <Button type="button" variant="tonal" onClick={onApplyAdjust} aria-label={`Appliquer l'ajustement sur ${account.name}`} className="mt-7 h-14 sm:h-10 sm:mt-[34px]">Appliquer</Button>
             </div>
             {tracked && typeof depositsDraft === 'number' && a.target === 'owned' && (
               <label className="flex items-center gap-2 text-sm text-on-surface">

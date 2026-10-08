@@ -12,7 +12,7 @@ interface MoneyTextProps {
   className?: string;
 }
 
-export const toneClass = (value: number) =>
+const toneClass = (value: number) =>
   value > 0 ? 'text-emerald-700 dark:text-emerald-300' : value < 0 ? 'text-rose-700 dark:text-rose-300' : '';
 
 export const MoneyText: React.FC<MoneyTextProps> = ({ value, decimals = 'auto', signed = false, tone = 'neutral', className = '' }) => (

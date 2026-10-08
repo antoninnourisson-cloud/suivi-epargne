@@ -10,7 +10,7 @@ import { parseISODate, formatISODay } from './dates';
 // ---------------------------------------------------------------------------
 
 /** Comptes disponibles sans délai ni impôt : ce qui compte pour la précaution. */
-export const EMERGENCY_TYPES = [AccountType.LIVRET_A, AccountType.LDDS, AccountType.LEP, AccountType.COMPTE_COURANT];
+const EMERGENCY_TYPES = [AccountType.LIVRET_A, AccountType.LDDS, AccountType.LEP, AccountType.COMPTE_COURANT];
 export const DEFAULT_EMERGENCY_MONTHS = 3;
 
 export interface EmergencyFund {
@@ -186,7 +186,7 @@ export interface SubscriptionReviewRow {
   cancelBy?: string;            // abonnement annuel : date limite de résiliation
 }
 
-export const REVIEW_EVERY_DAYS = 182;
+const REVIEW_EVERY_DAYS = 182;
 
 export const reviewSubscriptions = (subs: Subscription[], monthlyPay: number, asOf: Date = new Date()): SubscriptionReviewRow[] => {
   const today = formatISODay(asOf);

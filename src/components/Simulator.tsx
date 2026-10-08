@@ -30,6 +30,8 @@ interface SimulatorProps {
 
 const HORIZONS = ['12', '24', '36', '60'] as const;
 const BAND_DELAY_MS = 300;
+/** Annonce du résultat aux lecteurs d'écran : une phrase, une fois la saisie posée. */
+const ANNOUNCE_DELAY_MS = 800;
 
 /** La valeur, une fois qu'elle n'a plus changé pendant `ms` millisecondes. */
 const useDebounced = <T,>(value: T, ms: number): T => {
@@ -41,6 +43,13 @@ const useDebounced = <T,>(value: T, ms: number): T => {
   return settled;
 };
 type Horizon = typeof HORIZONS[number];
+
+/** Région annoncée (invisible) : une seule phrase de synthèse, après une pause de saisie,
+ *  plutôt que tout le bloc de résultat relu à chaque frappe. */
+const LiveSummary: React.FC<{ text: string }> = ({ text }) => {
+  const settled = useDebounced(text, ANNOUNCE_DELAY_MS);
+  return <p className="sr-only" aria-live="polite" aria-atomic="true">{settled}</p>;
+};
 
 const monthShort = (iso: string) => parseISODate(iso).toLocaleDateString('fr-FR', { month: 'short', year: '2-digit' });
 const monthLong = (iso: string) => parseISODate(iso).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
@@ -159,8 +168,17 @@ export const Simulator: React.FC<SimulatorProps> = ({
     ? ` Si vos prochains mois ressemblent à vos ${result.band?.historyMonths} derniers, vous seriez plutôt entre ${eur(last.p10)} et ${eur(last.p90)}.`
     : '';
 
-  const rank = (s: Scenario) => scenarios.filter(x => x.kind === s.kind).findIndex(x => x.id === s.id) + 1;
   const goal = result.goal;
+  const unavailable = [
+    ...(has('monthly') ? [SCENARIO_META.monthly.label] : []),
+    ...(restitutionOpen && has('restitution') ? [SCENARIO_META.restitution.label] : []),
+  ];
+  const goalMonth = goal ? (withScenario ? goal.scenarioMonth : goal.baselineMonth) : null;
+  const goalSentence = !goal ? ''
+    : ` Objectif de ${eur(goal.target)} : ${goalMonth !== null ? `atteint ${inMonths(goalMonth)}` : `pas atteint en ${result.horizon} mois`}.`;
+  const shortfall = result.purchases.some(p => p.shortfall > 0.5) ? ' Attention : votre part ne suffit pas pour un achat.' : '';
+
+  const rank = (s: Scenario) => scenarios.filter(x => x.kind === s.kind).findIndex(x => x.id === s.id) + 1;
 
   return (
     <div>
@@ -174,11 +192,16 @@ export const Simulator: React.FC<SimulatorProps> = ({
               <div role="group" aria-labelledby={`${resultId}-add`} className="flex flex-wrap gap-2">
                 <Chip kind="suggestion" icon={Plus} onClick={() => add('purchase')}>{SCENARIO_META.purchase.label}</Chip>
                 <Chip kind="suggestion" icon={Plus} onClick={() => add('pause')}>{SCENARIO_META.pause.label}</Chip>
-                <Chip kind="suggestion" icon={Plus} onClick={() => add('monthly')} disabled={has('monthly')} className="disabled:opacity-40 disabled:pointer-events-none">{SCENARIO_META.monthly.label}</Chip>
+                <Chip kind="suggestion" icon={Plus} onClick={() => add('monthly')} disabled={has('monthly')} aria-describedby={has('monthly') ? `${resultId}-why` : undefined} className="disabled:opacity-40 disabled:pointer-events-none">{SCENARIO_META.monthly.label}</Chip>
                 {restitutionOpen && (
-                  <Chip kind="suggestion" icon={Plus} onClick={() => add('restitution')} disabled={has('restitution')} className="disabled:opacity-40 disabled:pointer-events-none">{SCENARIO_META.restitution.label}</Chip>
+                  <Chip kind="suggestion" icon={Plus} onClick={() => add('restitution')} disabled={has('restitution')} aria-describedby={has('restitution') ? `${resultId}-why` : undefined} className="disabled:opacity-40 disabled:pointer-events-none">{SCENARIO_META.restitution.label}</Chip>
                 )}
               </div>
+              {unavailable.length > 0 && (
+                <p id={`${resultId}-why`} className="mt-2 text-xs text-on-surface-variant">
+                  {unavailable.join(' et ')} : déjà dans vos scénarios (un seul possible, modifiez-le ci-dessous).
+                </p>
+              )}
             </div>
 
             {scenarios.length > 0 ? (
@@ -205,7 +228,8 @@ export const Simulator: React.FC<SimulatorProps> = ({
 
         <div className="space-y-6 min-w-0">
           <Card>
-            <div aria-live="polite" aria-atomic="true" className="space-y-4">
+            <LiveSummary text={summary + goalSentence + shortfall} />
+            <div className="space-y-4">
               <StatTile size="hero" label={`Dans ${result.horizon} mois`} value={eur(result.scenarioEnd)}
                 delta={<DeltaBadge value={fromToday} period="par rapport à aujourd'hui" />}
                 hint={withScenario ? `Plan actuel : ${eur(result.baselineEnd)}` : `Plan actuel : ${eur(plan)} par mois`} />

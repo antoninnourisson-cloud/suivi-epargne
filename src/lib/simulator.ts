@@ -18,11 +18,11 @@ import { netAnnualRate } from './projection';
 import { recentPayWindows, savedBetween } from './motivation';
 import { parseISODate, formatISODay } from './dates';
 
-export const MIN_HORIZON = 6;
-export const MAX_HORIZON = 60;
-export const DEFAULT_RUNS = 1000;
+const MIN_HORIZON = 6;
+const MAX_HORIZON = 60;
+const DEFAULT_RUNS = 1000;
 /** En dessous, pas de fourchette : trop peu de mois pour tirer quoi que ce soit. */
-export const MIN_HISTORY_MONTHS = 3;
+const MIN_HISTORY_MONTHS = 3;
 
 // ---------------------------------------------------------------------------
 // Générateur pseudo-aléatoire à graine
@@ -173,7 +173,7 @@ export const monthDate = (todayISO: string, m: number): string => {
   return formatISODay(new Date(t.getFullYear(), t.getMonth() + m, 1));
 };
 
-export const clampHorizon = (h: number) => Math.min(MAX_HORIZON, Math.max(MIN_HORIZON, Math.round(Number.isFinite(h) ? h : 24)));
+const clampHorizon = (h: number) => Math.min(MAX_HORIZON, Math.max(MIN_HORIZON, Math.round(Number.isFinite(h) ? h : 24)));
 
 /**
  * Retire `amount` de VOTRE part : compte courant puis livrets (le moins rémunérateur

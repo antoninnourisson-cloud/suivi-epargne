@@ -5,6 +5,7 @@
 // Masquable 30 jours.
 // ================================================
 import React, { useEffect, useState } from 'react';
+import { lsSet } from '../lib/storage';
 import { Smartphone, X } from 'lucide-react';
 import { canPromptInstall, isStandalone, mobilePlatform, onInstallAvailabilityChange, promptInstall } from '../services/installPrompt';
 
@@ -26,7 +27,7 @@ export const InstallPrompt: React.FC = () => {
 
   if (hidden) return null;
   const dismiss = () => {
-    try { localStorage.setItem(DISMISS_KEY, String(Date.now())); } catch { /* préférence non mémorisée */ }
+    lsSet(DISMISS_KEY, String(Date.now()));
     setHidden(true);
   };
 

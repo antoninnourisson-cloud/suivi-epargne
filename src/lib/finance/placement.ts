@@ -3,6 +3,7 @@
 import { FiscalConfig, AccountType, SavingsAccount, GlobalAppData, PayslipExtractedData } from '../../types';
 import { DEFAULT_FISCAL_CONFIG, DEFAULT_WORK_BENEFITS } from '../../constants';
 import { formatISODay } from '../dates';
+import { formatEUR } from '../format';
 import { computeIncome, computeSavingsCapacity } from './income';
 import { totalFixedCharges } from './subscriptions';
 
@@ -48,10 +49,9 @@ export const computeMonthlySavingsCapacity = (data: GlobalAppData): number => {
   return computeSavingsCapacity(superNet, totalFixed, c.leisureBudget ?? 0, c.projectSavings ?? 0);
 };
 
-// Formateur créé une fois : le simulateur appelle le plan de placement des dizaines de
-// milliers de fois (fourchette), et construire un Intl.NumberFormat à chaque appel coûtait cher.
-const EUR_NO_CENTS = new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 });
-const formatEUR2 = (n: number) => EUR_NO_CENTS.format(n);
+// formatEUR garde ses formateurs Intl en cache : le simulateur appelle le plan de placement
+// des dizaines de milliers de fois (fourchette).
+const formatEUR2 = (n: number) => formatEUR(n, 0);
 
 export interface PlacementStep {
   accountId?: string;     // absent pour la suggestion « Ouvrir un PEA/AV »

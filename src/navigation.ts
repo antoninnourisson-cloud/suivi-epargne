@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import type { ComponentType } from 'react';
 
-export const VIEWS = [
+const VIEWS = [
   'dashboard', 'update', 'accounts', 'transfers', 'journal', 'pilot', 'subscriptions', 'payslips',
   'donations', 'yield', 'history', 'simulator', 'agenda', 'parental', 'settings',
 ] as const;

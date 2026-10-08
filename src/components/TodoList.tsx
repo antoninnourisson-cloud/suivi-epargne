@@ -2,6 +2,7 @@
 // action principale, « Plus tard »), les deux plus importantes d'abord, le reste derrière
 // « Voir tout ».
 import React, { useState } from 'react';
+import { lsGet, lsGetJSON, lsSet, lsSetJSON } from '../lib/storage';
 import { ChevronDown, Clock, ListTodo } from 'lucide-react';
 import { Button, Card, Chip } from './ui';
 import { formatEUR } from '../lib/format';
@@ -43,12 +44,12 @@ const GainChip: React.FC<{ gain: AlertGain }> = ({ gain }) => {
 
 const SNOOZE_KEY = 'todo_snoozed';
 const SHOWN_BY_DEFAULT = 2;
-const readSnoozed = (): Record<string, number> => { try { return JSON.parse(localStorage.getItem(SNOOZE_KEY) || '{}'); } catch { return {}; } };
+const readSnoozed = (): Record<string, number> => lsGetJSON<Record<string, number>>(SNOOZE_KEY, {});
 
 export const TodoList: React.FC<{ items: TodoSpec[] }> = ({ items }) => {
   const [snoozed, setSnoozed] = useState(readSnoozed);
   const [showAll, setShowAll] = useState(false);
-  const [open, setOpen] = useState(() => { try { return localStorage.getItem('todo_open') !== '0'; } catch { return true; } });
+  const [open, setOpen] = useState(() => lsGet('todo_open') !== '0');
   const now = Date.now();
   const visible = items.filter(i => !(snoozed[i.key] > now));
   if (visible.length === 0) return null;
@@ -59,9 +60,9 @@ export const TodoList: React.FC<{ items: TodoSpec[] }> = ({ items }) => {
   const snooze = (key: string) => {
     const next = { ...snoozed, [key]: now + 7 * 86_400_000 };
     setSnoozed(next);
-    try { localStorage.setItem(SNOOZE_KEY, JSON.stringify(next)); } catch { /* non mémorisé */ }
+    lsSetJSON(SNOOZE_KEY, next);
   };
-  const toggle = () => setOpen(o => { try { localStorage.setItem('todo_open', o ? '0' : '1'); } catch { /* idem */ } return !o; });
+  const toggle = () => setOpen(o => { lsSet('todo_open', o ? '0' : '1'); return !o; });
   const count = `${visible.length} élément${visible.length > 1 ? 's' : ''}`;
 
   return (

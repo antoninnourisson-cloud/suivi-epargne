@@ -1,11 +1,12 @@
 // Une ligne de scénario du simulateur « Et si… » : champs propres au type (montant, mois,
 // durée, date) et bouton pour la retirer. Libellés reliés, saisie des montants à la
 // française (NumberInput).
-import React from 'react';
+import React, { useState } from 'react';
 import { ShoppingBag, PauseCircle, PiggyBank, CalendarClock, X } from 'lucide-react';
 import type { Scenario } from '../../lib/simulator';
 import { TextField } from '../ui/TextField';
 import { NumberInput } from '../NumberInput';
+import { parseISODate } from '../../lib/dates';
 
 export const SCENARIO_META: Record<Scenario['kind'], { label: string; icon: React.ComponentType<{ className?: string }> }> = {
   purchase: { label: 'Achat', icon: ShoppingBag },
@@ -34,6 +35,19 @@ const MonthField: React.FC<{ label: string; value: number; onChange: (n: number)
     render={p => <NumberInput id={p.id} className={p.className} describedBy={p.describedBy} invalid={p.invalid} value={value} suffix="mois"
       onChange={n => onChange(Math.max(1, Math.min(max, Math.round(n) || 1)))} />} />
 );
+
+/** Date de restitution : un champ vidé reste vide avec un message, la simulation garde
+ *  la dernière date valide jusqu'à la saisie d'une nouvelle. */
+const RestitutionDateField: React.FC<{ value: string; min: string; onChange: (date: string) => void }> = ({ value, min, onChange }) => {
+  const [draft, setDraft] = useState(value);
+  const empty = draft === '';
+  return (
+    <TextField label="Date de la restitution" type="date" min={min} value={draft}
+      onChange={e => { setDraft(e.target.value); if (e.target.value) onChange(e.target.value); }}
+      error={empty ? `Saisissez une date. En attendant, la simulation garde le ${parseISODate(value).toLocaleDateString('fr-FR')}.` : undefined}
+      supporting="Le capital des parents produit des intérêts (offerts) jusqu'à cette date." />
+  );
+};
 
 export const ScenarioEditor: React.FC<ScenarioEditorProps> = ({ scenario: s, horizon, rank, minRestitutionDate, onChange, onRemove }) => {
   const meta = SCENARIO_META[s.kind];
@@ -65,9 +79,7 @@ export const ScenarioEditor: React.FC<ScenarioEditorProps> = ({ scenario: s, hor
           <MoneyField label="Mis de côté chaque mois" value={s.amount} onChange={amount => onChange({ ...s, amount })} />
         )}
         {s.kind === 'restitution' && (
-          <TextField label="Date de la restitution" type="date" min={minRestitutionDate} value={s.date}
-            onChange={e => { if (e.target.value) onChange({ ...s, date: e.target.value }); }}
-            supporting="Le capital des parents produit des intérêts (offerts) jusqu'à cette date." />
+          <RestitutionDateField value={s.date} min={minRestitutionDate} onChange={date => onChange({ ...s, date })} />
         )}
       </div>
     </li>

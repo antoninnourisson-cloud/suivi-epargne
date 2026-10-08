@@ -13,12 +13,13 @@ import { effectivePayday } from './finance/payPlan';
 import { signedAmount } from './money';
 import { formatISODay, parseISODate, MS_PER_DAY } from './dates';
 import { computeEmergencyFund } from './planning';
+import { plainEUR } from './format';
 
 export const DEFAULT_GOOD_MONTH_THRESHOLD = 500;
 /** Durée d'un « mois » de suivi, compté à partir de la paie (jusqu'à la paie suivante au plus). */
 export const PAY_WINDOW_DAYS = 30;
 /** Écart toléré entre la date d'enregistrement d'une fiche et le jour de paie attendu. */
-export const PAYSLIP_TOLERANCE_DAYS = 7;
+const PAYSLIP_TOLERANCE_DAYS = 7;
 
 export interface MotivationConfig {
   gamification?: boolean;
@@ -201,7 +202,7 @@ const SAVINGS_TIERS = [10_000, 25_000, 50_000, 100_000];
 const STREAK_TIERS = [3, 6, 12];
 const LIVRETS = [AccountType.LIVRET_A, AccountType.LDDS, AccountType.LEP];
 
-const eur = (n: number) => `${Math.round(n).toLocaleString('fr-FR')} €`;
+const eur = plainEUR;
 
 export const computeMilestones = (input: {
   accounts: SavingsAccount[];
@@ -365,8 +366,8 @@ const FIELDS: { field: PayslipAnomaly['field']; label: string }[] = [
   { field: 'grossAmount', label: 'Salaire brut' },
 ];
 /** Seuils d'alerte : plus de 15 % ET plus de 50 € d'écart avec la médiane. */
-export const ANOMALY_RATIO = 0.15;
-export const ANOMALY_MIN_EUR = 50;
+const ANOMALY_RATIO = 0.15;
+const ANOMALY_MIN_EUR = 50;
 
 const median = (xs: number[]) => {
   const s = [...xs].sort((a, b) => a - b);

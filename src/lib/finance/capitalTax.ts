@@ -246,13 +246,13 @@ export const computeWeightedAnnualRate = (
 // ---------------------------------------------------------------------------
 
 /** Comptes dont la valeur bouge avec les marchés : on y suit les versements cumulés. */
-export const DEPOSIT_TRACKED_TYPES = [AccountType.PEA, AccountType.ASSURANCE_VIE, AccountType.PEE, AccountType.PER, AccountType.CRYPTO];
+const DEPOSIT_TRACKED_TYPES = [AccountType.PEA, AccountType.ASSURANCE_VIE, AccountType.PEE, AccountType.PER, AccountType.CRYPTO];
 export const tracksDeposits = (type: AccountType) => DEPOSIT_TRACKED_TYPES.includes(type);
 
 /** Plafond légal des VERSEMENTS sur un PEA (la valorisation peut le dépasser). */
 export const PEA_DEPOSIT_CEILING = 150_000;
 /** Abattement annuel sur les gains d'Assurance Vie de plus de 8 ans (personne seule). */
-export const AV_ANNUAL_ALLOWANCE = 4_600;
+const AV_ANNUAL_ALLOWANCE = 4_600;
 
 /**
  * Versements cumulés après un retrait de `amount` : un retrait emporte versements et gains
@@ -262,7 +262,7 @@ export const depositsAfterWithdrawal = (totalDeposits: number, value: number, am
   value <= 0 ? totalDeposits : Math.max(0, totalDeposits * (1 - Math.min(1, amount / value)));
 
 // Cessions de crypto-actifs exonérées si leur total annuel ne dépasse pas 305 € (art. 150 VH bis).
-export const CRYPTO_EXEMPT_DISPOSALS = 305;
+const CRYPTO_EXEMPT_DISPOSALS = 305;
 
 export interface WithdrawalTax {
   known: boolean;        // false : versements cumulés inconnus, ou fiscalité non modélisée

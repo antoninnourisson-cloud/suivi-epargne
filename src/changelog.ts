@@ -15,6 +15,16 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '2026.10.08-3',
+    date: '2026-10-08',
+    title: 'Finitions',
+    items: [
+      "Simulateur « Et si… » : le résultat est annoncé une seule fois quand vous arrêtez de taper, et une date effacée est signalée au lieu de revenir en arrière.",
+      "Petites améliorations d'accessibilité : boutons de fermeture plus grands, jauge des bons mois lue en euros, titres mieux ordonnés.",
+      "Ménage interne et mises à jour de sécurité des outils de développement : rien ne change dans votre utilisation.",
+    ],
+  },
+  {
     version: '2026.10.08-2',
     date: '2026-10-08',
     title: 'Paramètres plus simples',

@@ -28,7 +28,7 @@ import {
 import { LATEST_TAX_SCALE } from '../../src/constants';
 import { computeYearReview } from '../../src/lib/agenda';
 import { formatISODay } from '../../src/lib/dates';
-import { frenchDay } from '../../src/lib/format';
+import { formatEUR, frenchDay } from '../../src/lib/format';
 import { DEFAULT_FISCAL_CONFIG } from '../../src/constants';
 import { lepTimelineFromData, describeLepTimeline } from '../../src/lib/lep';
 import { computeGoodMonths, computePayReview, motivationSettings } from '../../src/lib/motivation';
@@ -42,8 +42,7 @@ export interface Reminder {
   message: PushMessage;
 }
 
-const eur = (n: number) =>
-  new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(n);
+const eur = (n: number) => formatEUR(n, 0);
 
 const STALE_UPDATE_DAYS = 30;
 // Le rappel de paie reste valable quelques jours : un cron manqué (panne, déploiement)
@@ -52,7 +51,7 @@ const PAYDAY_WINDOW_DAYS = 3;
 const PAYDAY_FOLLOWUP_DELAY_DAYS = 3;
 
 // Écran de l'app ouvert au clic (voir le traitement de `?view=` dans App.tsx).
-export const viewUrl = (appUrl: string, view: string) =>
+const viewUrl = (appUrl: string, view: string) =>
   view === 'dashboard' ? appUrl : `${appUrl}${appUrl.includes('?') ? '&' : '?'}view=${view}`;
 
 const MONTH_NAMES = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
@@ -245,8 +244,7 @@ export const computeReminders = (data: GlobalAppData, today: CivilDate | Date, a
 
   // 6. Abonnements : la veille sous 100 €, une semaine avant au-delà. Une clé par
   //    prélèvement : le rappel « 7 jours avant » n'est pas répété les jours suivants.
-  const eur2 = (n: number) =>
-    new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(n);
+  const eur2 = (n: number) => formatEUR(n, 2);
   for (const { subscription: sub, dueDate, daysUntil } of findDueSubscriptions(data.subscriptions || [], now)) {
     const [y, m, d] = dueDate.split('-').map(Number);
     const day = frenchDay(new Date(y, m - 1, d), true);

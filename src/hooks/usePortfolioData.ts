@@ -4,6 +4,7 @@
 // sa valeur par défaut (src/lib/schema.ts) et son interface. Les setters par champ restent
 // exposés pour les écrans.
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import { lsDel, lsGet, lsSet } from '../lib/storage';
 import { tracksDeposits, totalFixedCharges } from '../lib/finance';
 import { applyMovement, balanceChangeMovements, canWithdrawOwn } from '../lib/accountOps';
 import { migrate, canonicalize, emptyData, isFromNewerApp, withoutDeviceOnlyFields, validateImport, APP_SCHEMA_VERSION } from '../lib/schema';
@@ -40,15 +41,12 @@ type Config = GlobalAppData['config'];
 type Updater<T> = T | ((prev: T) => T);
 const resolve = <T,>(u: Updater<T>, prev: T): T => (typeof u === 'function' ? (u as (p: T) => T)(prev) : u);
 
-const lsGet = (k: string) => { try { return localStorage.getItem(k); } catch { return null; } };
-const lsSet = (k: string, v: string) => { try { localStorage.setItem(k, v); } catch { /* quota ou stockage bloqué */ } };
-const lsDel = (k: string) => { try { localStorage.removeItem(k); } catch { /* idem */ } };
 
 const localMonthKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 
 export type SyncFailure = 'conflict' | 'session' | 'offline' | 'notfound' | 'error';
 /** Classe une erreur de Drive en une seule catégorie, la même pour tous les chemins. */
-export const classifySyncError = (err: unknown): SyncFailure => {
+const classifySyncError = (err: unknown): SyncFailure => {
   if (err instanceof ConflictError) return 'conflict';
   if (err instanceof Error && err.message === 'SESSION_EXPIRED') return 'session';
   if (err instanceof ApiError && err.status === 404) return 'notfound';

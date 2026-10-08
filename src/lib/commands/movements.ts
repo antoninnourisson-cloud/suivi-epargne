@@ -13,7 +13,7 @@ export type MovementLeg = { accountId: string; movement: AccountMovement };
  * côté source et le IN côté destination, appariés par `linkId`). Vide si le mouvement
  * n'existe plus.
  */
-export const collectMovementLegs = (accounts: SavingsAccount[], accountId: string, movementId: string): MovementLeg[] => {
+const collectMovementLegs = (accounts: SavingsAccount[], accountId: string, movementId: string): MovementLeg[] => {
   const movement = accounts.find(a => a.id === accountId)?.movements?.find(m => m.id === movementId);
   if (!movement) return [];
   if (!movement.linkId) return [{ accountId, movement }];
@@ -24,7 +24,7 @@ export const collectMovementLegs = (accounts: SavingsAccount[], accountId: strin
   return legs;
 };
 
-export const RESTITUTION_DELETE_ERROR = 'La restitution s\'annule depuis Part parentale.';
+const RESTITUTION_DELETE_ERROR = 'La restitution s\'annule depuis Part parentale.';
 
 /**
  * Ce que la suppression d'un mouvement retirerait, pour la confirmation : refus si le

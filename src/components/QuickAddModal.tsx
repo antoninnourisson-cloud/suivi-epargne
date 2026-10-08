@@ -1,5 +1,6 @@
 // Ajout rapide d'un dépôt ou d'un retrait.
 import React, { useEffect, useId, useRef, useState } from 'react';
+import { lsGet, lsSet } from '../lib/storage';
 import { SavingsAccount } from '../types';
 import { X, Plus, ArrowUpCircle, ArrowDownCircle, Lightbulb } from 'lucide-react';
 import { NumberInput } from './NumberInput';
@@ -35,8 +36,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ open, accounts, on
   // comptes ont pu être créés depuis le montage).
   useEffect(() => {
     if (!open) return;
-    let last = '';
-    try { last = localStorage.getItem(LAST_ACCOUNT_KEY) || ''; } catch { /* stockage bloqué */ }
+    const last = lsGet(LAST_ACCOUNT_KEY) || '';
     setAccountId(accounts.some(a => a.id === last) ? last : accounts[0]?.id || '');
     setAmount(0);
     setType('IN');
@@ -53,7 +53,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ open, accounts, on
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!canSubmit) return;
-    try { localStorage.setItem(LAST_ACCOUNT_KEY, accountId); } catch { /* idem */ }
+    lsSet(LAST_ACCOUNT_KEY, accountId);
     onSubmit(accountId, amount, type, label.trim() || (type === 'IN' ? 'Dépôt' : 'Retrait'), date);
     onClose();
   };

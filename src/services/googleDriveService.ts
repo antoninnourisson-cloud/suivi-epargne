@@ -221,7 +221,7 @@ const refreshTokenSilently = (): Promise<void> => {
 
 // Exporté pour le Google Picker (voir openDrivePicker), qui a besoin du token courant
 // pour n'afficher/autoriser que ce à quoi le compte connecté a accès.
-export const getAccessToken = async (): Promise<string> => {
+const getAccessToken = async (): Promise<string> => {
   const stored = localStorage.getItem('google_token');
   if (!stored && !(isBackendEnabled() && hasBackendSession())) throw new Error('NO_TOKEN');
   if (!stored || !isTokenValid()) {
@@ -413,7 +413,7 @@ export class ConcurrentWriteError extends ConflictError {
 }
 
 /** Historique des révisions du fichier (toutes les pages), avec leur date. */
-export const listRevisions = async (fileId: string): Promise<RevisionEntry[]> => {
+const listRevisions = async (fileId: string): Promise<RevisionEntry[]> => {
   const all: RevisionEntry[] = [];
   let pageToken: string | undefined;
   do {
@@ -549,7 +549,7 @@ const patchContent = async (fileId: string, data: unknown): Promise<string> => {
 // plus de version saine où revenir. Une copie par mois, les 12 dernières gardées (les plus
 // anciennes vont à la corbeille Drive, récupérables 30 jours).
 const BACKUP_PREFIX = 'suivi_epargne_backup_';
-export const BACKUPS_KEPT = 12;
+const BACKUPS_KEPT = 12;
 
 export interface DriveBackup { id: string; name: string; createdTime: string; month: string }
 

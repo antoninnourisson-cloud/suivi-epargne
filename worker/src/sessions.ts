@@ -31,7 +31,7 @@ const indexKey = (sub: string) => `sessions:${sub}`;
 export const sessionTtl = (createdAtMs: number, nowMs: number): number =>
   Math.min(SESSION_IDLE_TTL, Math.floor((createdAtMs + SESSION_MAX_AGE * 1000 - nowMs) / 1000));
 
-export const isSessionExpired = (s: SessionRecord, nowMs: number): boolean =>
+const isSessionExpired = (s: SessionRecord, nowMs: number): boolean =>
   s.createdAt !== undefined && nowMs >= s.createdAt + SESSION_MAX_AGE * 1000;
 
 // ---------- Index ----------
@@ -56,7 +56,7 @@ export const readSessionIndex = async (store: KVNamespace, sub: string, nowMs = 
   return alive;
 };
 
-export const addToSessionIndex = async (store: KVNamespace, sub: string, hash: string, nowMs = Date.now()): Promise<void> => {
+const addToSessionIndex = async (store: KVNamespace, sub: string, hash: string, nowMs = Date.now()): Promise<void> => {
   const alive = await readSessionIndex(store, sub, nowMs);
   if (alive.includes(hash)) return;
   alive.push(hash);
@@ -65,7 +65,7 @@ export const addToSessionIndex = async (store: KVNamespace, sub: string, hash: s
   await writeIndex(store, sub, alive);
 };
 
-export const removeFromSessionIndex = async (store: KVNamespace, sub: string, hash: string): Promise<void> => {
+const removeFromSessionIndex = async (store: KVNamespace, sub: string, hash: string): Promise<void> => {
   const raw = await readRawIndex(store, sub);
   if (raw.includes(hash)) await writeIndex(store, sub, raw.filter(h => h !== hash));
 };

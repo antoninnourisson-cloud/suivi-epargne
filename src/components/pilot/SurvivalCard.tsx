@@ -22,7 +22,7 @@ const level = (totalMonths: number) =>
       : { text: 'Réserve confortable', tone: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-200' };
 
 export const SurvivalCard: React.FC<{ survival: Survival }> = ({ survival: s }) => {
-  const value = s.infinite ? '∞' : (
+  const value = s.infinite ? <><span aria-hidden="true">∞</span><span className="sr-only">illimitée</span></> : (
     <>
       {s.years > 0 && <>{s.years} an{s.years > 1 ? 's' : ''} </>}
       {s.months} mois

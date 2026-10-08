@@ -12,7 +12,7 @@
 // exprimer.
 // ================================================
 
-export const CANONICAL_HOST = 'pecule-app.com';
+const CANONICAL_HOST = 'pecule-app.com';
 
 export const SECURITY_HEADERS: Readonly<Record<string, string>> = {
   // Un an, sous-domaines compris. Pas encore de « preload » : l'inscription dans les
@@ -29,7 +29,7 @@ export const SECURITY_HEADERS: Readonly<Record<string, string>> = {
 };
 
 /** Ajouté (pas remplacé) : si l'origine envoyait un jour sa propre CSP, les deux s'appliqueraient. */
-export const FRAME_ANCESTORS_CSP = "frame-ancestors 'none'";
+const FRAME_ANCESTORS_CSP = "frame-ancestors 'none'";
 
 const withSecurityHeaders = (res: Response): Response => {
   // Les en-têtes d'une réponse fetch() sont immuables : copie (le corps est relayé en flux,

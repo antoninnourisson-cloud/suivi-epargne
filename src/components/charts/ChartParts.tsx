@@ -5,7 +5,7 @@
 import React from 'react';
 
 /** Pastille de couleur d'une série ; hachurée pour l'épargne bloquée ou fiscalisée. */
-export const SeriesSwatch: React.FC<{ color: string; striped?: boolean; shape?: 'square' | 'line' }> = ({ color, striped, shape = 'square' }) => (
+const SeriesSwatch: React.FC<{ color: string; striped?: boolean; shape?: 'square' | 'line' }> = ({ color, striped, shape = 'square' }) => (
   <span
     aria-hidden="true"
     className={shape === 'line' ? 'inline-block w-3 h-0.5 rounded-full shrink-0' : 'inline-block w-2.5 h-2.5 rounded-[3px] shrink-0'}

@@ -23,7 +23,7 @@ export const MilestonesSheet: React.FC<MilestonesSheetProps> = ({ open, onClose,
           </h2>
           <p className="mt-1 text-sm text-on-surface-variant">{achieved} atteint{achieved > 1 ? 's' : ''} sur {milestones.length}</p>
         </div>
-        <button type="button" onClick={onClose} aria-label="Fermer" className="p-2 -m-2 rounded-full text-on-surface-variant hover:bg-on-surface/8">
+        <button type="button" onClick={onClose} aria-label="Fermer" className="w-11 h-11 -m-3 shrink-0 inline-flex items-center justify-center rounded-full text-on-surface-variant hover:bg-on-surface/8">
           <X className="w-5 h-5" aria-hidden="true" />
         </button>
       </div>

@@ -50,12 +50,12 @@ export interface AlertsInput {
 }
 
 /** Coussin gardé sur le compte courant : 1,5 mois de dépenses. */
-export const CASH_BUFFER_MONTHS = 1.5;
+const CASH_BUFFER_MONTHS = 1.5;
 /** En dessous, une alerte ne vaut pas la peine d'être affichée. */
-export const MIN_GAIN_PER_YEAR = 5;
-export const MIN_DORMANT_EUR = 300;
+const MIN_GAIN_PER_YEAR = 5;
+const MIN_DORMANT_EUR = 300;
 /** Horizon de la prévision « livret plein », en mois. */
-export const FULL_FORECAST_MONTHS = 24;
+const FULL_FORECAST_MONTHS = 24;
 
 const eur = (n: number) => formatEUR(n, 0);
 const fullDate = (iso: string) => `${frenchDay(parseISODate(iso))} ${parseISODate(iso).getFullYear()}`;

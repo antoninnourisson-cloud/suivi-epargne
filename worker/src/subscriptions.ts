@@ -12,8 +12,8 @@ import { b64urlDecode, sha256b64url } from './crypto';
 import type { PushSubscriptionJSON } from './webpush';
 
 export const MAX_SUBSCRIPTIONS = 10;
-export const MAX_ENDPOINT_LENGTH = 1024;
-export const MAX_KEY_LENGTH = 256;
+const MAX_ENDPOINT_LENGTH = 1024;
+const MAX_KEY_LENGTH = 256;
 
 export interface StoredSubscription extends PushSubscriptionJSON {
   sessionHash?: string;

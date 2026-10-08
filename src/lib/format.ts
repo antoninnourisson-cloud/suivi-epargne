@@ -24,6 +24,12 @@ export const formatEUR = (n: number, decimals: 'auto' | 0 | 2 = 'auto'): string 
 export const formatSignedEUR = (n: number, decimals: 'auto' | 0 | 2 = 'auto'): string =>
   `${n > 0 ? '+' : n < 0 ? '−' : ''}${formatEUR(Math.abs(n), decimals)}`;
 
+/**
+ * Arrondi à l'euro, en texte simple (« 1 250 € », espace ordinaire avant le symbole) :
+ * phrases générées par les calculs (conseils, propositions de la veille fiscale).
+ */
+export const plainEUR = (n: number): string => `${Math.round(n).toLocaleString('fr-FR')} €`;
+
 /** Valeur éditable dans un champ texte, à la française : « 410,80 », « 250 ». */
 export const toInputAmount = (n: number): string =>
   Math.round(n * 100) % 100 === 0 ? String(Math.round(n)) : n.toFixed(2).replace('.', ',');

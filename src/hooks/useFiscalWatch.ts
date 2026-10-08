@@ -7,10 +7,12 @@
 // Dans tous les cas, les écarts avec les paramètres de l'app sont PROPOSÉS, jamais appliqués
 // d'office (diffFiscalWatch).
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lsGetJSON, lsSetJSON } from '../lib/storage';
 import { FiscalConfig, SavingsAccount, TaxBracket } from '../types';
 import { diffFiscalWatch, FiscalProposal, FiscalWatchResult, isWatchDue, parseFiscalWatch, FISCAL_WATCH_PROMPT, buildSourcesPrompt } from '../lib/fiscalWatch';
 import { getFiscalSources, getServerFiscalWatch, hasBackendSession, isBackendEnabled, runServerFiscalWatch, ServerFiscalWatch } from '../services/backendService';
 import { askGeminiWithSearch } from '../services/geminiService';
+import { formatRate, plainEUR } from '../lib/format';
 
 const KEY = 'fiscal_watch';
 export type WatchSource = 'server' | 'gemini';
@@ -22,12 +24,12 @@ export interface StoredWatch {
   dismissed?: string[];
 }
 
-const read = (): StoredWatch => { try { return JSON.parse(localStorage.getItem(KEY) || '{}'); } catch { return {}; } };
-const write = (s: StoredWatch) => { try { localStorage.setItem(KEY, JSON.stringify(s)); } catch { /* non mémorisé */ } };
+const read = (): StoredWatch => lsGetJSON<StoredWatch>(KEY, {});
+const write = (s: StoredWatch) => lsSetJSON(KEY, s);
 const signature = (p: FiscalProposal) => `${p.key}=${p.proposed}`;
 const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
-export const SERVER_RESULT_MAX_AGE_DAYS = 8;
+const SERVER_RESULT_MAX_AGE_DAYS = 8;
 
 /** Résultat du serveur utilisable : réussi et vieux de 8 jours au plus. */
 export const isServerResultFresh = (s: Pick<ServerFiscalWatch, 'checkedAt' | 'ok'> | null | undefined, now: Date = new Date()): s is ServerFiscalWatch => {
@@ -50,8 +52,8 @@ export const pickWatchResult = (s: StoredWatch, now: Date = new Date()): { resul
 
 // ---------- Détail du relevé du serveur (contrôle de qualité visible dans l'app) ----------
 
-const pct = (n: number) => `${n.toLocaleString('fr-FR', { maximumFractionDigits: 2 })} %`;
-const eur = (n: number) => `${Math.round(n).toLocaleString('fr-FR')} €`;
+const pct = formatRate;
+const eur = plainEUR;
 const brackets = (v: unknown) => (Array.isArray(v) ? (v as TaxBracket[]).map(b => `${b.limit === null || b.limit === undefined ? '…' : eur(b.limit as number)} : ${pct(b.rate * 100)}`).join(' · ') : '?');
 
 /** Champ du relevé → libellé, mise en forme et clé de la proposition correspondante (diffFiscalWatch). */

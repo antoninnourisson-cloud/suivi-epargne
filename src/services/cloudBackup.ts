@@ -11,6 +11,7 @@
 // toujours de saisir le code.
 // ================================================
 import type { GlobalAppData } from '../types';
+import { lsDel, lsGetJSON, lsSetJSON } from '../lib/storage';
 import { canonicalize, withoutDeviceOnlyFields } from '../lib/schema';
 import {
   CloudBackupError, b64urlDecode, b64urlEncode, decryptBackup, deriveBackupKey, encryptBackup, newSalt,
@@ -18,10 +19,10 @@ import {
 } from '../lib/cloudBackupCrypto';
 import { BACKEND_URL, getSessionToken, hasBackendSession, isBackendEnabled } from './backendService';
 
-export { generateRecoveryCode, CloudBackupError } from '../lib/cloudBackupCrypto';
+export { generateRecoveryCode } from '../lib/cloudBackupCrypto';
 
 /** Même plafond que le serveur (worker/src/index.ts, PUT /backup). */
-export const MAX_BACKUP_BYTES = 2 * 1024 * 1024;
+const MAX_BACKUP_BYTES = 2 * 1024 * 1024;
 
 const DB_NAME = 'pecule-cloud-backup';
 const STORE = 'keys';
@@ -40,7 +41,7 @@ export interface CloudBackupStatus {
 export type CloudBackupFailure = 'SESSION_EXPIRED' | 'OFFLINE' | 'TOO_LARGE' | 'RATE_LIMITED' | 'SERVER' | 'NOT_ENABLED' | 'NO_BACKUP'
   | 'INVALID_CODE' | 'TYPO' | 'WRONG_CODE' | 'CORRUPTED' | 'UNSUPPORTED_FORMAT' | 'UNSUPPORTED_VERSION';
 
-export class CloudBackupFailureError extends Error {
+class CloudBackupFailureError extends Error {
   constructor(public readonly code: CloudBackupFailure) { super(code); this.name = 'CloudBackupFailureError'; }
 }
 
@@ -76,15 +77,9 @@ export const isCloudBackupAvailable = (): boolean => isBackendEnabled() && hasBa
 
 // ---------- Statut local (localStorage : dates et empreinte, rien de sensible) ----------
 
-export const readStatus = (): CloudBackupStatus => {
-  try { return JSON.parse(localStorage.getItem(STATUS_KEY) || '{}') as CloudBackupStatus; } catch { return {}; }
-};
-const writeStatus = (s: CloudBackupStatus): void => {
-  try { localStorage.setItem(STATUS_KEY, JSON.stringify(s)); } catch { /* stockage indisponible */ }
-};
-const clearStatus = (): void => {
-  try { localStorage.removeItem(STATUS_KEY); } catch { /* stockage indisponible */ }
-};
+export const readStatus = (): CloudBackupStatus => lsGetJSON<CloudBackupStatus>(STATUS_KEY, {});
+const writeStatus = (s: CloudBackupStatus): void => lsSetJSON(STATUS_KEY, s);
+const clearStatus = (): void => lsDel(STATUS_KEY);
 
 // ---------- Clé sur l'appareil (IndexedDB) ----------
 

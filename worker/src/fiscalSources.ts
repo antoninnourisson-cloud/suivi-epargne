@@ -1,8 +1,9 @@
-// Textes des pages officielles utilisées par la veille fiscale de l'app. Le navigateur ne
-// peut pas les lire lui-même (pages d'autres sites), et la recherche Google de Gemini n'est
-// pas incluse dans la clé gratuite : le serveur télécharge donc ces pages, en garde le
-// texte utile, et l'app le fait lire par Gemini. Liste fixe : aucune adresse ne vient de
-// l'extérieur.
+// Textes des pages officielles utilisées par la veille fiscale. Le navigateur ne peut pas
+// les lire lui-même (pages d'autres sites), et la recherche Google de Gemini n'est pas
+// incluse dans la clé gratuite : le serveur télécharge donc ces pages et en garde le texte
+// utile. Il les fait lire chaque semaine par Cloudflare Workers AI (fiscalWatchJob.ts) ;
+// l'app peut aussi les faire lire par Gemini en secours (GET /fiscal-sources). Liste fixe :
+// aucune adresse ne vient de l'extérieur.
 
 export interface FiscalSource { url: string; topic: string; text: string; ok: boolean }
 

@@ -22,7 +22,7 @@ import { signedAmount } from '../money';
 export const isInitialBalance = (m: AccountMovement) => m.tag === 'initial' || (!m.tag && m.label === 'Solde initial');
 
 /** Mouvement de la part des parents (ajout, correction, restitution) : pas votre argent. */
-export const isParentalMovement = (m: AccountMovement) => m.kind === 'parental';
+const isParentalMovement = (m: AccountMovement) => m.kind === 'parental';
 
 /**
  * Mouvement qui compte comme ÉPARGNE (argent réellement mis de côté ou retiré) : ni

@@ -21,13 +21,13 @@ import { fetchFiscalSources, FiscalSource } from './fiscalSources';
 /** Modèle : le plus solide des modèles Workers AI qui acceptent le mode JSON (json_schema). */
 export const FISCAL_AI_MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
 /** Tarif du modèle en neurones par million de jetons (page « Pricing » de Workers AI). */
-export const NEURONS_PER_M_INPUT = 26_668;
-export const NEURONS_PER_M_OUTPUT = 204_805;
+const NEURONS_PER_M_INPUT = 26_668;
+const NEURONS_PER_M_OUTPUT = 204_805;
 /** Plafond d'une exécution (pire cas estimé) : bien en dessous des 10 000 neurones gratuits par jour. */
 export const FISCAL_WATCH_BUDGET = 6_000;
 /** Texte gardé par page (les pages utiles font 10 000 à 34 000 caractères). */
-export const MAX_PAGE_CHARS = 36_000;
-export const MAX_OUTPUT_TOKENS = 700;
+const MAX_PAGE_CHARS = 36_000;
+const MAX_OUTPUT_TOKENS = 700;
 /** Fenêtre de contexte du modèle, marge comprise. */
 const CONTEXT_TOKENS = 24_000;
 
@@ -36,7 +36,7 @@ export const LATEST_KEY = 'fiscal-watch:latest';
 export const ATTEMPT_KEY = 'fiscal-watch:attempt';
 export const FAILURE_KEY = 'fiscal-watch:last-failure';
 /** Exécution à la demande : au plus une toutes les 20 h après un succès, 6 h après un échec. */
-export const MIN_INTERVAL_AFTER_SUCCESS_MS = 20 * 3600_000;
+const MIN_INTERVAL_AFTER_SUCCESS_MS = 20 * 3600_000;
 const ATTEMPT_TTL_S = 6 * 3600;
 
 /** Le binding Workers AI (`[ai] binding = "AI"`), réduit à ce qui sert ici. */
@@ -113,7 +113,7 @@ ${example}`;
 };
 
 /** Schéma imposé au modèle (mode JSON de Workers AI). */
-export const pageSchema = (fields: FieldSpec[]): Record<string, unknown> => {
+const pageSchema = (fields: FieldSpec[]): Record<string, unknown> => {
   const brackets = fields.some(f => f.unit === 'brackets');
   const item = brackets
     ? {
@@ -145,8 +145,8 @@ export const pageSchema = (fields: FieldSpec[]): Record<string, unknown> => {
 // ---------- Budget ----------
 
 /** Estimation prudente : ~3 caractères par jeton pour du français (la consigne « chars/4 » sous-estime les accents). */
-export const estimateTokens = (chars: number): number => Math.ceil(chars / 3);
-export const neuronsFor = (inputTokens: number, outputTokens: number): number =>
+const estimateTokens = (chars: number): number => Math.ceil(chars / 3);
+const neuronsFor = (inputTokens: number, outputTokens: number): number =>
   (inputTokens * NEURONS_PER_M_INPUT + outputTokens * NEURONS_PER_M_OUTPUT) / 1_000_000;
 /** Pire cas d'un appel : toute l'entrée, et la sortie au maximum autorisé. */
 export const estimateCallNeurons = (promptChars: number): number => neuronsFor(estimateTokens(promptChars), MAX_OUTPUT_TOKENS);

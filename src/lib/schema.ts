@@ -17,7 +17,7 @@ import { round2 } from './money';
  */
 export const APP_SCHEMA_VERSION = 2;
 
-export const DEFAULT_CONFIG: GlobalAppData['config'] = {
+const DEFAULT_CONFIG: GlobalAppData['config'] = {
   grossAnnual: 45000,
   leisureBudget: 300,
   projectSavings: 200,

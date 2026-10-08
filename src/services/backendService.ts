@@ -1,6 +1,7 @@
 // ================================================
 // FILE: src/services/backendService.ts
-// Dialogue avec le Worker (worker/) : session Google persistante et notifications push.
+// Dialogue avec le Worker (worker/) : session Google persistante, notifications push,
+// veille fiscale du serveur (la sauvegarde de secours chiffrée est dans cloudBackup.ts).
 //
 // Activé uniquement si VITE_BACKEND_URL est défini au build. Sans lui, l'app reste en mode
 // « zéro serveur » (Google Identity Services dans le navigateur), exactement comme avant :
@@ -10,19 +11,16 @@
 // lui-même : il permet seulement de demander au Worker un jeton d'accès Google court (1 h),
 // que l'app utilise ensuite directement auprès de Drive.
 // ================================================
+import { lsDel, lsGet } from '../lib/storage';
 
 export const BACKEND_URL: string = (import.meta.env.VITE_BACKEND_URL || '').replace(/\/+$/, '');
 export const isBackendEnabled = (): boolean => BACKEND_URL !== '';
 
 const SESSION_KEY = 'backend_session';
 
-export const getSessionToken = (): string | null => {
-  try { return localStorage.getItem(SESSION_KEY); } catch { return null; }
-};
+export const getSessionToken = (): string | null => lsGet(SESSION_KEY);
 export const hasBackendSession = (): boolean => !!getSessionToken();
-export const clearBackendSession = (): void => {
-  try { localStorage.removeItem(SESSION_KEY); } catch { /* stockage indisponible */ }
-};
+const clearBackendSession = (): void => lsDel(SESSION_KEY);
 
 export interface AccessTokenResponse { access_token: string; expires_in: number }
 

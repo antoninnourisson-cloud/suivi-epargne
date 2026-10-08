@@ -1,7 +1,7 @@
 // Carte « Bons mois » de l'Accueil : la paie en cours face au seuil, la série, le joker de
 // l'année, l'historique des dernières paies et le prochain jalon. Ton positif : on montre ce
 // qui est acquis, jamais la menace de perdre la série.
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { CalendarCheck, Check, Flag, Hourglass, Minus, ShieldCheck, Sparkles } from 'lucide-react';
 import type { GoodMonthsSummary, Milestone, MonthResult } from '../../lib/motivation';
 import { daysBetween, parseISODate } from '../../lib/dates';
@@ -41,19 +41,28 @@ export const GoodMonthsCard: React.FC<GoodMonthsCardProps> = ({ summary, today, 
   const daysLeft = current ? Math.max(0, daysBetween(parseISODate(today), parseISODate(current.end))) : 0;
   const since = current ? `depuis la paie du ${frenchDay(parseISODate(current.start))}` : '';
   const gaugeLabel = `Mis de côté ${since}`;
+  // Région d'annonce présente dès le montage et remplie juste après : un lecteur d'écran
+  // n'annonce pas une région role="status" insérée déjà pleine.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    const t = window.setTimeout(() => setMounted(true), 100);
+    return () => window.clearTimeout(t);
+  }, []);
 
   return (
     <Card title="Bons mois" icon={CalendarCheck}>
-      {fresh.length > 0 && (
-        <div role="status" className="mb-4 -mt-1 p-3 rounded-xl bg-tertiary-container text-on-tertiary-container flex flex-wrap items-center gap-x-3 gap-y-2">
-          <Sparkles className="w-4 h-4 shrink-0" aria-hidden="true" />
-          <p className="flex-1 min-w-40 text-sm">
-            <span className="font-medium">Nouveau jalon : </span>
-            {fresh.map(m => m.title).join(', ')}.
-          </p>
-          {onAcknowledge && <Button variant="text" className="-my-1 h-9 px-4 text-on-tertiary-container dark:text-on-tertiary-container" onClick={onAcknowledge}>Merci</Button>}
-        </div>
-      )}
+      <div role="status">
+        {mounted && fresh.length > 0 && (
+          <div className="mb-4 -mt-1 p-3 rounded-xl bg-tertiary-container text-on-tertiary-container flex flex-wrap items-center gap-x-3 gap-y-2">
+            <Sparkles className="w-4 h-4 shrink-0" aria-hidden="true" />
+            <p className="flex-1 min-w-40 text-sm">
+              <span className="font-medium">Nouveau jalon : </span>
+              {fresh.map(m => m.title).join(', ')}.
+            </p>
+            {onAcknowledge && <Button variant="text" className="-my-1 h-9 px-4 text-on-tertiary-container dark:text-on-tertiary-container" onClick={onAcknowledge}>Merci</Button>}
+          </div>
+        )}
+      </div>
 
       {current && (
         <>
@@ -62,7 +71,8 @@ export const GoodMonthsCard: React.FC<GoodMonthsCardProps> = ({ summary, today, 
             <span className="tabular-nums"> / {formatEUR(threshold, 0)}</span> mis de côté {since}
             {' · '}{reached ? 'bon mois acquis' : daysLeft > 0 ? `encore ${plural(daysLeft, 'jour')}` : 'dernier jour'}
           </p>
-          <div className="mt-2 h-2 rounded-full bg-surface-container-highest overflow-hidden" role="progressbar" aria-label={gaugeLabel} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(pct)}>
+          <div className="mt-2 h-2 rounded-full bg-surface-container-highest overflow-hidden" role="progressbar" aria-label={gaugeLabel} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(pct)}
+            aria-valuetext={`${formatEUR(current.saved, 0)} sur ${formatEUR(threshold, 0)}`}>
             <div className={`h-full rounded-full ${reached ? 'bg-emerald-600 dark:bg-emerald-400' : 'bg-primary'}`} style={{ width: `${pct}%` }} />
           </div>
         </>
@@ -115,7 +125,7 @@ export const GoodMonthsCard: React.FC<GoodMonthsCardProps> = ({ summary, today, 
             <span>Prochain jalon : <span className="text-on-surface font-medium">{next.title}</span> <span className="tabular-nums">{Math.round((next.progress ?? 0) * 100)} %</span></span>
           </p>
         ) : <span />}
-        <Button variant="tonal" onClick={() => setSheetOpen(true)} aria-haspopup="dialog" aria-expanded={sheetOpen}>Voir vos jalons</Button>
+        <Button variant="tonal" onClick={() => setSheetOpen(true)} aria-haspopup="dialog">Voir vos jalons</Button>
       </div>
 
       <MilestonesSheet open={sheetOpen} onClose={() => setSheetOpen(false)} milestones={milestones} />

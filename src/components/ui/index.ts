@@ -5,7 +5,7 @@ export { Chip } from './Chip';
 export { DataTable, type Column } from './DataTable';
 export { DeltaBadge } from './DeltaBadge';
 export { EmptyState } from './EmptyState';
-export { MoneyText, toneClass } from './MoneyText';
+export { MoneyText } from './MoneyText';
 export { PageHeader } from './PageHeader';
 export { SegmentedButton } from './SegmentedButton';
 export { Sparkline, sparkPath } from './Sparkline';

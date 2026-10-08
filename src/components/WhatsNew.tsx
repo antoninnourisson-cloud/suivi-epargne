@@ -1,9 +1,10 @@
 // ================================================
 // FILE: src/components/WhatsNew.tsx
-// « Quoi de neuf » : affiché UNE fois après une mise à jour (versions non encore vues), et
-// historique complet des mises à jour (Paramètres).
+// « Quoi de neuf » : affiché UNE fois après une mise à jour (versions non encore vues).
+// L'historique complet est dans Paramètres, carte « À propos ».
 // ================================================
 import React, { useState } from 'react';
+import { lsGet, lsSet } from '../lib/storage';
 import { CHANGELOG, LATEST_VERSION, ChangelogEntry } from '../changelog';
 import { parseISODate } from '../lib/dates';
 import { Sparkles, X } from 'lucide-react';
@@ -11,8 +12,8 @@ import { Modal } from './Modal';
 
 const SEEN_KEY = 'last_seen_version';
 
-const readSeen = (): string | null => { try { return localStorage.getItem(SEEN_KEY); } catch { return null; } };
-const markSeen = () => { try { localStorage.setItem(SEEN_KEY, LATEST_VERSION); } catch { /* préférence non mémorisée */ } };
+const readSeen = (): string | null => lsGet(SEEN_KEY);
+const markSeen = () => lsSet(SEEN_KEY, LATEST_VERSION);
 
 /** Versions publiées depuis la dernière vue (la plus récente seulement au tout premier lancement). */
 const unseenEntries = (): ChangelogEntry[] => {
@@ -52,13 +53,3 @@ export const WhatsNewModal: React.FC<{ isNewUser?: boolean }> = ({ isNewUser }) 
   );
 };
 
-/** Historique complet, pour les Paramètres. */
-export const ChangelogHistory: React.FC = () => (
-  <details className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 lg:col-span-2 group">
-    <summary className="list-none cursor-pointer font-bold text-slate-800 dark:text-slate-100 flex items-center justify-between">
-      <span className="flex items-center gap-2"><Sparkles className="w-4 h-4 text-indigo-600" /> Historique des mises à jour</span>
-      <span className="text-xs font-bold text-slate-500 dark:text-slate-400">version {LATEST_VERSION}{typeof __BUILD_SHA__ !== "undefined" && __BUILD_SHA__ !== "dev" ? ` (${__BUILD_SHA__})` : ""}</span>
-    </summary>
-    <div className="mt-4 space-y-5">{CHANGELOG.map(e => <EntryBlock key={e.version} e={e} />)}</div>
-  </details>
-);

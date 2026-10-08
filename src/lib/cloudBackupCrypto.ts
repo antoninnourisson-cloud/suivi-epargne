@@ -16,8 +16,8 @@
 //   illisible, comme modifier le texte chiffré.
 // ================================================
 
-export const BACKUP_FORMAT = 'pecule-backup';
-export const BACKUP_VERSION = 1;
+const BACKUP_FORMAT = 'pecule-backup';
+const BACKUP_VERSION = 1;
 const KDF = 'HKDF-SHA256';
 const CIPHER = 'AES-256-GCM';
 const KEY_INFO = 'pecule/cloud-backup/v1/aes-gcm-key';
@@ -71,7 +71,7 @@ const utf8 = (s: string): Uint8Array<ArrayBuffer> => {
 // ---------- Code de secours ----------
 
 const ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'; // base32 Crockford (ni I, L, O, U)
-export const RECOVERY_CODE_BYTES = 16;
+const RECOVERY_CODE_BYTES = 16;
 const DATA_CHARS = 26;  // ceil(128 / 5)
 const CHECK_CHARS = 2;  // 10 bits de CRC-16
 

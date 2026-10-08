@@ -33,7 +33,8 @@ const returnBases = (env: OriginConfig): { origin: string; prefix: string }[] =>
 
 /**
  * URL de retour autorisée uniquement vers l'app elle-même : même origine ET même préfixe
- * de chemin. Sur github.io, l'origine seule est partagée par tous les dépôts du compte.
+ * de chemin. Sur l'ancienne adresse github.io, l'origine seule est partagée par tous les
+ * dépôts du compte.
  */
 export const safeReturnUrl = (candidate: string | null, env: OriginConfig): string => {
   if (!candidate) return env.APP_URL;
@@ -111,7 +112,7 @@ export const timingSafeEqual = (a: string, b: string): boolean => {
 
 // ---------- Corps de requête bornés ----------
 
-export const MAX_BODY_BYTES = 4096;
+const MAX_BODY_BYTES = 4096;
 
 export class BodyTooLargeError extends Error { constructor() { super('BODY_TOO_LARGE'); } }
 

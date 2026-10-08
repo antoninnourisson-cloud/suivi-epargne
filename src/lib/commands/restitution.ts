@@ -11,7 +11,7 @@ import { CommandResult, CommandState, fail } from './types';
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
 
 /** Id stable du mouvement de restitution d'un compte (un seul par compte et par date). */
-export const restitutionMovementId = (dateISO: string, accountId: string) => `restitution-${dateISO}-${accountId}`;
+const restitutionMovementId = (dateISO: string, accountId: string) => `restitution-${dateISO}-${accountId}`;
 
 /**
  * Enregistre la restitution à la date du retrait réel :

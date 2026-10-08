@@ -44,7 +44,7 @@ export const FiscalClock: React.FC<{ items: FiscalClockItem[] }> = ({ items }) =
                 </span>
                 <span className="text-xs font-medium text-on-surface-variant">{item.type}</span>
               </div>
-              <h4 className="text-base font-medium text-on-surface">{item.name}</h4>
+              <h3 className="text-base font-medium text-on-surface">{item.name}</h3>
               <dl className="mt-auto pt-4 border-t border-outline-variant flex items-end justify-between gap-3">
                 <div>
                   <dt className="text-xs text-on-surface-variant">Échéance</dt>

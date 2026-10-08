@@ -1,15 +1,25 @@
 // ================================================
 // FILE: worker/src/index.ts
-// Serveur minimal de Pécule (Cloudflare Worker). Deux rôles, et seulement deux :
+// Serveur de Pécule (Cloudflare Worker). Il ne garde aucune donnée financière en clair ;
+// l'app continue de parler DIRECTEMENT à Drive. Ses rôles :
 //
-// 1. SESSION PERSISTANTE — le flux OAuth « code » de Google délivre un refresh token
+// 1. SESSION PERSISTANTE (OAuth) — le flux « code » de Google délivre un refresh token
 //    longue durée, impossible à obtenir côté navigateur. Il est chiffré et gardé ici ;
-//    l'app échange sa session contre des jetons d'accès courts (1 h) et continue de
-//    parler DIRECTEMENT à Drive. Les données financières ne transitent pas ici.
+//    l'app échange sa session contre des jetons d'accès courts (1 h). /auth/*, /token,
+//    déconnexion (un appareil ou tous) et suppression du compte.
 //
-// 2. NOTIFICATIONS PUSH — une tâche quotidienne relit le fichier Drive (lecture seule)
-//    pour calculer les rappels (échéances, révision des taux, intérêts de décembre...)
-//    et les envoie, chiffrés de bout en bout, aux appareils abonnés.
+// 2. NOTIFICATIONS PUSH — un cron quotidien relit le fichier Drive (lecture seule) pour
+//    calculer les rappels (échéances, jour de paie, révision des taux, intérêts de
+//    décembre…) et les envoie, chiffrés de bout en bout, aux appareils abonnés (/push/*).
+//
+// 3. VEILLE FISCALE — /fiscal-sources relaie les pages publiques de service-public.gouv.fr ;
+//    un cron hebdomadaire (lundi) les fait lire par Cloudflare Workers AI et garde le
+//    relevé (/fiscal-watch, fiscalWatchJob.ts). L'app propose, l'utilisateur valide.
+//
+// 4. SAUVEGARDE DE SECOURS — /backup garde des copies CHIFFRÉES PAR L'APP, illisibles ici.
+//
+// 5. SURVEILLANCE — /status, sonde publique sans détail de la surveillance quotidienne
+//    (GitHub Actions) ; /health, compte rendu du dernier cron pour l'app connectée.
 //
 // Stockage (KV) :
 //   code:<sha256(c)>  code de connexion à usage unique, contenu CHIFFRÉ (60 s, effacé à l'échange)
@@ -174,7 +184,7 @@ const deletePrefix = async (store: KVNamespace, prefix: string): Promise<number>
  * ou expiré — la copie de secours doit survivre à une reconnexion forcée ; elle s'efface
  * d'elle-même au bout d'un an (BACKUP_TTL) et le serveur ne peut pas la lire.
  */
-export const purgeUser = async (store: KVNamespace, sub: string, alsoSessionHash?: string, opts: { keepBackups?: boolean } = {}): Promise<void> => {
+const purgeUser = async (store: KVNamespace, sub: string, alsoSessionHash?: string, opts: { keepBackups?: boolean } = {}): Promise<void> => {
   await deleteAllSessions(store, sub, alsoSessionHash);
   await store.delete(`user:${sub}`);
   await store.delete(pushKey(sub));
@@ -623,7 +633,8 @@ const runDailyReminders = async (env: Env): Promise<void> => {
 
 // ---------- Point d'entrée ----------
 
-/** Routes appelées par fetch() depuis l'app : l'en-tête Origin, s'il est présent, doit être autorisé. */
+/** Routes ouvertes par navigation (redirection OAuth), exemptées du contrôle d'origine. Les
+ *  autres sont appelées par fetch() depuis l'app : l'en-tête Origin, s'il est présent, doit être autorisé. */
 const NAVIGATION_ROUTES = new Set(['GET /auth/start', 'GET /auth/callback']);
 
 const rateLimited = async (limiter: RateLimit | undefined, key: string): Promise<boolean> => {

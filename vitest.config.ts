@@ -6,6 +6,9 @@ export default mergeConfig(viteConfig, defineConfig({
   test: {
     // Les tests de bout en bout (Playwright) ont leur propre lanceur.
     exclude: ['node_modules/**', 'dist/**', 'e2e/**', 'worker/node_modules/**', 'edge/node_modules/**'],
+    // Marge pour une machine lente (couverture, sortie de veille) : les tests les plus longs
+    // (séquences aléatoires, rendu jsdom) prennent 1 à 2 s en temps normal.
+    testTimeout: 20_000,
     coverage: {
       provider: 'v8',
       reporter: ['text-summary', 'html', 'json-summary'],
@@ -14,7 +17,7 @@ export default mergeConfig(viteConfig, defineConfig({
       include: ['src/lib/**/*.ts', 'worker/src/**/*.ts', 'edge/src/**/*.ts'],
       exclude: ['**/*.test.ts', 'src/lib/chartTheme.ts'],
       // Seuils plancher : la couverture ne doit pas reculer. À relever au fil des tests.
-      thresholds: { statements: 88, branches: 76, functions: 89, lines: 91 },
+      thresholds: { statements: 92, branches: 81, functions: 93, lines: 95 },
     },
   },
 }));

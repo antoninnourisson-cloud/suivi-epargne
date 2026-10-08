@@ -8,7 +8,7 @@ import { Sprout, Loader2 } from 'lucide-react';
 import { Modal } from './Modal';
 import { disablePush } from '../services/pushService';
 
-export const NEW_APP_URL = 'https://pecule-app.com/';
+const NEW_APP_URL = 'https://pecule-app.com/';
 const OLD_HOST_SUFFIX = '.github.io';
 const PENDING_KEY = 'suivi_epargne_pending';
 

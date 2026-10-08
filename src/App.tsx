@@ -36,7 +36,7 @@ import { MovedNotice } from './components/MovedNotice';
 import { Logo } from './components/Logo';
 import { LATEST_VERSION } from './changelog';
 import { ErrorBoundary, lazyWithRetry } from './components/ErrorBoundary';
-import { NAV_ITEMS, NAV_SECTIONS, VIEWS, View, navLabel } from './navigation';
+import { NAV_ITEMS, NAV_SECTIONS, View, isView, navLabel } from './navigation';
 import { QuickAddFab } from './components/QuickAddFab';
 import { useFiscalWatch } from './hooks/useFiscalWatch';
 import { FiscalWatchCard } from './components/FiscalWatchCard';
@@ -90,8 +90,6 @@ const NavButton = ({ active, onClick, icon: Icon, label }: { active: boolean; on
       {label}
     </button>
 );
-
-const VALID_VIEWS: readonly View[] = VIEWS;
 
 const App: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -321,11 +319,11 @@ const App: React.FC = () => {
   useEffect(() => {
     if (!isAuthenticated || locked) return;
     const params = new URLSearchParams(window.location.search);
-    const target = params.get('view') as View | null;
+    const target = params.get('view');
     // Écran inconnu de cette version (lien d'une version plus récente, encore en cours de
     // mise à jour) : on laisse le lien dans l'adresse pour que la nouvelle version, chargée
     // juste après, l'ouvre.
-    if (target && VALID_VIEWS.includes(target)) {
+    if (isView(target)) {
       deepLinkedRef.current = true; setView(target);
       params.delete('view');
       const rest = params.toString();
@@ -338,8 +336,8 @@ const App: React.FC = () => {
   useEffect(() => {
     if (!('serviceWorker' in navigator)) return;
     const onMessage = (e: MessageEvent) => {
-      const target = e.data && e.data.type === 'open-view' ? e.data.view as View : null;
-      if (!target || !VALID_VIEWS.includes(target)) return;
+      const target: unknown = e.data && e.data.type === 'open-view' ? e.data.view : null;
+      if (!isView(target)) return;
       // « Votre année » (notification de janvier) : l'année passe par l'adresse, lue par
       // Historique à l'ouverture, et par un événement s'il est déjà affiché.
       const year = typeof e.data.year === 'string' && /^\d{4}$/.test(e.data.year) ? e.data.year : null;
@@ -359,8 +357,8 @@ const App: React.FC = () => {
   // (avec l'ancien `lastView`) et renverrait aussitôt vers l'écran précédent.
   useEffect(() => {
     const last = data.lastView;
-    if (!last || deepLinkedRef.current || !VALID_VIEWS.includes(last as View)) return;
-    setView(v => (v === 'dashboard' ? last as View : v));
+    if (!isView(last) || deepLinkedRef.current) return;
+    setView(v => (v === 'dashboard' ? last : v));
   }, [data.lastView]);
 
   useEffect(() => { setLastView(view); }, [view, setLastView]);
@@ -874,7 +872,7 @@ const App: React.FC = () => {
                   });
                 }}
             />}
-            {view === 'agenda' && <Agenda data={fullData} onOpen={(v) => { if (!VALID_VIEWS.includes(v as View)) return; if (v === 'settings') openSettingsSection('fiscal'); setView(v as View); }} />}
+            {view === 'agenda' && <Agenda data={fullData} onOpen={(v) => { if (!isView(v)) return; if (v === 'settings') openSettingsSection('fiscal'); setView(v); }} />}
             {view === 'parental' && <ParentalShare
                 accounts={data.accounts}
                 restitution={data.parentalRestitution}

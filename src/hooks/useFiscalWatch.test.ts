@@ -1,8 +1,11 @@
 // @vitest-environment jsdom
 // Choix de la source de la veille fiscale : résultat du serveur (Workers AI) s'il date de
 // 8 jours au plus, sinon Gemini avec la clé de l'appareil. Les propositions restent à valider.
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { renderHook, waitFor, act } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { renderHook, waitFor, act, cleanup, configure } from '@testing-library/react';
+
+// Machine lente (couverture, réveil de veille) : on laisse plus d'une seconde aux attentes.
+configure({ asyncUtilTimeout: 5000 });
 import { DEFAULT_FISCAL_CONFIG } from '../constants';
 import { AccountType } from '../types';
 
@@ -67,6 +70,7 @@ describe('useFiscalWatch', () => {
     backend.enabled = true; backend.session = true;
     backend.getServer.mockReset(); backend.runServer.mockReset(); gemini.ask.mockReset();
   });
+  afterEach(cleanup);
 
   it('utilise le résultat récent du serveur, sans appeler Gemini, et propose l\'écart', async () => {
     backend.getServer.mockResolvedValue(server(new Date(Date.now() - 86_400_000).toISOString()));

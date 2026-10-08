@@ -32,9 +32,9 @@ export const usePrefersReducedMotion = (): boolean => {
 };
 
 /** Palette de comptes (clair) : sapin, or, bleu, terracotta, violet, rose, bleu canard, olive, indigo, framboise. */
-export const ACCOUNT_PALETTE = ['#21804a', '#c08b00', '#2f6fb5', '#c0532e', '#6b55b8', '#c2456f', '#008aa8', '#7a8a1e', '#3a4a9e', '#a3274a'];
+const ACCOUNT_PALETTE = ['#21804a', '#c08b00', '#2f6fb5', '#c0532e', '#6b55b8', '#c2456f', '#008aa8', '#7a8a1e', '#3a4a9e', '#a3274a'];
 /** Mêmes teintes, éclaircies pour la surface sombre (même ordre). */
-export const ACCOUNT_PALETTE_DARK = ['#2d8f62', '#bd8a00', '#4a86cc', '#d0623a', '#8b78d8', '#d05c86', '#1e98b2', '#8a9a2c', '#6a7ad0', '#c0405f'];
+const ACCOUNT_PALETTE_DARK = ['#2d8f62', '#bd8a00', '#4a86cc', '#d0623a', '#8b78d8', '#d05c86', '#1e98b2', '#8a9a2c', '#6a7ad0', '#c0405f'];
 
 /** Couleur stable d'un compte : selon son rang dans la liste (deux comptes n'ont jamais la même tant qu'il y en a ≤ 10). */
 export const accountColor = (ids: string[], id: string): string => ACCOUNT_PALETTE[Math.max(0, ids.indexOf(id)) % ACCOUNT_PALETTE.length];

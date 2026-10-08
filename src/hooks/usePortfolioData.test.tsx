@@ -3,7 +3,10 @@
 // l'ouverture, écriture après une modification, conflit détecté, fichier d'une version plus
 // récente jamais écrasé, clé Gemini jamais envoyée.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderHook, act, waitFor } from '@testing-library/react';
+import { renderHook, act, waitFor, cleanup, configure } from '@testing-library/react';
+
+// Machine lente (couverture, réveil de veille) : on laisse plus d'une seconde aux attentes.
+configure({ asyncUtilTimeout: 5000 });
 
 const drive = vi.hoisted(() => ({
   file: null as unknown,
@@ -96,7 +99,8 @@ beforeEach(() => {
   drive.beforeWrite = null;
   drive.otherUnreadable = false;
 });
-afterEach(() => { vi.useRealTimers(); });
+// Chaque test démonte son hook (écouteurs, minuteries) avant de rendre les vraies horloges.
+afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 describe('synchronisation Drive', () => {
   it("n'écrit rien à l'ouverture si rien n'a changé", async () => {
