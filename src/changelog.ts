@@ -15,6 +15,14 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '2026.10.08',
+    date: '2026-10-08',
+    title: 'Veille fiscale : correctif',
+    items: [
+      "La veille du serveur se lance bien à l'ouverture de l'app, même avec une clé Gemini : le « Détail du relevé » apparaît dans Paramètres, « Veille fiscale ».",
+    ],
+  },
+  {
     version: '2026.10.07-8',
     date: '2026-10-07',
     title: 'Veille fiscale sans clé Gemini',

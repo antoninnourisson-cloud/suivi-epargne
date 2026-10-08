@@ -104,7 +104,6 @@ const serverAvailable = () => isBackendEnabled() && hasBackendSession();
 export const useFiscalWatch = (geminiApiKey: string, fiscal: FiscalConfig | undefined, accounts: SavingsAccount[], enabled: boolean) => {
   const [stored, setStored] = useState<StoredWatch>(read);
   const [runningVia, setRunningVia] = useState<WatchSource | undefined>();
-  const serverChecked = useRef(false);
   const running = runningVia !== undefined;
 
   const update = (patch: Partial<StoredWatch>) => setStored(prev => { const next = { ...prev, ...patch }; write(next); return next; });
@@ -155,27 +154,35 @@ export const useFiscalWatch = (geminiApiKey: string, fiscal: FiscalConfig | unde
   }, [running, geminiApiKey, runGemini, runServer]);
 
   // À l'ouverture : résultat du serveur d'abord (relancé s'il manque ou date de plus de
-  // 8 jours) ; Gemini seulement s'il n'y a rien de récent côté serveur.
+  // 8 jours), une seule fois par session. Cette étape ne dépend pas de la clé Gemini : la
+  // clé arrive souvent juste après le premier rendu, et relancer l'effet annulait la
+  // demande au serveur à mi-chemin (on retombait alors sur Gemini sans relevé du serveur).
+  const serverDone = useRef<Promise<boolean> | null>(null);
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled || serverDone.current || !serverAvailable()) return;
+    serverDone.current = (async () => {
+      try {
+        let s = await getServerFiscalWatch();
+        if (s) update({ server: s });
+        if (!isServerResultFresh(s)) s = (await runServer()) ?? s;
+        return isServerResultFresh(s);
+      } catch (e) {
+        console.warn('Veille fiscale du serveur indisponible', e);
+        return false;
+      }
+    })();
+  }, [enabled, runServer]);
+
+  // Gemini seulement s'il n'y a rien de récent côté serveur (une fois l'étape serveur finie).
+  useEffect(() => {
+    if (!enabled || !geminiApiKey) return;
     let cancelled = false;
     void (async () => {
-      let fresh = isServerResultFresh(read().server);
-      if (!serverChecked.current && serverAvailable()) {
-        serverChecked.current = true;
-        try {
-          let s = await getServerFiscalWatch();
-          if (s) update({ server: s });
-          if (!isServerResultFresh(s) && !cancelled) s = (await runServer()) ?? s;
-          fresh = isServerResultFresh(s);
-        } catch (e) {
-          console.warn('Veille fiscale du serveur indisponible', e);
-        }
-      }
-      if (!cancelled && !fresh && geminiApiKey && isWatchDue(read().checkedAt)) void runGemini();
+      const fresh = serverDone.current ? await serverDone.current : isServerResultFresh(read().server);
+      if (!cancelled && !fresh && !isServerResultFresh(read().server) && isWatchDue(read().checkedAt)) void runGemini();
     })();
     return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runGemini change avec la clé, déjà dans les dépendances
   }, [enabled, geminiApiKey]);
 
   const picked = useMemo(() => pickWatchResult(stored), [stored]);

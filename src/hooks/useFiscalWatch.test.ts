@@ -88,6 +88,19 @@ describe('useFiscalWatch', () => {
     expect(result.current.hasKey).toBe(false);
   });
 
+  it("lance quand même le serveur si la clé Gemini arrive juste après l'ouverture (et n'appelle pas Gemini)", async () => {
+    let resolveGet: (v: null) => void = () => {};
+    backend.getServer.mockReturnValue(new Promise(r => { resolveGet = r; }));
+    backend.runServer.mockResolvedValue(server(new Date().toISOString()));
+    const { result, rerender } = renderHook(({ key }) => useFiscalWatch(key, DEFAULT_FISCAL_CONFIG, [la], true), { initialProps: { key: '' } });
+    rerender({ key: 'cle-gemini' }); // la clé est chargée pendant la lecture du serveur
+    resolveGet(null);
+    await waitFor(() => expect(result.current.source).toBe('server'));
+    expect(backend.getServer).toHaveBeenCalledTimes(1);
+    expect(backend.runServer).toHaveBeenCalledTimes(1);
+    expect(gemini.ask).not.toHaveBeenCalled();
+  });
+
   it('se rabat sur Gemini quand le serveur n\'a rien de récent', async () => {
     backend.getServer.mockResolvedValue(server(new Date(Date.now() - 20 * 86_400_000).toISOString()));
     backend.runServer.mockResolvedValue(null); // limité ou en échec
