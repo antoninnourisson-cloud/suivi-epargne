@@ -85,6 +85,6 @@ test.describe('Paramètres (démo)', () => {
     await expect(cardButton(page, 'À propos')).toHaveAttribute('aria-expanded', 'true');
     // L'en-tête de la carte est amené à l'écran (son contenu peut dépasser vers le bas).
     await expect(cardButton(page, 'À propos')).toBeInViewport();
-    await expect(cardRegion(page, 'À propos').getByText('Historique des mises à jour')).toBeAttached();
+    await expect(cardRegion(page, 'À propos').getByText('Historique des mises à jour', { exact: true })).toBeAttached();
   });
 });
