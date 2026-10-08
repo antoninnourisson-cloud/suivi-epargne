@@ -48,6 +48,7 @@ import { buildAgenda } from './lib/agenda';
 import { TaxReturnHelper } from './components/TaxReturnHelper';
 import { SoloPlanCard } from './components/SoloPlanCard';
 import { MotivationSettings } from './components/motivation/MotivationSettings';
+import { openSettingsSection } from './components/settings/sections';
 import {
   LogOut,
   Loader2, Settings as SettingsIcon, AlertTriangle, RotateCw,
@@ -178,6 +179,12 @@ const App: React.FC = () => {
       lastError={fiscalWatch.lastError} hasKey={fiscalWatch.hasKey} canRun={fiscalWatch.canRun} source={fiscalWatch.source} runningVia={fiscalWatch.runningVia}
       serverReport={fiscalWatch.serverReport} onApply={applyFiscalProposal} onDismiss={fiscalWatch.dismiss} onRun={fiscalWatch.run} />
   );
+  // Depuis l'Accueil, le seul lien vers les Paramètres est « Importer mon avis » (LEP) :
+  // il ouvre directement la carte de l'avis d'imposition.
+  const navigateFromDashboard = (v: View) => {
+    if (v === 'settings') openSettingsSection('tax-notice');
+    setView(v);
+  };
   const askConfirm = (title: string, message: string, onConfirm: () => void | Promise<void>, danger = false) =>
     setDialog({ open: true, kind: 'confirm', title, message, danger, confirmLabel: 'Confirmer', onConfirm: () => { void onConfirm(); } });
 
@@ -708,7 +715,7 @@ const App: React.FC = () => {
         </nav>
         <div className="px-3 py-3 border-t border-outline-variant">
             <button onClick={handleLogout} className="w-full h-12 flex items-center gap-3 px-4 text-error hover:bg-error/8 rounded-full font-medium text-sm transition-colors"><LogOut className="w-5 h-5" aria-hidden="true" /> Déconnexion</button>
-            <button onClick={() => setView('settings')} className="w-full mt-1 px-4 text-left text-[11px] font-medium text-on-surface-variant hover:text-on-surface" title="Historique des mises à jour dans Paramètres">Pécule · version {LATEST_VERSION}{typeof __BUILD_SHA__ !== "undefined" && __BUILD_SHA__ !== "dev" ? ` · ${__BUILD_SHA__}` : ""}</button>
+            <button onClick={() => { openSettingsSection('about'); setView('settings'); }} className="w-full mt-1 px-4 text-left text-[11px] font-medium text-on-surface-variant hover:text-on-surface" title="Historique des mises à jour dans Paramètres">Pécule · version {LATEST_VERSION}{typeof __BUILD_SHA__ !== "undefined" && __BUILD_SHA__ !== "dev" ? ` · ${__BUILD_SHA__}` : ""}</button>
         </div>
       </aside>
 
@@ -776,7 +783,7 @@ const App: React.FC = () => {
             <ErrorBoundary resetKey={view}>
             <Suspense fallback={<ViewLoader />}>
             {view === 'dashboard' && fiscalWatch.proposals.length > 0 && <div className="mb-6">{fiscalWatchCard(true)}</div>}
-            {view === 'dashboard' && <Dashboard accounts={data.accounts} history={data.history} expenses={allCharges} fiscalConfig={data.fiscalConfig} workBenefits={data.workBenefits} onDeleteAccount={handleDeleteAccount} config={dashboardConfig} monthPlan={monthPlan} monthlyPay={monthlyPay} paydayDay={data.paydayDay} trackingStartDate={data.trackingStartDate} payRaise={payRaise && !payRaiseHandled ? { delta: payRaise.delta, period: payRaise.latest.extracted.period || '', hasFixedAmount: data.paydayAmount !== undefined } : null} onAcceptPayRaise={acceptPayRaise} onDismissPayRaise={dismissPayRaise} subscriptions={data.subscriptions} onUpdateFiscalConfig={data.setFiscalConfig} onUpdateAccounts={data.setAccounts} onOpenSettings={() => setView('settings')} recurringMovements={data.recurringMovements} onRecordRecurring={(r, date) => handleQuickAdd(r.accountId, r.amount, r.type, r.label, date)} onNavigate={setView} onAddAccount={() => { setView('accounts'); setEditingAccount(undefined); setShowForm(true); }} lastExportAt={data.config.lastExportAt} onExport={() => { data.exportData(); data.patchConfig({ lastExportAt: localTodayISO() }); }} emergency={emergency} onSetEmergencyMonths={m => data.patchConfig({ emergencyMonths: m })} agendaNext={agendaNext} lepTimeline={lepTimeline}
+            {view === 'dashboard' && <Dashboard accounts={data.accounts} history={data.history} expenses={allCharges} fiscalConfig={data.fiscalConfig} workBenefits={data.workBenefits} onDeleteAccount={handleDeleteAccount} config={dashboardConfig} monthPlan={monthPlan} monthlyPay={monthlyPay} paydayDay={data.paydayDay} trackingStartDate={data.trackingStartDate} payRaise={payRaise && !payRaiseHandled ? { delta: payRaise.delta, period: payRaise.latest.extracted.period || '', hasFixedAmount: data.paydayAmount !== undefined } : null} onAcceptPayRaise={acceptPayRaise} onDismissPayRaise={dismissPayRaise} subscriptions={data.subscriptions} onUpdateFiscalConfig={data.setFiscalConfig} onUpdateAccounts={data.setAccounts} onOpenSettings={() => { openSettingsSection('fiscal'); setView('settings'); }} recurringMovements={data.recurringMovements} onRecordRecurring={(r, date) => handleQuickAdd(r.accountId, r.amount, r.type, r.label, date)} onNavigate={navigateFromDashboard} onAddAccount={() => { setView('accounts'); setEditingAccount(undefined); setShowForm(true); }} lastExportAt={data.config.lastExportAt} onExport={() => { data.exportData(); data.patchConfig({ lastExportAt: localTodayISO() }); }} emergency={emergency} onSetEmergencyMonths={m => data.patchConfig({ emergencyMonths: m })} agendaNext={agendaNext} lepTimeline={lepTimeline}
               payslips={data.payslips} gamification={data.config.gamification} goodMonthThreshold={data.config.goodMonthThreshold}
               milestonesSeen={data.config.milestonesSeen} payReviewsDone={data.config.payReviewsDone} rfrByYear={data.config.rfrByYear}
               restitutionDoneOn={data.parentalRestitution?.done?.date} restitutionPlannedDate={data.parentalRestitution?.plannedDate} onMarkMilestonesSeen={markMilestonesSeen} onValidatePayReview={validatePayReview} />}
@@ -867,7 +874,7 @@ const App: React.FC = () => {
                   });
                 }}
             />}
-            {view === 'agenda' && <Agenda data={fullData} onOpen={(v) => VALID_VIEWS.includes(v as View) && setView(v as View)} />}
+            {view === 'agenda' && <Agenda data={fullData} onOpen={(v) => { if (!VALID_VIEWS.includes(v as View)) return; if (v === 'settings') openSettingsSection('fiscal'); setView(v as View); }} />}
             {view === 'parental' && <ParentalShare
                 accounts={data.accounts}
                 restitution={data.parentalRestitution}

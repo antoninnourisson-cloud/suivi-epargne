@@ -15,6 +15,16 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '2026.10.08-2',
+    date: '2026-10-08',
+    title: 'Paramètres plus simples',
+    items: [
+      "Les Paramètres sont rangés en cartes dépliables par thème (salaire et impôts, préférences, sécurité et données, à propos), chacune avec un résumé d'une ligne.",
+      "Les liens vers un réglage (par exemple « Importer mon avis ») ouvrent directement la bonne carte. Pécule se souvient des cartes que vous laissez ouvertes.",
+      "Nouvelle carte « À propos » : version, historique des mises à jour, confidentialité, wiki, licence et contact.",
+    ],
+  },
+  {
     version: '2026.10.08',
     date: '2026-10-08',
     title: 'Veille fiscale : correctif',

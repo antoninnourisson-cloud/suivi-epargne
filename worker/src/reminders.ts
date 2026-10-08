@@ -413,7 +413,7 @@ export const computeReminders = (data: GlobalAppData, today: CivilDate | Date, a
       message: {
         title: `Paramètres fiscaux ${year}`,
         body: `Vérifiez le barème de l'impôt, le plafond du LEP et l'abattement de 10 % : ils changent chaque année.${LATEST_TAX_SCALE.year < year ? '' : ` ${LATEST_TAX_SCALE.label} disponible dans l'app.`}`,
-        url: link('settings'),
+        url: `${link('settings')}&section=fiscal`,
         tag: 'fiscal-review',
       },
     });

@@ -36,6 +36,13 @@ const openYearSheet = async (page: Page) => {
   return sheet;
 };
 
+/** Ouvre une carte des Paramètres (repliées par défaut). */
+const openCard = async (page: Page, name: string) => {
+  const button = page.locator('main').getByRole('button', { name, exact: true });
+  if (await button.getAttribute('aria-expanded') !== 'true') await button.click();
+  await expect(button).toHaveAttribute('aria-expanded', 'true');
+};
+
 test.describe('Votre année (démo)', () => {
   test('l\'Historique propose « Votre année » et ses pages', async ({ page, isMobile }) => {
     await openDemo(page);
@@ -63,6 +70,7 @@ test.describe('Votre année (démo)', () => {
     await openDemo(page);
     await expect(page.getByRole('heading', { name: 'Accueil', level: 2 })).toBeAttached();
     await goTo(page, 'Paramètres', isMobile);
+    await openCard(page, 'Motivation');
     const toggle = page.getByRole('switch', { name: 'Bons mois et jalons' });
     await toggle.click();
     await expect(toggle).toHaveAttribute('aria-checked', 'false');

@@ -3,8 +3,11 @@
 import React, { useRef, useState } from 'react';
 import { FileSearch, Loader2, Check, X, Upload } from 'lucide-react';
 import { extractTaxNotice, TaxNoticeData } from '../services/geminiService';
-import { NumberInput } from './NumberInput';
 import { formatEUR } from '../lib/format';
+import { Button, Card } from './ui';
+import { Hint, useCardSummary, useInSettingsCard } from './settings/SettingsCard';
+import { NumberField } from './settings/fields';
+import { openSettingsSection } from './settings/sections';
 
 interface Props {
   geminiApiKey: string;
@@ -26,8 +29,12 @@ export const TaxNoticePanel: React.FC<Props> = ({ geminiApiKey, rfrByYear, house
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState<TaxNoticeData | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const embedded = useInSettingsCard();
   const thisYear = new Date().getFullYear();
   const years = [thisYear - 1, thisYear - 2, thisYear - 3];
+
+  const known = Object.entries(rfrByYear).filter(([, v]) => v > 0).sort(([a], [b]) => Number(b) - Number(a))[0];
+  useCardSummary('rfr', known ? `RFR ${known[0]} : ${formatEUR(known[1], 0)}` : 'RFR estimé (aucun avis saisi)');
 
   const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -46,44 +53,45 @@ export const TaxNoticePanel: React.FC<Props> = ({ geminiApiKey, rfrByYear, house
     }
   };
 
-  return (
-    <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700">
-      <h3 className="font-bold text-slate-800 dark:text-slate-100 mb-1 flex items-center gap-2"><FileSearch className="w-4 h-4 text-indigo-600" aria-hidden="true" /> Avis d'imposition (LEP)</h3>
-      <p className="text-xs text-slate-600 dark:text-slate-300 mb-4">
+  const body = (
+    <>
+      <Hint className="mb-4">
         Votre banque vérifie chaque année le revenu fiscal de référence (RFR) pour le LEP. Importez votre avis d'imposition : Gemini en relève le RFR, et Pécule vous prévient si vous risquez de perdre le livret, avec la date de fermeture probable.
-      </p>
+      </Hint>
 
       <input ref={fileRef} type="file" accept="application/pdf,image/*" onChange={onFile} className="hidden" tabIndex={-1} aria-hidden="true" />
-      <button type="button" disabled={busy || !geminiApiKey} onClick={() => fileRef.current?.click()}
-        className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white px-4 py-2 rounded-xl font-bold text-sm">
+      <Button type="button" disabled={busy || !geminiApiKey} onClick={() => fileRef.current?.click()}>
         {busy ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> : <Upload className="w-4 h-4" aria-hidden="true" />}
         {busy ? 'Lecture de l\'avis…' : 'Importer un avis d\'imposition'}
-      </button>
-      {!geminiApiKey && <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">Ajoutez d'abord votre clé Gemini (section Fiches de paie ci-dessous).</p>}
-      {error && <p role="alert" className="text-xs font-bold text-rose-700 dark:text-rose-300 mt-2">{error}</p>}
+      </Button>
+      {!geminiApiKey && (
+        <p className="text-sm text-on-surface-variant mt-2 flex flex-wrap items-center gap-x-1">
+          La lecture de l'avis demande une clé Gemini.
+          {embedded && <Button variant="text" className="-ml-3 sm:ml-0" onClick={() => openSettingsSection('keys')}>Ajouter la clé Gemini</Button>}
+        </p>
+      )}
+      {error && <p role="alert" className="text-xs font-medium text-error mt-2">{error}</p>}
 
       {draft && draft.incomeYear && draft.rfr !== undefined && (
-        <div className="mt-4 p-4 rounded-xl border border-indigo-200 dark:border-indigo-900 bg-indigo-50/60 dark:bg-indigo-950/30">
-          <p className="text-sm font-bold text-slate-800 dark:text-slate-100">Revenus {draft.incomeYear} : RFR {formatEUR(draft.rfr, 0)}{draft.parts ? ` · ${draft.parts.toLocaleString('fr-FR')} part${draft.parts > 1 ? 's' : ''}` : ''}</p>
-          <p className="text-xs text-slate-600 dark:text-slate-300 mt-1">Vérifiez ces valeurs sur votre avis avant d'enregistrer.</p>
-          <div className="flex gap-2 mt-3">
-            <button type="button" onClick={() => { onSave(draft.incomeYear!, draft.rfr!); if (draft.parts && draft.parts !== householdParts) onSetParts(draft.parts); setDraft(null); }}
-              className="flex items-center gap-1 text-xs font-black px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white"><Check className="w-3.5 h-3.5" aria-hidden="true" /> Enregistrer</button>
-            <button type="button" onClick={() => setDraft(null)} className="flex items-center gap-1 text-xs font-bold px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200"><X className="w-3.5 h-3.5" aria-hidden="true" /> Annuler</button>
+        <div className="mt-4 p-4 rounded-xl bg-secondary-container text-on-secondary-container">
+          <p className="text-sm font-medium">Revenus {draft.incomeYear} : RFR {formatEUR(draft.rfr, 0)}{draft.parts ? ` · ${draft.parts.toLocaleString('fr-FR')} part${draft.parts > 1 ? 's' : ''}` : ''}</p>
+          <p className="text-xs mt-1">Vérifiez ces valeurs sur votre avis avant d'enregistrer.</p>
+          <div className="flex flex-wrap gap-2 mt-3">
+            <Button type="button" onClick={() => { onSave(draft.incomeYear!, draft.rfr!); if (draft.parts && draft.parts !== householdParts) onSetParts(draft.parts); setDraft(null); }}>
+              <Check className="w-4 h-4" aria-hidden="true" /> Enregistrer</Button>
+            <Button type="button" variant="text" onClick={() => setDraft(null)}><X className="w-4 h-4" aria-hidden="true" /> Annuler</Button>
           </div>
         </div>
       )}
 
-      <div className="grid grid-cols-3 gap-3 mt-5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-5">
         {years.map(y => (
-          <div key={y}>
-            <label className="text-[11px] font-black text-slate-600 dark:text-slate-300 uppercase">RFR {y}</label>
-            <NumberInput ariaLabel={`Revenu fiscal de référence ${y}`} value={rfrByYear[String(y)] ?? 0} onChange={v => onSave(y, v)} min={0} suffix="€"
-              className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-sm font-bold" />
-          </div>
+          <NumberField key={y} label={`Revenu fiscal de référence ${y}`} value={rfrByYear[String(y)] ?? 0} onChange={v => onSave(y, v)} min={0} suffix="€" />
         ))}
       </div>
-      <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-2">Vide (0) = estimé d'après vos fiches de paie ou votre salaire.</p>
-    </div>
+      <Hint className="mt-2">Vide (0) = estimé d'après vos fiches de paie ou votre salaire.</Hint>
+    </>
   );
+
+  return embedded ? body : <Card title="Avis d'imposition (LEP)" icon={FileSearch}>{body}</Card>;
 };

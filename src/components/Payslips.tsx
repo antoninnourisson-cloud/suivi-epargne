@@ -228,7 +228,7 @@ export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, 
               {!pickerApiKey && !geminiApiKey && "Renseignez une clé API Picker et une clé API Gemini dans "}
               {!pickerApiKey && geminiApiKey && "Renseignez une clé API Google Picker dans "}
               {pickerApiKey && !geminiApiKey && "Renseignez une clé API Gemini dans "}
-              <span className="font-bold">Paramètres → Fiches de paie</span> pour importer et analyser vos fiches.
+              <span className="font-bold">Paramètres → Clés et services</span> pour importer et analyser vos fiches.
             </p>
           </div>
         </div>

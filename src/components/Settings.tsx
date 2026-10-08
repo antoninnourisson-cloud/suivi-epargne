@@ -1,22 +1,28 @@
 // ================================================
 // FILE: src/components/Settings.tsx
+// Écran Paramètres : une liste courte de cartes repliables, regroupées par thème. Chaque
+// carte résume son état sur une ligne ; les cartes ouvertes sont mémorisées sur cet
+// appareil, et un lien peut en ouvrir une (voir settings/sections).
 // ================================================
-import React, { useEffect, useState } from 'react';
-import { FiscalConfig, PayslipRecord, TaxBracket, WorkBenefits } from '../types';
-import { benefitsFromPayslips } from '../lib/planning';
-import { Save, AlertTriangle, Settings as SettingsIcon, Plus, Trash2, Download, Upload, Database, KeyRound, FileText, Fingerprint, Hash , SlidersHorizontal, ChevronDown, Building2, Scale, PiggyBank, Landmark } from 'lucide-react';
-import { isLockAvailable, isBiometricEnabled, isPinEnabled, enableLock, disableBiometric, enablePin, disablePin } from '../services/appLockService';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { FiscalConfig, PayslipRecord, WorkBenefits } from '../types';
+import {
+  AlertTriangle, Download, Upload, Database, KeyRound, Fingerprint, Building2, Scale, FileSearch, Radar, Sprout, Bell,
+  Smartphone, Info, Save,
+} from 'lucide-react';
 import { NotificationSettings } from './NotificationSettings';
 import { GeminiModelField } from './SettingsPanels';
-import { formatEUR } from '../lib/format';
-import { NumberInput } from './NumberInput';
-import { identifyTaxScale, sameTaxBrackets, applyTaxScale } from '../lib/finance';
-import { LATEST_TAX_SCALE } from '../constants';
-import { parseISODate } from '../lib/dates';
-import { ChangelogHistory } from './WhatsNew';
-
-// Champs numériques de la configuration fiscale (ceux de la grille de saisie générique).
-type NumericFiscalField = { [K in keyof FiscalConfig]-?: FiscalConfig[K] extends number | undefined ? K : never }[keyof FiscalConfig];
+import { isBackendEnabled } from '../services/backendService';
+import { LATEST_VERSION } from '../changelog';
+import { Button, PageHeader, TextField } from './ui';
+import { SettingsCard, Hint, Notice } from './settings/SettingsCard';
+import { BenefitsFields, FiscalFields, benefitsSummary, fiscalSummary } from './settings/SalarySections';
+import { LockSection } from './settings/LockSection';
+import { AboutSection } from './settings/AboutSection';
+import {
+  OPEN_SECTION_EVENT, clearRequestedSection, isSettingsSection, peekRequestedSection, readOpenSections, sectionAnchor,
+  writeOpenSections, type SettingsSection,
+} from './settings/sections';
 
 interface SettingsProps {
   payslips?: PayslipRecord[];
@@ -39,6 +45,10 @@ interface SettingsProps {
   onOpenPayday?: () => void;
 }
 
+const prefersReducedMotion = () => {
+  try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch { return false; }
+};
+
 export const Settings: React.FC<SettingsProps> = ({ payslips = [], config, workBenefits, geminiApiKey, pickerApiKey, onSave, onExport, onImport, paydayDay, onOpenPayday, backupSlot, fiscalWatchSlot, securitySlot, taxNoticeSlot, motivationSlot, notificationPrefs, onChangeNotificationPrefs }) => {
   const [importMsg, setImportMsg] = useState<string | null>(null);
   // L'import écrase TOUT (comptes, mouvements, objectifs, fiches de paie, réglages) puis
@@ -59,17 +69,17 @@ export const Settings: React.FC<SettingsProps> = ({ payslips = [], config, workB
     const file = pendingImport;
     setPendingImport(null);
     const ok = await onImport(file);
-    setImportMsg(ok ? '✅ Données importées (sauvegarde en cours).' : '❌ Fichier invalide : aucune donnée n\'a été remplacée.');
+    setImportMsg(ok ? 'Données importées (sauvegarde en cours).' : 'Fichier invalide : aucune donnée n\'a été remplacée.');
   };
 
   const [localFiscal, setLocalFiscal] = useState<FiscalConfig>(config);
   const [localBenefits, setLocalBenefits] = useState<WorkBenefits>(workBenefits);
   const [localGeminiKey, setLocalGeminiKey] = useState<string>(geminiApiKey || '');
   const [localPickerKey, setLocalPickerKey] = useState<string>(pickerApiKey || '');
-  const [benefitsMsg, setBenefitsMsg] = useState<string | null>(null);
 
   // Enregistrement automatique, comme partout ailleurs dans l'app (plus de bouton « Tout
-  // enregistrer » à ne pas oublier).
+  // enregistrer » à ne pas oublier). Les cartes repliées gardent leurs champs montés : un
+  // brouillon n'est jamais perdu en refermant une carte.
   const [savedHint, setSavedHint] = useState(false);
   const dirty = JSON.stringify([localFiscal, localBenefits, localGeminiKey.trim(), localPickerKey.trim()])
     !== JSON.stringify([config, workBenefits, geminiApiKey || '', pickerApiKey || '']);
@@ -83,425 +93,141 @@ export const Settings: React.FC<SettingsProps> = ({ payslips = [], config, workB
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [localFiscal, localBenefits, localGeminiKey, localPickerKey]);
 
-  // Verrou (biométrie et/ou PIN) : réglage 100% local à cet appareil (localStorage), donc
-  // en dehors du circuit onSave/Drive utilisé par le reste de cet écran — une empreinte ou
-  // un code enregistrés sur ce téléphone n'ont aucun sens synchronisés sur un autre appareil.
-  const [lockAvailable, setLockAvailable] = useState(false);
-  const [biometricOn, setBiometricOn] = useState(isBiometricEnabled());
-  const [lockError, setLockError] = useState<string | null>(null);
-  useEffect(() => { isLockAvailable().then(setLockAvailable).catch(() => setLockAvailable(false)); }, []);
+  // --- Cartes ouvertes (mémorisées sur cet appareil) et liens vers une carte ---
+  const [openIds, setOpenIds] = useState<SettingsSection[]>(readOpenSections);
+  const setOpen = useCallback((id: SettingsSection, open: boolean) => {
+    setOpenIds(prev => {
+      if (prev.includes(id) === open) return prev;
+      const next = open ? [...prev, id] : prev.filter(x => x !== id);
+      writeOpenSections(next);
+      return next;
+    });
+  }, []);
+  const isOpen = (id: SettingsSection) => openIds.includes(id);
+  const toggle = (id: SettingsSection) => setOpen(id, !isOpen(id));
 
-  const toggleBiometric = async () => {
-    setLockError(null);
-    if (biometricOn) {
-      disableBiometric();
-      setBiometricOn(false);
-      return;
-    }
-    try {
-      await enableLock();
-      setBiometricOn(true);
-    } catch {
-      setLockError("Activation annulée ou échouée. Réessayez, ou vérifiez que Face ID / l'empreinte est configuré sur cet appareil.");
-    }
-  };
+  // Ouvre la carte demandée, puis l'amène à l'écran et y place le focus. Le délai laisse
+  // App remonter en haut de l'écran et poser le focus sur le titre (changement d'écran).
+  const revealTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const reveal = useCallback((id: SettingsSection) => {
+    setOpen(id, true);
+    clearTimeout(revealTimer.current);
+    revealTimer.current = setTimeout(() => {
+      clearRequestedSection();
+      const el = document.getElementById(sectionAnchor(id));
+      if (!el) return;
+      el.scrollIntoView({ block: 'start', behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
+      el.querySelector<HTMLButtonElement>('button[aria-expanded]')?.focus({ preventScroll: true });
+    }, 300);
+  }, [setOpen]);
+  useEffect(() => {
+    const requested = peekRequestedSection();
+    if (requested) reveal(requested);
+    const onRequest = (e: Event) => {
+      const id = (e as CustomEvent<unknown>).detail;
+      if (isSettingsSection(id)) reveal(id);
+    };
+    window.addEventListener(OPEN_SECTION_EVENT, onRequest);
+    return () => { window.removeEventListener(OPEN_SECTION_EVENT, onRequest); clearTimeout(revealTimer.current); };
+  }, [reveal]);
 
-  const [pinOn, setPinOn] = useState(isPinEnabled());
-  const [pinDraft, setPinDraft] = useState('');
-  const [pinError, setPinError] = useState<string | null>(null);
-  const [settingPin, setSettingPin] = useState(false);
+  const backend = isBackendEnabled();
+  const keysSummary = [
+    localGeminiKey.trim() ? 'Gemini configurée' : 'Pas de clé Gemini',
+    localPickerKey.trim() ? 'Picker configurée' : 'pas de clé Picker',
+  ].join(' · ');
 
-  const submitPinSetup = async () => {
-    setPinError(null);
-    if (!/^\d{6,8}$/.test(pinDraft)) {
-      setPinError('Le code doit faire entre 6 et 8 chiffres (un code court se devine en quelques minutes si quelqu’un copie les données du navigateur).');
-      return;
-    }
-    await enablePin(pinDraft);
-    setPinOn(true);
-    setSettingPin(false);
-    setPinDraft('');
-  };
+  const card = (id: SettingsSection, title: string, icon: React.ComponentType<{ className?: string }>, children: React.ReactNode, summary?: string) => (
+    <SettingsCard key={id} id={id} title={title} icon={icon} summary={summary} open={isOpen(id)} onToggle={() => toggle(id)}>{children}</SettingsCard>
+  );
 
-  const togglePin = () => {
-    if (pinOn) {
-      disablePin();
-      setPinOn(false);
-      return;
-    }
-    setSettingPin(true);
-  };
-
-  const handleFiscalChange = <K extends keyof FiscalConfig>(field: K, value: FiscalConfig[K]) => {
-    setLocalFiscal(prev => ({ ...prev, [field]: value }));
-  };
-
-  const handleCeilingChange = (key: string, value: number) => {
-    setLocalFiscal(prev => ({ ...prev, ceilings: { ...prev.ceilings, [key]: value } }));
-  };
-
-  const updateBracket = (index: number, field: keyof TaxBracket, value: number) => {
-    const newBrackets = [...localFiscal.taxBrackets];
-    newBrackets[index] = { ...newBrackets[index], [field]: value };
-    handleFiscalChange('taxBrackets', newBrackets);
-  };
-
-  const addBracket = () => handleFiscalChange('taxBrackets', [...localFiscal.taxBrackets, { limit: 0, rate: 0 }]);
-  const removeBracket = (index: number) => handleFiscalChange('taxBrackets', localFiscal.taxBrackets.filter((_, i) => i !== index));
-
-  const updateBenefit = <C extends keyof WorkBenefits, F extends keyof WorkBenefits[C]>(category: C, field: F, value: WorkBenefits[C][F]) => {
-    setLocalBenefits(prev => ({
-        ...prev,
-        [category]: { ...prev[category], [field]: value }
-    }));
-  };
+  const group = (title: string, cards: React.ReactNode[]) => (
+    <div className="space-y-3">
+      <h3 className="px-1 text-sm font-medium text-on-surface-variant">{title}</h3>
+      {cards}
+    </div>
+  );
 
   return (
-    <div className="space-y-6 animate-fade-in pb-20">
-      <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xs flex items-center justify-between">
-        <div>
-          <h2 className="text-xl font-black text-slate-800 dark:text-slate-100 flex items-center gap-2"><SettingsIcon className="w-6 h-6 text-indigo-600" /> Paramètres</h2>
-          <p className="text-sm text-slate-500 dark:text-slate-400">Ajustez la fiscalité et vos avantages salariaux.</p>
-        </div>
-        <p role="status" className="text-xs font-bold text-slate-500 dark:text-slate-400 flex items-center gap-1.5"><Save className="w-4 h-4" aria-hidden="true" /> {savedHint ? 'Modifications enregistrées' : 'Enregistrement automatique'}</p>
-      </div>
+    <div className="max-w-3xl mx-auto animate-fade-in pb-20">
+      <PageHeader
+        title="Paramètres"
+        subtitle="Vos avantages et la fiscalité, les préférences de l'app, la sécurité et vos sauvegardes. Ouvrez une carte pour la modifier."
+        actions={
+          <p role="status" className="text-sm text-on-surface-variant flex items-center gap-1.5">
+            <Save className="w-4 h-4" aria-hidden="true" /> {savedHint ? 'Modifications enregistrées' : 'Enregistrement automatique'}
+          </p>
+        }
+      />
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* SECTION SAUVEGARDE */}
-        <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 lg:col-span-2">
-          <h3 className="font-bold text-slate-800 dark:text-slate-100 mb-4 border-b border-slate-200 dark:border-slate-700 pb-2 flex items-center gap-2"><Database className="w-4 h-4 text-indigo-600" /> Sauvegarde des données</h3>
-          <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
-            <button onClick={onExport} className="flex items-center gap-2 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 px-4 py-2 rounded-xl font-bold text-sm"><Download className="w-4 h-4" /> Exporter (JSON)</button>
-            <label className="flex items-center gap-2 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 px-4 py-2 rounded-xl font-bold text-sm cursor-pointer has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-indigo-600 has-[:focus-visible]:outline-offset-2">
-              <Upload className="w-4 h-4" aria-hidden="true" /> Importer un fichier
-              <input type="file" accept="application/json" onChange={handleImportFile} className="sr-only" />
-            </label>
-            {importMsg && <span className="text-xs font-bold text-slate-500 dark:text-slate-400">{importMsg}</span>}
-          </div>
+      <div className="space-y-8">
+        {group('Salaire et impôts', [
+          card('benefits', 'Avantages salariaux', Building2,
+            <BenefitsFields payslips={payslips} benefits={localBenefits} setBenefits={setLocalBenefits} />,
+            benefitsSummary(localBenefits)),
+          card('fiscal', 'Fiscalité et barème', Scale,
+            <FiscalFields fiscal={localFiscal} setFiscal={setLocalFiscal} />,
+            fiscalSummary(localFiscal)),
+          taxNoticeSlot && card('tax-notice', "Avis d'imposition (LEP)", FileSearch, taxNoticeSlot),
+          fiscalWatchSlot && card('fiscal-watch', 'Veille fiscale', Radar, fiscalWatchSlot),
+        ])}
 
-          {pendingImport && (
-            <div className="mt-4 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-xl p-4">
-              <p className="text-xs font-black text-rose-800 dark:text-rose-300 flex items-center gap-2 mb-2">
-                <AlertTriangle className="w-4 h-4 shrink-0" /> Remplacer toutes vos données ?
-              </p>
-              <p className="text-[11px] text-rose-700 dark:text-rose-300 mb-3 leading-relaxed">
-                « {pendingImport.name} » va écraser <strong>l'intégralité</strong> de vos comptes, mouvements,
-                objectifs, fiches de paie et réglages actuels, puis être synchronisé sur Drive. Cette action
-                est irréversible — pensez à faire un export avant en cas de doute.
-              </p>
-              <div className="flex gap-2">
-                <button onClick={confirmImport} className="flex-1 py-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-black">Remplacer mes données</button>
-                <button onClick={() => setPendingImport(null)} className="flex-1 py-2 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-black">Annuler</button>
-              </div>
+        {group('Préférences', [
+          motivationSlot && card('motivation', 'Motivation', Sprout, motivationSlot),
+          backend && card('notifications', 'Notifications', Bell,
+            <NotificationSettings paydayDay={paydayDay} onOpenPayday={onOpenPayday} prefs={notificationPrefs} onChangePrefs={onChangeNotificationPrefs} />),
+          card('keys', 'Clés et services', KeyRound, (
+            <div className="space-y-5">
+              <Hint>Les fiches de paie et les avis d'imposition sont lus par Gemini avec votre propre clé ; la clé Picker sert à choisir un fichier déjà sur votre Drive.</Hint>
+              <TextField id="gemini-key" label="Clé API Gemini (cet appareil)" type="password" autoComplete="off" spellCheck={false}
+                value={localGeminiKey} onChange={e => setLocalGeminiKey(e.target.value)} placeholder="AIza..."
+                supporting="Sert à lire les fiches de paie et à la veille fiscale hebdomadaire. Créée sur Google AI Studio ; restreignez-la à l'API « Generative Language » dans Google Cloud." />
+              <GeminiModelField />
+              <TextField id="picker-key" label="Clé API Google Picker" type="password" autoComplete="off" spellCheck={false}
+                value={localPickerKey} onChange={e => setLocalPickerKey(e.target.value)} placeholder="AIza..."
+                supporting="Permet de choisir une fiche déjà présente sur votre Drive. Créée dans Google Cloud Console, restreinte à l'API Picker." />
+              <Notice icon={AlertTriangle}>
+                La clé Gemini reste sur cet appareil : elle n'est ni dans votre fichier Drive, ni dans les exports (à ressaisir sur chaque appareil). La clé Picker, publique par nature, est synchronisée. Chaque analyse utilise votre propre quota Gemini.
+              </Notice>
             </div>
-          )}
+          ), keysSummary),
+        ])}
 
-          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-3">Un export télécharge une copie locale de toutes vos données (sans votre clé Gemini). L'import remplace les données actuelles puis les resynchronise sur Drive.</p>
-          {backupSlot}
-        </div>
-
-        {fiscalWatchSlot && <div className="lg:col-span-2">{fiscalWatchSlot}</div>}
-        {taxNoticeSlot && <div className="lg:col-span-2">{taxNoticeSlot}</div>}
-
-        {/* SECTION FICHES DE PAIE (IA) */}
-        <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 lg:col-span-2">
-            <h3 className="font-bold text-slate-800 dark:text-slate-100 mb-4 border-b border-slate-200 dark:border-slate-700 pb-2 flex items-center gap-2"><FileText className="w-4 h-4 text-indigo-600"/> Fiches de paie (analyse IA)</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="bg-slate-50 dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-700">
-                    <label htmlFor="gemini-key" className="text-[11px] font-black text-slate-600 dark:text-slate-300 uppercase block mb-2 flex items-center gap-1"><KeyRound className="w-3 h-3"/> Clé API Gemini (cet appareil)</label>
-                    <input
-                        id="gemini-key"
-                        type="password"
-                        autoComplete="off"
-                        value={localGeminiKey}
-                        onChange={e => setLocalGeminiKey(e.target.value)}
-                        placeholder="AIza..."
-                        className="w-full p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-bold text-slate-800 dark:text-slate-100"
-                    />
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-2">Sert à lire les fiches de paie et à la veille fiscale hebdomadaire. Créée sur <span className="font-bold">Google AI Studio</span> ; restreignez-la à l'API « Generative Language » dans Google Cloud.</p>
-                    <GeminiModelField />
-                </div>
-                <div className="bg-slate-50 dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-700">
-                    <label htmlFor="picker-key" className="text-[11px] font-black text-slate-600 dark:text-slate-300 uppercase block mb-2 flex items-center gap-1"><KeyRound className="w-3 h-3"/> Clé API Google Picker</label>
-                    <input
-                        id="picker-key"
-                        type="password"
-                        autoComplete="off"
-                        value={localPickerKey}
-                        onChange={e => setLocalPickerKey(e.target.value)}
-                        placeholder="AIza..."
-                        className="w-full p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-bold text-slate-800 dark:text-slate-100"
-                    />
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-2">Permet de choisir une fiche déjà présente sur votre Drive. Créée dans <span className="font-bold">Google Cloud Console</span>, restreinte à l'API Picker.</p>
-                </div>
-            </div>
-            <div className="mt-4 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-lg p-3 flex gap-2 items-start">
-                <AlertTriangle className="w-4 h-4 text-amber-700 dark:text-amber-400 mt-0.5 shrink-0"/>
-                <p className="text-xs text-amber-700 dark:text-amber-300 leading-relaxed">La clé Gemini reste sur cet appareil : elle n'est ni dans votre fichier Drive, ni dans les exports (à ressaisir sur chaque appareil). La clé Picker, publique par nature, est synchronisée. Chaque analyse utilise votre propre quota Gemini.</p>
-            </div>
-        </div>
-
-        {/* SECTION SÉCURITÉ (réglages locaux à cet appareil, non synchronisés) */}
-        <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 lg:col-span-2 space-y-4">
-            <h3 className="font-bold text-slate-800 dark:text-slate-100 mb-2 border-b border-slate-200 dark:border-slate-700 pb-2 flex items-center gap-2"><Fingerprint className="w-4 h-4 text-indigo-600"/> Sécurité</h3>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400 -mt-2">Verrouillez l'accès sur cet appareil (réglage propre à ce navigateur, jamais synchronisé sur Drive). Les deux méthodes peuvent être actives en même temps. Protège contre un accès occasionnel — pas une garantie cryptographique absolue sur un site sans serveur.</p>
-
-            {!lockAvailable ? (
-                <p className="text-sm text-slate-500 dark:text-slate-400">Face ID / empreinte / Windows Hello non disponible sur cet appareil ou ce navigateur — seul le code PIN est proposé.</p>
-            ) : (
-                <div className="flex items-center justify-between gap-4 bg-slate-50 dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-700">
-                    <div>
-                        <p className="font-bold text-slate-800 dark:text-slate-100 text-sm">Verrou biométrique</p>
-                        <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 max-w-md">Face ID / empreinte / Windows Hello à chaque ouverture de l'app.</p>
-                        {lockError && <p className="text-[11px] text-rose-700 dark:text-rose-400 mt-2 font-bold">{lockError}</p>}
-                    </div>
-                    <button
-                        onClick={toggleBiometric}
-                        className={`shrink-0 px-4 py-2 rounded-xl font-bold text-sm ${biometricOn ? 'bg-emerald-600 hover:bg-emerald-700 text-white' : 'bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200'}`}
-                    >
-                        {biometricOn ? 'Activé' : 'Désactivé'}
-                    </button>
-                </div>
-            )}
-
-            <div className="bg-slate-50 dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-700">
-                <div className="flex items-center justify-between gap-4">
-                    <div>
-                        <p className="font-bold text-slate-800 dark:text-slate-100 text-sm flex items-center gap-1.5"><Hash className="w-3.5 h-3.5"/> Code PIN</p>
-                        <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 max-w-md">6 à 8 chiffres, en repli si la biométrie n'est pas disponible ou par préférence.</p>
-                    </div>
-                    <button
-                        onClick={togglePin}
-                        className={`shrink-0 px-4 py-2 rounded-xl font-bold text-sm ${pinOn ? 'bg-emerald-600 hover:bg-emerald-700 text-white' : 'bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200'}`}
-                    >
-                        {pinOn ? 'Activé' : 'Désactivé'}
-                    </button>
-                </div>
-                {settingPin && (
-                    <div className="mt-3 flex items-center gap-2">
-                        <input
-                            type="password"
-                            inputMode="numeric"
-                            pattern="[0-9]*"
-                            maxLength={8}
-                            value={pinDraft}
-                            onChange={e => setPinDraft(e.target.value.replace(/\D/g, ''))}
-                            placeholder="Nouveau code (6 à 8 chiffres)"
-                            className="flex-1 p-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg font-bold text-slate-800 dark:text-slate-100"
-                            autoFocus
-                        />
-                        <button onClick={submitPinSetup} className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold text-sm">Définir</button>
-                        <button onClick={() => { setSettingPin(false); setPinDraft(''); setPinError(null); }} className="px-3 py-2 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 rounded-lg font-bold text-sm">Annuler</button>
-                    </div>
-                )}
-                {pinError && <p className="text-[11px] text-rose-700 dark:text-rose-400 mt-2 font-bold">{pinError}</p>}
-            </div>
-        </div>
-
-        {/* SECTION NOTIFICATIONS (visible seulement si l'app est reliée au serveur) */}
-        <NotificationSettings paydayDay={paydayDay} onOpenPayday={onOpenPayday} prefs={notificationPrefs} onChangePrefs={onChangeNotificationPrefs} />
-
-        {motivationSlot}
-
-        {securitySlot && <div className="lg:col-span-2">{securitySlot}</div>}
-
-        <ChangelogHistory />
-
-        {/* RÉGLAGES AVANCÉS : rarement modifiés, repliés par défaut */}
-        <details className="lg:col-span-2 group">
-          <summary className="list-none cursor-pointer bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 flex items-center gap-3">
-            <SlidersHorizontal className="w-5 h-5 text-indigo-600 shrink-0" />
-            <span className="flex-1 min-w-0">
-              <span className="block font-bold text-slate-800 dark:text-slate-100">Réglages avancés</span>
-              <span className="block text-xs text-slate-500 dark:text-slate-400">Avantages salariaux, fiscalité, plafonds des livrets, barème de l'impôt</span>
-            </span>
-            <ChevronDown className="w-5 h-5 text-slate-500 dark:text-slate-400 transition-transform group-open:rotate-180" />
-          </summary>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
-        {/* SECTION 1: AVANTAGES SALARIAUX */}
-        <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 lg:col-span-2">
-           <h3 className="font-bold text-slate-800 dark:text-slate-100 mb-4 border-b border-slate-200 dark:border-slate-700 pb-2 flex items-center gap-2"><Building2 className="w-4 h-4 text-indigo-600" /> Avantages et prélèvements de l'entreprise</h3>
-           {payslips.length > 0 && (
-             <div className="mb-5 p-4 rounded-xl bg-indigo-50/60 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-900 flex flex-wrap items-center gap-3">
-               <p className="flex-1 min-w-56 text-xs text-slate-700 dark:text-slate-200">
-                 Reprenez les montants réels de vos fiches de paie (moyenne des 3 dernières) : remboursement Navigo à 50 %, titres-restaurant payés à 50 % par l'employeur, part de mutuelle retenue sur la paie.
-                 {benefitsMsg && <span className="block mt-1 font-bold text-indigo-800 dark:text-indigo-200" role="status">{benefitsMsg}</span>}
-               </p>
-               <button type="button" onClick={() => {
-                 const r = benefitsFromPayslips(payslips, localBenefits);
-                 if (!r) return;
-                 setLocalBenefits(r.benefits);
-                 const parts = [
-                   r.navigoRefund ? `Navigo ${formatEUR(r.navigoRefund, 2)} remboursés` : 'pas de remboursement transport',
-                   r.mealVouchersEmployee ? `titres-restaurant ${formatEUR(r.mealVouchersEmployee, 2)} retenus` : 'pas de titres-restaurant',
-                   r.mutuelleEmployee ? `mutuelle ${formatEUR(r.mutuelleEmployee, 2)} retenue` : 'pas de mutuelle retenue',
-                 ];
-                 setBenefitsMsg(`D'après ${r.months} fiche${r.months > 1 ? 's' : ''} : ${parts.join(', ')} par mois.`);
-               }} className="shrink-0 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black">Utiliser mes fiches de paie</button>
-             </div>
-           )}
-           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-               {/* NAVIGO */}
-               <div className="bg-indigo-50 dark:bg-indigo-950/40 p-4 rounded-xl border border-indigo-100 dark:border-indigo-900">
-                   <label className="flex items-center gap-2 font-black text-xs uppercase text-indigo-600 dark:text-indigo-300 mb-3 cursor-pointer">
-                       <input type="checkbox" checked={localBenefits.navigo.active} onChange={e => updateBenefit('navigo', 'active', e.target.checked)} className="accent-indigo-600"/>
-                       Transport (Navigo)
-                   </label>
-                   {localBenefits.navigo.active && (
-                       <div className="space-y-2">
-                           <div><label className="text-[11px] font-bold text-slate-500 dark:text-slate-400">Prix de base mensuel (€)</label><NumberInput ariaLabel="Prix de base mensuel (€)" value={localBenefits.navigo.basePrice} onChange={v => updateBenefit('navigo', 'basePrice', v)} className="w-full p-2 rounded-sm border border-indigo-200 dark:border-indigo-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100" /></div>
-                           <div><label className="text-[11px] font-bold text-slate-500 dark:text-slate-400">Remboursement (%)</label><NumberInput ariaLabel="Remboursement (%)" value={localBenefits.navigo.refundRate} onChange={v => updateBenefit('navigo', 'refundRate', v)} className="w-full p-2 rounded-sm border border-indigo-200 dark:border-indigo-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100" /></div>
-                           <p className="text-[11px] text-emerald-700 dark:text-emerald-400 text-right mt-1">+{formatEUR(localBenefits.navigo.basePrice * localBenefits.navigo.refundRate / 100, 2)}/mois (gain)</p>
-                       </div>
-                   )}
-               </div>
-
-               {/* MUTUELLE */}
-               <div className="bg-rose-50 dark:bg-rose-950/40 p-4 rounded-xl border border-rose-100 dark:border-rose-900">
-                   <label className="flex items-center gap-2 font-black text-xs uppercase text-rose-700 dark:text-rose-300 mb-3 cursor-pointer">
-                       <input type="checkbox" checked={localBenefits.mutuelle.active} onChange={e => updateBenefit('mutuelle', 'active', e.target.checked)} className="accent-rose-600"/>
-                       Mutuelle santé
-                   </label>
-                   {localBenefits.mutuelle.active && (
-                       <div className="space-y-2">
-                           <div><label className="text-[11px] font-bold text-slate-500 dark:text-slate-400">Coût total du contrat (€)</label><NumberInput ariaLabel="Coût total du contrat (€)" value={localBenefits.mutuelle.totalCost} onChange={v => updateBenefit('mutuelle', 'totalCost', v)} className="w-full p-2 rounded-sm border border-rose-200 dark:border-rose-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100" /></div>
-                           <div><label className="text-[11px] font-bold text-slate-500 dark:text-slate-400">Prise en charge employeur (%)</label><NumberInput ariaLabel="Prise en charge employeur (%)" value={localBenefits.mutuelle.employerRate} onChange={v => updateBenefit('mutuelle', 'employerRate', v)} className="w-full p-2 rounded-sm border border-rose-200 dark:border-rose-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100" /></div>
-                           <p className="text-[11px] text-rose-700 dark:text-rose-400 text-right mt-1">−{formatEUR(localBenefits.mutuelle.totalCost * (1 - localBenefits.mutuelle.employerRate/100), 2)}/mois (coût)</p>
-                       </div>
-                   )}
-               </div>
-
-               {/* TICKETS RESTO */}
-               <div className="bg-emerald-50 dark:bg-emerald-950/40 p-4 rounded-xl border border-emerald-100 dark:border-emerald-900">
-                   <label className="flex items-center gap-2 font-black text-xs uppercase text-emerald-700 dark:text-emerald-300 mb-3 cursor-pointer">
-                       <input type="checkbox" checked={localBenefits.mealVouchers.active} onChange={e => updateBenefit('mealVouchers', 'active', e.target.checked)} className="accent-emerald-600"/>
-                       Titres-restaurant
-                   </label>
-                   {localBenefits.mealVouchers.active && (
-                       <div className="space-y-2">
-                           <div className="grid grid-cols-2 gap-2">
-                               <div><label className="text-[11px] font-bold text-slate-500 dark:text-slate-400">Valeur (€)</label><NumberInput ariaLabel="Valeur (€)" value={localBenefits.mealVouchers.faceValue} onChange={v => updateBenefit('mealVouchers', 'faceValue', v)} className="w-full p-2 rounded-sm border border-emerald-200 dark:border-emerald-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100" /></div>
-                               <div><label className="text-[11px] font-bold text-slate-500 dark:text-slate-400">Jours par mois</label><NumberInput ariaLabel="Jours par mois" value={localBenefits.mealVouchers.daysPerMonth} onChange={v => updateBenefit('mealVouchers', 'daysPerMonth', v)} className="w-full p-2 rounded-sm border border-emerald-200 dark:border-emerald-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100" /></div>
-                           </div>
-                           <div><label className="text-[11px] font-bold text-slate-500 dark:text-slate-400">Prise en charge employeur (%)</label><NumberInput ariaLabel="Prise en charge employeur (%)" value={localBenefits.mealVouchers.employerRate} onChange={v => updateBenefit('mealVouchers', 'employerRate', v)} className="w-full p-2 rounded-sm border border-emerald-200 dark:border-emerald-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-100" /></div>
-                           <p className="text-[11px] text-emerald-700 dark:text-emerald-400 text-right mt-1">−{formatEUR(localBenefits.mealVouchers.faceValue * localBenefits.mealVouchers.daysPerMonth * (1 - localBenefits.mealVouchers.employerRate/100), 2)}/mois (coût)</p>
-                       </div>
-                   )}
-               </div>
-           </div>
-        </div>
-
-        {/* SECTION 2: PARAMÈTRES FISCAUX */}
-        <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700">
-          <h3 className="font-bold text-slate-800 dark:text-slate-100 mb-4 border-b border-slate-200 dark:border-slate-700 pb-2 flex items-center gap-2"><Scale className="w-4 h-4 text-indigo-600" /> Fiscalité et charges sociales</h3>
-          <div className="space-y-4">
+        {group('Sécurité et données', [
+          card('lock', "Verrou de l'appareil", Fingerprint, <LockSection />),
+          card('data', 'Sauvegardes et données', Database, (
             <div>
-              <label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Charges salariales (ex. 0,2232)</label>
-              <NumberInput ariaLabel="Charges salariales (ex. 0,2232)" value={localFiscal.salaryChargesRate} onChange={v => handleFiscalChange('salaryChargesRate', v)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-sm font-bold" />
-            </div>
-            <div>
-              <label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Abattement forfaitaire (ex. 0,10)</label>
-              <NumberInput ariaLabel="Abattement forfaitaire (ex. 0,10)" value={localFiscal.standardAllowance} onChange={v => handleFiscalChange('standardAllowance', v)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-sm font-bold" />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              {([
-                ['socialChargesCapital', 'Prélèv. sociaux (ex. 0,186)', localFiscal.socialChargesCapital],
-                ['socialChargesLifeInsurance', 'Prélèv. sociaux AV (ex. 0,172)', localFiscal.socialChargesLifeInsurance ?? 0.172],
-                ['standardAllowanceCap', 'Abattement 10 % : plafond (€)', localFiscal.standardAllowanceCap ?? 0],
-                ['standardAllowanceMin', 'Abattement 10 % : minimum (€)', localFiscal.standardAllowanceMin ?? 0],
-              ] as [NumericFiscalField, string, number][]).map(([field, label, value]) => (
-                <div key={field}>
-                  <label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">{label}</label>
-                  <NumberInput ariaLabel={label} value={value} onChange={v => handleFiscalChange(field, v)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-sm font-bold" />
-                </div>
-              ))}
-              <div>
-                <label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Décote : montant (€)</label>
-                <NumberInput ariaLabel="Décote : montant" value={localFiscal.decote?.single ?? 897} onChange={v => handleFiscalChange('decote', { rate: 0.4525, threshold: 1982, ...localFiscal.decote, single: v })} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-sm font-bold" />
+              <Hint>Un export télécharge une copie locale de toutes vos données (sans votre clé Gemini). L'import remplace les données actuelles puis les resynchronise sur Drive.</Hint>
+              <div className="mt-3 flex flex-wrap gap-2 items-center">
+                <Button variant="tonal" onClick={onExport}><Download className="w-4 h-4" aria-hidden="true" /> Exporter (JSON)</Button>
+                <label className="h-10 px-6 rounded-full text-sm font-medium inline-flex items-center gap-2 border border-outline text-indigo-700 dark:text-indigo-200 hover:bg-indigo-600/8 cursor-pointer has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-indigo-600 has-[:focus-visible]:outline-offset-2">
+                  <Upload className="w-4 h-4" aria-hidden="true" /> Importer un fichier
+                  <input type="file" accept="application/json" onChange={handleImportFile} className="sr-only" />
+                </label>
               </div>
-              <div>
-                <label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Décote : seuil d'impôt (€)</label>
-                <NumberInput ariaLabel="Décote : seuil" value={localFiscal.decote?.threshold ?? 1982} onChange={v => handleFiscalChange('decote', { single: 897, rate: 0.4525, ...localFiscal.decote, threshold: v })} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-sm font-bold" />
-              </div>
-            </div>
-            <div className="grid grid-cols-3 gap-3">
-              <div>
-                <label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">LEP : + par demi-part</label>
-                <NumberInput ariaLabel="Plafond LEP : ajout par demi-part" value={localFiscal.lepCeilingPerHalfPart ?? 0} onChange={v => handleFiscalChange('lepCeilingPerHalfPart', v)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-sm font-bold" />
-              </div>
-              <div>
-                <label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Plafond RFR LEP (1 part)</label>
-                <NumberInput ariaLabel="Plafond RFR LEP (1 part)" value={localFiscal.lepIncomeCeiling ?? 0} onChange={v => handleFiscalChange('lepIncomeCeiling', v)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-sm font-bold" />
-              </div>
-              <div>
-                <label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Parts fiscales</label>
-                <NumberInput ariaLabel="Parts fiscales" value={localFiscal.lepHouseholdParts ?? 1} onChange={v => handleFiscalChange('lepHouseholdParts', v)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-sm font-bold" />
-              </div>
-            </div>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400 -mt-2">
-              Sert à vous alerter si votre revenu approche du plafond d'éligibilité au LEP. Le montant est révisé chaque année ; le vrai critère reste le RFR de votre avis d'imposition.
-            </p>
-          </div>
-        </div>
+              {importMsg && <p role="status" className="mt-2 text-sm text-on-surface-variant">{importMsg}</p>}
 
-        <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700">
-          <h3 className="font-bold text-slate-800 dark:text-slate-100 mb-4 border-b border-slate-200 dark:border-slate-700 pb-2 flex items-center gap-2"><PiggyBank className="w-4 h-4 text-indigo-600" /> Plafonds des livrets (€)</h3>
-          <div className="grid grid-cols-2 gap-4">
-              <div><label className="text-[11px] text-indigo-600 dark:text-indigo-300 font-black uppercase">Livret A</label><NumberInput ariaLabel="Livret A" value={localFiscal.ceilings.livretA} onChange={v => handleCeilingChange('livretA', v)} className="w-full p-2 bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900 rounded-sm font-bold text-slate-800 dark:text-slate-100" /></div>
-              <div><label className="text-[11px] text-rose-700 dark:text-rose-300 font-black uppercase">LEP</label><NumberInput ariaLabel="LEP" value={localFiscal.ceilings.lep} onChange={v => handleCeilingChange('lep', v)} className="w-full p-2 bg-rose-50 dark:bg-rose-950/40 border border-rose-100 dark:border-rose-900 rounded-sm font-bold text-slate-800 dark:text-slate-100" /></div>
-          </div>
-        </div>
-
-        {/* SECTION 3: BARÈME IMPÔT */}
-        <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 lg:col-span-2">
-          <div className="flex justify-between items-center mb-4 border-b border-slate-200 dark:border-slate-700 pb-2">
-            <h3 className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2"><Landmark className="w-4 h-4 text-indigo-600" /> Barème de l'impôt sur le revenu</h3>
-            <button onClick={addBracket} className="text-xs flex items-center gap-1 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 px-2 py-1 rounded-sm hover:bg-slate-200 dark:hover:bg-slate-600"><Plus className="w-3 h-3"/> Ajouter tranche</button>
-          </div>
-          <div className="mb-4 flex flex-wrap items-center gap-3 text-sm">
-            <span className="font-bold text-slate-700 dark:text-slate-200">{identifyTaxScale(localFiscal.taxBrackets)?.label ?? 'Barème personnalisé'}</span>
-            {!sameTaxBrackets(localFiscal.taxBrackets, LATEST_TAX_SCALE.brackets) && (
-              <button onClick={() => setLocalFiscal(prev => applyTaxScale(prev, LATEST_TAX_SCALE))} className="text-xs font-black px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white">
-                Appliquer le {LATEST_TAX_SCALE.label}
-              </button>
-            )}
-            <span className="text-[11px] text-slate-500 dark:text-slate-400">Source : service-public.fr. Pensez à enregistrer après une modification.</span>
-          </div>
-          {(localFiscal.taxBracketsHistory?.length ?? 0) > 0 && (
-            <details className="mb-4 text-sm">
-              <summary className="cursor-pointer font-bold text-slate-600 dark:text-slate-300">Barèmes précédents ({localFiscal.taxBracketsHistory!.length})</summary>
-              <ul className="mt-2 space-y-1">
-                {[...localFiscal.taxBracketsHistory!].reverse().map((h, i) => (
-                  <li key={i} className="text-xs text-slate-600 dark:text-slate-300">
-                    <b>{h.year ? `Barème ${h.year}` : 'Barème personnalisé'}</b>, remplacé le {parseISODate(h.replacedOn).toLocaleDateString('fr-FR')} :{' '}
-                    {h.brackets.map(b => `${Math.round(b.rate * 100)} % jusqu'à ${b.limit === null || b.limit === Infinity || b.limit >= 999999999 ? '∞' : formatEUR(b.limit)}`).join(' · ')}
-                  </li>
-                ))}
-              </ul>
-            </details>
-          )}
-          <div className="space-y-2">
-            {localFiscal.taxBrackets.map((bracket, index) => (
-                <div key={index} className="flex items-center gap-4">
-                    <div className="flex-1">
-                        <label className="text-[11px] uppercase font-bold text-slate-500 dark:text-slate-400">Limite haute (€)</label>
-                        <NumberInput ariaLabel="Limite haute (€)" value={bracket.limit === Infinity ? 999999999 : bracket.limit} onChange={v => updateBracket(index, 'limit', v)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-sm text-sm text-slate-800 dark:text-slate-100" />
-                    </div>
-                    <div className="w-32">
-                        <label className="text-[11px] uppercase font-bold text-slate-500 dark:text-slate-400">Taux (ex. 0,11)</label>
-                        <NumberInput ariaLabel="Taux (ex. 0,11)" value={bracket.rate} onChange={v => updateBracket(index, 'rate', v)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-sm text-sm font-bold text-indigo-600 dark:text-indigo-300" />
-                    </div>
-                    <button onClick={() => removeBracket(index)} className="mt-4 p-2 text-slate-500 dark:text-slate-400 hover:text-rose-500"><Trash2 className="w-4 h-4" /></button>
-                </div>
-            ))}
-            <div className="bg-amber-50 dark:bg-amber-950/40 p-3 rounded-lg flex gap-2 items-start mt-4">
-                <AlertTriangle className="w-4 h-4 text-amber-700 dark:text-amber-400 mt-1 shrink-0"/>
-                <p className="text-xs text-amber-700 dark:text-amber-300 leading-relaxed">Les tranches doivent être ordonnées. Mettez 999999999 pour l'infini.</p>
+              {pendingImport && (
+                <Notice tone="error" className="mt-4 p-4!">
+                  <p className="text-sm font-medium flex items-center gap-2"><AlertTriangle className="w-4 h-4 shrink-0" aria-hidden="true" /> Remplacer toutes vos données ?</p>
+                  <p className="mt-2">
+                    « {pendingImport.name} » va écraser <strong className="font-medium">l'intégralité</strong> de vos comptes, mouvements,
+                    objectifs, fiches de paie et réglages actuels, puis être synchronisé sur Drive. Cette action
+                    est irréversible — pensez à faire un export avant en cas de doute.
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Button variant="danger" onClick={confirmImport}>Remplacer mes données</Button>
+                    <Button variant="text" onClick={() => setPendingImport(null)}>Annuler</Button>
+                  </div>
+                </Notice>
+              )}
+              {backupSlot}
             </div>
-          </div>
-        </div>
-          </div>
-        </details>
+          )),
+          securitySlot && card('account', 'Compte et appareils', Smartphone, securitySlot),
+        ])}
+
+        {card('about', 'À propos', Info, <AboutSection />, `Version ${LATEST_VERSION}`)}
       </div>
     </div>
   );

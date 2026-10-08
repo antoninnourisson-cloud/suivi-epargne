@@ -22,6 +22,13 @@ const goTo = async (page: Page, label: string, isMobile: boolean) => {
   await page.getByRole('dialog', { name: "Plus d'écrans" }).getByRole('button', { name: label, exact: true }).click();
 };
 
+/** Ouvre une carte des Paramètres (repliées par défaut). */
+const openCard = async (page: Page, name: string) => {
+  const button = page.locator('main').getByRole('button', { name, exact: true });
+  if (await button.getAttribute('aria-expanded') !== 'true') await button.click();
+  await expect(button).toHaveAttribute('aria-expanded', 'true');
+};
+
 test.describe('Motivation (démo)', () => {
   test('la carte « Bons mois » montre la paie en cours et la série', async ({ page }) => {
     await openDemo(page);
@@ -67,6 +74,7 @@ test.describe('Motivation (démo)', () => {
     await openDemo(page);
     await expect(page.getByRole('region', { name: 'Bons mois', exact: true })).toBeVisible();
     await goTo(page, 'Paramètres', isMobile);
+    await openCard(page, 'Motivation');
     const toggle = page.getByRole('switch', { name: 'Bons mois et jalons' });
     await expect(toggle).toHaveAttribute('aria-checked', 'true');
     await toggle.click();

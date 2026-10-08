@@ -247,7 +247,7 @@ describe('computeReminders', () => {
     it('rappelle fin janvier de vérifier les paramètres, sauf si déjà fait', () => {
       const at = (reviewed?: number) => computeReminders(base({ fiscalConfig: { ...DEFAULT_FISCAL_CONFIG, paramsReviewedYear: reviewed } }), new Date(2027, 0, 20, 9), APP)
         .find(x => x.key === 'fiscal-review:2027');
-      expect(at()?.message.url).toBe(`${APP}?view=settings`);
+      expect(at()?.message.url).toBe(`${APP}?view=settings&section=fiscal`);
       expect(at(2027)).toBeUndefined();
     });
   });

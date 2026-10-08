@@ -1,7 +1,9 @@
 // Panneaux de Paramètres liés à la sécurité et à la sauvegarde : copies mensuelles Drive,
 // sauvegarde de secours chiffrée, appareils et données gardés par le serveur, modèle Gemini.
+// Ils s'affichent dans les cartes repliables de l'écran (voir settings/SettingsCard) et y
+// signalent leur état pour le résumé de la carte (useCardSummary).
 import React, { useCallback, useEffect, useState } from 'react';
-import { ArchiveRestore, Smartphone, ShieldOff, Loader2, Trash2, LogOut, Activity, Bot, ShieldCheck, Copy, CloudUpload, CloudDownload, KeyRound } from 'lucide-react';
+import { ArchiveRestore, Smartphone, Loader2, Trash2, LogOut, Activity, ShieldCheck, Copy, CloudUpload, CloudDownload, KeyRound } from 'lucide-react';
 import type { DriveBackup } from '../services/googleDriveService';
 import type { GlobalAppData } from '../types';
 import {
@@ -17,14 +19,14 @@ import {
 } from '../services/backendService';
 import { DEFAULT_GEMINI_MODEL, getGeminiModelOverride, setGeminiModelOverride } from '../services/geminiService';
 import { useToast } from './Toast';
+import { CardSubheading, Hint, Notice, useCardSummary } from './settings/SettingsCard';
+import { SwitchRow } from './settings/fields';
 
-const card = 'bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700';
-const h3 = 'font-bold text-slate-800 dark:text-slate-100 mb-4 border-b border-slate-200 dark:border-slate-700 pb-2 flex items-center gap-2';
-const btn = 'flex items-center gap-2 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 px-3 py-2 rounded-xl font-bold text-xs disabled:opacity-50';
 const monthLabel = (m: string) => {
   const [y, mo] = m.split('-').map(Number);
   return new Date(y, mo - 1, 1).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
 };
+const shortDay = (iso: string) => new Date(iso).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
 
 /** Copies mensuelles du fichier sur Drive, restaurables en un clic (après confirmation). */
 export const DriveBackupsPanel: React.FC<{
@@ -36,26 +38,30 @@ export const DriveBackupsPanel: React.FC<{
   const [items, setItems] = useState<DriveBackup[] | null>(null);
   const [busy, setBusy] = useState(false);
   useEffect(() => { list().then(setItems).catch(() => setItems([])); }, [list]);
+  const latest = items && items.length > 0 ? [...items].sort((a, b) => b.createdTime.localeCompare(a.createdTime))[0] : null;
+  useCardSummary('drive', items === null ? null : latest ? `Dernière copie Drive : ${shortDay(latest.createdTime)}` : 'Pas encore de copie Drive');
   return (
-    <div className="mt-5">
-      <p className="text-xs font-black text-slate-600 dark:text-slate-300 uppercase flex items-center gap-2"><ArchiveRestore className="w-4 h-4" aria-hidden="true" /> Copies mensuelles sur Drive</p>
-      <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">Une copie complète est créée au premier enregistrement de chaque mois ; les 12 dernières sont gardées.</p>
-      {items === null ? <Loader2 className="w-4 h-4 animate-spin mt-2 text-slate-500" aria-label="Chargement" />
-        : items.length === 0 ? <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">Pas encore de copie : la première sera créée au prochain enregistrement.</p>
+    <div className="pt-5 mt-5 border-t border-outline-variant">
+      <CardSubheading icon={ArchiveRestore}>Copies mensuelles sur Drive</CardSubheading>
+      <Hint className="mt-1">Une copie complète est créée au premier enregistrement de chaque mois ; les 12 dernières sont gardées. Choisissez un mois pour y revenir.</Hint>
+      {items === null ? <Loader2 className="w-4 h-4 animate-spin mt-3 text-on-surface-variant" aria-label="Chargement" />
+        : items.length === 0 ? <p className="text-sm text-on-surface-variant mt-3">Pas encore de copie : la première sera créée au prochain enregistrement.</p>
         : (
-          <ul className="mt-2 flex flex-wrap gap-2">
+          <ul className="mt-3 flex flex-wrap gap-2">
             {items.map(b => (
               <li key={b.id}>
-                <button disabled={busy} className={btn} onClick={() => confirm(
-                  `Revenir à la copie de ${monthLabel(b.month)} ?`,
-                  'Toutes vos données actuelles seront remplacées par cette copie, puis enregistrées sur Drive. Pensez à exporter avant si vous avez un doute.',
-                  async () => {
-                    setBusy(true);
-                    try { await restore(b.id); toast?.({ message: `Copie de ${monthLabel(b.month)} restaurée`, kind: 'success' }); }
-                    catch { toast?.({ message: 'Copie illisible : rien n\'a été remplacé.', kind: 'error' }); }
-                    finally { setBusy(false); }
-                  },
-                )}>{monthLabel(b.month)}</button>
+                <button type="button" disabled={busy}
+                  className="h-8 px-3 inline-flex items-center rounded-sm border border-outline text-sm font-medium text-on-surface-variant hover:bg-on-surface/8 disabled:opacity-40 capitalize"
+                  onClick={() => confirm(
+                    `Revenir à la copie de ${monthLabel(b.month)} ?`,
+                    'Toutes vos données actuelles seront remplacées par cette copie, puis enregistrées sur Drive. Pensez à exporter avant si vous avez un doute.',
+                    async () => {
+                      setBusy(true);
+                      try { await restore(b.id); toast?.({ message: `Copie de ${monthLabel(b.month)} restaurée`, kind: 'success' }); }
+                      catch { toast?.({ message: 'Copie illisible : rien n\'a été remplacé.', kind: 'error' }); }
+                      finally { setBusy(false); }
+                    },
+                  )}>{monthLabel(b.month)}</button>
               </li>
             ))}
           </ul>
@@ -100,6 +106,7 @@ export const CloudBackupPanel: React.FC<{
       .catch(() => setDates([]));
   }, []);
   useEffect(() => { if (available) refresh(); }, [available, refresh]);
+  useCardSummary('cloud', !available || enrolled === undefined ? null : enrolled ? 'Secours chiffré activé' : 'Secours chiffré désactivé');
 
   if (!available) return null;
 
@@ -155,22 +162,22 @@ export const CloudBackupPanel: React.FC<{
   const hasCopies = !!dates && dates.length > 0;
 
   return (
-    <div className="mt-6 pt-5 border-t border-slate-200 dark:border-slate-700" data-testid="cloud-backup-panel">
-      <p className="text-xs font-black text-slate-600 dark:text-slate-300 uppercase flex items-center gap-2"><ShieldCheck className="w-4 h-4" aria-hidden="true" /> Sauvegarde de secours chiffrée</p>
-      <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+    <div className="pt-5 mt-5 border-t border-outline-variant" data-testid="cloud-backup-panel">
+      <CardSubheading icon={ShieldCheck}>Sauvegarde de secours chiffrée</CardSubheading>
+      <Hint className="mt-1">
         Une copie de vos données, chiffrée sur cet appareil avant l'envoi, gardée par le serveur de Pécule au cas où le fichier Drive serait abîmé ou supprimé.
-        Le serveur ne peut pas la lire : seul votre <strong>code de secours</strong> permet de la déchiffrer. Envoi automatique au plus une fois par semaine si vos données ont changé ; les 8 dernières copies sont gardées.
-      </p>
+        Le serveur ne peut pas la lire : seul votre <strong className="font-medium text-on-surface">code de secours</strong> permet de la déchiffrer. Envoi automatique au plus une fois par semaine si vos données ont changé ; les 8 dernières copies sont gardées.
+      </Hint>
 
-      {enrolled === undefined ? <Loader2 className="w-4 h-4 animate-spin mt-2 text-slate-500" aria-label="Chargement" /> : (
+      {enrolled === undefined ? <Loader2 className="w-4 h-4 animate-spin mt-3 text-on-surface-variant" aria-label="Chargement" /> : (
         <>
-          <p role="status" className="mt-3 text-xs text-slate-700 dark:text-slate-200">
+          <p role="status" className="mt-3 text-sm text-on-surface">
             {enrolled
               ? <>Activée sur cet appareil. {status.lastUploadAt ? `Dernier envoi : ${dateTimeLabel(status.lastUploadAt)}.` : 'Aucun envoi pour l\'instant.'}
                 {status.lastError && status.lastErrorAt && (!status.lastUploadAt || status.lastErrorAt > status.lastUploadAt)
-                  && <span className="block text-rose-700 dark:text-rose-300">Échec du dernier essai ({dateTimeLabel(status.lastErrorAt)}) : {FAILURE_MESSAGES[status.lastError as keyof typeof FAILURE_MESSAGES] ?? status.lastError}</span>}</>
+                  && <span className="block text-error">Échec du dernier essai ({dateTimeLabel(status.lastErrorAt)}) : {FAILURE_MESSAGES[status.lastError as keyof typeof FAILURE_MESSAGES] ?? status.lastError}</span>}</>
               : 'Pas activée sur cet appareil.'}
-            {dates && <span className="block text-slate-500 dark:text-slate-400">{hasCopies ? `${dates.length} copie${dates.length > 1 ? 's' : ''} sur le serveur, la dernière du ${dayLabel(dates[0])}.` : 'Aucune copie sur le serveur.'}</span>}
+            {dates && <span className="block text-on-surface-variant">{hasCopies ? `${dates.length} copie${dates.length > 1 ? 's' : ''} sur le serveur, la dernière du ${dayLabel(dates[0])}.` : 'Aucune copie sur le serveur.'}</span>}
           </p>
 
           {mode === 'idle' && (
@@ -192,11 +199,11 @@ export const CloudBackupPanel: React.FC<{
           )}
 
           {mode === 'newCode' && newCode && (
-            <div className="mt-3 rounded-xl border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 p-4">
-              <p className="text-xs font-black text-amber-800 dark:text-amber-300">Votre code de secours</p>
-              <p className="mt-2 font-mono text-base sm:text-lg font-bold tracking-wider text-slate-900 dark:text-slate-100 break-all select-all" data-testid="recovery-code">{newCode}</p>
-              <p className="mt-2 text-[11px] text-amber-800 dark:text-amber-300 leading-relaxed">
-                Notez-le ou rangez-le dans un gestionnaire de mots de passe, <strong>hors de cet appareil</strong>. Il ne sera <strong>plus jamais affiché</strong> et n'est enregistré nulle part :
+            <Notice tone="warning" className="mt-3 p-4!">
+              <p className="text-sm font-medium">Votre code de secours</p>
+              <p className="mt-2 font-mono text-base sm:text-lg font-medium tracking-wider text-on-surface break-all select-all" data-testid="recovery-code">{newCode}</p>
+              <p className="mt-2">
+                Notez-le ou rangez-le dans un gestionnaire de mots de passe, <strong className="font-medium">hors de cet appareil</strong>. Il ne sera <strong className="font-medium">plus jamais affiché</strong> et n'est enregistré nulle part :
                 sans lui, les copies de secours sont illisibles, pour vous comme pour le serveur.
                 {hasCopies && ' Les copies déjà sur le serveur restent lisibles avec votre ancien code seulement.'}
               </p>
@@ -205,11 +212,11 @@ export const CloudBackupPanel: React.FC<{
                 <Button onClick={confirmSaved} disabled={busy}>Je l'ai mis en lieu sûr</Button>
                 <Button variant="text" onClick={reset} disabled={busy}>Annuler</Button>
               </div>
-            </div>
+            </Notice>
           )}
 
           {(mode === 'join' || mode === 'restore') && (
-            <div className="mt-3 rounded-xl border border-slate-200 dark:border-slate-700 p-4 space-y-3">
+            <div className="mt-3 rounded-xl border border-outline-variant p-4 space-y-3">
               {mode === 'restore' && dates && (
                 <div>
                   <label htmlFor="cloud-restore-date" className="block text-sm font-medium text-on-surface-variant mb-1.5">Copie à restaurer</label>
@@ -231,12 +238,15 @@ export const CloudBackupPanel: React.FC<{
             </div>
           )}
 
-          {error && mode !== 'join' && mode !== 'restore' && <p role="alert" className="mt-2 text-xs font-bold text-rose-700 dark:text-rose-300">{error}</p>}
+          {error && mode !== 'join' && mode !== 'restore' && <p role="alert" className="mt-2 text-xs font-medium text-error">{error}</p>}
         </>
       )}
     </div>
   );
 };
+
+const deviceName = (host: string) =>
+  host.includes('apple') ? 'iPhone / Mac' : host.includes('fcm') ? 'Android / Chrome' : host.includes('mozilla') ? 'Firefox' : host.includes('windows') ? 'Windows' : host;
 
 /** Appareils qui reçoivent les notifications, dernière vérification du serveur, déconnexions. */
 export const ServerSecurityPanel: React.FC<{
@@ -255,53 +265,59 @@ export const ServerSecurityPanel: React.FC<{
     getServerHealth().then(setHealth).catch(() => setHealth(null));
   };
   useEffect(refresh, [backend]);
+  useCardSummary('devices', devices === null ? null : `${devices.length} appareil${devices.length > 1 ? 's' : ''} notifié${devices.length > 1 ? 's' : ''}`);
+  useCardSummary('discreet', discreet ? 'Notifications discrètes' : 'Notifications avec montants');
 
   return (
-    <div className={card}>
-      <h3 className={h3}><ShieldOff className="w-4 h-4 text-indigo-600" aria-hidden="true" /> Appareils et confidentialité</h3>
-      <label className="flex items-start gap-3 cursor-pointer">
-        <input type="checkbox" checked={discreet} onChange={e => onToggleDiscreet(e.target.checked)} className="mt-1 w-4 h-4 accent-indigo-600" />
-        <span>
-          <span className="block text-sm font-bold text-slate-800 dark:text-slate-100">Notifications discrètes</span>
-          <span className="block text-xs text-slate-600 dark:text-slate-300">Aucun montant dans les notifications (salaire, restitution…) : rien de lisible sur l'écran verrouillé.</span>
-        </span>
-      </label>
+    <div>
+      <SwitchRow
+        label="Notifications discrètes"
+        hint="Aucun montant dans les notifications (salaire, restitution…) : rien de lisible sur l'écran verrouillé."
+        checked={discreet}
+        onChange={onToggleDiscreet}
+      />
 
       {backend && (
         <>
-          <p className="mt-5 text-xs font-black text-slate-600 dark:text-slate-300 uppercase flex items-center gap-2"><Smartphone className="w-4 h-4" aria-hidden="true" /> Appareils qui reçoivent les notifications</p>
-          {devices === null ? <Loader2 className="w-4 h-4 animate-spin mt-2 text-slate-500" aria-label="Chargement" />
-            : devices.length === 0 ? <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">Aucun appareil.</p>
-            : (
-              <ul className="mt-2 space-y-1">
-                {devices.map(d => (
-                  <li key={d.id} className="flex items-center justify-between gap-2 text-xs text-slate-700 dark:text-slate-200">
-                    <span>{d.host.includes('apple') ? 'iPhone / Mac' : d.host.includes('fcm') ? 'Android / Chrome' : d.host.includes('mozilla') ? 'Firefox' : d.host.includes('windows') ? 'Windows' : d.host}
-                      {d.current && <strong className="ml-1 text-indigo-700 dark:text-indigo-300">(cet appareil)</strong>}
-                      {d.createdAt && <span className="text-slate-500 dark:text-slate-400"> · depuis le {new Date(d.createdAt).toLocaleDateString('fr-FR')}</span>}
-                    </span>
-                    {!d.current && (
-                      <button className="p-2 text-slate-500 hover:text-rose-600" aria-label={`Retirer l'appareil ${d.host}`}
-                        onClick={async () => { await removePushDevice(d.id).catch(() => undefined); refresh(); }}><Trash2 className="w-4 h-4" /></button>
-                    )}
-                  </li>
-                ))}
-              </ul>
+          <div className="pt-5 mt-5 border-t border-outline-variant">
+            <CardSubheading icon={Smartphone}>Appareils qui reçoivent les notifications</CardSubheading>
+            {devices === null ? <Loader2 className="w-4 h-4 animate-spin mt-3 text-on-surface-variant" aria-label="Chargement" />
+              : devices.length === 0 ? <p className="text-sm text-on-surface-variant mt-2">Aucun appareil.</p>
+              : (
+                <ul className="mt-2 divide-y divide-outline-variant">
+                  {devices.map(d => (
+                    <li key={d.id} className="flex items-center justify-between gap-2 py-1.5 text-sm text-on-surface">
+                      <span>{deviceName(d.host)}
+                        {d.current && <span className="ml-1 font-medium text-indigo-700 dark:text-indigo-300">(cet appareil)</span>}
+                        {d.createdAt && <span className="text-on-surface-variant"> · depuis le {new Date(d.createdAt).toLocaleDateString('fr-FR')}</span>}
+                      </span>
+                      {!d.current && (
+                        <button type="button" className="p-2 -m-1 rounded-full text-on-surface-variant hover:text-error hover:bg-error/8" aria-label={`Retirer l'appareil ${d.host}`}
+                          onClick={async () => { await removePushDevice(d.id).catch(() => undefined); refresh(); }}><Trash2 className="w-4 h-4" aria-hidden="true" /></button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+            {health && (
+              <p className="mt-3 text-xs text-on-surface-variant flex items-center gap-2"><Activity className="w-4 h-4" aria-hidden="true" />
+                {health.lastRunAt ? `Dernière vérification des rappels : ${new Date(health.lastRunAt).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })}${health.ok === false ? ' (en échec)' : ''}` : 'Les rappels n\'ont pas encore tourné.'}
+              </p>
             )}
+          </div>
 
-          {health && (
-            <p className="mt-4 text-xs text-slate-600 dark:text-slate-300 flex items-center gap-2"><Activity className="w-4 h-4" aria-hidden="true" />
-              {health.lastRunAt ? `Dernière vérification des rappels : ${new Date(health.lastRunAt).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })}${health.ok === false ? ' (en échec)' : ''}` : 'Les rappels n\'ont pas encore tourné.'}
-            </p>
-          )}
-
-          <div className="mt-5 flex flex-wrap gap-2">
-            <button className={btn} onClick={() => confirm('Déconnecter tous les appareils ?', 'Toutes les sessions Pécule (téléphone, ordinateur…) seront fermées et plus aucune notification ne sera envoyée. Il faudra vous reconnecter partout.', async () => {
-              try { await logoutAllDevices(); onSignedOutEverywhere(); } catch { toast?.({ message: 'Serveur injoignable, réessayez.', kind: 'error' }); }
-            }, true)}><LogOut className="w-4 h-4" aria-hidden="true" /> Déconnecter tous les appareils</button>
-            <button className={`${btn} text-rose-700 dark:text-rose-300`} onClick={() => confirm('Supprimer mes données serveur ?', 'Le serveur efface votre session, vos appareils et l\'accès Google qu\'il garde, puis révoque cet accès. Vos données financières restent sur votre Drive. Les notifications s\'arrêtent.', async () => {
-              try { await deleteServerAccount(); onSignedOutEverywhere(); } catch { toast?.({ message: 'Serveur injoignable, réessayez.', kind: 'error' }); }
-            }, true)}><Trash2 className="w-4 h-4" aria-hidden="true" /> Supprimer mes données serveur</button>
+          <div className="pt-5 mt-5 border-t border-outline-variant">
+            <CardSubheading>Sessions et données du serveur</CardSubheading>
+            <Hint className="mt-1">Vos données financières restent sur votre Drive : le serveur ne garde que votre session, vos appareils et l'accès qui sert aux rappels.</Hint>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button variant="outlined" onClick={() => confirm('Déconnecter tous les appareils ?', 'Toutes les sessions Pécule (téléphone, ordinateur…) seront fermées et plus aucune notification ne sera envoyée. Il faudra vous reconnecter partout.', async () => {
+                try { await logoutAllDevices(); onSignedOutEverywhere(); } catch { toast?.({ message: 'Serveur injoignable, réessayez.', kind: 'error' }); }
+              }, true)}><LogOut className="w-4 h-4" aria-hidden="true" /> Déconnecter tous les appareils</Button>
+              <Button variant="text" className="text-error! hover:bg-error/8!" onClick={() => confirm('Supprimer mes données serveur ?', 'Le serveur efface votre session, vos appareils et l\'accès Google qu\'il garde, puis révoque cet accès. Vos données financières restent sur votre Drive. Les notifications s\'arrêtent.', async () => {
+                try { await deleteServerAccount(); onSignedOutEverywhere(); } catch { toast?.({ message: 'Serveur injoignable, réessayez.', kind: 'error' }); }
+              }, true)}><Trash2 className="w-4 h-4" aria-hidden="true" /> Supprimer mes données serveur</Button>
+            </div>
           </div>
         </>
       )}
@@ -313,11 +329,8 @@ export const ServerSecurityPanel: React.FC<{
 export const GeminiModelField: React.FC = () => {
   const [value, setValue] = useState(getGeminiModelOverride());
   return (
-    <div className="mt-3">
-      <label htmlFor="gemini-model" className="text-[11px] font-black text-slate-600 dark:text-slate-300 uppercase flex items-center gap-1"><Bot className="w-3.5 h-3.5" aria-hidden="true" /> Modèle Gemini (facultatif)</label>
-      <input id="gemini-model" value={value} placeholder={DEFAULT_GEMINI_MODEL} onChange={e => setValue(e.target.value)} onBlur={() => setGeminiModelOverride(value)}
-        className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-sm font-mono text-xs text-slate-800 dark:text-slate-100" />
-      <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">Laissez vide pour le modèle par défaut. Si Google retire un modèle, son message d'erreur indique le nom du remplaçant.</p>
-    </div>
+    <TextField id="gemini-model" label="Modèle Gemini (facultatif)" value={value} placeholder={DEFAULT_GEMINI_MODEL} autoComplete="off" spellCheck={false}
+      onChange={e => setValue(e.target.value)} onBlur={() => setGeminiModelOverride(value)}
+      supporting="Laissez vide pour le modèle par défaut. Si Google retire un modèle, son message d'erreur indique le nom du remplaçant." />
   );
 };
