@@ -54,19 +54,7 @@ jobs:
           ok()     { echo "OK : $1"; }
           CURL=(curl -sS --max-time 20 --retry 2 --retry-delay 5 --retry-all-errors)
 
-          # 1. Page d'accueil : 200 et le nom de l'app dans la page.
-          code=$("${CURL[@]}" -o home.html -w '%{http_code}' "$SITE/" || echo 000)
-          if [ "$code" != 200 ]; then fail "Accueil $SITE/ : code HTTP $code (attendu 200)"
-          elif ! grep -q 'Pécule' home.html; then fail "Accueil $SITE/ : la page ne contient pas « Pécule »"
-          else ok "Accueil"; fi
-
-          # 2. Pages publiques (présentation, exigée par Google ; confidentialité).
-          for p in presentation.html confidentialite.html; do
-            code=$("${CURL[@]}" -o /dev/null -w '%{http_code}' "$SITE/$p" || echo 000)
-            if [ "$code" = 200 ]; then ok "$p"; else fail "$SITE/$p : code HTTP $code (attendu 200)"; fi
-          done
-
-          # 3. Serveur : GET /status (public, sans donnée utilisateur) + tâche quotidienne.
+          # 1. Serveur : GET /status (public, sans donnée utilisateur) + tâche quotidienne.
           api=$(grep -m1 '^VITE_BACKEND_URL=' .env.production | cut -d= -f2- | tr -d '\r' || true)
           if [ -z "$api" ]; then
             fail "Adresse du serveur introuvable dans .env.production"
@@ -89,6 +77,26 @@ jobs:
             fi
           fi
 
+          # Pages publiques. La protection anti-robots de Cloudflare refuse (403) les requêtes
+          # des serveurs de GitHub : dans ce cas, on s'appuie sur le contrôle fait par le serveur
+          # lui-même (champ « site » de /status, vieux de 15 min au plus).
+          site_ok=$(jq -r '.site.ok // empty' status.json 2>/dev/null || true)
+          site_failing=$(jq -r '(.site.failing // []) | join(", ")' status.json 2>/dev/null || true)
+          site_hsts=$(jq -r '.site.hsts // empty' status.json 2>/dev/null || true)
+          check_page() { # $1 = chemin (vide pour l'accueil)
+            code=$("${CURL[@]}" -o page.html -w '%{http_code}' "$SITE/$1" || echo 000)
+            if [ "$code" = 200 ] && grep -q 'Pécule' page.html; then ok "/$1"
+            elif [ "$code" = 403 ] && [ "$site_ok" = true ]; then ok "/$1 (vérifiée par le serveur : GitHub est filtré par Cloudflare)"
+            elif [ "$code" = 403 ] && [ "$site_ok" = false ]; then fail "Site : pages en échec vues par le serveur : $site_failing"
+            else fail "$SITE/$1 : code HTTP $code (attendu 200 avec « Pécule »)"; fi
+          }
+          for p in "" presentation.html confidentialite.html; do check_page "$p"; done
+
+          # En-têtes de sécurité (Worker edge/) : HSTS attendu sur l'accueil.
+          headers=$("${CURL[@]}" -I "$SITE/" || true)
+          if echo "$headers" | grep -qi '^strict-transport-security:' || [ "$site_hsts" = true ]; then ok "En-tête HSTS"
+          else fail "En-tête Strict-Transport-Security absent : le Worker edge (pecule-edge) ne s'applique plus ?"; fi
+
           # 4. Certificat TLS : expire dans plus de CERT_MIN_DAYS jours.
           end=$(echo | timeout 20 openssl s_client -servername "$HOST" -connect "$HOST:443" 2>/dev/null | openssl x509 -noout -enddate 2>/dev/null | cut -d= -f2 || true)
           if [ -z "$end" ]; then
@@ -98,12 +106,6 @@ jobs:
             if [ "$days" -lt "$CERT_MIN_DAYS" ]; then fail "Certificat TLS de $HOST : expire dans ${days} jours ($end)"
             else ok "Certificat TLS ($days jours restants)"; fi
           fi
-
-          # 5. En-têtes de sécurité (Worker edge/) : simple information tant que le DNS
-          #    Cloudflare n'est pas passé en « Proxied ».
-          headers=$("${CURL[@]}" -I "$SITE/" || true)
-          if echo "$headers" | grep -qi '^strict-transport-security:'; then ok "En-tête HSTS"
-          else notice "En-tête Strict-Transport-Security absent : le Worker edge n'est pas (encore) actif (DNS en « DNS only » ?)"; fi
 
           if [ -s failures.md ]; then echo "failed=true" >> "$GITHUB_OUTPUT"; else echo "failed=false" >> "$GITHUB_OUTPUT"; fi
           {

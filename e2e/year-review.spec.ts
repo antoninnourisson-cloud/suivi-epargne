@@ -3,10 +3,14 @@
 import { test, expect, type Page } from '@playwright/test';
 import { LATEST_VERSION } from '../src/changelog';
 
-const YEAR = new Date().getFullYear();
+// Date figée en milieu d'année : de janvier à mars, l'app propose l'année précédente
+// (defaultReviewYear), et le test casserait la CI pendant trois mois.
+const FIXED_NOW = new Date('2026-10-15T12:00:00');
+const YEAR = FIXED_NOW.getFullYear();
 
 const openDemo = async (page: Page, query = '') => {
   // « Quoi de neuf » déjà vu : la modale ne masque pas l'écran.
+  await page.clock.setFixedTime(FIXED_NOW);
   await page.addInitScript(v => { try { localStorage.setItem('last_seen_version', v); } catch { /* ignoré */ } }, LATEST_VERSION);
   await page.goto(`/?demo=1${query}`);
 };

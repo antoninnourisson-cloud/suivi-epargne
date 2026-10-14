@@ -29,6 +29,7 @@
 //   push:<sub>        abonnements push des appareils (subscriptions.ts)
 //   sent:<sub>:<k>    rappels déjà envoyés (dédoublonnage, ~400 jours)
 //   health:cron       compte rendu de la dernière tâche quotidienne
+//   health:site       dernier contrôle des pages publiques (GET /status, 15 min)
 //   backup:<sub>:<date>  sauvegarde de secours CHIFFRÉE PAR L'APP (illisible ici), 8 au plus, 1 an
 //   fiscal-watch:*    veille fiscale hebdomadaire (Workers AI, pages publiques seulement : fiscalWatchJob.ts)
 // Le state OAuth n'est plus stocké : il est signé (HMAC) et lié au navigateur par cookie.
@@ -39,6 +40,7 @@ import {
 } from './google';
 import { sendPush, PushMessage } from './webpush';
 import { fetchFiscalSources, FiscalSource } from './fiscalSources';
+import { cachedSiteCheck } from './siteCheck';
 import { AiRunner, FISCAL_WATCH_CRON, LATEST_KEY, FAILURE_KEY, FiscalWatchRun, runAndStoreFiscalWatch, canRunOnDemand } from './fiscalWatchJob';
 import { isReminderEnabled } from '../../src/lib/notificationPrefs';
 import { computeReminders, applyDiscreetMode, isDiscreet, parisCivilDate } from './reminders';
@@ -479,7 +481,10 @@ const handleHealth = async (req: Request, env: Env): Promise<Response> => {
  */
 const handleStatus = async (req: Request, env: Env): Promise<Response> => {
   const health = await env.STORE.get<CronHealth>('health:cron', 'json');
-  return json(req, env, { ok: true, cron: { lastRunAt: health?.lastRunAt ?? null, ok: health?.ok ?? null } });
+  // Contrôle du site publié par le serveur (la surveillance GitHub est bloquée par la
+  // protection anti-robots de Cloudflare) ; résultat réutilisé 15 min.
+  const site = await cachedSiteCheck(env.STORE, env.APP_URL).catch(() => null);
+  return json(req, env, { ok: true, cron: { lastRunAt: health?.lastRunAt ?? null, ok: health?.ok ?? null }, site });
 };
 
 // ---------- Routes : sauvegarde de secours chiffrée ----------

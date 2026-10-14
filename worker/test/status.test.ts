@@ -11,18 +11,21 @@ const makeEnv = (kv: MemoryKV) => ({
 }) as Env;
 
 const status = (env: Env) => worker.fetch(new Request('https://api.example.workers.dev/status'), env);
+// Contrôle du site déjà fait il y a moins de 15 min : /status le reprend sans requête réseau.
+const SITE = { checkedAt: new Date().toISOString(), ok: true, failing: [], hsts: true };
+const withSite = async (kv: MemoryKV) => { await kv.put('health:site', JSON.stringify(SITE)); return kv; };
 
 describe('GET /status', () => {
   it("répond sans session, même avant la première tâche quotidienne", async () => {
-    const res = await status(makeEnv(new MemoryKV()));
+    const res = await status(makeEnv(await withSite(new MemoryKV())));
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ ok: true, cron: { lastRunAt: null, ok: null } });
+    expect(await res.json()).toEqual({ ok: true, cron: { lastRunAt: null, ok: null }, site: SITE });
   });
 
   it("ne rend que l'heure et le résultat de la tâche, sans détail", async () => {
-    const kv = new MemoryKV();
+    const kv = await withSite(new MemoryKV());
     await kv.put('health:cron', JSON.stringify({ lastRunAt: '2026-10-07T07:00:00.000Z', ok: false, error: 'détail interne', usersProcessed: 3 }));
     const body = await (await status(makeEnv(kv))).json();
-    expect(body).toEqual({ ok: true, cron: { lastRunAt: '2026-10-07T07:00:00.000Z', ok: false } });
+    expect(body).toEqual({ ok: true, cron: { lastRunAt: '2026-10-07T07:00:00.000Z', ok: false }, site: SITE });
   });
 });
