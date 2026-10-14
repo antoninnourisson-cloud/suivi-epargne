@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { migrate, canonicalize, isFromNewerApp, validateImport, withoutDeviceOnlyFields, APP_SCHEMA_VERSION, stableStringify } from './schema';
+import { DEFAULT_FISCAL_CONFIG, DEFAULT_WORK_BENEFITS } from '../constants';
 
 describe('migrate', () => {
   it('donne un document complet à partir de rien', () => {
@@ -107,5 +108,60 @@ describe('migrate : fichier abîmé', () => {
   it("est stable : migrer deux fois donne le même résultat (pas d'écriture inutile à l'ouverture)", () => {
     const raw = { accounts: [acc({ totalAmount: 1000, ownedAmount: 'abc', parentalCapital: 400, movements: [{ id: '1', date: '2026-01-02', amount: '5', type: 'IN' }] })] };
     expect(canonicalize(migrate(raw))).toBe(canonicalize(raw));
+  });
+
+  it("écarte les points d'historique illisibles au lieu de planter", () => {
+    const m = migrate({
+      accounts: [],
+      history: [{}, null, { date: 1 }, 'x', { date: '2026-01-05', totalAmount: 'abc', ownedAmount: 1 }, { date: '2026-02-01', totalAmount: '200', ownedAmount: 150, futur: 1 }],
+      expensesHistory: [null, { date: {} }, { total: 3 }, { date: '2026-03-01', total: 42 }],
+    });
+    expect(m.history).toEqual([{ date: '2026-02-01', totalAmount: 200, ownedAmount: 150, futur: 1 }]);
+    expect(m.expensesHistory).toEqual([{ date: '2026-03-01', total: 42 }]);
+  });
+
+  it('complète des paramètres fiscaux incomplets ou abîmés, sans perdre les champs inconnus', () => {
+    const f = migrate({
+      accounts: [],
+      fiscalConfig: { salaryChargesRate: 'x', ceilings: { livretA: 30000, lep: 'abc' }, taxBrackets: [], futur: 'garde', lepHouseholdParts: '1.5', decote: 'x' },
+    }).fiscalConfig!;
+    expect(f.salaryChargesRate).toBe(DEFAULT_FISCAL_CONFIG.salaryChargesRate);
+    expect(f.ceilings).toEqual({ ...DEFAULT_FISCAL_CONFIG.ceilings, livretA: 30000 });
+    expect(f.legalMaturity).toEqual(DEFAULT_FISCAL_CONFIG.legalMaturity);
+    expect(f.taxBrackets).toEqual(DEFAULT_FISCAL_CONFIG.taxBrackets);
+    expect(f.decote).toEqual(DEFAULT_FISCAL_CONFIG.decote);
+    expect(f.lepHouseholdParts).toBe(1.5);
+    expect((f as unknown as Record<string, unknown>).futur).toBe('garde');
+    // Un champ facultatif absent le reste : son absence a un sens (barème saisi à la main…).
+    expect(f.taxScaleYear).toBeUndefined();
+    expect(f.lepIncomeCeiling).toBeUndefined();
+  });
+
+  it('garde un barème lisible, limite infinie comprise, et écarte les tranches illisibles', () => {
+    const brackets = [{ limit: 10000, rate: 0 }, { limit: 'x', rate: 0.1 }, null, { limit: null, rate: 0.3 }];
+    const f = migrate({ accounts: [], fiscalConfig: { ...DEFAULT_FISCAL_CONFIG, taxBrackets: brackets } }).fiscalConfig!;
+    expect(f.taxBrackets).toEqual([{ limit: 10000, rate: 0 }, { limit: null, rate: 0.3 }]);
+  });
+
+  it('complète des avantages salariaux incomplets ou abîmés', () => {
+    const wb = migrate({ accounts: [], workBenefits: { navigo: { active: false }, mutuelle: 'x', mealVouchers: { faceValue: '12', employerRate: null }, futur: 2 } }).workBenefits!;
+    expect(wb.navigo).toEqual({ ...DEFAULT_WORK_BENEFITS.navigo, active: false });
+    expect(wb.mutuelle).toEqual(DEFAULT_WORK_BENEFITS.mutuelle);
+    expect(wb.mealVouchers).toEqual({ ...DEFAULT_WORK_BENEFITS.mealVouchers, faceValue: 12 });
+    expect((wb as unknown as Record<string, unknown>).futur).toBe(2);
+  });
+
+  it('ne plante sur aucune forme de fichier, et reste idempotente', () => {
+    const junk: unknown[] = [null, 0, 'x', [], {}, { a: 1 }, [null], { toString: 1 }];
+    const fields = ['accounts', 'history', 'expensesHistory', 'expenses', 'goals', 'payslips', 'subscriptions', 'donations',
+      'recurringMovements', 'fiscalConfig', 'workBenefits', 'config', 'payChecklist', 'parentalRestitution', 'activePayslipId'];
+    for (const field of fields) for (const v of junk) {
+      const raw = { [field]: v };
+      const m = migrate(raw);
+      expect(m.fiscalConfig!.taxBrackets.length).toBeGreaterThan(0);
+      expect(typeof m.workBenefits!.navigo.active).toBe('boolean');
+      expect(Number.isFinite(m.config.grossAnnual)).toBe(true);
+      expect(canonicalize(migrate(m))).toBe(canonicalize(raw));
+    }
   });
 });

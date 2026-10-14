@@ -6,15 +6,17 @@ import { ChevronDown, Lightbulb, Users, User, Pencil } from 'lucide-react';
 import { SavingsAccount } from '../../types';
 import { Button } from '../Button';
 import { DeltaBadge, MoneyText, SegmentedButton, TextField } from '../ui';
-import { safeNumber, parseFrenchNumber } from '../../lib/numbers';
-import { tracksDeposits, quinzaineWithdrawalTip } from '../../lib/finance';
+import { parseFrenchNumber } from '../../lib/numbers';
+import { quinzaineWithdrawalTip } from '../../lib/finance';
 import { parseISODate } from '../../lib/dates';
 import { formatEUR, toInputAmount, frenchDay } from '../../lib/format';
-import type { Adjust, Draft, EntryMode } from './draft';
+import type { Adjust, Draft, DraftBreakdown, EntryMode } from './draft';
 
 interface AccountUpdateRowProps {
   account: SavingsAccount;
   draft: Draft;
+  /** Ce que la saisie donnera (breakdownDraft), calculé par l'écran. */
+  breakdown: DraftBreakdown;
   adjust: Adjust;
   adjustError?: string | null;
   today: string;
@@ -25,12 +27,12 @@ interface AccountUpdateRowProps {
   onBankTotalChange: (val: string) => void;
   onDepositsChange: (val: string) => void;
   onDateChange: (val: string) => void;
+  /** Ventilation corrigée à la main (`undefined` = revenir à la proposition). */
+  onInterestChange: (val: string | undefined) => void;
+  onCashChange: (val: string | undefined) => void;
   onPatchAdjust: (patch: Partial<Adjust>) => void;
   onApplyAdjust: () => void;
 }
-
-const parseDeposits = (val: string): number | undefined | null =>
-  val.trim() === '' ? undefined : parseFrenchNumber(val);
 
 /** Ligne « libellé ……… montant (écart) » du récapitulatif déplié. */
 const SummaryLine: React.FC<{ label: string; icon: React.ComponentType<{ className?: string }>; value: number; diff?: number; className?: string }> = ({ label, icon: Icon, value, diff, className = '' }) => (
@@ -49,22 +51,26 @@ const SummaryLine: React.FC<{ label: string; icon: React.ComponentType<{ classNa
 );
 
 export const AccountUpdateRow: React.FC<AccountUpdateRowProps> = ({
-  account, draft: u, adjust: a, adjustError, today, expanded, onToggle,
-  onOwnedChange, onParentalChange, onBankTotalChange, onDepositsChange, onDateChange, onPatchAdjust, onApplyAdjust,
+  account, draft: u, breakdown: b, adjust: a, adjustError, today, expanded, onToggle,
+  onOwnedChange, onParentalChange, onBankTotalChange, onDepositsChange, onDateChange, onInterestChange, onCashChange, onPatchAdjust, onApplyAdjust,
 }) => {
   const panelId = useId();
   const [mode, setMode] = useState<EntryMode>('balance');
 
-  const owned = safeNumber(u.owned, 0);
-  const parental = safeNumber(u.parental, 0);
+  // Saisie illisible : le résumé garde le solde actuel (l'erreur est sous le champ).
+  const owned = b.owned ?? account.ownedAmount;
+  const parental = b.parental ?? account.parentalCapital;
   const newTotal = owned + parental;
-  const diffOwned = Math.round((owned - account.ownedAmount) * 100) / 100;
-  const diffParental = Math.round((parental - account.parentalCapital) * 100) / 100;
+  const diffOwned = b.ownDiff;
+  const diffParental = b.parentalDiff;
   const diffTotal = Math.round((diffOwned + diffParental) * 100) / 100;
-  const depositsDraft = parseDeposits(u.deposits);
-  const tracked = tracksDeposits(account.type);
-  const depositsChanged = tracked && depositsDraft !== null && depositsDraft !== account.totalDeposits;
-  const isChanged = diffOwned !== 0 || diffParental !== 0 || depositsChanged;
+  const depositsDraft = b.deposits;
+  const tracked = b.tracked;
+  const isChanged = b.changed;
+  // Nature de l'écart de votre part : intérêts (livrets) ou versement/valorisation (placements).
+  const showInterest = !tracked && diffOwned > 0 && (b.suggestion !== null || u.interest !== undefined);
+  const offerInterest = !tracked && diffOwned > 0 && !showInterest && (account.interestRate || 0) > 0;
+  const showCash = tracked && (diffOwned !== 0 || b.cash !== 0);
 
   // Part des parents : seulement sur les comptes qui en ont une (ou si une valeur est saisie).
   const showParental = account.parentalCapital > 0 || parental > 0;
@@ -143,6 +149,7 @@ export const AccountUpdateRow: React.FC<AccountUpdateRowProps> = ({
               value={u.owned}
               aria-label={`Ma part sur ${account.name}`}
               onChange={e => onOwnedChange(e.target.value)}
+              error={b.errors.owned}
               supporting={`Actuellement ${formatEUR(account.ownedAmount, 2)}`}
             />
             </div>
@@ -156,6 +163,7 @@ export const AccountUpdateRow: React.FC<AccountUpdateRowProps> = ({
                   value={u.parental}
                   aria-label={`Part des parents sur ${account.name}`}
                   onChange={e => onParentalChange(e.target.value)}
+                  error={b.errors.parental}
                   supporting={`Actuellement ${formatEUR(account.parentalCapital, 2)}`}
                 />
               </div>
@@ -235,6 +243,44 @@ export const AccountUpdateRow: React.FC<AccountUpdateRowProps> = ({
           </div>
         </dl>
 
+        {/* Nature de l'écart de votre part : seul l'argent réellement mis de côté compte comme épargne. */}
+        {showInterest && (
+          <TextField
+            label={`Dont ${b.interestLabel.toLowerCase()}`}
+            suffix="€"
+            type="text"
+            inputMode="decimal"
+            value={u.interest ?? toInputAmount(b.interest)}
+            aria-label={`Dont intérêts sur ${account.name}`}
+            onChange={e => onInterestChange(e.target.value)}
+            className="sm:max-w-sm"
+            error={b.errors.interest}
+            supporting={<>
+              {b.suggestion ? `Intérêts ${b.suggestion.year} attendus : ${formatEUR(b.suggestion.amount, 2)}, crédités au 31 décembre. ` : ''}
+              Les intérêts ne comptent pas comme épargne ; le reste (<MoneyText value={b.rest} decimals={2} />) est un {b.rest < 0 ? 'retrait' : 'versement'}.
+            </>}
+          />
+        )}
+        {offerInterest && (
+          <Button type="button" variant="text" className="-ml-3" onClick={() => onInterestChange('0')} aria-label={`Une partie de la hausse sur ${account.name} est des intérêts`}>
+            Une partie de la hausse est des intérêts ?
+          </Button>
+        )}
+        {showCash && (
+          <TextField
+            label="Dont argent versé (+) ou retiré (−)"
+            suffix="€"
+            type="text"
+            inputMode="decimal"
+            value={u.cash ?? toInputAmount(b.cash)}
+            aria-label={`Dont argent versé sur ${account.name}`}
+            onChange={e => onCashChange(e.target.value)}
+            className="sm:max-w-sm"
+            error={b.errors.cash}
+            supporting={<>Le reste (<MoneyText value={b.rest} decimals={2} />) est une variation de valeur (gain ou perte), qui ne compte pas comme épargne.</>}
+          />
+        )}
+
         {tip && (
           <p className="flex items-start gap-2 text-sm text-on-surface rounded-xl bg-secondary-container/60 p-3">
             <Lightbulb className="w-4 h-4 shrink-0 mt-0.5 text-indigo-700 dark:text-indigo-300" aria-hidden="true" />
@@ -253,10 +299,10 @@ export const AccountUpdateRow: React.FC<AccountUpdateRowProps> = ({
               placeholder="Inconnu"
               aria-label={`Versements cumulés sur ${account.name}`}
               onChange={e => onDepositsChange(e.target.value)}
-              error={depositsDraft === null ? 'Montant non reconnu.' : undefined}
+              error={b.errors.deposits}
               supporting={depositsDraft === undefined
                 ? 'Renseignez-les une fois : ensuite, les versements de l’ajustement les mettent à jour, et le reste de l’écart compte comme gain ou perte de valeur.'
-                : depositsDraft !== null ? <>Plus-value latente : <MoneyText value={newTotal - depositsDraft} decimals={0} className="font-medium" /></> : undefined}
+                : depositsDraft !== null ? <>Plus-value latente : <MoneyText value={newTotal - depositsDraft} decimals={0} className="font-medium" />. Un versement les augmente d’autant.</> : undefined}
             />
           )}
           <TextField

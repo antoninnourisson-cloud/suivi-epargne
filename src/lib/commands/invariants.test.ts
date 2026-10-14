@@ -1,13 +1,13 @@
 // Test « par propriétés » : des milliers de séquences aléatoires (mais reproductibles,
 // générateur à graine) d'opérations et d'annulations. Après chaque pas, pour chaque compte :
-// total = part propre + part des parents au centime, part des parents jamais négative, et
+// total = part propre + part des parents au centime, parts et versements cumulés jamais négatifs, et
 // une annulation dans l'ordre inverse rend l'état d'avant à l'identique.
 import { describe, it, expect } from 'vitest';
 import { AccountType, SavingsAccount } from '../../types';
 import { round2 } from '../accountOps';
 import {
   applyPatch, CommandOk, CommandResult, CommandState,
-  quickAdd, deleteMovement, cancelDeposit, saveAccount, deleteAccount, recordRestitution, undoRestitution,
+  quickAdd, deleteMovement, cancelDeposit, saveAccount, deleteAccount, recordRestitution, undoRestitution, updateBalances,
 } from './index';
 
 /** mulberry32 : petit générateur pseudo-aléatoire à graine, sans dépendance. */
@@ -31,6 +31,8 @@ const initial = (): CommandState => ({
 const checkInvariants = (s: CommandState, where: string) => {
   for (const a of s.accounts) {
     const fine = a.parentalCapital >= 0
+      && a.ownedAmount >= -0.005
+      && (a.totalDeposits === undefined || a.totalDeposits >= 0)
       && round2(a.ownedAmount) === a.ownedAmount
       && round2(a.parentalCapital) === a.parentalCapital
       && a.totalAmount === round2(a.ownedAmount + a.parentalCapital);
@@ -91,6 +93,16 @@ const runSequence = (seed: number, steps: number) => {
       name = `${useCancel ? 'cancelDeposit' : 'deleteMovement'} ${m.id}`;
       r = useCancel ? cancelDeposit(s, { accountId: acc.id, movementId: m.id }) : deleteMovement(s, { accountId: acc.id, movementId: m.id });
       if (m.tag === 'restitution') expect(r.ok, where).toBe(false);
+    } else if (roll < 0.66) {
+      const acc = pick(accounts);
+      const owned = rnd() < 0.1 ? -cents(100) - 0.01 : cents(12000);
+      const interest = rnd() < 0.3 ? cents(300) : 0;
+      name = `updateBalances ${acc.id} ${owned}`;
+      r = updateBalances(s, { updates: [{
+        accountId: acc.id, date: '2027-01-05', owned, parental: acc.parentalCapital, deposits: acc.totalDeposits,
+        interest, cashFlow: rnd() < 0.5 ? cents(200) : 0,
+      }] });
+      if (owned < 0 || interest > Math.max(0, owned - acc.ownedAmount) + 0.005) expect(r.ok, where).toBe(false);
     } else if (roll < 0.72) {
       const acc = pick(accounts);
       const isNew = rnd() < 0.2;

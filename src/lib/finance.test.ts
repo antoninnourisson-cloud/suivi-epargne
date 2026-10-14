@@ -148,23 +148,33 @@ describe('computeIncome (super net)', () => {
     expect(withNavigo.taxAmount).toBeCloseTo(3070.53, 1);
   });
 
-  it('applique le taux forcé à l\'assiette imposable, pas au net avant impôt', () => {
-    // Assiette imposable : 32 614,35 / 12 * 10 % = 271.79
-    // (avant : netBeforeTax * 10 %, ce qui imposait aussi le Navigo).
+  it('applique le taux forcé comme le prélèvement à la source : net imposable AVANT abattement', () => {
+    // Assiette du PAS : net imposable avant l'abattement de 10 % (CGI art. 204 F), soit
+    // 36 238,16 / 12 * 10 % = 301,98 (et non 32 614,35 / 12 * 10 % = 271,79).
     const forced = computeIncome(
       { ...baseInput, taxRateManual: 10 },
       LEGACY_CFG,
       NO_BENEFITS
     );
-    expect(forced.effectiveMonthlyTax).toBeCloseTo(271.79, 1);
+    expect(forced.netTaxableBeforeAllowance).toBeCloseTo(36238.16, 1);
+    expect(forced.effectiveMonthlyTax).toBeCloseTo(301.98, 1);
+    expect(forced.superNet).toBeCloseTo(forced.superNetRaw - 301.98, 1);
 
     const forcedWithNavigo = computeIncome(
       { ...baseInput, taxRateManual: 10 },
       LEGACY_CFG,
       { ...NO_BENEFITS, navigo: { active: true, basePrice: 90, refundRate: 50 } }
     );
-    // Même impôt forcé qu'sans Navigo : le remboursement n'est plus imposé.
-    expect(forcedWithNavigo.effectiveMonthlyTax).toBeCloseTo(271.79, 1);
+    // Même impôt forcé que sans Navigo : le remboursement n'est pas imposé.
+    expect(forcedWithNavigo.effectiveMonthlyTax).toBeCloseTo(301.98, 1);
+  });
+
+  it('forcer le taux automatique redonne exactement l\'impôt du barème (même assiette)', () => {
+    const auto = computeIncome(baseInput, LEGACY_CFG, NO_BENEFITS);
+    // 3 070,53 / 36 238,16 = 8,473 % (et non 9,41 % rapporté à l'assiette après abattement).
+    expect(auto.autoRate).toBeCloseTo(8.473, 2);
+    const forced = computeIncome({ ...baseInput, taxRateManual: auto.autoRate }, LEGACY_CFG, NO_BENEFITS);
+    expect(forced.effectiveMonthlyTax).toBeCloseTo(auto.monthlyTax, 6);
   });
 
   it('plafonne l\'abattement forfaitaire de 10%', () => {
@@ -210,15 +220,16 @@ describe('computeIncome (super net)', () => {
     expect(withNavigo.navigoGain).toBeCloseTo(45, 2);
   });
 
-  it('utilise navigoBase/navigoRate en repli quand l\'avantage est inactif', () => {
+  it('Navigo inactif ⇒ 0 €, même si les anciens champs navigoBase/navigoRate traînent dans la config', () => {
     const r = computeIncome(
       { ...baseInput, navigoBase: 90.8, navigoRate: 67.24 },
       LEGACY_CFG,
       NO_BENEFITS
     );
-    expect(r.navigoGain).toBeCloseTo(61.05, 2);
-    // Et toujours hors assiette imposable.
-    expect(r.netTaxableYear).toBeCloseTo(32614.35, 1);
+    expect(r.navigoGain).toBe(0);
+    expect(r.netBeforeTax).toBeCloseTo(2913, 2);
+    const off = computeIncome(baseInput, LEGACY_CFG, NO_BENEFITS);
+    expect(r.superNet).toBeCloseTo(off.superNet, 6);
   });
 
   it('ne produit aucun NaN sur un revenu nul', () => {

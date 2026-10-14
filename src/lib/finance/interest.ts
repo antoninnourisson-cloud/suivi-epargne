@@ -338,6 +338,31 @@ export const computeExpectedYearInterest = (
 };
 
 /**
+ * Intérêts à proposer quand un solde remonte (« Actualiser ») : ceux de l'année précédente,
+ * crédités au 31 décembre (livrets réglementés, la plupart des livrets bancaires, fonds
+ * euros) et visibles en début d'année, moins ce qui a déjà été enregistré hors épargne
+ * depuis le 31/12. Proposés du 1er janvier au 31 mars seulement : en cours d'année, la
+ * hausse d'un livret est un versement (ses intérêts ne tombent qu'au 31 décembre).
+ * `null` si rien à proposer. `account` : le compte AVANT l'actualisation.
+ */
+export const suggestCreditedInterest = (
+  account: Parameters<typeof computeAccruedInterest>[0],
+  dateISO: string
+): { year: number; amount: number } | null => {
+  const d = parseISODate(dateISO);
+  if (Number.isNaN(d.getTime()) || d.getMonth() > 2) return null;
+  const year = d.getFullYear() - 1;
+  const expected = computeAccruedInterest(account, year, new Date(year + 1, 0, 1));
+  if (!(expected > 0.005)) return null;
+  const from = `${year}-12-31`;
+  const recorded = (account.movements || [])
+    .filter(m => (m.kind === 'adjustment' || m.kind === 'valuation') && m.date >= from && m.date <= dateISO)
+    .reduce((s, m) => s + signedAmount(m), 0);
+  const amount = Math.round(Math.max(0, expected - Math.max(0, recorded)) * 100) / 100;
+  return amount > 0.005 ? { year, amount } : null;
+};
+
+/**
  * Retrait d'un livret réglementé en cours de quinzaine : il ne rapporte déjà plus rien
  * depuis le 1er ou le 16. Attendre la prochaine borne garde la quinzaine en cours.
  * `null` si sans objet (autre compte, ou retrait pile le 1er ou le 16).

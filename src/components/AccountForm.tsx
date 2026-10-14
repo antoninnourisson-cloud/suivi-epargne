@@ -98,8 +98,12 @@ export const AccountForm: React.FC<AccountFormProps> = ({ onSave, initialData, o
   };
   const removeTag = (t: string) => setTags(tags.filter(x => x !== t));
 
+  // Total inférieur à la part des parents : votre part serait négative (refusé, comme dans saveAccount).
+  const ownedNegative = ownedAmount < -0.004;
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (ownedNegative) return;
     // parseFrenchNumber et non parseFloat : « 2,4 » donnait 2 %.
     const newRate = parseFrenchNumber(interestRate) ?? 0;
 
@@ -128,7 +132,10 @@ export const AccountForm: React.FC<AccountFormProps> = ({ onSave, initialData, o
       tags: tags.length > 0 ? tags : undefined,
       euroFundPct: type === AccountType.ASSURANCE_VIE && euroFundPct.trim() !== '' && (parseFrenchNumber(euroFundPct) ?? -1) >= 0 ? Math.min(100, parseFrenchNumber(euroFundPct)!) : undefined,
       managementFee: showFee && managementFee.trim() !== '' && (parseFrenchNumber(managementFee) ?? -1) >= 0 ? parseFrenchNumber(managementFee)! : undefined,
-      totalDeposits: showDeposits && parsedDeposits !== null && parsedDeposits !== undefined && parsedDeposits >= 0 ? parsedDeposits : undefined,
+      // Saisie illisible : la valeur connue est gardée (jamais effacée en silence).
+      totalDeposits: !showDeposits ? undefined
+        : parsedDeposits === null ? initialData?.totalDeposits
+        : parsedDeposits !== undefined && parsedDeposits >= 0 ? parsedDeposits : undefined,
     });
   };
 
@@ -165,6 +172,8 @@ export const AccountForm: React.FC<AccountFormProps> = ({ onSave, initialData, o
               {showParental && (<div className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-amber-100 dark:border-amber-900"><label className="text-[11px] font-black text-amber-700 dark:text-amber-300 block mb-1"><Users className="w-3 h-3" /> Part des parents (€)</label><NumberInput ariaLabel="Part des parents (€)" value={parentalCapital} onChange={handleParentalChange} className={`${moneyInputClass} text-amber-700 dark:text-amber-300`} min={0} /></div>)}
               <div className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-emerald-100 dark:border-emerald-900"><label className="text-[11px] font-black text-emerald-700 dark:text-emerald-300 block mb-1">Ma part nette (€)</label><NumberInput ariaLabel="Ma part nette (€)" value={ownedAmount} onChange={handleOwnedChange} className={`${moneyInputClass} text-emerald-800 dark:text-emerald-300`} min={0} /></div>
             </div>
+            {ownedNegative && <p role="alert" className="mt-3 text-sm font-medium text-rose-700 dark:text-rose-300">Le solde total est inférieur à la part des parents : votre part serait négative. Corrigez le total ou la part des parents.</p>}
+            {initialData && <p className="mt-3 text-xs text-slate-600 dark:text-slate-300">Un écart de solde saisi ici est enregistré comme une correction, qui ne compte pas comme épargne. Pour un versement ou des intérêts, passez plutôt par « Actualiser ».</p>}
           </div>
 
           <div className="md:col-span-2 grid grid-cols-2 md:grid-cols-3 gap-4 bg-slate-50 dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-700">
@@ -200,7 +209,7 @@ export const AccountForm: React.FC<AccountFormProps> = ({ onSave, initialData, o
               <div className="col-span-2">
                 <label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase mb-1 block">Versements cumulés (€)</label>
                 <input type="text" inputMode="decimal" value={totalDeposits} onChange={e => setTotalDeposits(e.target.value)} placeholder="Inconnu" className="w-full p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-bold" />
-                {parsedDeposits === null && <p className="text-[11px] text-rose-700 mt-1">Montant non reconnu : il ne sera pas enregistré.</p>}
+                {parsedDeposits === null && <p className="text-[11px] text-rose-700 mt-1">Montant non reconnu : il ne sera pas enregistré (la valeur précédente est gardée).</p>}
                 {parsedDeposits !== null && parsedDeposits !== undefined && totalAmount > 0 && (
                   <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">Plus-value latente : <b>{formatEUR(totalAmount - parsedDeposits, 0)}</b>{type === AccountType.PEA && <> · reste {formatEUR(Math.max(0, PEA_DEPOSIT_CEILING - parsedDeposits))} de versements possibles</>}</p>
                 )}
@@ -237,7 +246,7 @@ export const AccountForm: React.FC<AccountFormProps> = ({ onSave, initialData, o
         </div>
         <div className="mt-8 sticky bottom-[calc(4.5rem+env(safe-area-inset-bottom))] md:static flex justify-end items-center gap-3 bg-white/95 dark:bg-slate-800/95 py-3 -mx-2 px-2 rounded-xl">
           {onCancel && <Button type="button" variant="ghost" onClick={onCancel}>Annuler</Button>}
-          <Button type="submit" className="px-10 py-4">Enregistrer</Button>
+          <Button type="submit" className="px-10 py-4" disabled={ownedNegative}>Enregistrer</Button>
         </div>
       </form>
     </div>

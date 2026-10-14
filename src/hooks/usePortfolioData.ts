@@ -10,7 +10,7 @@ import { applyMovement, balanceChangeMovements, canWithdrawOwn } from '../lib/ac
 import { migrate, canonicalize, emptyData, isFromNewerApp, withoutDeviceOnlyFields, validateImport, APP_SCHEMA_VERSION } from '../lib/schema';
 import { sealJSON, openJSON } from '../services/localVault';
 import { localTodayISO } from '../lib/dates';
-import { GlobalAppData, SavingsAccount, AccountMovement, PortfolioSnapshot, ExpenseSnapshot } from '../types';
+import { GlobalAppData, SavingsAccount, AccountMovement, PortfolioSnapshot, ExpenseSnapshot, WorkBenefits } from '../types';
 import {
   findConfigFile, createConfigFile, readConfigFile, updateConfigFile,
   getFileRevision, setOnAuthLost, ConflictError, ConcurrentWriteError, ApiError, writeMonthlyBackup, listBackups, DriveBackup,
@@ -44,6 +44,11 @@ const resolve = <T,>(u: Updater<T>, prev: T): T => (typeof u === 'function' ? (u
 
 const localMonthKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 
+// Nouvelles tentatives après un échec de requête (délai dépassé, Drive saturé…) alors que le
+// navigateur se croit en ligne : il n'émettra jamais l'événement `online`.
+const RETRY_DELAYS_MS = [5_000, 30_000, 120_000];
+const browserOnline = () => typeof navigator === 'undefined' || navigator.onLine !== false;
+
 export type SyncFailure = 'conflict' | 'session' | 'offline' | 'notfound' | 'error';
 /** Classe une erreur de Drive en une seule catégorie, la même pour tous les chemins. */
 const classifySyncError = (err: unknown): SyncFailure => {
@@ -67,9 +72,22 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
   const [sessionExpired, setSessionExpired] = useState(false);
   // Le fichier vient d'une version plus récente de l'app : lecture seule jusqu'à la mise à jour.
   const [appOutdated, setAppOutdated] = useState(false);
-  const [isOffline, setIsOffline] = useState(!navigator.onLine);
+  // Hors ligne au sens large : navigateur hors ligne, ou requête Drive impossible (délai
+  // dépassé, DNS…). Dans le second cas, de nouvelles tentatives sont programmées.
+  const [isOffline, setIsOffline] = useState(!browserOnline());
+  // Le chargement Drive a échoué : rien n'est chargé, donc rien ne doit être écrit.
+  const [loadFailed, setLoadFailed] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   const [localBackup, setLocalBackup] = useState<StoredSnapshot | null>(null);
+  // Relance la sauvegarde automatique sans modification du document (bouton « Réessayer »,
+  // nouvelle tentative programmée, retour au premier plan).
+  const [retryTick, setRetryTick] = useState(0);
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const retryAttemptRef = useRef(0);
+  const retrySyncRef = useRef<() => void>(() => {});
+  // Dernier état vu par les écouteurs (onglets, retour au premier plan) sans les réabonner.
+  const statusRef = useRef({ isOffline, syncError, syncConflict, sessionExpired, appOutdated, loadFailed, isLoadingData, localBackup, isAuthenticated });
+  statusRef.current = { isOffline, syncError, syncConflict, sessionExpired, appOutdated, loadFailed, isLoadingData, localBackup, isAuthenticated };
 
   const driveRevisionRef = useRef<string | null>(null);
   const driveFileIdRef = useRef<string | null>(null);
@@ -110,6 +128,34 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
   const buildData = useCallback((): GlobalAppData => ({
     ...withoutDeviceOnlyFields(doc), schemaVersion: APP_SCHEMA_VERSION, lastView: lastViewRef.current,
   }), [doc]);
+  /** Même chose, pour l'état le plus récent (écouteurs, fin d'écriture, déconnexion). */
+  const currentData = (): GlobalAppData => ({
+    ...withoutDeviceOnlyFields(docRef.current), schemaVersion: APP_SCHEMA_VERSION, lastView: lastViewRef.current,
+  });
+  /** Des modifications affichées ne sont pas encore sur Drive. */
+  const hasLocalEdits = () => hasLoadedRef.current && canonicalize(currentData()) !== persistedRef.current;
+
+  // Miroir local chiffré : seule la dernière demande est écrite (un chiffrement plus lent
+  // ne remet jamais une version plus ancienne par-dessus), et seulement si Drive n'a pas
+  // rattrapé entre-temps.
+  const mirrorSeqRef = useRef(0);
+  const writeMirror = (data: GlobalAppData) => {
+    const seq = ++mirrorSeqRef.current;
+    const snapshot: StoredSnapshot = { savedAt: new Date().toISOString(), fileId: driveFileIdRef.current ?? undefined, data };
+    sealJSON(snapshot).then(sealed => {
+      if (seq === mirrorSeqRef.current && canonicalize(data) !== persistedRef.current) lsSet(BACKUP_KEY, sealed);
+    }).catch(() => { /* filet de secours seulement */ });
+  };
+
+  /** Programme une nouvelle tentative (5 s, 30 s, puis toutes les 2 min). */
+  const scheduleRetry = () => {
+    clearTimeout(retryTimerRef.current);
+    if (!browserOnline()) return; // l'événement `online` relancera
+    const delay = RETRY_DELAYS_MS[Math.min(retryAttemptRef.current, RETRY_DELAYS_MS.length - 1)];
+    retryAttemptRef.current += 1;
+    retryTimerRef.current = setTimeout(() => retrySyncRef.current(), delay);
+  };
+  const resetRetry = () => { clearTimeout(retryTimerRef.current); retryAttemptRef.current = 0; };
 
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   // Garde-fou : tant qu'un chargement Drive n'a pas réussi, aucune sauvegarde (évite
@@ -131,11 +177,15 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
   }, []);
 
   useEffect(() => {
-    const on = () => setIsOffline(false);
+    const on = () => {
+      resetRetry();
+      setIsOffline(false);
+      if (statusRef.current.loadFailed) retrySyncRef.current(); // chargement raté hors ligne
+    };
     const off = () => setIsOffline(true);
     window.addEventListener('online', on);
     window.addEventListener('offline', off);
-    return () => { window.removeEventListener('online', on); window.removeEventListener('offline', off); };
+    return () => { window.removeEventListener('online', on); window.removeEventListener('offline', off); clearTimeout(retryTimerRef.current); };
   }, []);
 
   /** Remplace tout le document (chargement, import, restauration). */
@@ -148,58 +198,84 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
   const markPersisted = (data: unknown) => { persistedRef.current = canonicalize(data); };
 
   // --- CHARGEMENT ---
-  const loadDriveData = useCallback(async () => {
+  /**
+   * Charge le fichier Drive. Les modifications locales pas encore sur Drive (quarantaine,
+   * miroir, et état affiché s'il diffère) sont comparées au fichier : la plus récente qui
+   * en diffère est proposée (bannière « sauvegarde locale ») et gardée en quarantaine.
+   * `keepUnsynced: false` seulement pour un abandon explicite (« Recharger l'autre version »).
+   */
+  const loadDriveData = useCallback(async (opts?: { keepUnsynced?: boolean }) => {
+    const keepUnsynced = opts?.keepUnsynced !== false;
+    // Relevé AVANT toute attente : le miroir peut être effacé dès que l'état affiché
+    // redevient celui de Drive.
+    const inMemory: StoredSnapshot | null = keepUnsynced && hasLocalEdits()
+      ? { savedAt: new Date().toISOString(), fileId: driveFileIdRef.current ?? undefined, data: currentData() }
+      : null;
+    const storedCopies = keepUnsynced ? [PENDING_KEY, BACKUP_KEY].map(key => [key, lsGet(key)] as const) : [];
+    clearTimeout(retryTimerRef.current);
     setIsLoadingData(true);
     setSessionExpired(false);
     setSyncConflict(false);
     otherVersionRef.current = null;
     setSyncError(false);
+    setLoadFailed(false);
     try {
       let fileId = await findConfigFile();
       if (!fileId) fileId = await createConfigFile(emptyData());
       setDriveFileId(fileId);
       const raw: unknown = await readConfigFile(fileId);
-      if (raw) {
-        setAppOutdated(isFromNewerApp(raw));
-        applyData(raw);
-        const savedView = (raw as { lastView?: string }).lastView;
-        if (savedView) setLastView(savedView);
-        markPersisted(raw);
-        // Ancien fichier contenant encore la clé Gemini : une écriture la retire de Drive.
-        if ((raw as { config?: { geminiApiKey?: string } }).config?.geminiApiKey) persistedRef.current = '';
+      if (!raw) throw new Error('EMPTY_FILE');
+      setAppOutdated(isFromNewerApp(raw));
+      applyData(raw);
+      const savedView = (raw as { lastView?: string }).lastView;
+      if (savedView) setLastView(savedView);
+      markPersisted(raw);
+      // Ancien fichier contenant encore la clé Gemini : une écriture la retire de Drive.
+      if ((raw as { config?: { geminiApiKey?: string } }).config?.geminiApiKey) persistedRef.current = '';
 
-        // En cas d'échec on laisse `null` : la sauvegarde auto refusera d'écrire plutôt
-        // que d'écraser sans contrôle de concurrence.
-        try { driveRevisionRef.current = await getFileRevision(fileId); } catch { driveRevisionRef.current = null; }
+      // En cas d'échec on laisse `null` : la sauvegarde auto refusera d'écrire plutôt
+      // que d'écraser sans contrôle de concurrence.
+      try { driveRevisionRef.current = await getFileRevision(fileId); } catch { driveRevisionRef.current = null; }
 
-        // Modifications locales qui n'ont jamais atteint Drive (sync bloquée avant fermeture) ?
+      // Modifications locales qui n'ont jamais atteint Drive (sync bloquée avant fermeture) ?
+      // Les deux copies sont lues : une vieille quarantaine ne cache plus un miroir plus récent.
+      const rawCanonical = canonicalize(raw);
+      const candidates: StoredSnapshot[] = [];
+      if (inMemory && canonicalize(inMemory.data) !== rawCanonical) candidates.push(inMemory);
+      for (const [key, stored] of storedCopies) {
+        if (!stored) continue;
         try {
-          const stored = lsGet(PENDING_KEY) || lsGet(BACKUP_KEY);
-          if (stored) {
-            const snap = await openJSON<StoredSnapshot>(stored);
-            // Une sauvegarde rattachée à un AUTRE fichier Drive appartient à un autre compte.
-            const sameAccount = !snap.fileId || snap.fileId === fileId;
-            if (sameAccount && canonicalize(snap.data) !== canonicalize(raw)) {
-              setLocalBackup(snap);
-              lsSet(PENDING_KEY, await sealJSON({ ...snap, fileId }));
-            } else {
-              lsDel(PENDING_KEY);
-              lsDel(BACKUP_KEY);
-            }
+          const snap = await openJSON<StoredSnapshot>(stored);
+          // Une copie rattachée à un AUTRE fichier Drive appartient à un autre compte : ni
+          // proposée, ni effacée.
+          if (snap.fileId && snap.fileId !== fileId) continue;
+          if (canonicalize(snap.data) === rawCanonical) {
+            if (lsGet(key) === stored) lsDel(key); // déjà sur Drive
+            continue;
           }
-        } catch { /* sauvegarde illisible : ignorée */ }
-
-        driveFileIdRef.current = fileId;
-        hasLoadedRef.current = true;
+          candidates.push(snap);
+        } catch { /* copie illisible : laissée en place */ }
       }
+      const newest = candidates.reduce<StoredSnapshot | null>((best, s) => (!best || (s.savedAt || '') > (best.savedAt || '') ? s : best), null);
+      if (newest) {
+        setLocalBackup(newest);
+        try { lsSet(PENDING_KEY, await sealJSON({ ...newest, fileId })); } catch { /* reste proposée en mémoire */ }
+      }
+
+      driveFileIdRef.current = fileId;
+      hasLoadedRef.current = true;
+      resetRetry();
     } catch (error) {
-      // Un chargement raté doit être VISIBLE (sinon indiscernable d'une perte totale).
+      // Un chargement raté doit être VISIBLE (sinon indiscernable d'une perte totale), et
+      // rien ne sera écrit sur Drive tant qu'un chargement n'a pas réussi.
       console.error('Erreur chargement', error);
+      setLoadFailed(true);
       if (classifySyncError(error) === 'session') setSessionExpired(true);
-      else setSyncError(true);
+      else { setSyncError(true); scheduleRetry(); }
     } finally {
       setIsLoadingData(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [applyData, setLastView]);
 
   /** Mode démo (développement uniquement) : données fictives en mémoire, aucune écriture Drive. */
@@ -230,6 +306,18 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
       setActivePayslipId: top('activePayslipId'),
       setFiscalConfig: top('fiscalConfig') as (u: Updater<NonNullable<Doc['fiscalConfig']>>) => void,
       setWorkBenefits: top('workBenefits') as (u: Updater<NonNullable<Doc['workBenefits']>>) => void,
+      /**
+       * Modifie les avantages à partir de leur état le plus récent (seuls les champs touchés
+       * changent), et garde la copie du Navigo dans config (ancien format, encore lu).
+       */
+      updateWorkBenefits: (update: (prev: WorkBenefits) => WorkBenefits) => setDoc(d => {
+        const workBenefits = update(d.workBenefits!);
+        const { navigo } = workBenefits;
+        return {
+          ...d, workBenefits,
+          config: navigo.active ? { ...d.config, navigoBase: navigo.basePrice, navigoRate: navigo.refundRate } : d.config,
+        };
+      }),
       setGrossAnnual: cfg('grossAnnual'),
       setLeisureBudget: cfg('leisureBudget'),
       setProjectSavings: cfg('projectSavings'),
@@ -313,7 +401,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
     lsDel(BACKUP_KEY);
     setLocalBackup(null);
     setSyncConflict(false);
-    void loadDriveData();
+    void loadDriveData({ keepUnsynced: false });
   }, [loadDriveData, adoptOtherVersion]);
 
   const announceSave = (fileId: string, revision: string | null) =>
@@ -333,8 +421,13 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
     markPersisted(saved);
     announceSave(fileId, revision);
     setSyncError(false);
+    resetRetry();
+    if (browserOnline()) setIsOffline(false);
     setLastSavedAt(new Date());
-    lsDel(BACKUP_KEY);
+    // Le miroir n'est effacé que si Drive a TOUT rattrapé : une saisie faite pendant cette
+    // écriture n'est pas encore sur Drive, son miroir est réécrit tout de suite.
+    const current = currentData();
+    if (canonicalize(current) === persistedRef.current) lsDel(BACKUP_KEY); else writeMirror(current);
     maybeMonthlyBackup(saved);
   };
 
@@ -358,18 +451,33 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
     setSyncConflict(true);
   };
 
-  const handleSyncFailure = (err: unknown) => {
+  /**
+   * `ours` : la version qu'on tentait d'écrire. Sur un conflit, elle est mise en quarantaine
+   * locale chiffrée : elle survit à une fermeture de l'app avant que l'utilisateur tranche.
+   */
+  const handleSyncFailure = (err: unknown, ours?: GlobalAppData) => {
     const kind = classifySyncError(err);
-    if (kind === 'conflict') setSyncConflict(true);
-    else if (kind === 'session') setSessionExpired(true);
-    else if (kind === 'offline') setIsOffline(true);
-    else { setSyncError(true); console.error('Erreur de sauvegarde', err); }
+    if (kind === 'conflict') {
+      setSyncConflict(true);
+      if (ours) {
+        const snap: StoredSnapshot = { savedAt: new Date().toISOString(), fileId: driveFileIdRef.current ?? undefined, data: ours };
+        sealJSON(snap).then(sealed => lsSet(PENDING_KEY, sealed)).catch(() => { /* reste en mémoire et dans le miroir */ });
+      }
+    } else if (kind === 'session') setSessionExpired(true);
+    else if (kind === 'offline') { setIsOffline(true); scheduleRetry(); }
+    else {
+      // 'notfound' est traité par l'appelant (fichier retrouvé ou recréé).
+      setSyncError(true);
+      if (kind === 'error') scheduleRetry();
+      console.error('Erreur de sauvegarde', err);
+    }
     return kind;
   };
 
   // Résout un conflit en écrasant la version distante (choix explicite de l'utilisateur).
   const forceSaveToDrive = useCallback(async () => {
-    if (!driveFileId || appOutdated) return;
+    // Jamais d'écriture sans chargement réussi : on écraserait le fichier par un état vide.
+    if (!driveFileId || appOutdated || !hasLoadedRef.current) return;
     try {
       const data = buildData();
       const newRevision = await runExclusive(() => updateConfigFile(driveFileId, data)); // sans contrôle : choix explicite
@@ -400,40 +508,98 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
   useEffect(() => { isSavingRef.current = isSaving; }, [isSaving]);
 
   // --- COORDINATION MULTI-ONGLETS ---
+  /**
+   * Sauvegarde annoncée par un autre onglet. Appliquée seulement si cet onglet n'a rien en
+   * attente : modifications pas encore sur Drive, écriture en cours, conflit, hors ligne,
+   * session expirée ou version trop ancienne de l'app. Sinon rien n'est appliqué et la
+   * révision connue reste l'ancienne : la prochaine écriture lèvera le conflit (choix
+   * explicite) au lieu d'effacer nos saisies ou d'écraser celles de l'autre onglet.
+   */
+  const applyAnnouncedSave = async (announcement: string | null) => {
+    if (!announcement) return;
+    try {
+      const { fileId, revision } = JSON.parse(announcement) as { fileId?: string; revision?: string | null };
+      if (!fileId || fileId !== driveFileIdRef.current) return;
+      if (!revision || String(revision) === driveRevisionRef.current) return;
+      const busy = () => {
+        const s = statusRef.current;
+        return isSavingRef.current || hasLocalEdits() || s.syncConflict || s.sessionExpired || s.isOffline || s.appOutdated || s.isLoadingData;
+      };
+      const keepForConflict = () => {
+        // Révision inconnue : la sauvegarde la relirait et écraserait l'autre onglet sans
+        // contrôle. Une valeur qui ne correspond à aucune révision force le conflit.
+        if (!driveRevisionRef.current) driveRevisionRef.current = 'superseded-by-other-tab';
+      };
+      if (busy()) { keepForConflict(); return; }
+      const remote: unknown = await readConfigFile(fileId);
+      if (busy() || fileId !== driveFileIdRef.current) { keepForConflict(); return; }
+      // Fichier écrit par une version plus récente : lecture seule, comme au chargement.
+      setAppOutdated(isFromNewerApp(remote));
+      driveRevisionRef.current = String(revision);
+      markPersisted(remote);
+      if (canonicalize(remote) !== canonicalize(docRef.current)) applyData(remote);
+    } catch { /* annonce illisible ou lecture ratée : le conflit naturel jouera */ }
+  };
+  const applyAnnouncedSaveRef = useRef(applyAnnouncedSave);
+  applyAnnouncedSaveRef.current = applyAnnouncedSave;
   useEffect(() => {
-    const onStorage = async (e: StorageEvent) => {
-      if (e.key !== LAST_SAVE_KEY || !e.newValue) return;
-      try {
-        const { fileId, revision } = JSON.parse(e.newValue);
-        if (!fileId || fileId !== driveFileIdRef.current) return;
-        if (!revision || revision === driveRevisionRef.current) return;
-        // Modifications locales en cours : la prochaine sauvegarde lèvera le conflit.
-        if (isSavingRef.current) return;
-        const remote: unknown = await readConfigFile(fileId);
-        driveRevisionRef.current = String(revision);
-        markPersisted(remote);
-        if (canonicalize(remote) !== canonicalize(docRef.current)) applyData(remote);
-      } catch { /* annonce illisible ou lecture ratée : le conflit naturel jouera */ }
-    };
-    const listener = (e: StorageEvent) => { void onStorage(e); };
+    const listener = (e: StorageEvent) => { if (e.key === LAST_SAVE_KEY) void applyAnnouncedSaveRef.current(e.newValue); };
     window.addEventListener('storage', listener);
     return () => window.removeEventListener('storage', listener);
-  }, [applyData]);
+  }, []);
 
   // --- MIROIR LOCAL (seulement tant que Drive n'est pas à jour) ---
   useEffect(() => {
     if (!hasLoadedRef.current) return;
     const timer = setTimeout(() => {
       const data = buildData();
-      if (canonicalize(data) === persistedRef.current) { lsDel(BACKUP_KEY); return; }
-      const snapshot: StoredSnapshot = { savedAt: new Date().toISOString(), fileId: driveFileIdRef.current ?? undefined, data };
+      if (canonicalize(data) === persistedRef.current) { mirrorSeqRef.current += 1; lsDel(BACKUP_KEY); return; }
       // Chiffrée (voir localVault) ; réécrite seulement si Drive n'a pas rattrapé entre-temps.
-      sealJSON(snapshot).then(sealed => {
-        if (canonicalize(data) !== persistedRef.current) lsSet(BACKUP_KEY, sealed);
-      }).catch(() => { /* filet de secours seulement */ });
+      writeMirror(data);
     }, 600);
     return () => clearTimeout(timer);
   }, [buildData]);
+
+  // --- NOUVELLES TENTATIVES ---
+  /**
+   * « Réessayer » : recharge si le chargement a échoué (jamais d'écriture sans données
+   * chargées), sinon relance la sauvegarde automatique, avec son contrôle de révision.
+   */
+  const retrySync = useCallback(() => {
+    clearTimeout(retryTimerRef.current);
+    const s = statusRef.current;
+    if (!s.isAuthenticated || s.isLoadingData || s.sessionExpired) return;
+    if (!hasLoadedRef.current || s.loadFailed) { void loadDriveData(); return; }
+    if (browserOnline()) setIsOffline(false);
+    setSyncError(false);
+    setRetryTick(t => t + 1);
+  }, [loadDriveData]);
+  retrySyncRef.current = retrySync;
+
+  // Retour au premier plan : nouvelle tentative si la synchro est en échec, mise à jour
+  // depuis un autre onglet sinon ; en arrière-plan, le miroir est écrit sans attendre
+  // (le système peut fermer l'app à tout moment).
+  useEffect(() => {
+    const wake = () => {
+      if (document.visibilityState === 'hidden') {
+        if (hasLocalEdits()) writeMirror(currentData());
+        return;
+      }
+      const s = statusRef.current;
+      if (s.loadFailed || (hasLoadedRef.current && (s.syncError || (s.isOffline && browserOnline())))) retrySync();
+      else void applyAnnouncedSaveRef.current(lsGet(LAST_SAVE_KEY));
+    };
+    const onPageHide = () => { if (hasLocalEdits()) writeMirror(currentData()); };
+    document.addEventListener('visibilitychange', wake);
+    window.addEventListener('focus', wake);
+    window.addEventListener('pagehide', onPageHide);
+    return () => {
+      document.removeEventListener('visibilitychange', wake);
+      window.removeEventListener('focus', wake);
+      window.removeEventListener('pagehide', onPageHide);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [retrySync]);
 
   // --- SAUVEGARDE AUTO ---
   useEffect(() => {
@@ -456,7 +622,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
         onSaved(driveFileId, newRevision, data);
       } catch (err) {
         if (err instanceof ConcurrentWriteError) onConcurrentWrite(driveFileId, data, err);
-        else if (handleSyncFailure(err) === 'notfound') {
+        else if (handleSyncFailure(err, data) === 'notfound') {
           // Fichier supprimé hors de l'app : on le retrouve ou on le recrée.
           setSyncError(false);
           try {
@@ -487,7 +653,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
     })(), 2000);
     return () => clearTimeout(saveTimeoutRef.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [doc, isAuthenticated, driveFileId, isLoadingData, buildData, syncConflict, sessionExpired, appOutdated, isOffline, runExclusive]);
+  }, [doc, isAuthenticated, driveFileId, isLoadingData, buildData, syncConflict, sessionExpired, appOutdated, isOffline, runExclusive, retryTick]);
 
   // Réveil périodique : les points mensuels s'ouvrent sur le nouveau mois même sans saisie.
   const [monthTick, setMonthTick] = useState(() => localMonthKey(new Date()));
@@ -576,10 +742,27 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
   }, [applyData]);
 
   /**
-   * Déconnexion : purge l'état ET toutes les copies locales (sinon se reconnecter avec un
-   * autre compte proposerait de restaurer les données du précédent).
+   * Quelque chose n'est pas (ou pas sûrement) sur Drive : modifications affichées pas encore
+   * écrites, copie locale proposée et pas encore tranchée, ou, si rien n'a pu être chargé,
+   * copies locales jamais examinées. À vérifier avant une déconnexion.
+   */
+  const hasUnsyncedChanges = useCallback((): boolean => {
+    if (!hasLoadedRef.current) return !!(lsGet(PENDING_KEY) || lsGet(BACKUP_KEY));
+    return !!statusRef.current.localBackup || hasLocalEdits();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /**
+   * Déconnexion : purge l'état en mémoire. Les modifications pas encore sur Drive ne sont
+   * JAMAIS effacées ici : elles restent dans la copie locale chiffrée, rattachée à ce fichier
+   * Drive (une reconnexion avec un autre compte ne les propose pas), et seront proposées à la
+   * prochaine connexion. Seul l'utilisateur peut les abandonner (« Ignorer », « Recharger
+   * l'autre version »).
    */
   const resetData = useCallback(() => {
+    resetRetry();
+    mirrorSeqRef.current += 1; // une copie en cours de chiffrement ne doit plus rien écrire
+    if (hasLocalEdits()) writeMirror(currentData()); // dernières saisies (< 600 ms) comprises
     hasLoadedRef.current = false;
     driveRevisionRef.current = null;
     driveFileIdRef.current = null;
@@ -589,12 +772,12 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
     setSyncConflict(false);
     setSessionExpired(false);
     setAppOutdated(false);
+    setLoadFailed(false);
     setDoc(emptyData());
     setDriveFileId(null);
-    lsDel(BACKUP_KEY);
-    lsDel(PENDING_KEY);
     lsDel(LAST_BACKUP_MONTH_KEY);
     setLocalBackup(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const c = doc.config;
@@ -643,12 +826,15 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
     localBackup,
     lastSavedAt,
     isOffline,
+    loadFailed,
 
     // Actions
     loadDriveData,
     loadDemoData,
     reloadFromDrive,
     forceSaveToDrive,
+    retrySync,
+    hasUnsyncedChanges,
     restoreLocalBackup,
     dismissLocalBackup,
     updateAccountsWithMovements,

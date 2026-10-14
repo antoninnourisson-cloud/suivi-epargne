@@ -178,3 +178,41 @@ describe('mois passés', () => {
     expect(p.amounts).toEqual([300, 400, 450]);
   });
 });
+
+describe('simulateur : argent bloqué, impôt et surplus non placé', () => {
+  const base = { fiscal: CFG, monthlyPlan: 0, horizon: 6, today: '2027-01-01', restitution: { done: true } } as const;
+
+  it("un achat n'est jamais payé avec un PER ou un PEE bloqué", () => {
+    const accounts = [
+      acc({ id: 'cc', name: 'CC', type: AccountType.COMPTE_COURANT, ownedAmount: 500 }),
+      acc({ id: 'la', name: 'Livret A', type: AccountType.LIVRET_A, ownedAmount: 1000 }),
+      acc({ id: 'pee', name: 'PEE', type: AccountType.PEE, ownedAmount: 5000, openingDate: '2025-01-01' }),
+      acc({ id: 'per', name: 'PER', type: AccountType.PER, ownedAmount: 20000 }),
+    ];
+    const out = simulate({ ...base, accounts, scenarios: [{ kind: 'purchase', id: 'p', amount: 8000, month: 1 }] }).purchases[0];
+    expect(out.takenFrom.map(t => t.accountId)).toEqual(['cc', 'la']);
+    expect(out.shortfall).toBeCloseTo(6500, 2);
+  });
+
+  it("vendre un placement imposable coûte l'impôt sur la part de gains", () => {
+    const accounts = [
+      acc({ id: 'cc', name: 'CC', type: AccountType.COMPTE_COURANT, ownedAmount: 1000 }),
+      acc({ id: 'av', name: 'AV', type: AccountType.ASSURANCE_VIE, ownedAmount: 3000, totalDeposits: 1500, openingDate: '2025-01-01' }),
+    ];
+    const out = simulate({ ...base, accounts, scenarios: [{ kind: 'purchase', id: 'p', amount: 2000, month: 1 }] }).purchases[0];
+    const fromAv = out.takenFrom.find(t => t.accountId === 'av')!.amount;
+    expect(fromAv).toBeGreaterThan(1100);
+    expect(out.tax).toBeCloseTo(fromAv - 1000, 2);
+    expect(out.shortfall).toBe(0);
+  });
+
+  it('livrets pleins sans AV ni PEA : le surplus reste sur le compte courant (pas perdu, pas sur le PEE)', () => {
+    const accounts = [
+      acc({ id: 'la', name: 'Livret A', type: AccountType.LIVRET_A, ownedAmount: 22950, ceiling: 22950 }),
+      acc({ id: 'ldds', name: 'LDDS', type: AccountType.LDDS, ownedAmount: 12000, ceiling: 12000 }),
+      acc({ id: 'pee', name: 'PEE', type: AccountType.PEE, ownedAmount: 1000 }),
+    ];
+    const r = simulate({ ...base, accounts, monthlyPlan: 500 });
+    expect(r.baselineEnd).toBeCloseTo(22950 + 12000 + 1000 + 500 * 6, 2);
+  });
+});

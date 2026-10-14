@@ -6,9 +6,12 @@ import { DEFAULT_STANDARD_ALLOWANCE_CAP, DEFAULT_STANDARD_ALLOWANCE_MIN, DEFAULT
 export interface IncomeInput {
   grossAnnual: number;
   extraMonthlyIncome: number;
-  navigoBase: number;   // fallback rétro-compat si workBenefits.navigo inactif
-  navigoRate: number;   // idem
-  taxRateManual: number; // > 0 pour forcer un taux d'imposition
+  /** @deprecated Ignoré : `workBenefits.navigo` est la seule source (inactif ⇒ 0 €). Lu seulement par migrate(). */
+  navigoBase?: number;
+  /** @deprecated Idem. */
+  navigoRate?: number;
+  /** > 0 pour forcer un taux de prélèvement à la source (appliqué au net imposable AVANT l'abattement de 10 %). */
+  taxRateManual: number;
 }
 
 export interface IncomeBreakdown {
@@ -23,7 +26,7 @@ export interface IncomeBreakdown {
   netTaxableBeforeAllowance: number; // salaires imposables avant l'abattement de 10 % (case 1AJ)
   taxAmount: number;          // impôt annuel (barème)
   monthlyTax: number;         // impôt mensuel (barème auto)
-  autoRate: number;           // taux effectif du barème (%)
+  autoRate: number;           // taux du barème équivalent au prélèvement à la source (%, sur le net imposable avant abattement)
   effectiveMonthlyTax: number; // tient compte du taux forcé éventuel
   superNetRaw: number;        // net avant impôt, après mutuelle/tickets
   superNet: number;           // reste à vivre réel (après impôt effectif)
@@ -94,9 +97,11 @@ export const computeIncome = (
   const socialCharges = grossMonth * fiscalConfig.salaryChargesRate;
   const netSalaryOnly = grossMonth - socialCharges;
 
+  // Seule source : l'avantage Navigo. Désactivé ⇒ aucun remboursement (les anciens champs
+  // config.navigoBase / navigoRate ne servent plus qu'à migrate()).
   const navigoGain = workBenefits.navigo.active
     ? workBenefits.navigo.basePrice * (workBenefits.navigo.refundRate / 100)
-    : (input.navigoBase || 0) * ((input.navigoRate || 0) / 100);
+    : 0;
 
   const mutuelleCost = workBenefits.mutuelle.active
     ? workBenefits.mutuelle.totalCost * (1 - workBenefits.mutuelle.employerRate / 100)
@@ -136,13 +141,17 @@ export const computeIncome = (
 
   const taxAmount = applyDecote(computeIncomeTax(netTaxableYear, fiscalConfig.taxBrackets), fiscalConfig);
   const monthlyTax = taxAmount / 12;
-  const autoRate = netTaxableYear > 0 ? (taxAmount / netTaxableYear) * 100 : 0;
+  // Taux équivalent au prélèvement à la source : l'assiette du PAS est le net imposable
+  // AVANT la déduction de 10 % (CGI art. 204 F ; BOI-IR-PAS-20-20-10 § 60). Même base que
+  // le taux forcé ci-dessous : forcer ce taux redonne exactement l'impôt du barème.
+  const autoRate = netAnnualBeforeAllowance > 0 && taxAmount > 0 ? (taxAmount / netAnnualBeforeAllowance) * 100 : 0;
 
-  // Le taux forcé doit porter sur la MÊME assiette imposable que le barème automatique :
-  // l'appliquer à netBeforeTax revenait à imposer le remboursement Navigo, non imposable.
+  // Taux forcé (celui de la fiche de paie / de l'avis) : appliqué comme le vrai prélèvement
+  // à la source, au net imposable avant abattement, hors remboursement Navigo (exonéré).
+  // L'appliquer après l'abattement sous-estimait la retenue d'environ 10 %.
   const effectiveMonthlyTax =
     input.taxRateManual > 0
-      ? (netTaxableYear / 12) * (input.taxRateManual / 100)
+      ? (Math.max(0, netAnnualBeforeAllowance) / 12) * (input.taxRateManual / 100)
       : monthlyTax;
 
   const superNetRaw = netBeforeTax - mutuelleCost - swileCost;

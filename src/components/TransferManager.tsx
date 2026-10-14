@@ -1,20 +1,24 @@
 // src/components/TransferManager.tsx
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { SavingsAccount, RecurringMovement } from '../types';
 import { Button } from './Button';
 import { ArrowRightLeft, Download, Calendar, ArrowDown, CheckCircle, AlertCircle, Wallet, Repeat } from 'lucide-react';
 import { RecurringManager } from './RecurringManager';
 import { useSaveFeedback } from '../hooks/useSaveFeedback';
-import { safeNumber } from '../lib/numbers';
+import { useToast } from './Toast';
+import { parseFrenchNumber, safeNumber } from '../lib/numbers';
 import { localTodayISO } from '../lib/dates';
-import { depositsAfterCashFlow } from '../lib/finance';
+import { quickAdd, type CommandPatch } from '../lib/commands';
 import { formatEUR } from '../lib/format';
 import { onTablistKeyDown } from '../lib/tablist';
 import { canWithdrawOwn } from '../lib/accountOps';
 
 interface TransferManagerProps {
   accounts: SavingsAccount[];
+  /** Repli : enregistre le compte déjà calculé par la commande (sans annulation). */
   onUpdateAccountsComplex: (updates: { account: SavingsAccount, date: string, cashFlow?: number }[]) => void;
+  /** Applique le résultat d'une commande (comme `commit` dans App) : active « Annuler » après un dépôt. */
+  onCommit?: (patch: CommandPatch) => void;
   /** `false` si le virement est refusé (part des parents, compte introuvable). */
   onLinkedTransfer: (sourceId: string, destId: string, amount: number, date: string) => boolean;
   // Horodatage de la dernière écriture Drive CONFIRMÉE (voir useSaveFeedback).
@@ -23,8 +27,12 @@ interface TransferManagerProps {
   onUpdateRecurring: React.Dispatch<React.SetStateAction<RecurringMovement[]>>;
 }
 
-export const TransferManager: React.FC<TransferManagerProps> = ({ accounts, onUpdateAccountsComplex, onLinkedTransfer, lastSavedAt, recurringMovements, onUpdateRecurring }) => {
+export const TransferManager: React.FC<TransferManagerProps> = ({ accounts, onUpdateAccountsComplex, onCommit, onLinkedTransfer, lastSavedAt, recurringMovements, onUpdateRecurring }) => {
   const today = localTodayISO();
+  const addToast = useToast();
+  // État le plus récent pour l'annulation (le toast survit à ce rendu).
+  const accountsRef = useRef(accounts);
+  accountsRef.current = accounts;
   const [activeTab, setActiveTab] = useState<'deposit' | 'transfer' | 'recurring'>('deposit');
   const [opDate, setOpDate] = useState<string>(today);
   const { status: saveStatus, markPending } = useSaveFeedback(lastSavedAt);
@@ -42,26 +50,28 @@ export const TransferManager: React.FC<TransferManagerProps> = ({ accounts, onUp
   // Les échecs de validation étaient de simples `return` silencieux (ou une `alert()`
   // native) : l'utilisateur cliquait et rien ne se passait, sans explication. On remonte
   // désormais la raison dans le formulaire lui-même.
+  // Dépôt : même commande que l'ajout rapide (arrondi, versements cumulés, annulation exacte).
   const handleDeposit = (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
 
     if (!depositAccountId) { setFormError('Choisissez un compte de destination.'); return; }
-    const amount = safeNumber(depositAmount, 0);
+    const amount = parseFrenchNumber(depositAmount);
+    if (amount === null) { setFormError('Montant non reconnu : saisissez par exemple 150 ou 150,50.'); return; }
     if (amount <= 0) { setFormError('Saisissez un montant supérieur à 0.'); return; }
 
-    const targetAcc = accounts.find(a => a.id === depositAccountId);
-    if (!targetAcc) { setFormError('Ce compte est introuvable.'); return; }
-
-    const updatedAcc: SavingsAccount = {
-      ...targetAcc,
-      totalAmount: targetAcc.totalAmount + amount,
-      ownedAmount: targetAcc.ownedAmount + amount,
-      totalDeposits: depositsAfterCashFlow(targetAcc, amount),
-    };
+    const r = quickAdd({ accounts }, { accountId: depositAccountId, amount, type: 'IN', label: 'Dépôt', date: opDate });
+    if (!r.ok) { setFormError(r.code === 'not-found' ? 'Ce compte est introuvable.' : r.error); return; }
 
     markPending();
-    onUpdateAccountsComplex([{ account: updatedAcc, date: opDate, cashFlow: amount }]);
+    if (onCommit) {
+      onCommit(r.next);
+      addToast?.({ message: r.message, kind: 'success', action: { label: 'Annuler', onClick: () => onCommit(r.undo({ accounts: accountsRef.current })) } });
+    } else {
+      // Compte déjà calculé (mouvement « Dépôt » compris) : le hook le reprend tel quel.
+      const updated = r.next.accounts?.find(a => a.id === depositAccountId);
+      if (updated) onUpdateAccountsComplex([{ account: updated, date: opDate }]);
+    }
     setDepositAmount('');
   };
 

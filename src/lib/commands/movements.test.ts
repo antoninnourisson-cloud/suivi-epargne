@@ -63,13 +63,53 @@ describe('deleteMovement', () => {
     const r = ok(deleteMovement(s0, { accountId: 'av', movementId: 'v1' }));
     const s1 = applyPatch(s0, r.next);
     expect(r.message).toBe('Virement supprimé (2 lignes)');
-    expect(acc(s1, 'av')).toMatchObject({ ownedAmount: 4000, totalAmount: 4000, totalDeposits: 4000, movements: [] });
+    // Le versement retiré sort aussi des versements cumulés.
+    expect(acc(s1, 'av')).toMatchObject({ ownedAmount: 4000, totalAmount: 4000, totalDeposits: 3700, movements: [] });
     expect(acc(s1, 'cc')).toMatchObject({ ownedAmount: 1700, totalAmount: 1700, movements: [] });
     expect(applyPatch(s1, r.undo(s1))).toEqual(s0);
   });
 
   it('refuse un mouvement disparu', () => {
     expect(deleteMovement(state(), { accountId: 'la', movementId: 'nope' })).toMatchObject({ ok: false, code: 'not-found' });
+  });
+
+  it('versement supprimé depuis le journal : versements cumulés réduits d’autant', () => {
+    const s0 = state();
+    const s1 = applyPatch(s0, ok(quickAdd(s0, { accountId: 'av', amount: 100, type: 'IN', label: 'Versement', date: '2026-10-01', id: 'd' })).next);
+    expect(acc(s1, 'av').totalDeposits).toBe(4100);
+    const r = ok(deleteMovement(s1, { accountId: 'av', movementId: 'd' }));
+    expect(acc(applyPatch(s1, r.next), 'av')).toMatchObject({ ownedAmount: 4300, totalDeposits: 4000 });
+  });
+
+  it('refuse une suppression qui rendrait la part propre négative (solde initial déjà dépensé)', () => {
+    const s0: CommandState = { accounts: [{ id: 'l', name: 'LDDS', institution: 'B', type: AccountType.LDDS, totalAmount: 100, ownedAmount: 100, parentalCapital: 0,
+      movements: [{ id: 'i', date: '2026-01-01', amount: 5000, label: 'Solde initial', type: 'IN', tag: 'initial' }, { id: 'o', date: '2026-02-01', amount: 4900, label: 'Retrait', type: 'OUT' }] }] };
+    const plan = planMovementDeletion(s0.accounts, 'l', 'i');
+    expect(plan).toMatchObject({ ok: false, code: 'forbidden' });
+    expect(!plan.ok && plan.error).toMatch(/passerait à -4\s900,00\s€/);
+    expect(deleteMovement(s0, { accountId: 'l', movementId: 'i' })).toMatchObject({ ok: false, code: 'forbidden' });
+    // Le retrait, lui, se supprime.
+    expect(deleteMovement(s0, { accountId: 'l', movementId: 'o' }).ok).toBe(true);
+  });
+});
+
+describe('annulations hors ordre', () => {
+  it('versements cumulés justes après l’annulation d’un versement plus ancien', () => {
+    const s0 = state();
+    const a = ok(quickAdd(s0, { accountId: 'av', amount: 100, type: 'IN', label: 'A', date: '2026-10-01', id: 'A' }));
+    const s1 = applyPatch(s0, a.next);
+    const s2 = applyPatch(s1, ok(quickAdd(s1, { accountId: 'av', amount: 50, type: 'IN', label: 'B', date: '2026-10-02', id: 'B' })).next);
+    const s3 = applyPatch(s2, a.undo(s2));
+    expect(acc(s3, 'av')).toMatchObject({ ownedAmount: 4350, totalAmount: 4350, totalDeposits: 4050 });
+  });
+
+  it('refuse (sans rien changer) une annulation qui rendrait la part propre négative', () => {
+    const s0 = state();
+    const a = ok(quickAdd(s0, { accountId: 'cc', amount: 100, type: 'IN', label: 'A', date: '2026-10-01', id: 'A' }));
+    const s1 = applyPatch(s0, a.next);
+    const s2 = applyPatch(s1, ok(quickAdd(s1, { accountId: 'cc', amount: 1500, type: 'OUT', label: 'B', date: '2026-10-02', id: 'B' })).next);
+    expect(acc(s2, 'cc').ownedAmount).toBe(0);
+    expect(applyPatch(s2, a.undo(s2))).toEqual(s2);
   });
 });
 
@@ -113,8 +153,22 @@ describe('saveAccount / deleteAccount', () => {
     const s1 = applyPatch(s0, r.next);
     expect(s1.accounts.map(a => a.id)).toEqual(['la', 'av', 'cc']);
     expect(acc(s1, 'la')).toMatchObject({ name: 'LA', ownedAmount: 8300, parentalCapital: 6900, totalAmount: 15200 });
-    expect(acc(s1, 'la').movements?.slice(-2).map(m => [m.label, m.amount, m.kind])).toEqual([['Correction de solde (+)', 100, undefined], ['Part des parents (-)', 100, 'parental']]);
+    // Une correction de fiche n'est pas de l'épargne.
+    expect(acc(s1, 'la').movements?.slice(-2).map(m => [m.label, m.amount, m.kind])).toEqual([['Correction de solde (+)', 100, 'adjustment'], ['Part des parents (-)', 100, 'parental']]);
     expect(applyPatch(s1, r.undo(s1))).toEqual(s0);
+  });
+
+  it('placement : un changement des versements cumulés est un versement, le reste une valorisation', () => {
+    const s0 = state();
+    const av = acc(s0, 'av');
+    const r = ok(saveAccount(s0, { account: { ...av, ownedAmount: 4600, totalAmount: 4600, totalDeposits: 4200 }, today: '2026-10-07' }));
+    expect(acc(applyPatch(s0, r.next), 'av').movements?.slice(-2).map(m => [m.label, m.amount, m.kind])).toEqual([['Versement (+)', 200, undefined], ['Valorisation (+)', 100, 'valuation']]);
+  });
+
+  it('refuse un total inférieur à la part des parents et une saisie illisible', () => {
+    const s0 = state();
+    expect(saveAccount(s0, { account: edited({ ownedAmount: -1, totalAmount: 6999 }), today: '2026-10-07' })).toMatchObject({ ok: false, code: 'invalid' });
+    expect(saveAccount(s0, { account: edited({ ownedAmount: Number.NaN }), today: '2026-10-07' })).toMatchObject({ ok: false, code: 'invalid' });
   });
 
   it('nouveau compte : solde initial, annulable ; part des parents négative refusée', () => {
@@ -124,6 +178,13 @@ describe('saveAccount / deleteAccount', () => {
     expect(acc(s1, 'n')).toMatchObject({ totalAmount: 500, movements: [{ label: 'Solde initial', amount: 500, tag: 'initial' }] });
     expect(applyPatch(s1, r.undo(s1))).toEqual(s0);
     expect(saveAccount(s0, { account: edited({ parentalCapital: -1 }), today: '2026-10-07' })).toMatchObject({ ok: false, code: 'invalid' });
+  });
+
+  it('un « Solde initial » supprimé ne réduit pas les versements cumulés saisis avec la fiche', () => {
+    const s0: CommandState = { accounts: [{ id: 'p', name: 'PEA', institution: 'B', type: AccountType.PEA, totalAmount: 500, ownedAmount: 500, parentalCapital: 0, totalDeposits: 450,
+      movements: [{ id: 'i', date: '2026-01-01', amount: 500, label: 'Solde initial', type: 'IN', tag: 'initial' }] }] };
+    const r = ok(deleteMovement(s0, { accountId: 'p', movementId: 'i' }));
+    expect(acc(applyPatch(s0, r.next), 'p')).toMatchObject({ ownedAmount: 0, totalDeposits: 450 });
   });
 
   it('suppression de compte : l’annulation le remet à sa place', () => {

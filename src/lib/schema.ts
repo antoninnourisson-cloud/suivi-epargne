@@ -5,8 +5,8 @@
 // entre dans l'app : chargement Drive, import, restauration locale, synchronisation entre
 // onglets, et lecture par le serveur de notifications.
 // ================================================
-import { GlobalAppData } from '../types';
-import { DEFAULT_FISCAL_CONFIG, DEFAULT_WORK_BENEFITS } from '../constants';
+import { ExpenseSnapshot, FiscalConfig, GlobalAppData, PortfolioSnapshot, TaxBracket } from '../types';
+import { DEFAULT_DECOTE, DEFAULT_FISCAL_CONFIG, DEFAULT_WORK_BENEFITS } from '../constants';
 import { normalizeAccounts, dedupeMonthlySnapshots, migrateFiscalConfig } from './finance';
 import { round2 } from './money';
 
@@ -85,6 +85,92 @@ const sanitizeAccount = (a: Record<string, unknown>): Record<string, unknown> =>
   return out;
 };
 
+/**
+ * Objet complété par ses valeurs par défaut, en profondeur : chaque champ du modèle garde
+ * son type (nombre fini, booléen, texte, sous-objet), un champ illisible reprend sa valeur
+ * par défaut, et les champs inconnus sont conservés.
+ */
+const withDefaults = <T extends object>(raw: unknown, defaults: T): T => {
+  const src = isObj(raw) ? raw : {};
+  const out: Record<string, unknown> = { ...src };
+  for (const [k, d] of Object.entries(defaults)) {
+    const v = src[k];
+    if (typeof d === 'number') out[k] = finite(v) ?? d;
+    else if (typeof d === 'boolean') out[k] = typeof v === 'boolean' ? v : d;
+    else if (typeof d === 'string') out[k] = typeof v === 'string' ? v : d;
+    else if (isObj(d)) out[k] = withDefaults(v, d);
+  }
+  return out as T;
+};
+
+// Points mensuels : une date au moins « AAAA-MM » et des montants lisibles, sinon écartés
+// (le tri et le dédoublonnage lisent la date, les graphiques les montants).
+const MONTH_DATE = /^\d{4}-\d{2}/;
+const sanitizeSnapshots = <T,>(v: unknown, amounts: readonly string[]): T[] => arr<unknown>(v).flatMap(s => {
+  if (!isObj(s) || typeof s.date !== 'string' || !MONTH_DATE.test(s.date)) return [];
+  const out: Record<string, unknown> = { ...s };
+  for (const k of amounts) {
+    const n = finite(s[k]);
+    if (n === undefined) return [];
+    out[k] = n;
+  }
+  return [out as T];
+});
+
+/** Barème lisible (taux fini, limite finie ou infinie) ; `undefined` s'il n'en reste rien. */
+const sanitizeBrackets = (v: unknown): TaxBracket[] | undefined => {
+  if (!Array.isArray(v)) return undefined;
+  const ok = v.flatMap(b => {
+    if (!isObj(b)) return [];
+    const rate = finite(b.rate);
+    if (rate === undefined) return [];
+    // Infinity devient `null` dans le JSON du fichier : les deux veulent dire « sans limite ».
+    if (b.limit === null || b.limit === undefined || b.limit === Infinity) return [{ ...b, rate } as unknown as TaxBracket];
+    const limit = finite(b.limit);
+    return limit === undefined ? [] : [{ ...b, rate, limit } as unknown as TaxBracket];
+  });
+  return ok.length > 0 ? ok : undefined;
+};
+
+const FISCAL_NUMBERS = [
+  'salaryChargesRate', 'socialChargesCapital', 'standardAllowance', 'socialChargesLifeInsurance', 'standardAllowanceMin',
+  'standardAllowanceCap', 'lepCeilingPerHalfPart', 'donation75Ceiling', 'lepIncomeCeiling', 'lepHouseholdParts',
+  'taxScaleYear', 'paramsReviewedYear',
+] as const;
+
+/**
+ * Paramètres fiscaux d'un fichier remis d'aplomb : champs illisibles retirés AVANT la mise à
+ * niveau (qui se fonde sur l'absence d'un champ), puis champs obligatoires complétés par les
+ * valeurs par défaut. Les champs facultatifs absents le restent (leur absence a un sens :
+ * barème saisi à la main, alerte LEP désactivée…).
+ */
+const sanitizeFiscalConfig = (raw: unknown): FiscalConfig => {
+  if (!isObj(raw)) return migrateFiscalConfig(DEFAULT_FISCAL_CONFIG);
+  const f: Record<string, unknown> = { ...raw };
+  for (const k of FISCAL_NUMBERS) {
+    if (f[k] === undefined) continue;
+    const n = finite(f[k]);
+    if (n === undefined) delete f[k]; else f[k] = n;
+  }
+  if (f.decote !== undefined) {
+    if (isObj(f.decote)) f.decote = withDefaults(f.decote, DEFAULT_DECOTE); else delete f.decote;
+  }
+  if (f.taxBracketsHistory !== undefined) {
+    const h = arr<unknown>(f.taxBracketsHistory).filter(e => isObj(e) && Array.isArray(e.brackets));
+    if (h.length > 0) f.taxBracketsHistory = h; else delete f.taxBracketsHistory;
+  }
+  const m = migrateFiscalConfig(f as unknown as FiscalConfig);
+  return {
+    ...m,
+    salaryChargesRate: m.salaryChargesRate ?? DEFAULT_FISCAL_CONFIG.salaryChargesRate,
+    socialChargesCapital: m.socialChargesCapital ?? DEFAULT_FISCAL_CONFIG.socialChargesCapital,
+    standardAllowance: m.standardAllowance ?? DEFAULT_FISCAL_CONFIG.standardAllowance,
+    ceilings: withDefaults(m.ceilings, DEFAULT_FISCAL_CONFIG.ceilings),
+    legalMaturity: withDefaults(m.legalMaturity, DEFAULT_FISCAL_CONFIG.legalMaturity),
+    taxBrackets: sanitizeBrackets(m.taxBrackets) ?? DEFAULT_FISCAL_CONFIG.taxBrackets,
+  };
+};
+
 /** Le fichier a été écrit par une version plus récente de l'app que celle-ci. */
 export const isFromNewerApp = (raw: unknown): boolean =>
   isObj(raw) && typeof raw.schemaVersion === 'number' && raw.schemaVersion > APP_SCHEMA_VERSION;
@@ -97,28 +183,31 @@ export const isFromNewerApp = (raw: unknown): boolean =>
 export const migrate = (raw: unknown): GlobalAppData => {
   const r = isObj(raw) ? raw : {};
   const cfgRaw = isObj(r.config) ? r.config : {};
-  const config = { ...DEFAULT_CONFIG, ...cfgRaw } as GlobalAppData['config'];
+  const config = withDefaults(cfgRaw, DEFAULT_CONFIG);
   // Ancien format : l'avantage Navigo vivait dans config (navigoBase / navigoRate).
+  // Fichier abîmé ou incomplet : chaque avantage est complété champ par champ.
   const workBenefits = isObj(r.workBenefits)
-    ? (r.workBenefits as unknown as GlobalAppData['workBenefits'])
+    ? withDefaults(r.workBenefits, DEFAULT_WORK_BENEFITS)
     : { ...DEFAULT_WORK_BENEFITS, navigo: { active: true, basePrice: Number(cfgRaw.navigoBase) || 90.80, refundRate: Number(cfgRaw.navigoRate) || 67.24 } };
   const { lastView: _lastView, ...rest } = r;
+  // Listes d'objets : une entrée qui n'est pas un objet (null, texte…) ferait planter les écrans.
+  const objects = <T,>(v: unknown) => arr<unknown>(v).filter(isObj) as unknown as T[];
   return {
     ...rest,
     schemaVersion: APP_SCHEMA_VERSION,
     accounts: normalizeAccounts(arr<unknown>(r.accounts).filter(isObj).map(sanitizeAccount) as unknown as GlobalAppData['accounts']),
-    expenses: arr(r.expenses),
-    history: dedupeMonthlySnapshots(arr(r.history)),
-    expensesHistory: dedupeMonthlySnapshots(arr(r.expensesHistory)),
-    goals: arr(r.goals),
-    payslips: arr(r.payslips),
-    recurringMovements: arr(r.recurringMovements),
-    subscriptions: arr(r.subscriptions),
-    donations: arr(r.donations),
-    payChecklist: (r.payChecklist as GlobalAppData['payChecklist']) || undefined,
-    parentalRestitution: (r.parentalRestitution as GlobalAppData['parentalRestitution']) || undefined,
-    activePayslipId: (r.activePayslipId as string) || undefined,
-    fiscalConfig: migrateFiscalConfig((isObj(r.fiscalConfig) ? r.fiscalConfig : DEFAULT_FISCAL_CONFIG) as unknown as NonNullable<GlobalAppData['fiscalConfig']>),
+    expenses: objects(r.expenses),
+    history: dedupeMonthlySnapshots(sanitizeSnapshots<PortfolioSnapshot>(r.history, ['totalAmount', 'ownedAmount'])),
+    expensesHistory: dedupeMonthlySnapshots(sanitizeSnapshots<ExpenseSnapshot>(r.expensesHistory, ['total'])),
+    goals: objects(r.goals),
+    payslips: objects(r.payslips),
+    recurringMovements: objects(r.recurringMovements),
+    subscriptions: objects(r.subscriptions),
+    donations: objects(r.donations),
+    payChecklist: isObj(r.payChecklist) ? (r.payChecklist as unknown as GlobalAppData['payChecklist']) : undefined,
+    parentalRestitution: isObj(r.parentalRestitution) ? (r.parentalRestitution as unknown as GlobalAppData['parentalRestitution']) : undefined,
+    activePayslipId: typeof r.activePayslipId === 'string' && r.activePayslipId ? r.activePayslipId : undefined,
+    fiscalConfig: sanitizeFiscalConfig(r.fiscalConfig),
     workBenefits,
     config,
   } as GlobalAppData;

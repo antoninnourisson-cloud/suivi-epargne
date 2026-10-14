@@ -3,6 +3,7 @@
 // ================================================
 import React, { useState, useEffect, useMemo, useRef, useCallback, Suspense } from 'react';
 import { SavingsAccount, PayslipRecord } from './types';
+import { clearStoredDrafts } from './components/update/draft';
 import { usePortfolioData } from './hooks/usePortfolioData';
 import { useTheme } from './hooks/useTheme';
 import { Dialog, DialogState, emptyDialog } from './components/Dialog';
@@ -481,7 +482,30 @@ const App: React.FC = () => {
     if (isBackendEnabled()) await disablePush().catch(() => undefined);
     await handleSignOut();
     setIsAuthenticated(false);
+    // Les modifications pas encore sur Drive restent en copie locale chiffrée (voir resetData).
     data.resetData();
+    clearStoredDrafts(); // brouillons d'« Actualiser » de cet onglet
+  };
+
+  /**
+   * Déconnexion demandée par l'utilisateur : si quelque chose n'est pas encore sur Drive, on
+   * le dit et on laisse annuler (sur ordinateur comme sur mobile). `alwaysConfirm` : le
+   * bouton du mobile, plus facile à toucher par erreur, demande toujours confirmation.
+   */
+  const requestLogout = (alwaysConfirm: boolean) => {
+    if (data.hasUnsyncedChanges()) {
+      setDialog({
+        open: true, kind: 'confirm', danger: true,
+        title: 'Modifications pas encore sur Drive',
+        message: 'Des modifications ne sont pas encore sur Drive. Si vous vous déconnectez maintenant, elles resteront seulement sur cet appareil, dans une copie chiffrée qui vous sera proposée à votre prochaine connexion avec ce compte Google. Annulez pour attendre la fin de l\'envoi ou exporter vos données d\'abord.',
+        confirmLabel: 'Me déconnecter quand même',
+        onConfirm: () => { void handleLogout(); },
+      });
+    } else if (alwaysConfirm) {
+      setDialog({ open: true, kind: 'confirm', title: 'Se déconnecter ?', message: 'Les données restent sur votre Drive ; il faudra vous reconnecter avec Google.', confirmLabel: 'Se déconnecter', onConfirm: () => { void handleLogout(); } });
+    } else {
+      void handleLogout();
+    }
   };
 
   // --- ACTIONS METIER ---
@@ -712,7 +736,7 @@ const App: React.FC = () => {
           <NavButton active={view === 'settings'} onClick={() => setView('settings')} icon={SettingsIcon} label="Paramètres" />
         </nav>
         <div className="px-3 py-3 border-t border-outline-variant">
-            <button onClick={handleLogout} className="w-full h-12 flex items-center gap-3 px-4 text-error hover:bg-error/8 rounded-full font-medium text-sm transition-colors"><LogOut className="w-5 h-5" aria-hidden="true" /> Déconnexion</button>
+            <button onClick={() => requestLogout(false)} className="w-full h-12 flex items-center gap-3 px-4 text-error hover:bg-error/8 rounded-full font-medium text-sm transition-colors"><LogOut className="w-5 h-5" aria-hidden="true" /> Déconnexion</button>
             <button onClick={() => { openSettingsSection('about'); setView('settings'); }} className="w-full mt-1 px-4 text-left text-[11px] font-medium text-on-surface-variant hover:text-on-surface" title="Historique des mises à jour dans Paramètres">Pécule · version {LATEST_VERSION}{typeof __BUILD_SHA__ !== "undefined" && __BUILD_SHA__ !== "dev" ? ` · ${__BUILD_SHA__}` : ""}</button>
         </div>
       </aside>
@@ -728,7 +752,7 @@ const App: React.FC = () => {
             </span>
           </div>
           <button onClick={toggleTheme} className="p-2.5 -m-1 rounded-full text-on-surface-variant hover:bg-on-surface/8" title="Thème" aria-label="Changer de thème">{isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}</button>
-          <button onClick={() => setDialog({ open: true, kind: 'confirm', title: 'Se déconnecter ?', message: 'Les données restent sur votre Drive ; il faudra vous reconnecter avec Google.', confirmLabel: 'Se déconnecter', onConfirm: () => { void handleLogout(); } })} className="p-2.5 -m-1 rounded-full text-error hover:bg-error/8" aria-label="Se déconnecter"><LogOut className="w-4 h-4" /></button>
+          <button onClick={() => requestLogout(true)} className="p-2.5 -m-1 rounded-full text-error hover:bg-error/8" aria-label="Se déconnecter"><LogOut className="w-4 h-4" /></button>
         </div>
       </header>
 
@@ -737,8 +761,9 @@ const App: React.FC = () => {
         <div className="max-w-7xl mx-auto pb-20">
             {/* --- BANNIÈRES DE SYNCHRONISATION --- */}
             {data.isOffline && (
-              <div role="status" className="mb-4 inline-flex items-center gap-2 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-full px-3 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-200">
-                <WifiOff className="w-4 h-4 shrink-0" aria-hidden="true" /> Hors ligne : vos modifications partiront sur Drive au retour du réseau.
+              <div role="status" className="mb-4 inline-flex flex-wrap items-center gap-2 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl px-3 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-200">
+                <WifiOff className="w-4 h-4 shrink-0" aria-hidden="true" /> Hors ligne ou Drive injoignable : vos modifications restent sur cet appareil et partiront sur Drive dès que possible.
+                <button onClick={data.retrySync} className="underline underline-offset-2 hover:text-slate-900 dark:hover:text-white">Réessayer</button>
               </div>
             )}
             {data.appOutdated && (
@@ -764,8 +789,12 @@ const App: React.FC = () => {
             )}
             {data.syncError && !data.sessionExpired && !data.syncConflict && !data.isOffline && (
               <div role="alert" className="mb-4 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-xl p-3 text-rose-700 dark:text-rose-300 text-sm font-bold flex items-center justify-between gap-3">
-                <span className="flex items-center gap-2"><AlertTriangle className="w-4 h-4 shrink-0"/> La dernière sauvegarde a échoué.</span>
-                <button onClick={data.forceSaveToDrive} className="bg-rose-600 hover:bg-rose-700 text-white px-3 py-1.5 rounded-lg font-bold text-xs shrink-0">Réessayer</button>
+                <span className="flex items-center gap-2"><AlertTriangle className="w-4 h-4 shrink-0"/> {data.loadFailed
+                  ? 'Impossible de charger vos données depuis Drive (rien n\'y a été modifié). Nouvel essai automatique.'
+                  : 'La dernière sauvegarde a échoué. Nouvel essai automatique.'}</span>
+                {/* Recharge si le chargement a échoué, sinon réécrit avec contrôle de révision :
+                    jamais d'écriture forcée ici. */}
+                <button onClick={data.retrySync} className="bg-rose-600 hover:bg-rose-700 text-white px-3 py-1.5 rounded-lg font-bold text-xs shrink-0">Réessayer</button>
               </div>
             )}
             {data.localBackup && (
@@ -823,8 +852,8 @@ const App: React.FC = () => {
                 setPaydayAmount={data.setPaydayAmount}
             />}
 
-            {view === 'transfers' && <TransferManager accounts={data.accounts} onUpdateAccountsComplex={data.updateAccountsWithMovements} onLinkedTransfer={data.executeLinkedTransfer} lastSavedAt={data.lastSavedAt} recurringMovements={data.recurringMovements} onUpdateRecurring={data.setRecurringMovements} />}
-            {view === 'update' && <AccountUpdate accounts={data.accounts} onUpdateAccountsComplex={data.updateAccountsWithMovements} lastSavedAt={data.lastSavedAt} onAddAccount={() => { setView('accounts'); setEditingAccount(undefined); setShowForm(true); }} />}
+            {view === 'transfers' && <TransferManager accounts={data.accounts} onUpdateAccountsComplex={data.updateAccountsWithMovements} onCommit={commit} onLinkedTransfer={data.executeLinkedTransfer} lastSavedAt={data.lastSavedAt} recurringMovements={data.recurringMovements} onUpdateRecurring={data.setRecurringMovements} />}
+            {view === 'update' && <AccountUpdate accounts={data.accounts} onUpdateAccountsComplex={data.updateAccountsWithMovements} onCommit={commit} lastSavedAt={data.lastSavedAt} onAddAccount={() => { setView('accounts'); setEditingAccount(undefined); setShowForm(true); }} />}
 
             {view === 'yield' && <Yield accounts={data.accounts} fiscalConfig={data.fiscalConfig} monthPlan={monthPlan} savingsSplit={data.savingsSplit} restitutionInMonths={restitutionInMonths} />}
             {view === 'simulator' && <Simulator accounts={data.accounts} fiscalConfig={data.fiscalConfig} monthPlan={monthPlan} savingsSplit={data.savingsSplit} paydayDay={data.paydayDay} payslips={data.payslips} trackingStartDate={data.trackingStartDate} parentalRestitution={data.parentalRestitution} />}
@@ -913,16 +942,12 @@ const App: React.FC = () => {
                     motivationSlot={<MotivationSettings gamification={data.config.gamification} goodMonthThreshold={data.config.goodMonthThreshold} onChange={patch => data.patchConfig(patch)} />}
                     paydayDay={data.paydayDay}
                     onOpenPayday={() => setView('pilot')}
-                    onSave={(newFiscal, newBenefits, newGeminiKey, newPickerKey) => {
-                       data.setFiscalConfig(newFiscal);
-                       data.setWorkBenefits(newBenefits);
-                       data.setGeminiApiKey(newGeminiKey);
-                       data.setPickerApiKey(newPickerKey);
-                       if (newBenefits.navigo.active) {
-                           data.setNavigoBase(newBenefits.navigo.basePrice);
-                           data.setNavigoRate(newBenefits.navigo.refundRate);
-                       }
-                    }}
+                    // Champ par champ, à partir de l'état le plus récent : une saisie ne
+                    // défait jamais ce qui a changé entre-temps (veille fiscale, avis, import).
+                    onUpdateFiscal={update => data.setFiscalConfig(update)}
+                    onUpdateBenefits={data.updateWorkBenefits}
+                    onSaveGeminiKey={data.setGeminiApiKey}
+                    onSavePickerKey={key => data.setPickerApiKey(key)}
                 />
             )}
 

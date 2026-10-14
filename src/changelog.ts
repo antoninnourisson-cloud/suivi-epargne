@@ -15,6 +15,18 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '2026.10.14',
+    date: '2026-10-14',
+    title: 'Données mieux protégées et calculs justes',
+    items: [
+      "Vos données ne peuvent plus être écrasées par erreur : « Réessayer » recharge Drive au lieu d'y enregistrer, une déconnexion avec des modifications pas encore envoyées demande confirmation et les garde en copie, deux onglets ouverts ne s'écrasent plus.",
+      "Après une coupure réseau, l'envoi vers Drive reprend tout seul (et un bouton « Réessayer » est là si besoin).",
+      "Paramètres : une modification ne peut plus annuler une proposition de la veille fiscale ou votre avis d'imposition appliqués juste avant.",
+      "Actualiser : en début d'année, les intérêts des livrets sont proposés à part et ne comptent plus comme de l'épargne ; pour l'assurance vie et le PEA, vous indiquez ce qui a été versé. Votre saisie est gardée si vous changez d'écran, une saisie illisible est refusée, et l'enregistrement peut être annulé.",
+      "Calculs : le Navigo désactivé n'est plus compté, le taux d'impôt forcé s'applique comme le vrai prélèvement à la source, et le plan de placement n'envoie plus le surplus vers un compte bloqué ou volatil sans votre accord.",
+    ],
+  },
+  {
     version: '2026.10.08-3',
     date: '2026-10-08',
     title: 'Finitions',

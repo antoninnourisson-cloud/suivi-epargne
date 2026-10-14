@@ -13,7 +13,7 @@
 // (accord familial) : ils s'ajoutent à votre part, comme dans projectSavings.
 // ================================================
 import { AccountType, FiscalConfig, PayslipRecord, SavingsAccount, AccountMovement } from '../types';
-import { computePlacementStrategy, SavingsSplit } from './finance';
+import { computePlacementStrategy, computeWithdrawalTax, depositsAfterWithdrawal, SavingsSplit } from './finance';
 import { netAnnualRate } from './projection';
 import { recentPayWindows, savedBetween } from './motivation';
 import { parseISODate, formatISODay } from './dates';
@@ -135,8 +135,10 @@ export interface PurchaseOutcome {
   amount: number;
   /** Comptes d'où l'argent sort (votre part seulement). */
   takenFrom: { accountId: string; name: string; type: AccountType; amount: number }[];
-  /** Ce qui manquait : votre part ne suffisait pas. */
+  /** Ce qui manquait : votre part disponible ne suffisait pas (PER/PEE bloqués exclus). */
   shortfall: number;
+  /** Impôt sur les gains des placements vendus pour payer l'achat (inclus dans `takenFrom`). */
+  tax: number;
 }
 
 export interface SimulatorResult {
@@ -175,26 +177,39 @@ export const monthDate = (todayISO: string, m: number): string => {
 
 const clampHorizon = (h: number) => Math.min(MAX_HORIZON, Math.max(MIN_HORIZON, Math.round(Number.isFinite(h) ? h : 24)));
 
+/** Épargne bloquée (retraite, salariale) : jamais mobilisée pour un achat simulé. */
+const BLOCKED_TYPES: readonly AccountType[] = [AccountType.PER, AccountType.PEE];
+
 /**
- * Retire `amount` de VOTRE part : compte courant puis livrets (le moins rémunérateur
- * d'abord), puis les autres placements. La part des parents n'est jamais touchée.
+ * Retire `amount` NET de VOTRE part : compte courant puis livrets (le moins rémunérateur
+ * d'abord), puis les placements disponibles. Jamais la part des parents ni un PER/PEE
+ * bloqué. Sur un placement imposable (PEA, AV, crypto), l'impôt sur la part de gains
+ * (computeWithdrawalTax) s'ajoute : on retire assez pour que `amount` arrive net.
  */
-const withdraw = (sim: SimAccount[], rates: Map<string, number>, amount: number) => {
+const withdraw = (sim: SimAccount[], rates: Map<string, number>, amount: number, fiscal: FiscalConfig, at: Date) => {
   const rank = (a: SimAccount) => {
     const i = LIQUID_ORDER.indexOf(a.type);
     return i >= 0 ? i : LIQUID_ORDER.length;
   };
-  const order = [...sim].sort((x, y) => rank(x) - rank(y) || (rates.get(x.id) || 0) - (rates.get(y.id) || 0));
+  const order = sim.filter(a => !BLOCKED_TYPES.includes(a.type))
+    .sort((x, y) => rank(x) - rank(y) || (rates.get(x.id) || 0) - (rates.get(y.id) || 0));
   let left = amount;
+  let tax = 0;
   const takenFrom: PurchaseOutcome['takenFrom'] = [];
   for (const a of order) {
     if (left <= 0.005) break;
-    const take = Math.min(left, Math.max(0, a.own));
-    if (take <= 0.005) continue;
-    a.own -= take; a.totalAmount -= take; left -= take;
-    takenFrom.push({ accountId: a.id, name: a.name, type: a.type, amount: take });
+    const own = Math.max(0, a.own);
+    if (own <= 0.005) continue;
+    const probe = Math.min(left, own);
+    const t = computeWithdrawalTax(a, probe, fiscal, at);
+    const taxRatio = t.known && probe > 0 ? Math.min(0.99, Math.max(0, 1 - t.net / probe)) : 0;
+    const gross = Math.min(own, left / (1 - taxRatio));
+    const net = gross * (1 - taxRatio);
+    if (a.totalDeposits !== undefined) a.totalDeposits = depositsAfterWithdrawal(a.totalDeposits, a.totalAmount, gross);
+    a.own -= gross; a.totalAmount -= gross; left -= net; tax += gross - net;
+    takenFrom.push({ accountId: a.id, name: a.name, type: a.type, amount: gross });
   }
-  return { takenFrom, shortfall: Math.max(0, left) };
+  return { takenFrom, shortfall: Math.max(0, left), tax };
 };
 
 interface PathPlan {
@@ -210,11 +225,21 @@ interface PathContext {
   split?: SavingsSplit;
   horizon: number;
   rates: Map<string, number>;
+  today: string;
 }
 
 const runPath = (ctx: PathContext, plan: PathPlan, record?: PurchaseOutcome[]): number[] => {
   const sim: SimAccount[] = ctx.base.map(a => ({ ...a, own: a.ownedAmount }));
+  // Ce que le plan ne peut placer nulle part (livrets pleins, ni AV ni PEA) reste sur le
+  // compte courant : sans compte courant saisi, un compte courant virtuel le garde.
+  let current = sim.find(a => a.type === AccountType.COMPTE_COURANT);
+  if (!current) {
+    current = { id: '__current', name: 'Compte courant', type: AccountType.COMPTE_COURANT, institution: '', totalAmount: 0, ownedAmount: 0, parentalCapital: 0, own: 0 };
+    sim.push(current);
+  }
+  const idle = current;
   const byId = new Map(sim.map(a => [a.id, a]));
+  const at = (m: number) => parseISODate(monthDate(ctx.today, m));
   const total = () => sim.reduce((s, a) => s + a.own, 0);
   const out = [total()];
   // Restitution déjà passée mais pas encore enregistrée : appliquée tout de suite.
@@ -229,16 +254,17 @@ const runPath = (ctx: PathContext, plan: PathPlan, record?: PurchaseOutcome[]): 
     const dep = plan.deposit(m);
     if (dep > 0) {
       for (const st of computePlacementStrategy(dep, sim, ctx.fiscal, ctx.split)) {
-        if (st.infoOnly || !st.accountId) continue;
-        const a = byId.get(st.accountId);
-        if (a) { a.totalAmount += st.fillAmount; a.own += st.fillAmount; }
+        if (st.infoOnly) continue;
+        const a = (st.accountId && byId.get(st.accountId)) || idle;
+        a.totalAmount += st.fillAmount; a.own += st.fillAmount;
+        if (a.totalDeposits !== undefined) a.totalDeposits += st.fillAmount;
       }
     } else if (dep < 0) {
-      withdraw(sim, ctx.rates, -dep);
+      withdraw(sim, ctx.rates, -dep, ctx.fiscal, at(m));
     }
     for (const p of plan.purchases) {
       if (p.month !== m || !(p.amount > 0)) continue;
-      const r = withdraw(sim, ctx.rates, p.amount);
+      const r = withdraw(sim, ctx.rates, p.amount, ctx.fiscal, at(m));
       record?.push({ id: p.id, month: m, amount: p.amount, ...r });
     }
     out.push(total());
@@ -262,7 +288,7 @@ export const simulate = (input: SimulatorInput): SimulatorResult => {
   const scenarios = input.scenarios || [];
   const base = input.accounts.filter(a => a.type !== AccountType.IMMOBILIER);
   const ctx: PathContext = {
-    base, fiscal: input.fiscal, split: input.split, horizon,
+    base, fiscal: input.fiscal, split: input.split, horizon, today: input.today,
     rates: new Map(base.map(a => [a.id, netAnnualRate(a, input.fiscal) / 100 / 12])),
   };
 

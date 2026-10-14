@@ -83,6 +83,34 @@ describe('balanceChangeMovements', () => {
   it('ne crée rien sans changement', () => {
     expect(balanceChangeMovements(base, { ...base }, '2026-10-02', { ownLabel: 'X' })).toEqual([]);
   });
+  it('correction hors épargne : nature `adjustment`', () => {
+    const m = balanceChangeMovements(base, { ...base, ownedAmount: 130, totalAmount: 180 }, '2026-10-02', { ownLabel: 'Correction de solde', ownKind: 'adjustment' });
+    expect(m.map(x => [x.label, x.amount, x.kind])).toEqual([['Correction de solde (+)', 30, 'adjustment']]);
+  });
+  it('reprend tels quels les mouvements déjà préparés par une commande, et n’explique que le reste', () => {
+    const interest = mv({ id: 'i', amount: 20, label: 'Intérêts 2026', kind: 'adjustment' });
+    const next = { ...base, ownedAmount: 150, parentalCapital: 40, totalAmount: 190, movements: [interest] };
+    const m = balanceChangeMovements(base, next, '2026-10-02', { ownLabel: 'Actualisation' });
+    expect(m.map(x => [x.label, x.amount, x.kind])).toEqual([['Intérêts 2026', 20, 'adjustment'], ['Actualisation (+)', 30, undefined], ['Part des parents (-)', 10, 'parental']]);
+    expect(m[0]).toBe(interest);
+  });
+});
+
+describe('versements cumulés et garde-fous', () => {
+  it('un solde initial n’est pas un versement suivi', () => {
+    const av = acc({ type: AccountType.ASSURANCE_VIE, totalDeposits: 800, parentalCapital: 0, totalAmount: 1000 });
+    const initial = mv({ amount: 1000, label: 'Solde initial', tag: 'initial' });
+    expect(applyMovement(av, initial, -1, { trackDeposits: true }).totalDeposits).toBe(800);
+  });
+  it('rejoue les mouvements postérieurs avec leurs versements cumulés, et refuse une part propre négative', () => {
+    const av = acc({ type: AccountType.ASSURANCE_VIE, totalDeposits: 800, parentalCapital: 0, totalAmount: 1000 });
+    const snap = snapshotBalances([av], ['a']);
+    let cur = applyMovement(av, mv({ id: 'op', amount: 100 }), 1, { trackDeposits: true });
+    cur = applyMovement(cur, mv({ id: 'later', amount: 50 }), 1, { trackDeposits: true });
+    expect(restoreBalances([cur], snap, ['op'])[0]).toMatchObject({ ownedAmount: 1050, totalDeposits: 850 });
+    const spent = applyMovement(applyMovement(av, mv({ id: 'op', amount: 100 }), 1), mv({ id: 'out', amount: 1100, type: 'OUT' }), 1);
+    expect(restoreBalances([spent], snap, ['op'])[0]).toBe(spent);
+  });
 });
 
 describe('canWithdrawOwn (capital des parents intouchable)', () => {

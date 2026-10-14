@@ -240,7 +240,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
               )}
               {result.purchases.map(p => (
                 <p key={p.id} className="text-sm text-on-surface-variant">
-                  Achat de {eur(p.amount)} {inMonths(p.month)} : pris sur {p.takenFrom.map(t => `${t.name} (${eur(t.amount)})`).join(', ') || 'rien'}.
+                  Achat de {eur(p.amount)} {inMonths(p.month)} : pris sur {p.takenFrom.map(t => `${t.name} (${eur(t.amount)})`).join(', ') || 'rien'}{p.tax > 0.5 ? `, dont ${eur(p.tax)} d'impôt sur les gains` : ''}.
                   {p.shortfall > 0.5 && <span className="block text-error font-medium">Il manquerait {eur(p.shortfall)} : votre part ne suffit pas (celle des parents n'est pas utilisable).</span>}
                 </p>
               ))}

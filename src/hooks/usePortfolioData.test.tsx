@@ -19,6 +19,10 @@ const drive = vi.hoisted(() => ({
   beforeWrite: null as (() => void) | null,
   // La version de l'autre appareil ne peut pas être relue au moment du conflit.
   otherUnreadable: false,
+  // Pannes : lecture du fichier en échec, prochaine écriture en échec, écriture lente.
+  readFail: null as unknown,
+  writeFail: null as unknown,
+  writeGate: null as Promise<void> | null,
 }));
 
 const remoteWrite = (data: unknown) => {
@@ -42,7 +46,10 @@ vi.mock('../services/googleDriveService', () => {
     setOnAuthLost: () => {},
     findConfigFile: async () => 'file-1',
     createConfigFile: async () => 'file-1',
-    readConfigFile: async () => copy(drive.file),
+    readConfigFile: async () => {
+      if (drive.readFail) throw drive.readFail;
+      return copy(drive.file);
+    },
     getFileRevision: async () => String(drive.revision),
     fetchRevisionContent: async (_id: string, rev: string) => {
       if (!drive.history.has(rev)) throw new Error('REVISION_GONE');
@@ -51,6 +58,8 @@ vi.mock('../services/googleDriveService', () => {
     // Même contrat que le vrai service : contrôle, écriture, puis vérification que la
     // révision précédant la nôtre est bien celle attendue.
     updateConfigFile: async (_id: string, data: unknown, expected?: string | null) => {
+      if (drive.writeFail) { const err = drive.writeFail; drive.writeFail = null; throw err; }
+      if (drive.writeGate) await drive.writeGate;
       if (expected != null && expected !== String(drive.revision)) throw new ConflictError();
       drive.beforeWrite?.();
       drive.beforeWrite = null;
@@ -98,6 +107,9 @@ beforeEach(() => {
   drive.history = new Map([['1', drive.file]]);
   drive.beforeWrite = null;
   drive.otherUnreadable = false;
+  drive.readFail = null;
+  drive.writeFail = null;
+  drive.writeGate = null;
 });
 // Chaque test démonte son hook (écouteurs, minuteries) avant de rendre les vraies horloges.
 afterEach(() => { cleanup(); vi.useRealTimers(); });
@@ -266,6 +278,216 @@ describe('synchronisation Drive', () => {
     const written = drive.writes[0] as { config: Record<string, unknown>; parentalRestitution: unknown };
     expect(written.config.parentsEmail).toBe('parents@exemple.fr');
     expect(written.parentalRestitution).toEqual(restitution);
+  });
+});
+
+const budgetOfFile = (x: unknown) => (x as { config: { leisureBudget: number } }).config.leisureBudget;
+const withBudget = (leisureBudget: number) => ({ ...baseFile(), config: { ...baseFile().config, leisureBudget } });
+// jsdom n'a pas d'IndexedDB : les copies locales y restent en JSON lisible (voir localVault).
+const storedCopy = (key: string) => {
+  const raw = localStorage.getItem(key);
+  return raw ? (JSON.parse(raw) as { savedAt: string; data: unknown }) : null;
+};
+const PENDING = 'suivi_epargne_pending';
+const BACKUP = 'suivi_epargne_backup';
+
+describe('chargement raté', () => {
+  it("« Réessayer » recharge au lieu d'écraser Drive avec un document vide", async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    drive.readFail = new Error('HTTP 503');
+    const { result } = await load();
+    expect(result.current.loadFailed).toBe(true);
+    expect(result.current.syncError).toBe(true);
+    expect(result.current.accounts).toHaveLength(0);
+
+    // Ni l'écriture forcée, ni « Réessayer » n'écrivent quoi que ce soit.
+    await act(async () => { await result.current.forceSaveToDrive(); });
+    await act(async () => { result.current.retrySync(); await vi.advanceTimersByTimeAsync(10); });
+    await flushSave();
+    expect(drive.writes).toHaveLength(0);
+
+    drive.readFail = null;
+    await act(async () => { result.current.retrySync(); await vi.advanceTimersByTimeAsync(10); });
+    await waitFor(() => expect(result.current.accounts).toHaveLength(1));
+    expect(result.current.loadFailed).toBe(false);
+    expect(result.current.syncError).toBe(false);
+    await flushSave();
+    expect(drive.writes).toHaveLength(0);
+    spy.mockRestore();
+  });
+
+  it('le chargement est retenté tout seul', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    drive.readFail = new TypeError('NETWORK_TIMEOUT');
+    const { result } = await load();
+    expect(result.current.loadFailed).toBe(true);
+    drive.readFail = null;
+    await act(async () => { await vi.advanceTimersByTimeAsync(5500); });
+    await waitFor(() => expect(result.current.accounts).toHaveLength(1));
+    expect(drive.writes).toHaveLength(0);
+    spy.mockRestore();
+  });
+
+  it("un fichier à l'historique ou aux réglages abîmés se charge quand même", async () => {
+    drive.file = { ...baseFile(), history: [{}, null, { date: 1 }], fiscalConfig: { taxBrackets: 'x' }, workBenefits: { navigo: null } };
+    const { result } = await load();
+    expect(result.current.loadFailed).toBe(false);
+    expect(result.current.accounts).toHaveLength(1);
+    expect(result.current.fiscalConfig.taxBrackets.length).toBeGreaterThan(0);
+    expect(result.current.workBenefits.navigo.active).toBe(true);
+  });
+});
+
+describe('déconnexion', () => {
+  it('signale les modifications pas encore sur Drive et en garde une copie, proposée à la reconnexion', async () => {
+    const first = await load();
+    expect(first.result.current.hasUnsyncedChanges()).toBe(false);
+    act(() => first.result.current.setLeisureBudget(321));
+    expect(first.result.current.hasUnsyncedChanges()).toBe(true);
+    act(() => first.result.current.resetData());
+    await waitFor(() => expect(storedCopy(BACKUP)).not.toBeNull());
+    expect(budgetOfFile(storedCopy(BACKUP)!.data)).toBe(321);
+    expect(drive.writes).toHaveLength(0);
+    first.unmount();
+
+    const second = await load();
+    await waitFor(() => expect(second.result.current.localBackup).not.toBeNull());
+    expect(budgetOfFile(second.result.current.localBackup!.data)).toBe(321);
+  });
+
+  it('plus rien à signaler une fois la sauvegarde faite', async () => {
+    const { result } = await load();
+    act(() => result.current.setLeisureBudget(321));
+    await flushSave();
+    await waitFor(() => expect(drive.writes.length).toBe(1));
+    expect(result.current.hasUnsyncedChanges()).toBe(false);
+  });
+});
+
+describe('réseau', () => {
+  it("un délai dépassé n'arrête pas la synchronisation : nouvel essai sans événement « online »", async () => {
+    const { result } = await load();
+    drive.writeFail = new TypeError('NETWORK_TIMEOUT');
+    act(() => result.current.setLeisureBudget(5));
+    await flushSave();
+    await waitFor(() => expect(result.current.isOffline).toBe(true));
+    expect(drive.writes).toHaveLength(0);
+    await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
+    await flushSave();
+    await waitFor(() => expect(drive.writes.length).toBe(1));
+    expect(result.current.isOffline).toBe(false);
+    expect(budgetOfFile(drive.file)).toBe(5);
+  });
+
+  it('« Réessayer » et le retour au premier plan relancent tout de suite', async () => {
+    const { result } = await load();
+    drive.writeFail = new TypeError('Failed to fetch');
+    act(() => result.current.setLeisureBudget(5));
+    await flushSave();
+    await waitFor(() => expect(result.current.isOffline).toBe(true));
+    act(() => { window.dispatchEvent(new Event('focus')); });
+    await flushSave();
+    await waitFor(() => expect(drive.writes.length).toBe(1));
+    expect(result.current.isOffline).toBe(false);
+  });
+});
+
+describe('plusieurs onglets', () => {
+  const announce = async () => {
+    await act(async () => {
+      window.dispatchEvent(new StorageEvent('storage', {
+        key: 'suivi_epargne_last_save', newValue: JSON.stringify({ fileId: 'file-1', revision: String(drive.revision), at: Date.now() }),
+      }));
+      await vi.advanceTimersByTimeAsync(20);
+    });
+  };
+
+  it("applique la sauvegarde d'un autre onglet quand rien n'est en attente", async () => {
+    const { result } = await load();
+    remoteWrite(withBudget(300));
+    await announce();
+    await waitFor(() => expect(result.current.leisureBudget).toBe(300));
+    await flushSave();
+    expect(drive.writes).toHaveLength(0);
+  });
+
+  it("n'efface pas des modifications non envoyées : la prochaine écriture lève le conflit, la nôtre en quarantaine", async () => {
+    const { result } = await load();
+    act(() => { window.dispatchEvent(new Event('offline')); });
+    act(() => result.current.setLeisureBudget(150));
+    remoteWrite(withBudget(300));
+    await announce();
+    expect(result.current.leisureBudget).toBe(150);
+
+    act(() => { window.dispatchEvent(new Event('online')); });
+    await flushSave();
+    await waitFor(() => expect(result.current.syncConflict).toBe(true));
+    expect(drive.writes).toHaveLength(0);
+    expect(budgetOfFile(drive.file)).toBe(300);
+    expect(result.current.leisureBudget).toBe(150);
+    await waitFor(() => expect(storedCopy(PENDING)).not.toBeNull());
+    expect(budgetOfFile(storedCopy(PENDING)!.data)).toBe(150);
+  });
+
+  it("pendant un conflit, la sauvegarde d'un autre onglet n'est pas appliquée", async () => {
+    const { result } = await load();
+    drive.revision = 99; // un autre appareil a écrit
+    act(() => result.current.setLeisureBudget(5));
+    await flushSave();
+    await waitFor(() => expect(result.current.syncConflict).toBe(true));
+    remoteWrite(withBudget(300));
+    await announce();
+    expect(result.current.leisureBudget).toBe(5);
+  });
+
+  it("un autre onglet écrit dans un format plus récent : lecture seule, rien n'est réécrit", async () => {
+    const { result } = await load();
+    remoteWrite({ ...withBudget(300), schemaVersion: APP_SCHEMA_VERSION + 1 });
+    await announce();
+    await waitFor(() => expect(result.current.appOutdated).toBe(true));
+    act(() => result.current.setLeisureBudget(5));
+    await flushSave();
+    expect(drive.writes).toHaveLength(0);
+  });
+});
+
+describe('copies locales', () => {
+  it("garde le miroir d'une saisie faite pendant une écriture lente", async () => {
+    const { result } = await load();
+    let release = () => {};
+    drive.writeGate = new Promise<void>(r => { release = r; });
+    act(() => result.current.setLeisureBudget(150));
+    await flushSave(); // écriture de 150 en cours, bloquée
+    act(() => result.current.setLeisureBudget(175));
+    await act(async () => { await vi.advanceTimersByTimeAsync(700); });
+    await waitFor(() => expect(storedCopy(BACKUP)).not.toBeNull());
+
+    await act(async () => { drive.writeGate = null; release(); await vi.advanceTimersByTimeAsync(10); });
+    await waitFor(() => expect(drive.writes.length).toBe(1));
+    expect(budgetOfFile(drive.file)).toBe(150);
+    // 175 n'est pas encore sur Drive : son miroir reste.
+    await waitFor(() => expect(budgetOfFile(storedCopy(BACKUP)?.data ?? withBudget(-1))).toBe(175));
+
+    await flushSave();
+    await waitFor(() => expect(budgetOfFile(drive.file)).toBe(175));
+    await waitFor(() => expect(storedCopy(BACKUP)).toBeNull());
+  });
+
+  it('au démarrage, propose la copie la plus récente même si une vieille quarantaine existe', async () => {
+    const copy = (budget: number, savedAt: string) => JSON.stringify({ savedAt, fileId: 'file-1', data: withBudget(budget) });
+    localStorage.setItem(PENDING, copy(111, '2026-10-01T10:00:00.000Z'));
+    localStorage.setItem(BACKUP, copy(222, '2026-10-05T10:00:00.000Z'));
+    const { result } = await load();
+    await waitFor(() => expect(result.current.localBackup).not.toBeNull());
+    expect(budgetOfFile(result.current.localBackup!.data)).toBe(222);
+    expect(budgetOfFile(storedCopy(PENDING)!.data)).toBe(222);
+  });
+
+  it("une copie d'un autre compte n'est ni proposée ni effacée", async () => {
+    localStorage.setItem(PENDING, JSON.stringify({ savedAt: '2026-10-01T10:00:00.000Z', fileId: 'autre-fichier', data: withBudget(111) }));
+    const { result } = await load();
+    expect(result.current.localBackup).toBeNull();
+    expect(storedCopy(PENDING)).not.toBeNull();
   });
 });
 

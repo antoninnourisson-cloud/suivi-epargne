@@ -31,8 +31,6 @@ export const computeMonthlyPay = (data: GlobalAppData): number => {
     {
       grossAnnual: c.grossAnnual ?? 0,
       extraMonthlyIncome: c.extraMonthlyIncome ?? 0,
-      navigoBase: c.navigoBase ?? 90.80,
-      navigoRate: c.navigoRate ?? 67.24,
       taxRateManual: c.taxRateManual ?? 0,
     },
     data.fiscalConfig || DEFAULT_FISCAL_CONFIG,
@@ -53,6 +51,9 @@ export const computeMonthlySavingsCapacity = (data: GlobalAppData): number => {
 // des dizaines de milliers de fois (fourchette).
 const formatEUR2 = (n: number) => formatEUR(n, 0);
 
+/** Comptes qui peuvent recevoir automatiquement le surplus une fois les livrets pleins. */
+const SURPLUS_TYPES: readonly AccountType[] = [AccountType.ASSURANCE_VIE, AccountType.PEA];
+
 export interface PlacementStep {
   accountId?: string;     // absent pour la suggestion « Ouvrir un PEA/AV »
   accountName: string;
@@ -70,8 +71,9 @@ export interface PlacementStep {
 
 /**
  * Répartit `totalToInvest` : livrets réglementés d'abord (meilleur taux, puis LEP > Livret A
- * > LDDS) jusqu'à leur plafond, le reste sur le premier autre placement (ou suggestion
- * d'ouvrir un PEA/AV).
+ * > LDDS) jusqu'à leur plafond, le reste sur l'Assurance Vie ou le PEA au meilleur taux
+ * (jamais un PEE/PER bloqué ni de la crypto, sauf répartition personnalisée), sinon il
+ * reste sur le compte courant avec la suggestion d'ouvrir un PEA/AV.
  */
 export type SavingsSplit = { accountId: string; pct: number }[];
 
@@ -152,7 +154,11 @@ export const computePlacementStrategy = (
   const steps: PlacementStep[] = [];
   const liquidTypes = [AccountType.LEP, AccountType.LIVRET_A, AccountType.LDDS];
   const userLiquidAccounts = accounts.filter(a => liquidTypes.includes(a.type));
-  const userOtherAccounts = accounts.filter(a => !liquidTypes.includes(a.type) && ![AccountType.COMPTE_COURANT, AccountType.IMMOBILIER].includes(a.type));
+  // Débordement automatique : seulement les enveloppes disponibles (Assurance Vie, PEA).
+  // PEE et PER (bloqués), crypto (volatile), immobilier et « Autre » ne reçoivent de
+  // l'argent que si la répartition personnalisée les cite.
+  const userOtherAccounts = accounts.filter(a => SURPLUS_TYPES.includes(a.type));
+  const skipped = accounts.filter(a => !liquidTypes.includes(a.type) && !SURPLUS_TYPES.includes(a.type) && a.type !== AccountType.COMPTE_COURANT);
 
   const priority: Partial<Record<AccountType, number>> = { [AccountType.LEP]: 3, [AccountType.LIVRET_A]: 2, [AccountType.LDDS]: 1 };
   const sortAccounts = (a: SavingsAccount, b: SavingsAccount) => {
@@ -202,8 +208,13 @@ export const computePlacementStrategy = (
       const o = userOtherAccounts[0];
       steps.push({ accountId: o.id, accountName: o.name, type: o.type, rate: o.interestRate, fillAmount: remainingMoney, isFullAfter: false, isLiquid: false });
     } else {
+      // Rien de disponible : l'argent reste sur le compte courant (suggestion sans compte
+      // réel derrière, donc aucun virement à cocher).
+      const why = skipped.length > 0
+        ? ` ${skipped.map(a => a.name).join(', ')} ${skipped.length > 1 ? 'ne sont pas choisis' : 'n\'est pas choisi'} automatiquement (argent bloqué ou risqué) : ajoutez-${skipped.length > 1 ? 'les' : 'le'} à votre répartition si vous le souhaitez.`
+        : '';
       steps.push({ accountName: 'Ouvrir un PEA/AV', type: AccountType.AUTRE, rate: 0, fillAmount: remainingMoney, isFullAfter: false, isLiquid: false, alert: true,
-        hint: `${formatEUR2(remainingMoney)} de plus que vos livrets ne peuvent accueillir : ouvrez un PEA ou une Assurance Vie.` });
+        hint: `${formatEUR2(remainingMoney)} de plus que vos livrets ne peuvent accueillir : en attendant, ils restent sur votre compte courant. Ouvrez un PEA ou une Assurance Vie.${why}` });
     }
   }
   return steps;

@@ -4,7 +4,7 @@
 // carte résume son état sur une ligne ; les cartes ouvertes sont mémorisées sur cet
 // appareil, et un lien peut en ouvrir une (voir settings/sections).
 // ================================================
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FiscalConfig, PayslipRecord, WorkBenefits } from '../types';
 import {
   AlertTriangle, Download, Upload, Database, KeyRound, Fingerprint, Building2, Scale, FileSearch, Radar, Sprout, Bell,
@@ -30,7 +30,11 @@ interface SettingsProps {
   workBenefits: WorkBenefits;
   geminiApiKey: string;
   pickerApiKey: string;
-  onSave: (newConfig: FiscalConfig, newBenefits: WorkBenefits, newGeminiKey: string, newPickerKey: string) => void;
+  /** Modifications appliquées à l'état le plus récent (seuls les champs touchés changent). */
+  onUpdateFiscal: (update: (prev: FiscalConfig) => FiscalConfig) => void;
+  onUpdateBenefits: (update: (prev: WorkBenefits) => WorkBenefits) => void;
+  onSaveGeminiKey: (key: string) => void;
+  onSavePickerKey: (key: string) => void;
   onExport: () => void;
   onImport: (file: File) => Promise<boolean>;
   // Panneaux composés par App (sauvegardes Drive, veille fiscale, appareils et confidentialité).
@@ -49,7 +53,10 @@ const prefersReducedMotion = () => {
   try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch { return false; }
 };
 
-export const Settings: React.FC<SettingsProps> = ({ payslips = [], config, workBenefits, geminiApiKey, pickerApiKey, onSave, onExport, onImport, paydayDay, onOpenPayday, backupSlot, fiscalWatchSlot, securitySlot, taxNoticeSlot, motivationSlot, notificationPrefs, onChangeNotificationPrefs }) => {
+type Edit<T> = (prev: T) => T;
+const applyEdits = <T,>(base: T, edits: Edit<T>[]): T => edits.reduce((acc, edit) => edit(acc), base);
+
+export const Settings: React.FC<SettingsProps> = ({ payslips = [], config, workBenefits, geminiApiKey, pickerApiKey, onUpdateFiscal, onUpdateBenefits, onSaveGeminiKey, onSavePickerKey, onExport, onImport, paydayDay, onOpenPayday, backupSlot, fiscalWatchSlot, securitySlot, taxNoticeSlot, motivationSlot, notificationPrefs, onChangeNotificationPrefs }) => {
   const [importMsg, setImportMsg] = useState<string | null>(null);
   // L'import écrase TOUT (comptes, mouvements, objectifs, fiches de paie, réglages) puis
   // resynchronise sur Drive : il faut une confirmation explicite, la boîte de sélection de
@@ -72,26 +79,52 @@ export const Settings: React.FC<SettingsProps> = ({ payslips = [], config, workB
     setImportMsg(ok ? 'Données importées (sauvegarde en cours).' : 'Fichier invalide : aucune donnée n\'a été remplacée.');
   };
 
-  const [localFiscal, setLocalFiscal] = useState<FiscalConfig>(config);
-  const [localBenefits, setLocalBenefits] = useState<WorkBenefits>(workBenefits);
-  const [localGeminiKey, setLocalGeminiKey] = useState<string>(geminiApiKey || '');
-  const [localPickerKey, setLocalPickerKey] = useState<string>(pickerApiKey || '');
+  // Brouillon = données actuelles + modifications pas encore enregistrées. Ce ne sont PAS
+  // des copies figées : ce qui change ailleurs pendant la saisie (veille fiscale « Appliquer »,
+  // avis d'imposition, import, restauration) s'affiche aussitôt et n'est jamais défait, car
+  // seules les modifications champ par champ sont rejouées sur l'état le plus récent.
+  const [fiscalEdits, setFiscalEdits] = useState<Edit<FiscalConfig>[]>([]);
+  const [benefitEdits, setBenefitEdits] = useState<Edit<WorkBenefits>[]>([]);
+  const [geminiDraft, setGeminiDraft] = useState<string | null>(null);
+  const [pickerDraft, setPickerDraft] = useState<string | null>(null);
+  const localFiscal = useMemo(() => applyEdits(config, fiscalEdits), [config, fiscalEdits]);
+  const localBenefits = useMemo(() => applyEdits(workBenefits, benefitEdits), [workBenefits, benefitEdits]);
+  const localGeminiKey = geminiDraft ?? (geminiApiKey || '');
+  const localPickerKey = pickerDraft ?? (pickerApiKey || '');
+  const editFiscal = useCallback((edit: Edit<FiscalConfig>) => setFiscalEdits(prev => [...prev, edit]), []);
+  const editBenefits = useCallback((edit: Edit<WorkBenefits>) => setBenefitEdits(prev => [...prev, edit]), []);
 
   // Enregistrement automatique, comme partout ailleurs dans l'app (plus de bouton « Tout
-  // enregistrer » à ne pas oublier). Les cartes repliées gardent leurs champs montés : un
-  // brouillon n'est jamais perdu en refermant une carte.
+  // enregistrer » à ne pas oublier), 700 ms après la dernière frappe. Les cartes repliées
+  // gardent leurs champs montés : un brouillon n'est jamais perdu en refermant une carte,
+  // ni en quittant l'écran avant la fin du délai.
   const [savedHint, setSavedHint] = useState(false);
-  const dirty = JSON.stringify([localFiscal, localBenefits, localGeminiKey.trim(), localPickerKey.trim()])
-    !== JSON.stringify([config, workBenefits, geminiApiKey || '', pickerApiKey || '']);
+  const pending = { fiscalEdits, benefitEdits, geminiDraft, pickerDraft };
+  const pendingRef = useRef(pending);
+  pendingRef.current = pending;
+  const saversRef = useRef({ onUpdateFiscal, onUpdateBenefits, onSaveGeminiKey, onSavePickerKey });
+  saversRef.current = { onUpdateFiscal, onUpdateBenefits, onSaveGeminiKey, onSavePickerKey };
+  const flush = useCallback(() => {
+    const p = pendingRef.current;
+    const save = saversRef.current;
+    if (p.fiscalEdits.length === 0 && p.benefitEdits.length === 0 && p.geminiDraft === null && p.pickerDraft === null) return;
+    pendingRef.current = { fiscalEdits: [], benefitEdits: [], geminiDraft: null, pickerDraft: null };
+    if (p.fiscalEdits.length > 0) save.onUpdateFiscal(prev => applyEdits(prev, p.fiscalEdits));
+    if (p.benefitEdits.length > 0) save.onUpdateBenefits(prev => applyEdits(prev, p.benefitEdits));
+    if (p.geminiDraft !== null) save.onSaveGeminiKey(p.geminiDraft.trim());
+    if (p.pickerDraft !== null) save.onSavePickerKey(p.pickerDraft.trim());
+    setFiscalEdits([]);
+    setBenefitEdits([]);
+    setGeminiDraft(null);
+    setPickerDraft(null);
+  }, []);
+  const hasPending = fiscalEdits.length > 0 || benefitEdits.length > 0 || geminiDraft !== null || pickerDraft !== null;
   useEffect(() => {
-    if (!dirty) return;
-    const t = setTimeout(() => {
-      onSave(localFiscal, localBenefits, localGeminiKey.trim(), localPickerKey.trim());
-      setSavedHint(true);
-    }, 700);
+    if (!hasPending) return;
+    const t = setTimeout(() => { flush(); setSavedHint(true); }, 700);
     return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [localFiscal, localBenefits, localGeminiKey, localPickerKey]);
+  }, [hasPending, fiscalEdits, benefitEdits, geminiDraft, pickerDraft, flush]);
+  useEffect(() => () => flush(), [flush]);
 
   // --- Cartes ouvertes (mémorisées sur cet appareil) et liens vers une carte ---
   const [openIds, setOpenIds] = useState<SettingsSection[]>(readOpenSections);
@@ -163,10 +196,10 @@ export const Settings: React.FC<SettingsProps> = ({ payslips = [], config, workB
       <div className="space-y-8">
         {group('Salaire et impôts', [
           card('benefits', 'Avantages salariaux', Building2,
-            <BenefitsFields payslips={payslips} benefits={localBenefits} setBenefits={setLocalBenefits} />,
+            <BenefitsFields payslips={payslips} benefits={localBenefits} setBenefits={editBenefits} />,
             benefitsSummary(localBenefits)),
           card('fiscal', 'Fiscalité et barème', Scale,
-            <FiscalFields fiscal={localFiscal} setFiscal={setLocalFiscal} />,
+            <FiscalFields fiscal={localFiscal} setFiscal={editFiscal} />,
             fiscalSummary(localFiscal)),
           taxNoticeSlot && card('tax-notice', "Avis d'imposition (LEP)", FileSearch, taxNoticeSlot),
           fiscalWatchSlot && card('fiscal-watch', 'Veille fiscale', Radar, fiscalWatchSlot),
@@ -180,11 +213,11 @@ export const Settings: React.FC<SettingsProps> = ({ payslips = [], config, workB
             <div className="space-y-5">
               <Hint>Les fiches de paie et les avis d'imposition sont lus par Gemini avec votre propre clé ; la clé Picker sert à choisir un fichier déjà sur votre Drive.</Hint>
               <TextField id="gemini-key" label="Clé API Gemini (cet appareil)" type="password" autoComplete="off" spellCheck={false}
-                value={localGeminiKey} onChange={e => setLocalGeminiKey(e.target.value)} placeholder="AIza..."
+                value={localGeminiKey} onChange={e => setGeminiDraft(e.target.value)} placeholder="AIza..."
                 supporting="Sert à lire les fiches de paie et à la veille fiscale hebdomadaire. Créée sur Google AI Studio ; restreignez-la à l'API « Generative Language » dans Google Cloud." />
               <GeminiModelField />
               <TextField id="picker-key" label="Clé API Google Picker" type="password" autoComplete="off" spellCheck={false}
-                value={localPickerKey} onChange={e => setLocalPickerKey(e.target.value)} placeholder="AIza..."
+                value={localPickerKey} onChange={e => setPickerDraft(e.target.value)} placeholder="AIza..."
                 supporting="Permet de choisir une fiche déjà présente sur votre Drive. Créée dans Google Cloud Console, restreinte à l'API Picker." />
               <Notice icon={AlertTriangle}>
                 La clé Gemini reste sur cet appareil : elle n'est ni dans votre fichier Drive, ni dans les exports (à ressaisir sur chaque appareil). La clé Picker, publique par nature, est synchronisée. Chaque analyse utilise votre propre quota Gemini.

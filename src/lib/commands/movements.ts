@@ -4,6 +4,7 @@
 import type { AccountMovement, SavingsAccount } from '../../types';
 import { applyMovement, CancellingGroup, isRestitutionMovement, restoreBalances, snapshotBalances } from '../accountOps';
 import { EPS, signedAmount } from '../money';
+import { formatEUR } from '../format';
 import { CommandResult, CommandState, fail } from './types';
 
 export type MovementLeg = { accountId: string; movement: AccountMovement };
@@ -26,6 +27,23 @@ const collectMovementLegs = (accounts: SavingsAccount[], accountId: string, move
 
 const RESTITUTION_DELETE_ERROR = 'La restitution s\'annule depuis Part parentale.';
 
+/** Premier compte dont la part propre deviendrait négative (et ne l'était pas déjà). */
+const negativeAfter = (after: SavingsAccount[], before: SavingsAccount[]) =>
+  after.find(a => a.ownedAmount < -EPS && (before.find(b => b.id === a.id)?.ownedAmount ?? 0) >= -EPS);
+
+const negativeError = (label: string, acc: SavingsAccount) =>
+  `Impossible de supprimer « ${label} » : votre part sur ${acc.name} passerait à ${formatEUR(acc.ownedAmount, 2)}. Supprimez d'abord les retraits qui en dépendent.`;
+
+// Versements cumulés suivis dans les deux sens : retirer un versement les réduit d'autant.
+const removeLegs = (state: CommandState, legs: MovementLeg[]) => {
+  const ids = [...new Set(legs.map(l => l.accountId))];
+  const snap = snapshotBalances(state.accounts, ids);
+  const accounts = state.accounts.map(acc => legs
+    .filter(l => l.accountId === acc.id)
+    .reduce((cur, l) => applyMovement(cur, l.movement, -1, { trackDeposits: true }), acc));
+  return { accounts, undo: (current: CommandState) => ({ accounts: restoreBalances(current.accounts, snap) }) };
+};
+
 /**
  * Ce que la suppression d'un mouvement retirerait, pour la confirmation : refus si le
  * mouvement a disparu ou si c'est une restitution (elle s'annule depuis Part parentale).
@@ -36,16 +54,9 @@ export const planMovementDeletion = (accounts: SavingsAccount[], accountId: stri
   if (!movement) return { ok: false, code: 'not-found', error: 'Mouvement introuvable.' };
   const legs = collectMovementLegs(accounts, accountId, movementId);
   if (legs.some(l => isRestitutionMovement(l.movement))) return { ok: false, code: 'forbidden', error: RESTITUTION_DELETE_ERROR };
+  const negative = negativeAfter(removeLegs({ accounts }, legs).accounts, accounts);
+  if (negative) return { ok: false, code: 'forbidden', error: negativeError(movement.label, negative) };
   return { ok: true, movement, legs, isTransfer: legs.length > 1 };
-};
-
-const removeLegs = (state: CommandState, legs: MovementLeg[], opts: { trackDeposits?: boolean } = {}) => {
-  const ids = [...new Set(legs.map(l => l.accountId))];
-  const snap = snapshotBalances(state.accounts, ids);
-  const accounts = state.accounts.map(acc => legs
-    .filter(l => l.accountId === acc.id)
-    .reduce((cur, l) => applyMovement(cur, l.movement, -1, opts), acc));
-  return { accounts, undo: (current: CommandState) => ({ accounts: restoreBalances(current.accounts, snap) }) };
 };
 
 /** Supprime un mouvement (et l'autre moitié d'un virement interne) depuis le journal ou la fiche du compte. */
@@ -70,7 +81,9 @@ export const cancelDeposit = (state: CommandState, input: { accountId: string; m
   const movement = state.accounts.find(a => a.id === input.accountId)?.movements?.find(m => m.id === input.movementId);
   if (!movement) return fail('not-found', 'Versement introuvable.');
   if (isRestitutionMovement(movement)) return fail('forbidden', RESTITUTION_DELETE_ERROR);
-  const { accounts, undo } = removeLegs(state, [{ accountId: input.accountId, movement }], { trackDeposits: true });
+  const { accounts, undo } = removeLegs(state, [{ accountId: input.accountId, movement }]);
+  const negative = negativeAfter(accounts, state.accounts);
+  if (negative) return fail('forbidden', negativeError(movement.label, negative));
   return { ok: true, next: { accounts }, message: 'Versement annulé', undo };
 };
 

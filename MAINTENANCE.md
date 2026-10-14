@@ -11,9 +11,10 @@ Voir aussi : [README.md](README.md) (fonctionnement général), [worker/README.m
 - **Les opérations métier qui changent les soldes sont des commandes pures et testées dans [`src/lib/commands`](src/lib/commands)** (ajout rapide, suppression/annulation de mouvement, fiche de compte, restitution et son annulation) : elles appliquent elles-mêmes les règles ci-dessous et renvoient de quoi annuler à l'identique ; `App.tsx` ne fait que l'interface (confirmation, toasts). Toute nouvelle opération de ce genre s'y ajoute, avec ses tests.
 - **Les `kind` de mouvement** :
   - pas de `kind` : versement ou retrait réel de l'utilisateur ;
-  - `valuation` : variation de valeur (intérêts, plus-values) ;
+  - `valuation` : variation de valeur d'un placement (cours, plus-values, fonds euros) ;
   - `parental` : part des parents (ajout, correction, restitution) ;
-  - `adjustment` : correction, « Pas de l'épargne ».
+  - `adjustment` : intérêts crédités d'un livret (« Intérêts 2026 », proposés par « Actualiser » en janvier-mars), correction de fiche, « Pas de l'épargne ».
+- **« Actualiser » et « Dépôt » passent aussi par les commandes** (`updateBalances`, `quickAdd`) : saisie illisible refusée (jamais 0 €), part propre ≥ 0, arrondi au centime. Aucune commande ne laisse une part propre négative (suppression ou annulation refusée).
 - **`isSavingsFlow`** ([`src/lib/finance/savings.ts`](src/lib/finance/savings.ts)) décide de ce qui compte comme épargne : seulement les mouvements sans `kind`, hors solde initial, et postérieurs à `config.trackingStartDate` (« Repartir de zéro »). « Placé », le taux d'épargne, la projection et les bilans en dépendent : tout nouveau calcul d'épargne doit passer par cette fonction.
 - Un mouvement de restitution (`isRestitutionMovement`) ne se supprime ni ne se renomme à la main.
 

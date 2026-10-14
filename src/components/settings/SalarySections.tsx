@@ -1,6 +1,7 @@
 // Contenu des cartes « Avantages salariaux » et « Fiscalité et barème ». L'état (brouillon
 // enregistré automatiquement) reste dans Settings : ces composants ne font que l'afficher
-// et le modifier.
+// et le modifier, toujours champ par champ à partir de l'état le plus récent (`prev`),
+// jamais en renvoyant une copie de ce qui est affiché.
 import React, { useState } from 'react';
 import { AlertTriangle, Plus, Trash2 } from 'lucide-react';
 import type { FiscalConfig, PayslipRecord, TaxBracket, WorkBenefits } from '../../types';
@@ -13,7 +14,8 @@ import { Button } from '../ui';
 import { CardSubheading, Hint, Notice } from './SettingsCard';
 import { NumberField, SwitchRow } from './fields';
 
-type SetState<T> = React.Dispatch<React.SetStateAction<T>>;
+/** Modification fonctionnelle : ne touche que les champs voulus de l'état le plus récent. */
+type SetState<T> = (update: (prev: T) => T) => void;
 
 // Champs numériques de la configuration fiscale (ceux de la grille de saisie générique).
 type NumericFiscalField = { [K in keyof FiscalConfig]-?: FiscalConfig[K] extends number | undefined ? K : never }[keyof FiscalConfig];
@@ -55,7 +57,7 @@ export const BenefitsFields: React.FC<{ payslips: PayslipRecord[]; benefits: Wor
           <Button variant="tonal" className="shrink-0 self-start sm:self-center" onClick={() => {
             const r = benefitsFromPayslips(payslips, benefits);
             if (!r) return;
-            setBenefits(r.benefits);
+            setBenefits(prev => benefitsFromPayslips(payslips, prev)?.benefits ?? prev);
             const parts = [
               r.navigoRefund ? `Navigo ${formatEUR(r.navigoRefund, 2)} remboursés` : 'pas de remboursement transport',
               r.mealVouchersEmployee ? `titres-restaurant ${formatEUR(r.mealVouchersEmployee, 2)} retenus` : 'pas de titres-restaurant',
@@ -107,13 +109,14 @@ export const BenefitsFields: React.FC<{ payslips: PayslipRecord[]; benefits: Wor
 export const FiscalFields: React.FC<{ fiscal: FiscalConfig; setFiscal: SetState<FiscalConfig> }> = ({ fiscal, setFiscal }) => {
   const change = <K extends keyof FiscalConfig>(field: K, value: FiscalConfig[K]) => setFiscal(prev => ({ ...prev, [field]: value }));
   const changeCeiling = (key: keyof FiscalConfig['ceilings'], value: number) => setFiscal(prev => ({ ...prev, ceilings: { ...prev.ceilings, [key]: value } }));
-  const updateBracket = (index: number, field: keyof TaxBracket, value: number) => {
-    const next = [...fiscal.taxBrackets];
-    next[index] = { ...next[index], [field]: value };
-    change('taxBrackets', next);
-  };
-  const addBracket = () => change('taxBrackets', [...fiscal.taxBrackets, { limit: 0, rate: 0 }]);
-  const removeBracket = (index: number) => change('taxBrackets', fiscal.taxBrackets.filter((_, i) => i !== index));
+  const updateBracket = (index: number, field: keyof TaxBracket, value: number) => setFiscal(prev => ({
+    ...prev, taxBrackets: prev.taxBrackets.map((b, i) => (i === index ? { ...b, [field]: value } : b)),
+  }));
+  const addBracket = () => setFiscal(prev => ({ ...prev, taxBrackets: [...prev.taxBrackets, { limit: 0, rate: 0 }] }));
+  const removeBracket = (index: number) => setFiscal(prev => ({ ...prev, taxBrackets: prev.taxBrackets.filter((_, i) => i !== index) }));
+  const changeDecote = (field: 'single' | 'threshold', value: number) => setFiscal(prev => ({
+    ...prev, decote: { single: 897, rate: 0.4525, threshold: 1982, ...prev.decote, [field]: value },
+  }));
 
   const numeric: [NumericFiscalField, string, number, string?][] = [
     ['salaryChargesRate', 'Charges salariales', fiscal.salaryChargesRate, 'Taux, ex. 0,2232'],
@@ -137,9 +140,9 @@ export const FiscalFields: React.FC<{ fiscal: FiscalConfig; setFiscal: SetState<
             <NumberField key={field} label={label} supporting={help} value={value} onChange={v => change(field, v)} />
           ))}
           <NumberField label="Décote : montant" suffix="€" value={fiscal.decote?.single ?? 897}
-            onChange={v => change('decote', { rate: 0.4525, threshold: 1982, ...fiscal.decote, single: v })} />
+            onChange={v => changeDecote('single', v)} />
           <NumberField label="Décote : seuil d'impôt" suffix="€" value={fiscal.decote?.threshold ?? 1982}
-            onChange={v => change('decote', { single: 897, rate: 0.4525, ...fiscal.decote, threshold: v })} />
+            onChange={v => changeDecote('threshold', v)} />
           {social.map(([field, label, value, help]) => (
             <NumberField key={field} label={label} supporting={help} value={value} onChange={v => change(field, v)} />
           ))}

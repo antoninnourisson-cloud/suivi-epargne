@@ -6,40 +6,48 @@
 // dérivait d'un endroit à l'autre.
 // ================================================
 import { AccountMovement, SavingsAccount } from '../types';
-import { depositsAfterCashFlow, tracksDeposits } from './finance';
+import { depositsAfterCashFlow, isInitialBalance, tracksDeposits } from './finance';
 import { EPS, round2, signedAmount } from './money';
 
 export { round2 };
 
 /**
  * Mouvements qui expliquent le passage d'un solde à un autre (fiche modifiée, actualisation) :
- * - variation de VOTRE part : un mouvement « {ownLabel} » ; sur un placement qui suit ses
- *   versements, l'argent versé/retiré (`cashFlow`) et la variation de valeur (`valuation`)
- *   sont séparés ;
+ * - mouvements DÉJÀ préparés par une commande (updateBalances, quickAdd) et portés par
+ *   `next.movements` (absents de `old`) : ce sont eux qui expliquent l'écart, repris tels
+ *   quels ; seul un reste éventuel est déduit ci-dessous ;
+ * - variation de VOTRE part : un mouvement « {ownLabel} » (de nature `ownKind`, par exemple
+ *   `adjustment` pour une correction qui n'est pas de l'épargne) ; sur un placement qui suit
+ *   ses versements, l'argent versé/retiré (`cashFlow`) et la variation de valeur
+ *   (`valuation`) sont séparés ;
  * - variation de la part des parents : un mouvement `parental` à part.
- * Un seul calcul, utilisé par la fiche de compte et par « Actualiser les soldes ».
  */
 export const balanceChangeMovements = (
   old: SavingsAccount,
   next: SavingsAccount,
   date: string,
-  opts: { ownLabel: string; cashFlow?: number; splitValuation?: boolean },
+  opts: { ownLabel: string; ownKind?: 'adjustment'; cashFlow?: number; splitValuation?: boolean },
 ): AccountMovement[] => {
-  const out: AccountMovement[] = [];
-  const push = (amount: number, label: string, kind?: 'valuation' | 'parental') => {
+  const known = new Set((old.movements || []).map(m => m.id));
+  const declared = (next.movements || []).filter(m => !known.has(m.id));
+  const declaredSum = (parental: boolean) => declared
+    .filter(m => (m.kind === 'parental') === parental)
+    .reduce((s, m) => s + signedAmount(m), 0);
+  const out: AccountMovement[] = [...declared];
+  const push = (amount: number, label: string, kind?: AccountMovement['kind']) => {
     const a = round2(amount);
     if (Math.abs(a) <= 0.001) return;
     out.push({ id: crypto.randomUUID(), date, amount: Math.abs(a), label: `${label} (${a > 0 ? '+' : '-'})`, type: a > 0 ? 'IN' : 'OUT', ...(kind ? { kind } : {}) });
   };
-  const ownDiff = next.ownedAmount - old.ownedAmount;
+  const ownDiff = next.ownedAmount - old.ownedAmount - declaredSum(false);
   if (opts.splitValuation) {
     const cash = opts.cashFlow ?? 0;
     push(cash, cash > 0 ? 'Versement' : 'Retrait');
     push(ownDiff - cash, 'Valorisation', 'valuation');
   } else {
-    push(ownDiff, opts.ownLabel);
+    push(ownDiff, opts.ownLabel, opts.ownKind);
   }
-  push(next.parentalCapital - old.parentalCapital, 'Part des parents', 'parental');
+  push(next.parentalCapital - old.parentalCapital - declaredSum(true), 'Part des parents', 'parental');
   return out;
 };
 
@@ -77,7 +85,9 @@ export const applyMovement = (
     parentalCapital = round2(Math.max(0, parentalCapital + flow));
   } else {
     ownedAmount = round2(ownedAmount + flow);
-    if (opts.trackDeposits && !m.kind && totalDeposits !== undefined && tracksDeposits(acc.type)) {
+    // Le solde initial n'est pas un versement suivi : les versements cumulés saisis avec la
+    // fiche le comprennent déjà (le supprimer ne doit pas les réduire).
+    if (opts.trackDeposits && !m.kind && !isInitialBalance(m) && totalDeposits !== undefined && tracksDeposits(acc.type)) {
       totalDeposits = sign > 0
         ? depositsAfterCashFlow(acc, flow)
         : Math.max(0, round2(totalDeposits + flow)); // annulation : on retire exactement ce qui avait été ajouté
@@ -99,19 +109,25 @@ export const snapshotBalances = (accounts: SavingsAccount[], ids: string[]): Bal
 /**
  * Remet ces comptes exactement dans l'état de l'instantané. `createdIds` : mouvements créés
  * par l'opération annulée (jetés). Les autres mouvements apparus depuis sur ces comptes
- * sont conservés et rejoués par-dessus.
+ * sont conservés et rejoués par-dessus (versements cumulés compris).
+ * Garde-fou : si l'annulation rendait une part propre négative (un retrait fait depuis
+ * dépendait de l'opération annulée), rien n'est changé.
  */
-export const restoreBalances = (accounts: SavingsAccount[], snap: BalanceSnapshot, createdIds: string[] = []): SavingsAccount[] =>
-  accounts.map(a => {
+export const restoreBalances = (accounts: SavingsAccount[], snap: BalanceSnapshot, createdIds: string[] = []): SavingsAccount[] => {
+  const created = new Set(createdIds);
+  let broken = false;
+  const next = accounts.map(a => {
     const s = snap[a.id];
     if (!s) return a;
     const known = new Set((s.movements || []).map(m => m.id));
-    const created = new Set(createdIds);
     const later = (a.movements || []).filter(m => !known.has(m.id) && !created.has(m.id));
     let restored: SavingsAccount = { ...a, ...s, movements: [...(s.movements || [])] };
-    for (const m of later) restored = applyMovement(restored, m, 1);
+    for (const m of later) restored = applyMovement(restored, m, 1, { trackDeposits: true });
+    if (restored.ownedAmount < -EPS && a.ownedAmount >= -EPS) broken = true;
     return restored;
   });
+  return broken ? accounts : next;
+};
 
 // ---------------------------------------------------------------------------
 // Nettoyage : mouvements qui s'annulent

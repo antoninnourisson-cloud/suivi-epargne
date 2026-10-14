@@ -7,3 +7,4 @@ export * from './quickAdd';
 export * from './movements';
 export * from './restitution';
 export * from './accounts';
+export * from './balances';

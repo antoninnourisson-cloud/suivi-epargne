@@ -294,6 +294,34 @@ describe('LDDS et taux servi', () => {
   });
 });
 
+describe('surplus une fois les livrets pleins', () => {
+  const full = [
+    acc({ id: 'lep', name: 'LEP', type: AccountType.LEP, interestRate: 2.5, totalAmount: 10000, ownedAmount: 10000 }),
+    acc({ id: 'la', name: 'Livret A', type: AccountType.LIVRET_A, interestRate: 1.7, totalAmount: 22950, ownedAmount: 22950 }),
+    acc({ id: 'ldds', name: 'LDDS', type: AccountType.LDDS, interestRate: 1.7, totalAmount: 12000, ownedAmount: 12000 }),
+  ];
+  const crypto = acc({ id: 'c', name: 'Crypto', type: AccountType.CRYPTO, interestRate: 8, totalAmount: 500, ownedAmount: 500 });
+  const pee = acc({ id: 'pee', name: 'PEE', type: AccountType.PEE, interestRate: 5, totalAmount: 1500, ownedAmount: 1500 });
+  const per = acc({ id: 'per', name: 'PER', type: AccountType.PER, interestRate: 5, totalAmount: 20000, ownedAmount: 20000 });
+  const av = acc({ id: 'av', name: 'AV', type: AccountType.ASSURANCE_VIE, interestRate: 2.6, totalAmount: 4000, ownedAmount: 4000 });
+
+  it("ne va jamais automatiquement sur la crypto, un PEE ou un PER, même mieux rémunérés", () => {
+    const steps = computePlacementStrategy(600, [crypto, pee, per, ...full, av], CFG);
+    expect(steps.map(s => [s.accountId, s.fillAmount])).toEqual([['av', 600]]);
+  });
+  it("sans AV ni PEA : l'argent reste sur le compte courant, avec une explication", () => {
+    const steps = computePlacementStrategy(600, [crypto, pee, ...full], CFG);
+    expect(steps).toHaveLength(1);
+    expect(steps[0].accountId).toBeUndefined();
+    expect(steps[0].hint).toContain('compte courant');
+    expect(steps[0].hint).toContain('Crypto, PEE');
+  });
+  it('sauf si la répartition personnalisée les cite', () => {
+    const steps = computePlacementStrategy(600, [pee, ...full], CFG, [{ accountId: 'pee', pct: 100 }]);
+    expect(steps.map(s => [s.accountId, s.fillAmount])).toEqual([['pee', 600]]);
+  });
+});
+
 describe('solde initial', () => {
   it("n'est compté ni comme épargne du mois ni dans la reconstitution du passé", () => {
     const a = acc({ totalAmount: 5300, ownedAmount: 5300, movements: [
