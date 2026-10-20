@@ -77,40 +77,64 @@ jobs:
             fi
           fi
 
-          # Pages publiques. La protection anti-robots de Cloudflare refuse (403) les requêtes
-          # des serveurs de GitHub : dans ce cas, on s'appuie sur le contrôle fait par le serveur
-          # lui-même (champ « site » de /status, vieux de 15 min au plus).
-          site_ok=$(jq -r '.site.ok // empty' status.json 2>/dev/null || true)
-          site_failing=$(jq -r '(.site.failing // []) | join(", ")' status.json 2>/dev/null || true)
-          site_hsts=$(jq -r '.site.hsts // empty' status.json 2>/dev/null || true)
-          check_page() { # $1 = chemin (vide pour l'accueil)
-            code=$("${CURL[@]}" -o page.html -w '%{http_code}' "$SITE/$1" || echo 000)
-            if [ "$code" = 200 ] && grep -q 'Pécule' page.html; then ok "/$1"
-            elif [ "$code" = 403 ] && [ "$site_ok" = true ]; then ok "/$1 (vérifiée par le serveur : GitHub est filtré par Cloudflare)"
-            elif [ "$code" = 403 ] && [ "$site_ok" = false ]; then fail "Site : pages en échec vues par le serveur : $site_failing"
-            else fail "$SITE/$1 : code HTTP $code (attendu 200 avec « Pécule »)"; fi
-          }
-          for p in "" presentation.html confidentialite.html; do check_page "$p"; done
+          # 2. Site publié, vérifié directement chez GitHub Pages (requête envoyée à une adresse de
+          # GitHub Pages avec le nom du site, certificat vérifié) : la protection anti-robots de
+          # Cloudflare refuse (403) les requêtes des serveurs de GitHub, et parfois celles du
+          # serveur lui-même, mais elle n'est pas sur ce chemin.
+          origin=()
+          for ip in 185.199.108.153 185.199.109.153 185.199.110.153 185.199.111.153; do
+            if [ "$("${CURL[@]}" --resolve "$HOST:443:$ip" -o /dev/null -w '%{http_code}' "$SITE/" 2>/dev/null)" = 200 ]; then
+              origin=(--resolve "$HOST:443:$ip"); break
+            fi
+          done
+          if [ ${#origin[@]} -eq 0 ]; then fail "GitHub Pages injoignable (aucune des 4 adresses ne répond)"; fi
+          for p in "" presentation.html confidentialite.html; do
+            code=$("${CURL[@]}" "${origin[@]}" -o page.html -w '%{http_code}' "$SITE/$p" || echo 000)
+            if [ "$code" = 200 ] && grep -q 'Pécule' page.html; then ok "/$p (GitHub Pages)"
+            else fail "Site publié (GitHub Pages) : /$p répond $code (attendu 200 avec « Pécule »)"; fi
+          done
 
           # Écran blanc : « Pécule » est écrit en dur dans index.html, même si l'app ne démarre
-          # pas. Le script principal qu'il cite doit donc aussi répondre 200, avec un type
-          # JavaScript. Filtré par Cloudflare (403) : le serveur le vérifie lui-même (champ
-          # « site » de /status ci-dessus, voir worker/src/siteCheck.ts).
-          code=$("${CURL[@]}" -o home.html -w '%{http_code}' "$SITE/" || echo 000)
+          # pas. Le script principal qu'il cite doit donc aussi répondre 200, avec un type JavaScript.
+          code=$("${CURL[@]}" "${origin[@]}" -o home.html -w '%{http_code}' "$SITE/" || echo 000)
           if [ "$code" = 200 ]; then
             src=$(grep -oE '<script[^>]*type="module"[^>]*src="[^"]+"' home.html | head -n1 | sed -E 's/.*src="([^"]+)".*/\1/' || true)
             if [ -z "$src" ]; then fail "Accueil : script principal introuvable dans index.html (écran blanc probable)"
             else
               src=${src#./}; src=${src#/}
-              js=$("${CURL[@]}" -o /dev/null -w '%{http_code} %{content_type}' "$SITE/$src" || echo '000 -')
+              js=$("${CURL[@]}" "${origin[@]}" -o /dev/null -w '%{http_code} %{content_type}' "$SITE/$src" || echo '000 -')
               if echo "$js" | grep -qiE '^200 .*(javascript|ecmascript)'; then ok "Script principal /$src"
               else fail "Script principal $SITE/$src : $js (attendu 200 et un type JavaScript : écran blanc probable)"; fi
             fi
           fi
 
+          # 3. Couche Cloudflare (DNS, proxy, Worker d'en-têtes edge/) : requête normale. Si
+          # Cloudflare filtre GitHub (403), on s'appuie sur le contrôle fait par le serveur
+          # (champ « site » de /status, vieux de 15 min au plus). Si le serveur est filtré lui
+          # aussi, la couche Cloudflare n'est pas vérifiable aujourd'hui : simple information,
+          # le site publié ayant été vérifié ci-dessus.
+          # (jq : `//` remplace aussi false, d'où les tests explicites.)
+          site_state=$(jq -r 'if (.site | type) != "object" then "absent" elif .site.ok == true then "ok" else "ko" end' status.json 2>/dev/null || echo absent)
+          site_failing=$(jq -r '(.site.failing // []) | join(", ")' status.json 2>/dev/null || true)
+          site_hsts=$(jq -r 'if .site.hsts == true then "true" else "false" end' status.json 2>/dev/null || echo false)
+          site_filtered=$(jq -r 'if ((.site.failing // []) | length) > 0 and all(.site.failing[]; test("\\((403|injoignable)\\)$")) then "true" else "false" end' status.json 2>/dev/null || echo false)
+          edge_unverified=false
+          for p in "" presentation.html confidentialite.html; do
+            code=$("${CURL[@]}" -o page.html -w '%{http_code}' "$SITE/$p" || echo 000)
+            if [ "$code" = 200 ] && grep -q 'Pécule' page.html; then ok "/$p (Cloudflare)"
+            elif [ "$code" = 403 ] && [ "$site_state" = ok ]; then ok "/$p (Cloudflare, vérifiée par le serveur : GitHub est filtré)"
+            elif [ "$code" = 403 ] && [ "$site_state" = ko ] && [ "$site_filtered" = false ]; then fail "Site via Cloudflare : pages en échec vues par le serveur : $site_failing"
+            elif [ "$code" = 403 ]; then edge_unverified=true
+            else fail "$SITE/$p : code HTTP $code via Cloudflare (attendu 200 avec « Pécule »)"; fi
+          done
+          if [ "$edge_unverified" = true ]; then
+            notice "Couche Cloudflare non vérifiable aujourd'hui : la protection anti-robots filtre GitHub et le serveur (contrôle du serveur : ${site_state}${site_failing:+, $site_failing}). Le site publié a été vérifié directement chez GitHub Pages."
+          fi
+
           # En-têtes de sécurité (Worker edge/) : HSTS attendu sur l'accueil.
           headers=$("${CURL[@]}" -I "$SITE/" || true)
           if echo "$headers" | grep -qi '^strict-transport-security:' || [ "$site_hsts" = true ]; then ok "En-tête HSTS"
+          elif [ "$edge_unverified" = true ]; then notice "En-tête HSTS non vérifiable aujourd'hui (même raison)"
           else fail "En-tête Strict-Transport-Security absent : le Worker edge (pecule-edge) ne s'applique plus ?"; fi
 
           # 4. Certificat TLS : expire dans plus de CERT_MIN_DAYS jours.
