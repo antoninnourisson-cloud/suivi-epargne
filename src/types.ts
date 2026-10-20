@@ -70,6 +70,9 @@ export interface SavingsAccount {
   euroFundPct?: number;
   // Dernière vérification du taux (même inchangé) : éteint le rappel de révision.
   rateReviewedAt?: string;
+  // Compte tenu par un établissement à l'étranger (néobanque, courtier, plateforme crypto) :
+  // à déclarer chaque année (case 8UU, formulaire 3916 ou 3916-bis). Absent = non précisé.
+  heldAbroad?: boolean;
 }
 
 export interface PortfolioSnapshot {
@@ -182,6 +185,14 @@ export interface PayChecklist {
   lines: PayChecklistLine[];
   // Virements faits : montant réel (peut différer du prévu) et mouvement enregistré.
   done: Record<string, { amount: number; movementId?: string; alreadyRecorded?: boolean }>;
+}
+
+// Réglages de la paie en cours, saisis dans le Pilotage (voir lib/payAdjustment) : ils
+// valent jusqu'à la paie suivante, puis sont ignorés.
+export interface PayAdjustment {
+  period: string;           // 'YYYY-MM' : mois de la paie concernée (payPeriodOf)
+  capacity?: number;        // « Capacité d'épargne du mois » saisie (remplace le calcul)
+  extra?: number;           // « Somme en plus à placer » (prime, cadeau…)
 }
 
 // Restitution du capital parental (prévue fin 2026).
@@ -333,6 +344,8 @@ export interface GlobalAppData {
     milestonesSeen?: string[];
     // Points de paie validés (clés 'YYYY-MM' de la paie).
     payReviewsDone?: string[];
+    // Capacité d'épargne et somme en plus de la paie en cours (Pilotage, Accueil, relance).
+    payAdjustment?: PayAdjustment;
   };
   goals?: SavingsGoal[];
   lastView?: string;

@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { simulate, mulberry32, pastMonthlySavings, monthIndex, Scenario } from './simulator';
 import { buildSoloPlan } from './planning';
+import { projectSavings } from './projection';
+import { parseISODate } from './dates';
 import { DEFAULT_FISCAL_CONFIG as CFG } from '../constants';
 import { AccountType, AccountMovement, SavingsAccount } from '../types';
 
@@ -25,10 +27,47 @@ describe('simulateur « Et si… » : courbe de référence', () => {
     const r = simulate({ accounts: simple(), fiscal: CFG, monthlyPlan: 500, horizon: 12, today: '2027-01-01', restitution: { done: true } });
     const solo = buildSoloPlan(simple(), CFG, 500, '2027-01-01', { years: 1 });
     expect(r.start).toBe(8000);
-    expect(Math.round(r.points[12].baseline)).toBe(solo.years[0].total);
+    // Même règle (Livret A versé au 31 décembre) : même solde, au centime d'arrondi près.
+    expect(solo.years[0].total).toBe(Math.round(r.points[12].baseline));
     expect(r.points).toHaveLength(13);
     expect(r.points[0].date).toBe('2027-01-01');
     expect(r.points[12].date).toBe('2028-01-01');
+  });
+
+  it('même solde que le plan solo et la projection Rendement en partant en cours d\'année', () => {
+    // 19 octobre : les intérêts du Livret A acquis de janvier à septembre sont versés au
+    // 31 décembre par les trois calculs.
+    const today = '2026-10-19';
+    const r = simulate({ accounts: simple(), fiscal: CFG, monthlyPlan: 500, horizon: 12, today, restitution: { done: true } });
+    const solo = buildSoloPlan(simple(), CFG, 500, today, { years: 1 });
+    expect(solo.years.map(y => y.year)).toEqual([2026, 2027]);
+    expect(r.points[3].date).toBe('2027-01-01');
+    expect(solo.years[0].total).toBe(Math.round(r.points[3].baseline));
+    expect(solo.years[1].total).toBe(Math.round(r.points[12].baseline));
+    const proj = projectSavings(simple(), CFG, 500, 1, undefined, undefined, parseISODate(today));
+    expect(proj.total).toBeCloseTo(r.points[12].baseline, 6);
+  });
+
+  it('Livret A seul, 20 000 € à 1,7 % le 19 octobre : 20 340 € au 1er janvier partout', () => {
+    const accounts = [acc({ id: 'la', name: 'Livret A', type: AccountType.LIVRET_A, ownedAmount: 20000, interestRate: 1.7 })];
+    const r = simulate({ accounts, fiscal: CFG, monthlyPlan: 0, horizon: 12, today: '2026-10-19', restitution: { done: true } });
+    expect(r.points[3].baseline).toBeCloseTo(20340, 9);
+    expect(buildSoloPlan(accounts, CFG, 0, '2026-10-19', { years: 1 }).years[0].total).toBe(20340);
+    expect(projectSavings(accounts, CFG, 0, 1, undefined, undefined, parseISODate('2026-10-19')).total).toBeCloseTo(r.points[12].baseline, 9);
+  });
+
+  it('intérêts de livrets gagnés mais pas encore versés au dernier mois : rendus à part', () => {
+    const accounts = [acc({ id: 'la', name: 'Livret A', type: AccountType.LIVRET_A, ownedAmount: 10000, interestRate: 1.7 })];
+    const r = simulate({ accounts, fiscal: CFG, monthlyPlan: 0, horizon: 18, today: '2027-01-01', restitution: { done: true } });
+    // Juillet 2028 : 2027 versé, janvier à juin 2028 acquis mais pas comptés dans la courbe.
+    expect(r.points[18].baseline).toBeCloseTo(10170, 9);
+    expect(r.pendingInterest.baseline).toBeCloseTo(10170 * 0.017 * 6 / 12, 9);
+    expect(r.pendingInterest.scenario).toBeCloseTo(r.pendingInterest.baseline, 9);
+    // Horizon qui finit un 1er janvier : tout est versé, rien en attente.
+    const jan = simulate({ accounts, fiscal: CFG, monthlyPlan: 0, horizon: 12, today: '2027-01-01', restitution: { done: true } });
+    expect(jan.pendingInterest.baseline).toBe(0);
+    // Sans livret réglementé : rien en attente.
+    expect(run().pendingInterest).toEqual({ baseline: 0, scenario: 0 });
   });
 
   it('sans scénario, la courbe du scénario est la référence', () => {
@@ -36,6 +75,33 @@ describe('simulateur « Et si… » : courbe de référence', () => {
     expect(r.points.every(p => p.scenario === p.baseline)).toBe(true);
     expect(r.gap).toBe(0);
     expect(r.baselineEnd).toBe(8000 + 500 * 24);
+  });
+
+  it('Livret A : intérêts ajoutés une fois par an, au 31 décembre (pas chaque mois)', () => {
+    const accounts = [acc({ id: 'la', name: 'Livret A', type: AccountType.LIVRET_A, ownedAmount: 10000, interestRate: 1.7 })];
+    const r = simulate({ accounts, fiscal: CFG, monthlyPlan: 0, horizon: 24, today: '2027-01-01', restitution: { done: true } });
+    // Pas d'intérêts sur les intérêts en cours d'année : le solde ne bouge qu'au 1er janvier.
+    for (let m = 0; m < 12; m++) expect(r.points[m].baseline).toBe(10000);
+    expect(r.points[12].baseline).toBeCloseTo(10170, 9);
+    // L'année suivante, les intérêts crédités rapportent à leur tour.
+    expect(r.points[23].baseline).toBeCloseTo(10170, 9);
+    expect(r.points[24].baseline).toBeCloseTo(10170 * 1.017, 9);
+  });
+
+  it('Livret A : le crédit du 31 décembre comprend les intérêts déjà acquis depuis janvier', () => {
+    const accounts = [acc({ id: 'la', name: 'Livret A', type: AccountType.LIVRET_A, ownedAmount: 10000, interestRate: 1.7 })];
+    const r = simulate({ accounts, fiscal: CFG, monthlyPlan: 0, horizon: 6, today: '2027-10-14', restitution: { done: true } });
+    expect(r.points[2].baseline).toBe(10000);
+    // 1er janvier 2028 : toute l'année 2027 (janvier à septembre déjà acquis, puis octobre à
+    // décembre simulés), soit 10 000 € × 1,7 %.
+    expect(r.points[3].baseline).toBeCloseTo(10170, 9);
+  });
+
+  it('assurance vie : intérêts toujours ajoutés chaque mois', () => {
+    const accounts = [acc({ id: 'av', name: 'AV', type: AccountType.ASSURANCE_VIE, ownedAmount: 10000, interestRate: 2 })];
+    const r = simulate({ accounts, fiscal: CFG, monthlyPlan: 0, horizon: 6, today: '2027-01-01', restitution: { done: true } });
+    expect(r.points[1].baseline).toBeGreaterThan(10000);
+    expect(r.points[2].baseline).toBeGreaterThan(r.points[1].baseline);
   });
 
   it('borne l\'horizon entre 6 et 60 mois', () => {
@@ -105,8 +171,27 @@ describe('restitution et part des parents', () => {
     const r = simulate({ ...base, restitution: { plannedDate: '2027-01-01' } });
     expect(monthIndex('2026-10-07', '2027-01-01')).toBe(3);
     expect(r.restitution.baselineMonth).toBe(3);
-    // Mois 1 : intérêts du capital entier (offerts) ; versement sur l'AV (LEP plein).
-    expect(r.points[1].baseline).toBeCloseTo(7500 + 10000 * 0.024 / 12 + 300, 6);
+    // Mois 1 et 2 : versement sur l'AV (LEP plein) ; les intérêts du LEP attendent le 31/12.
+    expect(r.points[1].baseline).toBeCloseTo(7500 + 300, 6);
+    expect(r.points[2].baseline).toBeCloseTo(7500 + 600, 6);
+    // Mois 3 (1er janvier) : crédit des intérêts de l'année, tous à vous (ceux du capital des
+    // parents sont offerts) : janvier à septembre déjà acquis (18 quinzaines sur 10 000 €),
+    // puis octobre, novembre et décembre sur 10 000 € : les parents reprennent leur capital
+    // le 1er janvier, après le 31 décembre. Le LEP a de nouveau de la place : le versement du
+    // mois y va.
+    const credited = 10000 * 0.024 * 18 / 24 + 3 * 10000 * 0.024 / 12;
+    expect(r.points[3].baseline).toBeCloseTo(7500 + 900 + credited, 6);
+    // Janvier : les nouveaux intérêts du LEP attendent le 31 décembre, seul le versement s'ajoute.
+    expect(r.points[4].baseline).toBeCloseTo(r.points[3].baseline + 300, 6);
+  });
+
+  it('restitution déjà passée mais pas enregistrée : appliquée avant tout intérêt', () => {
+    const r = simulate({ ...base, monthlyPlan: 0, restitution: { plannedDate: '2026-09-01' } });
+    expect(r.restitution.baselineMonth).toBe(1);
+    // Octobre à décembre sur votre part seule (7 000 €) ; janvier à septembre d'après les
+    // mouvements enregistrés (la restitution ne l'est pas encore) : 10 000 €.
+    const credited = 10000 * 0.024 * 18 / 24 + 3 * 7000 * 0.024 / 12;
+    expect(r.points[3].baseline).toBeCloseTo(7500 + credited, 6);
   });
 
   it('décaler la restitution change la courbe ; sans effet une fois faite', () => {
@@ -137,6 +222,13 @@ describe('fourchette (bootstrap de vos mois passés)', () => {
     const a = run([{ kind: 'purchase', id: 'p', amount: 1000, month: 2 }], { history, rng: mulberry32(7), runs: 200 });
     const b = run([{ kind: 'purchase', id: 'p', amount: 1000, month: 2 }], { history, rng: mulberry32(7), runs: 200 });
     expect(a.points).toEqual(b.points);
+  });
+
+  it('`seed` donne la même fourchette que le générateur de même graine (calcul hors écran)', () => {
+    const viaSeed = run([], { history, seed: 2026, runs: 100 });
+    const viaRng = run([], { history, rng: mulberry32(2026), runs: 100 });
+    expect(viaSeed.points).toEqual(viaRng.points);
+    expect(run([], { history, runs: 100 }).points).toEqual(run([], { history, seed: 1, runs: 100 }).points);
   });
 
   it('un historique constant donne une fourchette serrée sur ce montant', () => {

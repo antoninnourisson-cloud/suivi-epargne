@@ -67,7 +67,12 @@ export const SoloPlanCard: React.FC<Props> = ({ accounts, fiscalConfig, monthPla
           ))}
         </ul>
       )}
-      <p className="text-[11px] text-slate-500 dark:text-slate-400">Taux d'aujourd'hui supposés constants, intérêts nets. Votre répartition personnalisée est utilisée si vous en avez une, sinon le plan « meilleur taux d'abord ».</p>
+      {plan.unplaced >= 1 && (
+        <p className="text-sm text-amber-800 dark:text-amber-300">
+          {formatEUR(plan.unplaced, 0)} versés ne trouvent pas de place (livrets pleins, ni assurance vie ni PEA) : ils restent sur le compte courant, sans intérêts, et sont comptés dans les totaux.
+        </p>
+      )}
+      <p className="text-[11px] text-slate-500 dark:text-slate-400">Taux d'aujourd'hui supposés constants, intérêts nets d'impôt et de prélèvements sociaux en cas de retrait. Votre répartition personnalisée est utilisée si vous en avez une, sinon le plan « meilleur taux d'abord ».</p>
     </section>
   );
 };

@@ -1,8 +1,8 @@
 // Répétition générale de la restitution du capital des parents (prévue vers le 1er janvier
 // 2027), en mode démo, par la vraie interface : planifier, enregistrer, vérifier les soldes
 // écran par écran, le passage en mode solo et le relevé, puis annuler (par le toast, puis
-// depuis l'écran) et vérifier que tout est revenu.
-import { test, expect, type Page } from '@playwright/test';
+// depuis l'écran, avec confirmation et « Rétablir ») et vérifier que tout est revenu.
+import { test, expect, type Page } from './fixtures';
 import { readFile } from 'node:fs/promises';
 import { LATEST_VERSION } from '../src/changelog';
 
@@ -164,9 +164,27 @@ test.describe('Répétition générale de la restitution', () => {
     await goTo(page, 'Part parentale', isMobile);
     await expect(page.getByRole('heading', { name: /^Restitution effectuée/ })).toBeVisible();
 
-    // --- Annulation depuis l'écran ---
+    // --- Annulation depuis l'écran : toujours confirmée, puis rétablissable ---
+    const confirmUndo = page.getByRole('dialog', { name: 'Annuler la restitution ?' });
+    const undoneToast = page.getByRole('status').filter({ hasText: 'Restitution annulée : la part de vos parents est rétablie' });
     await page.getByRole('button', { name: 'Annuler la restitution' }).click();
-    await expect(page.getByRole('status').filter({ hasText: 'Restitution annulée : la part de vos parents est rétablie' })).toBeVisible();
+    await expect(confirmUndo).toContainText(/9\s500\s€ de capital de vos parents seront remis sur 2 comptes, et le relevé du 1er janvier 2027 sera effacé/);
+    // « Garder la restitution » ne change rien.
+    await confirmUndo.getByRole('button', { name: 'Garder la restitution' }).click();
+    await expect(confirmUndo).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: /^Restitution effectuée/ })).toBeVisible();
+    // Confirmée puis rétablie depuis le toast : la restitution revient à l'identique.
+    await page.getByRole('button', { name: 'Annuler la restitution' }).click();
+    await confirmUndo.getByRole('button', { name: 'Remettre leur capital' }).click();
+    await expect(page.getByRole('heading', { name: 'Restitution du capital' })).toBeVisible();
+    await undoneToast.last().getByRole('button', { name: 'Rétablir' }).click();
+    await expect(page.getByRole('heading', { name: /^Restitution effectuée le 1er janvier 2027/ })).toBeVisible();
+    expect(await readAccounts(page, isMobile)).toEqual(after);
+    // Puis annulée pour de bon.
+    await goTo(page, 'Part parentale', isMobile);
+    await page.getByRole('button', { name: 'Annuler la restitution' }).click();
+    await confirmUndo.getByRole('button', { name: 'Remettre leur capital' }).click();
+    await expect(undoneToast.last()).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Restitution du capital' })).toBeVisible();
     await expect(page.getByText(/^Rappels prévus : début décembre, puis le 1er janvier 2027/)).toBeVisible();
     expect(await readAccounts(page, isMobile)).toEqual(before);

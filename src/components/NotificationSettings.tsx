@@ -66,7 +66,7 @@ export const NotificationSettings: React.FC<{ paydayDay?: number; onOpenPayday?:
   return (
     <div className="space-y-4">
       <Hint>
-        Recevez les rappels même app fermée : jour de paie, abonnements, échéances récurrentes, révision des taux réglementés, bilan du mois, dons à déclarer, soldes non actualisés… Vérification une fois par jour ; chaque rappel n’est envoyé qu’une fois. Réglage propre à cet appareil.
+        Recevez les rappels même app fermée : jour de paie, abonnements, échéances récurrentes, révision des taux réglementés, bilan du mois, déclaration de revenus (en avril), soldes non actualisés… Vérification une fois par jour ; chaque rappel n’est envoyé qu’une fois. Réglage propre à cet appareil.
       </Hint>
 
       {state === 'loading' && <Loader2 className="w-4 h-4 animate-spin text-on-surface-variant" aria-label="Chargement" />}

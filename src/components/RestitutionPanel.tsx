@@ -2,7 +2,7 @@
 // FILE: src/components/RestitutionPanel.tsx
 // Restitution du capital parental : date conseillée (le 1er janvier garde toute l'année
 // d'intérêts), montants par compte, effet sur le plan de placement, puis enregistrement
-// en un clic avec relevé exportable et annulation.
+// en un clic avec relevé exportable et annulation (confirmée, puis rétablissable).
 // ================================================
 import React, { useMemo, useState } from 'react';
 import { SavingsAccount, ParentalRestitution, AccountType } from '../types';
@@ -10,6 +10,7 @@ import { computeRestitutionPlan, suggestedRestitutionDate } from '../lib/finance
 import { formatEUR, frenchDay } from '../lib/format';
 import { parseISODate, localTodayISO } from '../lib/dates';
 import { HandCoins, CalendarCheck, Lightbulb, CheckCircle2, FileDown, RotateCcw } from 'lucide-react';
+import { Dialog } from './Dialog';
 
 interface RestitutionPanelProps {
   accounts: SavingsAccount[];
@@ -31,6 +32,7 @@ export const RestitutionPanel: React.FC<RestitutionPanelProps> = ({ accounts, re
   const suggested = suggestedRestitutionDate();
   const [date, setDate] = useState(restitution?.plannedDate || suggested);
   const [confirming, setConfirming] = useState(false);
+  const [confirmingUndo, setConfirmingUndo] = useState(false);
   // Date du retrait réel : la date prévue si elle est passée (enregistrement après coup),
   // sinon aujourd'hui.
   const [withdrawDate, setWithdrawDate] = useState(() => {
@@ -49,6 +51,9 @@ export const RestitutionPanel: React.FC<RestitutionPanelProps> = ({ accounts, re
   const done = restitution?.done;
   if (done) {
     const total = done.accounts.reduce((s, a) => s + a.amount, 0);
+    const restored = done.accounts.filter(a => a.amount > 0);
+    // Un seul compte : on le nomme (ex. « … sur le compte « Livret A » »).
+    const restoredWhere = restored.length > 1 ? `${restored.length} comptes` : restored[0] ? `le compte « ${restored[0].name} »` : 'le compte';
     const exportCsv = () => {
       let csv = `Relevé de restitution du capital parental,${done.date}\n\nCompte,Capital rendu (€)\n`;
       done.accounts.forEach(a => { csv += `"${a.name.replace(/"/g, '""')}",${a.amount.toFixed(2)}\n`; });
@@ -72,9 +77,27 @@ export const RestitutionPanel: React.FC<RestitutionPanelProps> = ({ accounts, re
           </p>
         )}
         <div className="flex flex-wrap gap-3 pt-1">
-          <button onClick={exportCsv} className="flex items-center gap-2 bg-white dark:bg-slate-800 border border-emerald-200 dark:border-emerald-900 px-3 py-2 rounded-lg text-sm font-bold text-emerald-800 dark:text-emerald-300"><FileDown className="w-4 h-4" /> Exporter le relevé (CSV)</button>
-          <button onClick={onUndo} className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-bold text-slate-600 dark:text-slate-300 hover:underline"><RotateCcw className="w-4 h-4" /> Annuler la restitution</button>
+          <button onClick={exportCsv} className="flex items-center gap-2 bg-white dark:bg-slate-800 border border-emerald-200 dark:border-emerald-900 px-3 py-2 rounded-lg text-sm font-bold text-emerald-800 dark:text-emerald-300"><FileDown className="w-4 h-4" aria-hidden="true" /> Exporter le relevé (CSV)</button>
         </div>
+        {/* Annulation : à l'écart de l'export, et toujours confirmée (elle remet le capital
+            des parents sur les comptes et efface le relevé). */}
+        <div className="mt-2 pt-3 border-t border-emerald-200 dark:border-emerald-900 flex flex-wrap items-center justify-between gap-2">
+          <p className="text-xs text-emerald-900 dark:text-emerald-200">Enregistrée par erreur ?</p>
+          <button type="button" onClick={() => setConfirmingUndo(true)} className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-bold text-emerald-900 dark:text-emerald-200 hover:underline"><RotateCcw className="w-4 h-4" aria-hidden="true" /> Annuler la restitution</button>
+        </div>
+        <Dialog
+          state={{
+            open: confirmingUndo,
+            kind: 'confirm',
+            danger: true,
+            title: 'Annuler la restitution ?',
+            message: `${fmt(total)} de capital de vos parents seront remis sur ${restoredWhere}, et le relevé du ${dayLabel(done.date)} sera effacé. Votre part ne change pas. Vous pourrez rétablir la restitution juste après.`,
+            confirmLabel: 'Remettre leur capital',
+            cancelLabel: 'Garder la restitution',
+            onConfirm: onUndo,
+          }}
+          onClose={() => setConfirmingUndo(false)}
+        />
       </div>
     );
   }

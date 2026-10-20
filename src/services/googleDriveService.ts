@@ -5,7 +5,7 @@
 
 import {
   isBackendEnabled, hasBackendSession, fetchAccessToken, startBackendLogin, backendLogout, consumeLoginCode,
-  saveBackendSession,
+  saveBackendSession, type LoginOptions,
 } from './backendService';
 import { verifyWriteChain, RevisionEntry } from '../lib/driveWriteCheck';
 
@@ -13,14 +13,13 @@ const CLIENT_ID = '763862877733-hl1an9vcn0ibnoq2iq035927528mimd5.apps.googleuser
 const SCOPES = 'https://www.googleapis.com/auth/drive.file';
 const FILE_NAME = 'suivi_epargne.json';
 
-// Types minimaux des SDK Google chargés par <script> (gapi, GIS, Picker) : uniquement ce
-// que l'app utilise.
+// Types minimaux des SDK Google (gapi pour le Picker, GIS pour la connexion sans serveur) :
+// uniquement ce que l'app utilise. Ils sont chargés à la demande (voir loadScript).
 interface TokenResponse { access_token?: string; expires_in?: number; error?: string }
 type TokenCallback = ((resp: TokenResponse) => void) | '';
 interface TokenClient { callback: TokenCallback; requestAccessToken: (opts: { prompt: string }) => void }
 interface Gapi {
   load: (lib: string, cb: (() => void) | { callback: () => void; onerror: (e?: unknown) => void }) => void;
-  client: { init: (opts: { discoveryDocs: string[] }) => Promise<void>; setToken: (token: string) => void };
 }
 interface PickerCallbackData { action: string; docs?: { id: string; name: string; mimeType: string }[] }
 interface PickerDocsView {
@@ -53,77 +52,90 @@ interface GoogleGlobals { gapi: Gapi; google: GoogleSdk }
 const googleWindow = () => window as unknown as Partial<GoogleGlobals>;
 
 let tokenClient: TokenClient | undefined;
-let gapiInited = false;
-let gisInited = false;
 
 // Callback déclenché quand la session est définitivement perdue (401 + refresh KO).
 // L'UI s'y abonne pour afficher une bannière de reconnexion.
 let onAuthLost: (() => void) | null = null;
 export const setOnAuthLost = (cb: (() => void) | null) => { onAuthLost = cb; };
 
-// --- INITIALISATION (web) ---
-/**
- * Attend que les deux SDK Google (gapi + GIS, chargés en `async defer` depuis
- * index.html) soient disponibles, puis les initialise.
- *
- * Avant, on testait `window.gapi`/`window.google` UNE SEULE FOIS, au montage : si les
- * scripts n'étaient pas encore évalués (connexion lente, cache froid), aucune branche ne
- * s'exécutait, la promesse ne se réglait jamais et l'app restait bloquée sur
- * « Chargement API… » sans erreur exploitable. On attend donc activement, avec un délai
- * maximal au-delà duquel on rejette pour que l'UI puisse afficher un vrai message.
- */
+// --- SDK GOOGLE, CHARGÉS À LA DEMANDE ---
+// Plus aucun <script> Google dans index.html : toutes les requêtes Drive passent par fetch.
+// En mode serveur, rien n'en a besoin au démarrage (environ 260 Kio et 1 à 2 s gagnés à
+// chaque ouverture, et l'app démarre hors ligne). GIS ne sert qu'à la connexion sans serveur,
+// api.js qu'au Google Picker (dons, fiches de paie). La CSP d'index.html (script-src)
+// autorise toujours ces deux origines.
+const GIS_SRC = 'https://accounts.google.com/gsi/client';
+const GAPI_SRC = 'https://apis.google.com/js/api.js';
+// Délai maximal de chargement d'un SDK : au-delà, on échoue avec un message plutôt que de
+// laisser l'écran en attente.
 const SDK_WAIT_TIMEOUT_MS = 20_000;
 
-const waitForGlobal = <K extends keyof GoogleGlobals>(name: K, timeoutMs: number): Promise<GoogleGlobals[K]> =>
+/** Échec de chargement d'un SDK Google : traité comme un problème réseau (TypeError). */
+const sdkUnavailable = (what: string) => new TypeError(`GOOGLE_SDK_UNAVAILABLE:${what}`);
+
+const scriptLoads = new Map<string, Promise<void>>();
+/** Insère le script une seule fois ; un échec (hors ligne, bloqueur) laisse réessayer plus tard. */
+const loadScript = (src: string): Promise<void> => {
+  const pending = scriptLoads.get(src);
+  if (pending) return pending;
+  const loading = new Promise<void>((resolve, reject) => {
+    const el = document.createElement('script');
+    el.src = src;
+    el.async = true;
+    const timer = setTimeout(() => fail(), SDK_WAIT_TIMEOUT_MS);
+    const fail = () => { clearTimeout(timer); el.remove(); reject(sdkUnavailable(src)); };
+    el.onload = () => { clearTimeout(timer); resolve(); };
+    el.onerror = fail;
+    document.head.appendChild(el);
+  });
+  scriptLoads.set(src, loading);
+  loading.catch(() => { if (scriptLoads.get(src) === loading) scriptLoads.delete(src); });
+  return loading;
+};
+
+/** Attend qu'un objet défini par un SDK soit disponible (il l'est d'ordinaire dès le chargement). */
+const waitFor = <T,>(get: () => T | undefined, what: string, timeoutMs = SDK_WAIT_TIMEOUT_MS): Promise<T> =>
   new Promise((resolve, reject) => {
-    const existing = googleWindow()[name];
+    const existing = get();
     if (existing) { resolve(existing); return; }
     const startedAt = Date.now();
     const timer = setInterval(() => {
-      const value = googleWindow()[name];
+      const value = get();
       if (value) { clearInterval(timer); resolve(value); return; }
-      if (Date.now() - startedAt >= timeoutMs) {
-        clearInterval(timer);
-        reject(new Error(`GOOGLE_SDK_UNAVAILABLE:${name}`));
-      }
+      if (Date.now() - startedAt >= timeoutMs) { clearInterval(timer); reject(sdkUnavailable(what)); }
     }, 100);
   });
 
-export const initGoogleApi = async (): Promise<void> => {
-  const [gapi, google] = await Promise.all([
-    waitForGlobal('gapi', SDK_WAIT_TIMEOUT_MS),
-    waitForGlobal('google', SDK_WAIT_TIMEOUT_MS),
-  ]);
-
-  if (!gapiInited) {
-    await new Promise<void>((resolve, reject) => {
-      gapi.load('client', () => {
-        void (async () => {
-          try {
-            await gapi.client.init({
-              discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'],
-            });
-            gapiInited = true;
-            resolve();
-          } catch (e) {
-            reject(e);
-          }
-        })();
+let tokenClientLoad: Promise<TokenClient> | null = null;
+/** Client de jeton de Google Identity Services (connexion sans serveur), chargé au premier besoin. */
+const ensureTokenClient = (): Promise<TokenClient> => {
+  if (tokenClient) return Promise.resolve(tokenClient);
+  if (!tokenClientLoad) {
+    tokenClientLoad = (async () => {
+      await loadScript(GIS_SRC);
+      const oauth2 = await waitFor(() => googleWindow().google?.accounts?.oauth2, 'gis');
+      tokenClient = oauth2.initTokenClient({
+        client_id: CLIENT_ID,
+        scope: SCOPES,
+        // Seulement drive.file : sans ça, Google rajoute les autorisations accordées autrefois
+        // (gmail.send) et affiche « Google n'a pas validé cette application ».
+        include_granted_scopes: false,
+        callback: '',
       });
-    });
+      return tokenClient;
+    })();
+    tokenClientLoad.catch(() => { tokenClientLoad = null; });
   }
+  return tokenClientLoad;
+};
 
-  if (!gisInited) {
-    tokenClient = google.accounts.oauth2.initTokenClient({
-      client_id: CLIENT_ID,
-      scope: SCOPES,
-      // Seulement drive.file : sans ça, Google rajoute les autorisations accordées autrefois
-      // (gmail.send) et affiche « Google n'a pas validé cette application ».
-      include_granted_scopes: false,
-      callback: '',
-    });
-    gisInited = true;
-  }
+/**
+ * Prépare le bouton de connexion. Mode serveur : rien à charger (la connexion est une
+ * redirection vers le Worker). Sans serveur : charge Google Identity Services.
+ */
+export const initGoogleApi = async (): Promise<void> => {
+  if (isBackendEnabled()) return;
+  await ensureTokenClient();
 };
 
 // --- GESTION DU TOKEN ---
@@ -149,16 +161,17 @@ export const isTokenValid = (): boolean => {
 // indéfiniment, `isSaving` collé à true, sans aucune erreur remontée. On ajoute donc un
 // timeout pour qu'une promesse orpheline échoue au lieu de pendre pour toujours.
 const TOKEN_TIMEOUT_MS = 30_000;
-const requestToken = (prompt: '' | 'none' | 'consent'): Promise<void> =>
-  new Promise((resolve, reject) => {
-    if (!tokenClient) { reject(new Error('tokenClient not ready')); return; }
+const requestToken = async (prompt: '' | 'none' | 'consent' | 'select_account consent'): Promise<void> => {
+  // GIS chargé au premier besoin ; un échec de chargement remonte en TypeError (« hors ligne »).
+  const client = await ensureTokenClient();
+  return new Promise((resolve, reject) => {
     let settled = false;
     const timer = setTimeout(() => {
       if (settled) return;
       settled = true;
       reject(new Error('TOKEN_REQUEST_TIMEOUT'));
     }, TOKEN_TIMEOUT_MS);
-    tokenClient.callback = (resp: TokenResponse) => {
+    client.callback = (resp: TokenResponse) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
@@ -175,21 +188,30 @@ const requestToken = (prompt: '' | 'none' | 'consent'): Promise<void> =>
       }
       resolve();
     };
-    tokenClient.requestAccessToken({ prompt });
+    client.requestAccessToken({ prompt });
   });
+};
 
 // Connexion manuelle (bouton). prompt='' évite de redemander le consentement à
-// chaque fois une fois qu'il a été donné.
-export const handleAuthClick = async (silent: boolean = false): Promise<void> => {
+// chaque fois une fois qu'il a été donné. `chooseAccount` (réinitialisation du verrou de
+// l'appareil) : choix du compte et consentement toujours affichés, jamais de connexion
+// silencieuse au compte déjà ouvert dans le navigateur.
+export const handleAuthClick = async (silent: boolean = false, opts: LoginOptions = {}): Promise<void> => {
   if (isBackendEnabled()) {
     // Mode serveur : silencieux = le Worker émet un jeton frais à partir du refresh token ;
     // sinon, redirection vers la connexion Google (la page quitte l'app, d'où la promesse
     // jamais résolue — le retour recharge tout).
     if (silent) return refreshTokenSilently();
-    startBackendLogin();
+    startBackendLogin(opts);
     return new Promise<void>(() => {});
   }
-  await requestToken(silent ? 'none' : '');
+  await requestToken(silent ? 'none' : opts.chooseAccount ? 'select_account consent' : '');
+};
+
+/** Cet appareil garde-t-il de quoi accéder à Drive (jeton Google ou session serveur) ? */
+export const hasStoredSession = (): boolean => {
+  try { if (localStorage.getItem('google_token')) return true; } catch { /* stockage bloqué */ }
+  return isBackendEnabled() && hasBackendSession();
 };
 
 /**
@@ -219,6 +241,44 @@ const refreshTokenSilently = (): Promise<void> => {
   return refreshInFlight;
 };
 
+/**
+ * Au démarrage, la session de cet appareil est-elle utilisable ?
+ * - 'ready' : jeton valide (ou rafraîchi), Drive peut être chargé ;
+ * - 'offline' : session gardée, mais réseau ou serveur injoignable : l'app s'ouvre sur la
+ *   dernière copie connue (voir usePortfolioData) et recharge Drive au retour du réseau ;
+ * - 'signed-out' : aucune session, ou session refusée : écran de connexion.
+ * Aucun SDK Google n'est attendu en mode serveur, et rien n'est tenté hors ligne.
+ * Lève une TypeError si le code de retour de connexion n'a pas pu être échangé faute de
+ * réseau alors qu'aucune session n'existait.
+ * `onNewLogin` : appelé quand une connexion vient d'aboutir (code de retour du Worker),
+ * peut-être avec un autre compte Google que la session précédente.
+ */
+export type SessionStart = 'ready' | 'offline' | 'signed-out';
+export const resumeSession = async (opts: { onNewLogin?: () => void } = {}): Promise<SessionStart> => {
+  if (isBackendEnabled()) {
+    try {
+      if (await completeBackendLoginIfPresent()) { opts.onNewLogin?.(); return 'ready'; }
+    } catch (e) {
+      // Code de connexion refusé ou serveur injoignable : une session plus ancienne reste utilisable.
+      if (!hasBackendSession()) throw e;
+    }
+    if (!hasBackendSession()) return 'signed-out';
+  } else {
+    let persisted = false;
+    try { persisted = !!localStorage.getItem('google_token') && localStorage.getItem('auth_persistence') === 'true'; } catch { /* stockage bloqué */ }
+    if (!persisted) return 'signed-out';
+  }
+  if (isTokenValid()) return 'ready';
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return 'offline';
+  try {
+    await refreshTokenSilently();
+    return 'ready';
+  } catch (e) {
+    // Réseau, serveur ou SDK injoignable : la session n'est pas en cause.
+    return e instanceof TypeError ? 'offline' : 'signed-out';
+  }
+};
+
 // Exporté pour le Google Picker (voir openDrivePicker), qui a besoin du token courant
 // pour n'afficher/autoriser que ce à quoi le compte connecté a accès.
 const getAccessToken = async (): Promise<string> => {
@@ -246,15 +306,28 @@ const handleAuthLost = () => {
 
 // Erreur d'API portant le statut HTTP : permet aux appelants de réagir différemment à un
 // 404 (fichier supprimé côté Drive → re-résolution) qu'à un 500 (bannière d'erreur).
+// `reason` : la raison donnée par Drive (`error.errors[0].reason`, ex. storageQuotaExceeded,
+// userRateLimitExceeded) : elle distingue une panne passagère d'un blocage durable (voir
+// src/lib/syncErrors.ts).
 export class ApiError extends Error {
   status: number;
-  constructor(message: string, status: number) { super(message); this.name = 'ApiError'; this.status = status; }
+  reason?: string;
+  constructor(message: string, status: number, reason?: string) { super(message); this.name = 'ApiError'; this.status = status; this.reason = reason; }
 }
+
+/** Raison d'erreur dans le corps d'une réponse Drive (`{ error: { errors: [{ reason }] } }`). */
+export const driveErrorReason = (body: string): string | undefined => {
+  try {
+    const err = (JSON.parse(body) as { error?: { errors?: { reason?: unknown }[]; status?: unknown } }).error;
+    const reason = err?.errors?.[0]?.reason ?? err?.status;
+    return typeof reason === 'string' && reason ? reason : undefined;
+  } catch { return undefined; }
+};
 
 const ensureOk = async (res: Response): Promise<Response> => {
   if (res.ok) return res;
   const body = await res.text().catch(() => '');
-  throw new ApiError(`Google API ${res.status} ${res.statusText} — ${body.slice(0, 300)}`, res.status);
+  throw new ApiError(`Google API ${res.status} ${res.statusText} — ${body.slice(0, 300)}`, res.status, driveErrorReason(body));
 };
 
 // Toute requête a un délai maximal : sans lui, un fetch qui pend (portail captif, TLS
@@ -314,19 +387,27 @@ export const handleSignOut = async () => {
   }
   try {
     if (stored) {
-      const token = JSON.parse(stored).access_token;
-      googleWindow().google?.accounts?.oauth2?.revoke(token, () => {});
+      const token = JSON.parse(stored).access_token as string;
+      const oauth2 = googleWindow().google?.accounts?.oauth2;
+      if (oauth2) oauth2.revoke(token, () => {});
+      // GIS pas chargé dans cette page (jeton encore valide à l'ouverture) : révocation
+      // directe, sans attendre ni charger le SDK. L'adresse n'accepte pas CORS, d'où
+      // `no-cors` (réponse illisible, mais la demande part) ; le jeton voyage dans le corps.
+      else void fetch('https://oauth2.googleapis.com/revoke', {
+        method: 'POST', mode: 'no-cors',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ token }).toString(),
+      }).catch(() => { /* hors ligne : le jeton expire seul dans l'heure */ });
     }
-    googleWindow().gapi?.client?.setToken('');
   } catch { /* no-op */ }
 };
 
 // --- DRIVE ---
 /**
- * Cherche le fichier de config. Retourne `null` UNIQUEMENT si le compte n'en a
+ * Cherche les fichiers de données. Retourne une liste vide UNIQUEMENT si le compte n'en a
  * réellement aucun ; toute autre erreur est propagée.
  *
- * Ce point est critique : l'appelant interprète `null` comme « premier démarrage »
+ * Ce point est critique : l'appelant interprète « aucun » comme « premier démarrage »
  * et crée alors un fichier vide. Avant, un `catch` global renvoyait `null` pour
  * n'importe quelle panne (403 rateLimitExceeded, 503 backendError — courants chez
  * Drive), ce qui créait un SECOND `suivi_epargne.json` vide, y basculait l'app et
@@ -334,16 +415,26 @@ export const handleSignOut = async () => {
  * inatteignables (la recherche renvoyant `files[0]` sans tri). Un échec doit donc
  * remonter et faire échouer le chargement, jamais se déguiser en « pas de données ».
  *
- * On trie aussi par date de création pour rester déterministe si plusieurs fichiers
- * homonymes existent déjà (dégât d'une version antérieure de ce bug).
+ * Plusieurs fichiers homonymes peuvent exister (fichier mis à la corbeille puis restauré
+ * pendant qu'un autre appareil en recréait un) : ils sont tous renvoyés, LE PLUS RÉCEMMENT
+ * MODIFIÉ D'ABORD. Avant, le plus ancien (tri par date de création) était ouvert en silence
+ * au démarrage suivant, avec des données périmées. L'appelant signale les doublons et
+ * laisse l'utilisateur choisir (voir usePortfolioData).
  */
-export const findConfigFile = async (): Promise<string | null> => {
+// `headRevisionId` est lu dans la même requête (le champ File « headRevisionId », disponible
+// pour un fichier au contenu binaire comme ce JSON : developers.google.com/workspace/drive/
+// api/reference/rest/v3/files) : au démarrage, la révision est connue AVANT la lecture du
+// contenu, sans un aller-retour de plus (voir getFileMeta pour l'ordre des lectures).
+export interface DriveFileInfo { id: string; modifiedTime?: string; createdTime?: string; headRevisionId?: string }
+export const findConfigFiles = async (): Promise<DriveFileInfo[]> => {
   const q = encodeURIComponent(`name = '${FILE_NAME}' and trashed = false`);
   const res = await authedFetch(
-    `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,createdTime)&orderBy=createdTime`
+    `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,createdTime,modifiedTime,headRevisionId)&orderBy=${encodeURIComponent('modifiedTime desc')}&pageSize=20`
   );
-  const data = await res.json();
-  return data.files && data.files.length > 0 ? data.files[0].id : null;
+  const data = await res.json() as { files?: DriveFileInfo[] };
+  const files = (data.files || []).filter(f => f && typeof f.id === 'string');
+  // Tri refait ici : l'ordre de l'API n'est pas une garantie.
+  return files.sort((a, b) => (b.modifiedTime || '').localeCompare(a.modifiedTime || ''));
 };
 
 export const readConfigFile = async (fileId: string): Promise<unknown> => {
@@ -371,6 +462,20 @@ export const getFileRevision = async (fileId: string): Promise<string> => {
   // silencieusement sauter le contrôle de concurrence (voir updateConfigFile).
   if (!data.headRevisionId) throw new Error('REVISION_UNAVAILABLE');
   return String(data.headRevisionId);
+};
+
+/**
+ * Révision courante ET date du dernier enregistrement (pour l'afficher lors d'un conflit).
+ * À lire AVANT le contenu : si une écriture tombe entre les deux, le contenu lu est plus
+ * récent que la révision notée, et la prochaine écriture lèvera un conflit de trop, jamais
+ * un écrasement.
+ */
+export interface FileMeta { headRevisionId: string; modifiedTime: string | null }
+export const getFileMeta = async (fileId: string): Promise<FileMeta> => {
+  const res = await authedFetch(`https://www.googleapis.com/drive/v3/files/${fileId}?fields=headRevisionId,modifiedTime`);
+  const data = await res.json() as { headRevisionId?: unknown; modifiedTime?: unknown };
+  if (!data.headRevisionId) throw new Error('REVISION_UNAVAILABLE');
+  return { headRevisionId: String(data.headRevisionId), modifiedTime: typeof data.modifiedTime === 'string' ? data.modifiedTime : null };
 };
 
 export const createConfigFile = async (data: unknown, name: string = FILE_NAME): Promise<string> => {
@@ -586,7 +691,9 @@ export const writeMonthlyBackup = async (monthKey: string, data: unknown): Promi
 let pickerApiLoaded = false;
 
 const loadPickerApi = async (): Promise<PickerApi> => {
-  const gapi = await waitForGlobal('gapi', SDK_WAIT_TIMEOUT_MS);
+  // api.js n'est chargé qu'ici, à la première ouverture du Picker.
+  await loadScript(GAPI_SRC);
+  const gapi = await waitFor(() => googleWindow().gapi, 'gapi');
   if (!pickerApiLoaded) {
     await new Promise<void>((resolve, reject) => {
       gapi.load('picker', { callback: resolve, onerror: reject });

@@ -2,7 +2,7 @@
 // Écriture vérifiée (updateConfigFile) contre un faux Drive HTTP : la course « contrôle de
 // révision puis écriture » ne doit jamais faire perdre une version en silence.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { updateConfigFile, ConflictError, ConcurrentWriteError } from './googleDriveService';
+import { updateConfigFile, ConflictError, ConcurrentWriteError, findConfigFiles, getFileMeta, ApiError, driveErrorReason } from './googleDriveService';
 
 interface Rev { id: string; content: unknown; keepForever: boolean }
 
@@ -96,5 +96,49 @@ describe('updateConfigFile — écriture vérifiée', () => {
   it('écriture sans contrôle (choix explicite) : pas de vérification', async () => {
     await updateConfigFile('f', { v: 'mine' }, null);
     expect(calls).toHaveLength(1);
+  });
+});
+
+describe('fichiers de données et erreurs Drive', () => {
+  it('plusieurs fichiers homonymes : le plus récemment modifié d’abord', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      expect(decodeURIComponent(String(input))).toContain('orderBy=modifiedTime desc');
+      return json({ files: [
+        { id: 'ancien', name: 'suivi_epargne.json', modifiedTime: '2026-09-01T10:00:00Z' },
+        { id: 'recent', name: 'suivi_epargne.json', modifiedTime: '2026-10-14T10:00:00Z' },
+        { name: 'sans id' },
+      ] });
+    }));
+    expect((await findConfigFiles()).map(f => f.id)).toEqual(['recent', 'ancien']);
+  });
+
+  it('la liste donne aussi la révision de chaque fichier (lue avant le contenu, sans requête de plus)', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      expect(decodeURIComponent(String(input))).toContain('fields=files(id,name,createdTime,modifiedTime,headRevisionId)');
+      return json({ files: [{ id: 'f', name: 'suivi_epargne.json', modifiedTime: '2026-10-14T10:00:00Z', headRevisionId: 'r7' }] });
+    }));
+    expect(await findConfigFiles()).toEqual([{ id: 'f', name: 'suivi_epargne.json', modifiedTime: '2026-10-14T10:00:00Z', headRevisionId: 'r7' }]);
+  });
+
+  it('aucun fichier : liste vide (premier démarrage), une panne remonte', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => json({ files: [] })));
+    expect(await findConfigFiles()).toEqual([]);
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: { errors: [{ reason: 'backendError' }] } }), { status: 503 })));
+    await expect(findConfigFiles()).rejects.toMatchObject({ status: 503, reason: 'backendError' });
+  });
+
+  it('la raison donnée par Drive accompagne le statut (passager ou durable)', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: { code: 403, errors: [{ reason: 'storageQuotaExceeded' }] } }), { status: 403 })));
+    const err = await updateConfigFile('f', { v: 1 }, null).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect((err as ApiError).reason).toBe('storageQuotaExceeded');
+    expect(driveErrorReason('pas du JSON')).toBeUndefined();
+  });
+
+  it('révision et date du dernier enregistrement', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => json({ headRevisionId: 'r9', modifiedTime: '2026-10-14T09:30:00.000Z' })));
+    expect(await getFileMeta('f')).toEqual({ headRevisionId: 'r9', modifiedTime: '2026-10-14T09:30:00.000Z' });
+    vi.stubGlobal('fetch', vi.fn(async () => json({})));
+    await expect(getFileMeta('f')).rejects.toThrow('REVISION_UNAVAILABLE');
   });
 });

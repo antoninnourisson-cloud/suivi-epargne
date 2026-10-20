@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { netAnnualRate, projectSavings, detectPayRaise, computeBadgeCount } from './projection';
+import { netAnnualRate, netMonthlyRateSchedule, projectSavings, detectPayRaise, computeBadgeCount, IDLE_ACCOUNT_ID } from './projection';
 import { DEFAULT_FISCAL_CONFIG as CFG } from '../constants';
 import { AccountType, GlobalAppData, SavingsAccount, PayslipRecord } from '../types';
 
@@ -8,11 +8,74 @@ const acc = (over: Partial<SavingsAccount>): SavingsAccount => ({
   totalAmount: 0, ownedAmount: 0, parentalCapital: 0, movements: [], ...over,
 });
 
+// Valeurs attendues FIGÉES (2026), jamais recalculées depuis la configuration testée :
+// prélèvements sociaux 18,6 % (17,2 % sur l'assurance vie) et part « impôt » du PFU 12,8 %.
+// https://www.service-public.gouv.fr/particuliers/vosdroits/F2329
+// https://www.impots.gouv.fr/particulier/questions/jai-realise-une-plus-value-mobiliere-comment-est-elle-imposee
+// https://www.impots.gouv.fr/particulier/questions/comment-declarer-les-plus-ou-moins-values-sur-cessions-dactifs-numeriques
 describe('netAnnualRate', () => {
-  it('livrets nets, AV moins les prélèvements sociaux (et les frais éventuels)', () => {
-    expect(netAnnualRate(acc({ interestRate: 1.7 }), CFG)).toBe(1.7);
-    expect(netAnnualRate(acc({ type: AccountType.ASSURANCE_VIE, interestRate: 3 }), CFG)).toBeCloseTo(3 * 0.828);
-    expect(netAnnualRate(acc({ type: AccountType.ASSURANCE_VIE, interestRate: 3, managementFee: 0.6 }), CFG)).toBeCloseTo(2.4 * 0.828);
+  const AT = new Date(2026, 9, 1); // 1er octobre 2026
+
+  it('livrets réglementés : le taux affiché', () => {
+    expect(netAnnualRate(acc({ interestRate: 1.7 }), CFG, AT)).toBe(1.7);
+  });
+
+  it('assurance vie de moins de 8 ans (ou ancienneté inconnue) : 17,2 % + 12,8 % retenus', () => {
+    expect(netAnnualRate(acc({ type: AccountType.ASSURANCE_VIE, interestRate: 3 }), CFG, AT)).toBeCloseTo(2.1, 10);
+    expect(netAnnualRate(acc({ type: AccountType.ASSURANCE_VIE, interestRate: 3, openingDate: '2024-06-15' }), CFG, AT)).toBeCloseTo(2.1, 10);
+    // Frais de gestion déduits d'abord : (3 − 0,6) × 0,7.
+    expect(netAnnualRate(acc({ type: AccountType.ASSURANCE_VIE, interestRate: 3, managementFee: 0.6 }), CFG, AT)).toBeCloseTo(1.68, 10);
+  });
+
+  it('assurance vie de 8 ans et plus : prélèvements sociaux seuls (gains sous l’abattement)', () => {
+    expect(netAnnualRate(acc({ type: AccountType.ASSURANCE_VIE, interestRate: 3, openingDate: '2018-01-01' }), CFG, AT)).toBeCloseTo(2.484, 10);
+  });
+
+  it('PEA : 18,6 % + 12,8 % avant 5 ans, 18,6 % ensuite', () => {
+    expect(netAnnualRate(acc({ type: AccountType.PEA, interestRate: 5, openingDate: '2023-01-01' }), CFG, AT)).toBeCloseTo(3.43, 10);
+    expect(netAnnualRate(acc({ type: AccountType.PEA, interestRate: 5, openingDate: '2020-01-01' }), CFG, AT)).toBeCloseTo(4.07, 10);
+  });
+
+  it('crypto et « Autre » : PFU de 31,4 % quelle que soit l’ancienneté', () => {
+    expect(netAnnualRate(acc({ type: AccountType.CRYPTO, interestRate: 8, openingDate: '2010-01-01' }), CFG, AT)).toBeCloseTo(5.488, 10);
+    expect(netAnnualRate(acc({ type: AccountType.AUTRE, interestRate: 3, openingDate: '2010-01-01' }), CFG, AT)).toBeCloseTo(2.058, 10);
+  });
+
+  it('PEE : toujours sans impôt sur le revenu, prélèvements sociaux seuls', () => {
+    expect(netAnnualRate(acc({ type: AccountType.PEE, interestRate: 5, openingDate: '2026-01-01' }), CFG, AT)).toBeCloseTo(4.07, 10);
+  });
+});
+
+describe('netMonthlyRateSchedule', () => {
+  it('passe au taux mûr le mois du 5e anniversaire d’un PEA', () => {
+    // Ouvert le 01/03/2022, projection au 01/10/2026 : maturité le 01/03/2027, dans 5 mois.
+    const rate = netMonthlyRateSchedule(acc({ type: AccountType.PEA, interestRate: 5, openingDate: '2022-03-01' }), CFG, new Date(2026, 9, 1));
+    expect(rate(4)).toBeCloseTo(3.43 / 1200, 12);
+    expect(rate(5)).toBeCloseTo(4.07 / 1200, 12);
+  });
+  it('taux constant sans maturité à venir', () => {
+    const rate = netMonthlyRateSchedule(acc({ type: AccountType.CRYPTO, interestRate: 8 }), CFG, new Date(2026, 9, 1));
+    expect(rate(0)).toBeCloseTo(5.488 / 1200, 12);
+    expect(rate(120)).toBeCloseTo(5.488 / 1200, 12);
+  });
+});
+
+describe('projectSavings : rien ne se perd', () => {
+  it('ce qui ne trouve pas de place reste compté sur le compte courant', () => {
+    // Livret A plein, sans LDDS, AV ni PEA : 500 € par mois pendant un an n'ont nulle part où aller.
+    const full = acc({ id: 'la', name: 'Livret A', interestRate: 0, totalAmount: 22950, ownedAmount: 22950 });
+    const r = projectSavings([full], CFG, 500, 1, undefined, undefined, new Date(2026, 9, 1));
+    expect(r.unplaced).toBe(6000);
+    expect(r.byAccount.find(b => b.accountId === IDLE_ACCOUNT_ID)?.amount).toBe(6000);
+    expect(r.total).toBe(22950 + 6000);
+    expect(r.interest).toBe(0);
+  });
+  it('un compte courant saisi garde cet argent, sans intérêts', () => {
+    const full = acc({ id: 'la', name: 'Livret A', interestRate: 0, totalAmount: 22950, ownedAmount: 22950 });
+    const cc = acc({ id: 'cc', name: 'Compte courant', type: AccountType.COMPTE_COURANT, interestRate: 2, totalAmount: 1000, ownedAmount: 1000 });
+    const r = projectSavings([full, cc], CFG, 500, 1, undefined, undefined, new Date(2026, 9, 1));
+    expect(r.byAccount.find(b => b.accountId === 'cc')?.amount).toBe(7000);
+    expect(r.total).toBe(22950 + 7000);
   });
 });
 

@@ -142,7 +142,10 @@ body { background: var(--md-surface); color: var(--md-on-surface); }
   [class~="bg-slate-100"], [class~="bg-slate-200"], [class~="bg-indigo-50"], [class~="bg-indigo-100"]
 ) { border-radius: 9999px; }
 
-/* Mode sombre : boutons pleins en couleur « primary » claire, texte foncé (Material 3). */
+/* Mode sombre : boutons pleins en couleur « primary » claire, texte foncé (Material 3).
+   Ne pas forcer un autre fond sur un <Button> plein (ex. `bg-emerald-600!`) : le texte
+   foncé ci-dessous resterait, illisible sur ce fond. Ajouter plutôt une variante fondée sur
+   un rôle de couleur (voir Button.tsx). */
 html.dark :is(button, a, label):not([role]):not([aria-pressed]):is([class~="bg-indigo-600"], [class~="bg-indigo-700"]) {
   background-color: var(--md-primary);
   color: var(--md-on-primary);

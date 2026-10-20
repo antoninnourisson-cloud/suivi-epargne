@@ -379,7 +379,7 @@ export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, 
                           <button onClick={() => onApplyToPilotage(p)} className="p-2 text-amber-700 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/40 rounded-lg" title="Utiliser pour mon Pilotage budgétaire (chiffres exacts)"><Wand2 className="w-4 h-4" /></button>
                         )}
                         <a href={`https://drive.google.com/file/d/${p.fileId}/view`} target="_blank" rel="noopener noreferrer" className="p-2 text-indigo-600 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 rounded-lg" title="Ouvrir sur Drive"><ExternalLink className="w-4 h-4" /></a>
-                        <button onClick={() => removePayslip(p.id)} className="p-2 text-slate-300 dark:text-slate-600 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg" title="Retirer de la liste"><Trash2 className="w-4 h-4" /></button>
+                        <button onClick={() => removePayslip(p.id)} className="p-2 text-on-surface-variant hover:text-rose-600 dark:hover:text-rose-300 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg" title="Retirer de la liste" aria-label="Retirer de la liste"><Trash2 className="w-4 h-4" /></button>
                       </div>
                     </td>
                   </tr>

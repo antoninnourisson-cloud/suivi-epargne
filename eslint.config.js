@@ -7,7 +7,7 @@ import jsxA11y from 'eslint-plugin-jsx-a11y';
 import globals from 'globals';
 
 export default tseslint.config(
-  { ignores: ['dist', 'node_modules', 'worker/node_modules', 'worker/.wrangler', 'edge/node_modules', 'edge/.wrangler', 'public/push-sw.js', 'dev-dist'] },
+  { ignores: ['dist', 'dist-e2e', 'node_modules', 'worker/node_modules', 'worker/.wrangler', 'edge/node_modules', 'edge/.wrangler', 'public/push-sw.js', 'dev-dist'] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
@@ -39,5 +39,15 @@ export default tseslint.config(
     },
   },
   { files: ['**/*.{js,mjs,cjs}'], languageOptions: { globals: { ...globals.node } } },
+  // Tests de bout en bout : `test` vient de e2e/fixtures.ts, qui coupe tout appel au vrai serveur.
+  {
+    files: ['e2e/**/*.spec.ts'],
+    rules: {
+      'no-restricted-imports': ['error', { paths: [{
+        name: '@playwright/test', importNames: ['test'],
+        message: "Importer test depuis './fixtures' (garde-fou : aucun appel au vrai serveur).",
+      }] }],
+    },
+  },
   { files: ['**/*.test.ts', '**/*.test.tsx', 'worker/test/**', 'edge/test/**'], rules: { '@typescript-eslint/no-explicit-any': 'off' } },
 );

@@ -48,10 +48,18 @@ const call = async (path: string, init: RequestInit = {}, withSession = true, ti
   }
 };
 
+export interface LoginOptions {
+  /** Toujours montrer le choix du compte Google (réinitialisation du verrou de l'appareil). */
+  chooseAccount?: boolean;
+}
+
+/** Adresse de connexion du Worker. */
+export const backendLoginUrl = (returnUrl: string, opts: LoginOptions = {}): string =>
+  `${BACKEND_URL}/auth/start?return=${encodeURIComponent(returnUrl)}${opts.chooseAccount ? '&select=1' : ''}`;
+
 /** Redirige vers la connexion Google via le Worker ; l'app est rechargée au retour. */
-export const startBackendLogin = (): void => {
-  const returnUrl = window.location.origin + window.location.pathname;
-  window.location.assign(`${BACKEND_URL}/auth/start?return=${encodeURIComponent(returnUrl)}`);
+export const startBackendLogin = (opts: LoginOptions = {}): void => {
+  window.location.assign(backendLoginUrl(window.location.origin + window.location.pathname, opts));
 };
 
 /**

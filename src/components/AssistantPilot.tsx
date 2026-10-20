@@ -1,9 +1,10 @@
 // src/components/AssistantPilot.tsx
 import React, { useState, useMemo, useEffect, useId } from 'react';
-import { SavingsAccount, Expense, AccountType, FiscalConfig, WorkBenefits, PayslipRecord, Subscription, PayChecklist as PayChecklistData } from '../types';
+import { SavingsAccount, Expense, AccountType, FiscalConfig, WorkBenefits, PayslipRecord, Subscription, PayChecklist as PayChecklistData, PayAdjustment } from '../types';
 import { PayChecklist } from './PayChecklist';
 import { SavingsSplitEditor } from './SavingsSplitEditor';
-import { computeIncome, computeMaturityCountdown, computePlacementStrategy, payslipSuperNet, subscriptionsAsExpenses, computePayTransfers, computeRecentSavingsRate, activeSavingsSplit } from '../lib/finance';
+import { computeIncome, computeMaturityCountdown, computePeeAvailability, describeMaturity, computePlacementStrategy, payslipSuperNet, subscriptionsAsExpenses, computePayTransfers, computeRecentSavingsRate, activeSavingsSplit, payPeriodOf } from '../lib/finance';
+import { combineMonthTarget, currentPayAdjustment, updatePayAdjustment } from '../lib/payAdjustment';
 import { parseISODate } from '../lib/dates';
 import { parseFrenchNumber, safeNumber } from '../lib/numbers';
 import { NumberInput } from './NumberInput';
@@ -58,6 +59,10 @@ interface AssistantPilotProps {
   setPaydayDay: (day: number | undefined) => void;
   paydayAmount?: number;
   setPaydayAmount: (amount: number | undefined) => void;
+  // Capacité d'épargne et somme en plus saisies pour la paie en cours (enregistrées dans le
+  // fichier de données, ignorées à la paie suivante : voir lib/payAdjustment).
+  payAdjustment?: PayAdjustment;
+  onPayAdjustmentChange: (next: PayAdjustment | undefined) => void;
 }
 
 export const AssistantPilot: React.FC<AssistantPilotProps> = ({
@@ -65,12 +70,29 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
   grossAnnual, setGrossAnnual, leisureBudget, setLeisureBudget, projectSavings, setProjectSavings,
   navigoBase, navigoRate, taxRateManual, setTaxRateManual,
   extraMonthlyIncome, fiscalConfig, workBenefits, activePayslip, onClearActivePayslip,
-  subscriptions, onOpenSubscriptions, savingsSplit, savingsSplitFrom, onSavingsSplitChange, payChecklist, onPayChecklistChange, onRecordPayDeposit, onCancelPayDeposit, paydayDay, setPaydayDay, paydayAmount, setPaydayAmount
+  subscriptions, onOpenSubscriptions, savingsSplit, savingsSplitFrom, onSavingsSplitChange, payChecklist, onPayChecklistChange, onRecordPayDeposit, onCancelPayDeposit, paydayDay, setPaydayDay, paydayAmount, setPaydayAmount, payAdjustment, onPayAdjustmentChange
 }) => {
   const [showDetails, setShowDetails] = useState(false);
   const removeWithUndo = useUndoableRemove();
-  const [externalSavings, setExternalSavings] = useState<number>(0);
-  const [manualSavingsCapacity, setManualSavingsCapacity] = useState<string | null>(null); 
+  // Réglages de la paie en cours : enregistrés (l'Accueil et la relance de paie affichent le
+  // même objectif), ignorés dès la paie suivante.
+  const periodKey = payPeriodOf(paydayDay).key;
+  const adjustment = currentPayAdjustment({ payAdjustment, paydayDay });
+  const externalSavings = adjustment?.extra ?? 0;
+  const savedCapacity = adjustment?.capacity;
+  const changeAdjustment = (patch: { capacity?: number | null; extra?: number | null }) =>
+    onPayAdjustmentChange(updatePayAdjustment(payAdjustment, periodKey, patch));
+  // Brouillon de la capacité saisie : affiché tant qu'il correspond à la valeur enregistrée
+  // (sinon la valeur a changé ailleurs, par exemple sur un autre appareil).
+  const [capacityDraft, setCapacityDraft] = useState<{ text: string; saved: number | undefined } | null>(null);
+  const capacityText = capacityDraft && capacityDraft.saved === savedCapacity ? capacityDraft.text : null;
+  const onCapacityInput = (text: string) => {
+    // Saisie vide ou illisible : retour au calcul automatique (le texte reste affiché).
+    const parsed = text.trim() === '' ? null : parseFrenchNumber(text);
+    setCapacityDraft({ text, saved: parsed === null ? undefined : Math.round(parsed * 100) / 100 });
+    changeAdjustment({ capacity: parsed });
+  };
+  const resetCapacity = () => { setCapacityDraft(null); changeAdjustment({ capacity: null }); };
   const [activeTab, setActiveTab] = useState<'budget' | 'fiscal'>('budget');
   
   // UX State pour ajout dépense
@@ -187,18 +209,13 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
     const subscriptionsFixed = subscriptionCharges.reduce((sum, e) => sum + e.amount, 0);
     const totalFixed = manualFixed + subscriptionsFixed;
     const theoreticalCapacity = effectiveSuperNetForCalc - totalFixed - leisureBudget - projectSavings;
-    // parseFrenchNumber et non parseFloat : vider le champ (ou taper "-" seul) donnait
-    // NaN → "Placement (NaN €)" et un plan de placement qui disparaissait sans message.
-    // Saisie non interprétable = retour au calcul automatique.
-    const manualParsed = manualSavingsCapacity !== null ? parseFrenchNumber(manualSavingsCapacity) : null;
-    // Montant fixé dans le rappel de paie : c'est lui que le Pilotage répartit (même chiffre
-    // que la notification, la relance, l'agenda et la jauge du mois).
-    const finalCapacity = manualParsed ?? paydayAmount ?? theoreticalCapacity;
-    const totalToInvest = Math.max(0, finalCapacity + externalSavings);
-    // Pour l'affichage seulement : d'où vient le montant retenu.
-    const source: AmountSource = manualParsed !== null ? 'manual' : paydayAmount !== undefined ? 'payday' : 'calc';
-    return { manualFixed, totalFixed, subscriptionsFixed, theoreticalCapacity, finalCapacity, totalToInvest, source };
-  }, [effectiveSuperNetForCalc, expenses, subscriptionCharges, leisureBudget, projectSavings, manualSavingsCapacity, externalSavings, paydayAmount]);
+    // Capacité saisie pour cette paie, sinon montant du rappel de paie (même chiffre que la
+    // notification et l'agenda), sinon calcul ; plus la somme en plus. Même règle que la
+    // jauge de l'Accueil et la relance de paie (lib/payAdjustment).
+    const target = combineMonthTarget({ computed: theoreticalCapacity, paydayAmount, adjustment });
+    const source: AmountSource = target.source;
+    return { manualFixed, totalFixed, subscriptionsFixed, theoreticalCapacity, finalCapacity: target.capacity, totalToInvest: target.total, source };
+  }, [effectiveSuperNetForCalc, expenses, subscriptionCharges, leisureBudget, projectSavings, adjustment, paydayAmount]);
 
   const payTransfers = useMemo(
     () => computePayTransfers({ expenses, subscriptions, leisureBudget, projectSavings }),
@@ -261,20 +278,32 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
 
   const fiscalClock = useMemo(() => {
     return accounts.filter(a => [AccountType.PEE, AccountType.PEA, AccountType.ASSURANCE_VIE].includes(a.type)).map(acc => {
-        // Cas particulier : un PEE avec date de fin de contrat explicite prime sur le
-        // calcul d'ancienneté.
-        if (acc.type === AccountType.PEE && acc.contractEndDate) {
-          const endDate = parseISODate(acc.contractEndDate);
-          const diffTime = endDate.getTime() - Date.now();
-          const isAvailable = diffTime <= 0;
-          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-          const years = Math.floor(diffDays / 365); const months = Math.floor((diffDays % 365) / 30);
-          return { id: acc.id, name: acc.name, type: acc.type, date: endDate.toLocaleDateString('fr-FR'), timeLeft: isAvailable ? "Disponible" : `${years > 0 ? years + 'a ' : ''}${months}m`, isAvailable };
+        // PEE : chaque versement est bloqué 5 ans (date de fin de contrat passée : tout est
+        // libre). On annonce le prochain déblocage, calculé versement par versement.
+        if (acc.type === AccountType.PEE) {
+          const pee = computePeeAvailability(acc, fiscalConfig);
+          const release = pee.nextRelease;
+          if (pee.blocked < 0.5) return { id: acc.id, name: acc.name, type: acc.type, date: '', timeLeft: 'Disponible', isAvailable: true };
+          const free = pee.available >= 1 ? `${formatEUR(pee.available, 0)} déjà disponibles. ` : '';
+          // Solde initial d'un plan plus ancien, ou solde sans mouvements : dates de versement
+          // inconnues, compté bloqué par prudence (jamais une date de déblocage inventée).
+          const unknown = pee.undated
+            ? 'Une partie de votre solde n\'a pas de date de versement connue (par exemple ce qui était déjà sur le plan quand vous l\'avez ajouté) : elle est comptée bloquée par prudence. Votre relevé d\'épargne salariale donne les dates exactes.'
+            : '';
+          if (!release) {
+            return { id: acc.id, name: acc.name, type: acc.type, date: '', timeLeft: 'Date inconnue', isAvailable: false,
+              note: `${free}${unknown}` };
+          }
+          return {
+            id: acc.id, name: acc.name, type: acc.type,
+            date: parseISODate(release.date).toLocaleDateString('fr-FR'),
+            timeLeft: `${Math.floor(release.monthsRemaining / 12) > 0 ? Math.floor(release.monthsRemaining / 12) + 'a ' : ''}${release.monthsRemaining % 12}m`,
+            isAvailable: false,
+            note: `${free}${release.last ? 'Tout le reste se débloque' : `${formatEUR(release.amount, 0)} se débloquent`} à cette date : chaque versement reste bloqué ${fiscalConfig.legalMaturity.pee} ans.${unknown ? ` ${unknown}` : ''}`,
+          };
         }
-        // Sinon : MÊME calcul que le badge de "Mes comptes" (computeMaturityCountdown),
-        // qui applique la bonne maturité par type — l'ancien code donnait au PEE la
-        // maturité de l'Assurance Vie (8 ans au lieu de legalMaturity.pee), et ses
-        // conventions d'arrondi divergeaient du badge d'un mois.
+        // PEA / assurance vie : MÊME calcul que le badge de "Mes comptes"
+        // (computeMaturityCountdown) et le même texte (describeMaturity).
         if (!acc.openingDate) return null;
         const countdown = computeMaturityCountdown(acc, fiscalConfig);
         if (!countdown) {
@@ -289,6 +318,8 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
           date: parseISODate(countdown.maturityDate).toLocaleDateString('fr-FR'),
           timeLeft: `${years > 0 ? years + 'a ' : ''}${months}m`,
           isAvailable: false,
+          // « Bloqué » jusqu'à l'échéance au sens de l'impôt seulement : on le précise.
+          note: `Retirable avant, avec plus d'impôt${acc.type === AccountType.PEA ? ' (et le plan est clôturé)' : ''}. À l'échéance : ${describeMaturity(acc, countdown, fiscalConfig).detail}.`,
         };
     }).filter(item => item !== null);
   }, [accounts, fiscalConfig]);
@@ -319,10 +350,12 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
     totalToInvest: budgetData.totalToInvest,
     finalCapacity: budgetData.finalCapacity,
   });
-  const shortfall = Math.max(0, -budgetData.finalCapacity, -budgetData.theoreticalCapacity, paydayAmount !== undefined && manualSavingsCapacity === null ? paydayAmount - Math.max(0, budgetData.theoreticalCapacity) : 0);
+  const shortfall = Math.max(0, -budgetData.finalCapacity, -budgetData.theoreticalCapacity, paydayAmount !== undefined && savedCapacity === undefined ? paydayAmount - Math.max(0, budgetData.theoreticalCapacity) : 0);
   const customSplit = activeSavingsSplit({ savingsSplit, savingsSplitFrom }) !== undefined;
   const plannedSpending = budgetData.totalFixed + leisureBudget + projectSavings;
   const paydaySelectId = useId();
+  // Durée de validité des réglages du mois, dite simplement.
+  const untilNextPay = paydayDay !== undefined ? "Gardé jusqu'à la prochaine paie." : "Gardé jusqu'à la fin du mois.";
 
   const readOnlyValue = (label: string, value: React.ReactNode) => (
     <div>
@@ -440,14 +473,21 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
                   <p className="mt-3 text-xs text-on-surface-variant">Taux réel constaté : <strong className="font-medium text-on-surface">{display.autoRate !== undefined ? formatRate(Math.round(display.autoRate * 10) / 10) : '—'}</strong> (montant tel que retenu sur la fiche, pas une estimation)</p>
                 ) : (
                   <div className="mt-3 pt-3 border-t border-outline-variant flex flex-wrap items-end justify-between gap-4">
-                    <div className="text-xs text-on-surface-variant">
-                      <p>Taux du barème (automatique) : <strong className="font-medium text-on-surface">{formatRate(Math.round(autoValues.autoRate * 10) / 10)}</strong></p>
-                      {taxRateManual > 0 && <p className="mt-0.5">Taux forcé à : <strong className="font-medium text-on-surface">{formatRate(taxRateManual)}</strong></p>}
+                    {/* Taux du prélèvement à la source : celui du barème (calcul) ou celui que
+                        l'utilisateur a saisi. Les deux s'appliquent au net imposable du mois
+                        (avant l'abattement de 10 %), comme sur la fiche de paie : voir computeIncome. */}
+                    <div className="text-xs text-on-surface-variant max-w-sm space-y-0.5">
+                      <p>
+                        Taux utilisé : <strong className="font-medium text-on-surface">{formatRate(taxRateManual > 0 ? taxRateManual : Math.round(autoValues.autoRate * 10) / 10)}</strong>
+                        {taxRateManual > 0 ? ', saisi par vous.' : ', calculé automatiquement avec le barème de l\'impôt.'}
+                      </p>
+                      {taxRateManual > 0 && <p>Taux calculé avec le barème : {formatRate(Math.round(autoValues.autoRate * 10) / 10)}.</p>}
+                      <p>Il s'applique à votre salaire imposable du mois, comme le prélèvement à la source sur votre fiche de paie.</p>
                     </div>
                     <TextField
-                      label="Forcer le taux (%)"
-                      supporting="0 = automatique"
-                      className="w-44"
+                      label="Votre taux de prélèvement (%)"
+                      supporting="Celui de votre fiche de paie. 0 = calcul automatique."
+                      className="w-56"
                       render={p => <NumberInput id={p.id} describedBy={p.describedBy} invalid={p.invalid} value={taxRateManual} onChange={setTaxRateManual} min={0} suffix="%" placeholder="Auto" className={`${p.className} tabular-nums`} />}
                     />
                   </div>
@@ -540,20 +580,22 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
                   inputMode="decimal"
                   suffix="€"
                   className="tabular-nums"
-                  value={manualSavingsCapacity !== null ? manualSavingsCapacity : String(Math.round(paydayAmount ?? budgetData.theoreticalCapacity))}
-                  onChange={e => setManualSavingsCapacity(e.target.value)}
-                  supporting={paydayAmount !== undefined && manualSavingsCapacity === null
-                    ? `Montant fixé dans le rappel de paie (capacité calculée : ${formatEUR(budgetData.theoreticalCapacity, 0)}).`
-                    : `Calculée : ${formatEUR(budgetData.theoreticalCapacity, 0)}. Modifiez-la si ce mois est différent.`}
+                  value={capacityText ?? (savedCapacity !== undefined ? String(savedCapacity).replace('.', ',') : String(Math.round(paydayAmount ?? budgetData.theoreticalCapacity)))}
+                  onChange={e => onCapacityInput(e.target.value)}
+                  supporting={savedCapacity !== undefined
+                    ? `Pour cette paie seulement (calculée : ${formatEUR(budgetData.theoreticalCapacity, 0)}). ${untilNextPay}`
+                    : paydayAmount !== undefined
+                      ? `Montant fixé dans le rappel de paie (capacité calculée : ${formatEUR(budgetData.theoreticalCapacity, 0)}).`
+                      : `Calculée : ${formatEUR(budgetData.theoreticalCapacity, 0)}. Modifiez-la si ce mois est différent.`}
                 />
-                {manualSavingsCapacity !== null && (
-                  <Button variant="text" onClick={() => setManualSavingsCapacity(null)} className="mt-1 h-9 px-3">Revenir au calcul</Button>
+                {(savedCapacity !== undefined || capacityText !== null) && (
+                  <Button variant="text" onClick={resetCapacity} className="mt-1 h-9 px-3">Revenir au calcul</Button>
                 )}
               </div>
               <TextField
                 label="Somme en plus à placer ce mois-ci"
-                supporting="Prime, cadeau, remboursement… ajouté au plan de placement."
-                render={p => <NumberInput id={p.id} describedBy={p.describedBy} invalid={p.invalid} value={externalSavings} onChange={setExternalSavings} suffix="€" className={`${p.className} tabular-nums`} />}
+                supporting={`Prime, cadeau, remboursement… ajouté au plan de placement. ${untilNextPay}`}
+                render={p => <NumberInput id={p.id} describedBy={p.describedBy} invalid={p.invalid} value={externalSavings} onChange={v => changeAdjustment({ extra: v })} suffix="€" className={`${p.className} tabular-nums`} />}
               />
             </div>
           </Disclosure>

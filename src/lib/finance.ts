@@ -2,6 +2,7 @@
 // src/lib/finance/ ; ce fichier réexporte tout pour que les imports existants restent valables.
 export * from './finance/income';
 export * from './finance/capitalTax';
+export * from './finance/availability';
 export * from './finance/interest';
 export * from './finance/savings';
 export * from './finance/placement';

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Modal } from './Modal';
 import { X, AlertTriangle } from 'lucide-react';
+import { Button } from './Button';
 
 export interface DialogState {
   open: boolean;
@@ -9,6 +10,9 @@ export interface DialogState {
   message?: string;
   defaultValue?: string;
   confirmLabel?: string;
+  // Libellé du bouton qui ferme sans rien faire (défaut « Annuler »), quand « Annuler »
+  // prêterait à confusion (ex. « Annuler la restitution »).
+  cancelLabel?: string;
   danger?: boolean;
   onConfirm?: (value?: string) => void;
 }
@@ -37,7 +41,7 @@ export const Dialog: React.FC<{ state: DialogState; onClose: () => void }> = ({ 
           </h2>
           <button onClick={onClose} aria-label="Fermer" className="p-2.5 -m-1.5 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"><X className="w-5 h-5" /></button>
         </div>
-        {state.message && <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">{state.message}</p>}
+        {state.message && <p className="text-sm text-on-surface-variant mb-4">{state.message}</p>}
         {state.kind === 'prompt' && (
           <input
             autoFocus
@@ -47,14 +51,10 @@ export const Dialog: React.FC<{ state: DialogState; onClose: () => void }> = ({ 
             className="w-full p-3 mb-4 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl font-bold text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-indigo-500 outline-hidden"
           />
         )}
-        <div className="flex gap-2 justify-end">
-          <button ref={cancelRef} onClick={onClose} className="px-4 py-2 rounded-xl font-bold text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700">Annuler</button>
-          <button
-            onClick={confirm}
-            className={`px-4 py-2 rounded-xl font-bold text-sm text-white ${state.danger ? 'bg-rose-600 hover:bg-rose-700' : 'bg-indigo-600 hover:bg-indigo-700'}`}
-          >
-            {state.confirmLabel || 'Confirmer'}
-          </button>
+        {/* Boutons du kit Material 3 : même forme (pilule) pour les deux actions. */}
+        <div className="flex flex-wrap gap-2 justify-end">
+          <Button ref={cancelRef} variant="text" onClick={onClose}>{state.cancelLabel || 'Annuler'}</Button>
+          <Button variant={state.danger ? 'danger' : 'filled'} onClick={confirm}>{state.confirmLabel || 'Confirmer'}</Button>
         </div>
     </Modal>
   );

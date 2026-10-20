@@ -1,6 +1,6 @@
 // Simulateur « Et si… » en mode démo (?demo=1) : un achat de 3 000 € change le résultat
 // et le tableau de données montre l'écart avec le plan actuel.
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page } from './fixtures';
 import { LATEST_VERSION } from '../src/changelog';
 
 const openDemo = async (page: Page) => {
@@ -47,5 +47,33 @@ test.describe('Simulateur « Et si… » (démo)', () => {
     const rows = table.locator('tbody tr');
     await expect(rows.first().locator('td').nth(2)).toHaveText(/^0\s€$/);
     await expect(rows.last().locator('td').nth(2)).toHaveText(/^−3\s0\d\d\s€$/);
+  });
+
+  test('la fourchette se calcule hors de l\'écran (Web Worker) et suit l\'horizon choisi', async ({ page, isMobile }) => {
+    // Un Worker bloqué par la CSP ou introuvable se verrait ici (l'écran retomberait sur le calcul sur place).
+    const errors: string[] = [];
+    page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
+    const workers: string[] = [];
+    page.on('worker', w => workers.push(w.url()));
+
+    await openDemo(page);
+    await goTo(page, 'Et si…', isMobile);
+    const note = page.getByText(/Fourchette tirée de vos propres mois passés/);
+    await expect(note).toBeVisible();
+    // Ce que la fourchette représente : le rythme d'épargne, pas les marchés.
+    await expect(note).toContainText('pas les variations des marchés');
+    await expect(page.getByText(/s'ajoutent au solde chaque 31 décembre/)).toBeVisible();
+    // Hors janvier, l'horizon finit en cours d'année : les intérêts des livrets déjà gagnés,
+    // pas encore versés, sont signalés à part.
+    if (new Date().getMonth() !== 0) await expect(page.getByText(/d'intérêts déjà gagnés sur ces livrets attendront/)).toBeVisible();
+    expect(workers.some(u => /simulator\.worker/.test(u))).toBe(true);
+
+    await page.getByRole('group', { name: 'Horizon' }).getByRole('button', { name: '60 mois' }).click();
+    await expect(page.getByText('Calcul de la fourchette…')).toBeHidden();
+    await page.getByRole('button', { name: 'Voir les données' }).click();
+    const table = page.getByRole('table', { name: /Votre épargne sur 60 mois/ });
+    await expect(table.getByRole('columnheader', { name: 'Fourchette basse' })).toBeVisible();
+    await expect(table.locator('tbody tr').last().locator('td').nth(2)).toHaveText(/\d\s€$/);
+    expect(errors.filter(e => /Content Security Policy|worker/i.test(e))).toEqual([]);
   });
 });

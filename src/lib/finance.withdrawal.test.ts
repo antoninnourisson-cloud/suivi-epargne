@@ -46,7 +46,7 @@ describe('computeWithdrawalTax', () => {
     expect(t.known).toBe(true);
     expect(t.gainPart).toBeCloseTo(400);
     expect(t.incomeTax).toBe(0);
-    expect(t.socialCharges).toBeCloseTo(400 * CFG.socialChargesCapital);
+    expect(t.socialCharges).toBeCloseTo(74.4); // 400 € × 18,6 % (F2329)
     expect(t.closesPea).toBe(false);
   });
 

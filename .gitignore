@@ -10,6 +10,8 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+# Build de production testé par les e2e (mode démo inclus, jamais publié)
+dist-e2e
 *.local
 
 # Editor directories and files

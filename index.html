@@ -31,8 +31,15 @@
     <link rel="icon" type="image/png" href="pwa-192x192.png" />
     <link rel="apple-touch-icon" href="apple-touch-icon.png" />
     <meta name="apple-mobile-web-app-title" content="Pécule" />
-    <script src="https://accounts.google.com/gsi/client" async defer></script>
-    <script src="https://apis.google.com/js/api.js" async defer></script>
+    <!--
+      Connexions ouvertes d'avance vers les seules origines appelées au démarrage : l'API Drive
+      et le Worker (jeton). `crossorigin` : ces appels fetch partent sans cookies. Les SDK
+      Google (connexion sans serveur, Google Picker) ne sont plus chargés ici mais à la demande
+      (src/services/googleDriveService.ts) : rien à attendre au démarrage, et l'app s'ouvre
+      hors ligne.
+    -->
+    <link rel="preconnect" href="https://www.googleapis.com" crossorigin />
+    <!--__BACKEND_PRECONNECT__-->
   </head>
   <body>
     <div id="root"></div>

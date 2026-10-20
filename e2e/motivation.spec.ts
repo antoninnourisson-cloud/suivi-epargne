@@ -1,5 +1,5 @@
 // Motivation en mode démo (?demo=1) : bons mois, point de paie, jalons et leur réglage.
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page } from './fixtures';
 import { LATEST_VERSION } from '../src/changelog';
 
 const openDemo = async (page: Page) => {

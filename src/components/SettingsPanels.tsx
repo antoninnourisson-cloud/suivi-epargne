@@ -28,12 +28,22 @@ const monthLabel = (m: string) => {
 };
 const shortDay = (iso: string) => new Date(iso).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
 
-/** Copies mensuelles du fichier sur Drive, restaurables en un clic (après confirmation). */
+/** « de septembre 2026 », mais « d'août 2026 », « d'octobre 2026 ». */
+const ofMonth = (label: string) => (/^[aeiouyéèêh]/i.test(label) ? `d'${label}` : `de ${label}`);
+
+/**
+ * Copies mensuelles du fichier sur Drive, restaurables en un clic (après confirmation). Les
+ * données actuelles sont d'abord mises de côté : « Annuler » dans le message qui suit, ou
+ * « Versions mises de côté » pendant 30 jours.
+ */
 export const DriveBackupsPanel: React.FC<{
   list: () => Promise<DriveBackup[]>;
-  restore: (id: string) => Promise<void>;
-  confirm: (title: string, message: string, onOk: () => void | Promise<void>) => void;
-}> = ({ list, restore, confirm }) => {
+  /** Restaure ; renvoie de quoi annuler (identifiant de la version mise de côté). */
+  restore: (id: string, label: string) => Promise<string | void>;
+  /** Annule une restauration (remet la version mise de côté). */
+  undo?: (undoId: string) => Promise<boolean>;
+  confirm: (title: string, message: string, onOk: () => void | Promise<void>, confirmLabel?: string) => void;
+}> = ({ list, restore, undo, confirm }) => {
   const toast = useToast();
   const [items, setItems] = useState<DriveBackup[] | null>(null);
   const [busy, setBusy] = useState(false);
@@ -53,14 +63,31 @@ export const DriveBackupsPanel: React.FC<{
                 <button type="button" disabled={busy}
                   className="h-8 px-3 inline-flex items-center rounded-sm border border-outline text-sm font-medium text-on-surface-variant hover:bg-on-surface/8 disabled:opacity-40 capitalize"
                   onClick={() => confirm(
-                    `Revenir à la copie de ${monthLabel(b.month)} ?`,
-                    'Toutes vos données actuelles seront remplacées par cette copie, puis enregistrées sur Drive. Pensez à exporter avant si vous avez un doute.',
+                    `Revenir à la copie ${ofMonth(monthLabel(b.month))} ?`,
+                    'Toutes vos données actuelles seront remplacées par cette copie, puis enregistrées sur Drive. Elles sont d\'abord mises de côté sur cet appareil : vous pourrez annuler juste après, ou les récupérer pendant 30 jours (« Versions mises de côté »).',
                     async () => {
                       setBusy(true);
-                      try { await restore(b.id); toast?.({ message: `Copie de ${monthLabel(b.month)} restaurée`, kind: 'success' }); }
-                      catch { toast?.({ message: 'Copie illisible : rien n\'a été remplacé.', kind: 'error' }); }
+                      const of = ofMonth(monthLabel(b.month));
+                      try {
+                        const undoId = await restore(b.id, of);
+                        toast?.({
+                          message: `Copie ${of} restaurée`, kind: 'success',
+                          action: undoId && undo ? {
+                            label: 'Annuler',
+                            onClick: () => { void undo(undoId).then(ok => toast?.(ok ? { message: 'Restauration annulée', kind: 'success' } : { message: 'Annulation impossible : voyez « Versions mises de côté ».', kind: 'error' })); },
+                          } : undefined,
+                        });
+                      } catch (e) {
+                        toast?.({
+                          message: e instanceof Error && e.message === 'SET_ASIDE_FAILED'
+                            ? 'Impossible de mettre vos données actuelles de côté sur cet appareil : rien n\'a été remplacé.'
+                            : 'Copie illisible : rien n\'a été remplacé.',
+                          kind: 'error',
+                        });
+                      }
                       finally { setBusy(false); }
                     },
+                    `Remplacer par la copie ${ofMonth(monthLabel(b.month))}`,
                   )}>{monthLabel(b.month)}</button>
               </li>
             ))}
@@ -79,13 +106,16 @@ type CloudMode = 'idle' | 'newCode' | 'join' | 'restore';
 /**
  * Sauvegarde de secours chiffrée de bout en bout, gardée par le serveur (8 copies). Le code
  * de secours n'est montré qu'UNE fois ; la restauration passe par le même contrôle qu'un
- * import de fichier (validateImport, puis migrate dans importData).
+ * import de fichier (validateImport, puis migrate dans importData), qui met d'abord les
+ * données actuelles de côté et ne remplace rien s'il ne le peut pas (SET_ASIDE_FAILED).
  */
 export const CloudBackupPanel: React.FC<{
   getData: () => GlobalAppData;
-  onImport: (file: File) => Promise<boolean>;
-  confirm: (title: string, message: string, onOk: () => void | Promise<void>, danger?: boolean) => void;
-}> = ({ getData, onImport, confirm }) => {
+  /** `undoId` : version mise de côté juste avant (« Annuler » la remet, via `undo`). */
+  onImport: (file: File, opts?: { requireSetAside?: boolean }) => Promise<{ ok: boolean; undoId?: string }>;
+  undo?: (undoId: string) => Promise<boolean>;
+  confirm: (title: string, message: string, onOk: () => void | Promise<void>, danger?: boolean, confirmLabel?: string) => void;
+}> = ({ getData, onImport, undo, confirm }) => {
   const toast = useToast();
   const [available] = useState(isCloudBackupAvailable);
   const [enrolled, setEnrolled] = useState<{ enabledAt: string } | null | undefined>(undefined);
@@ -144,12 +174,33 @@ export const CloudBackupPanel: React.FC<{
     if (validateImport(parsed).length > 0) { setError('Copie déchiffrée mais illisible par cette version de Pécule : rien n\'a été remplacé.'); return; }
     const label = dayLabel(restoreDate);
     confirm(`Remplacer vos données par la copie du ${label} ?`,
-      'Toutes vos données actuelles (comptes, mouvements, objectifs, fiches de paie, réglages) seront remplacées par cette copie, puis enregistrées sur Drive. Pensez à exporter avant si vous avez un doute.',
+      'Toutes vos données actuelles (comptes, mouvements, objectifs, fiches de paie, réglages) seront remplacées par cette copie, puis enregistrées sur Drive. Elles sont d\'abord mises de côté sur cet appareil : vous pourrez annuler juste après, ou les récupérer pendant 30 jours (« Versions mises de côté »).',
       async () => {
-        const ok = await onImport(new File([json], `pecule-secours-${restoreDate}.json`, { type: 'application/json' }));
-        if (ok) { reset(); toast?.({ message: `Copie de secours du ${label} restaurée`, kind: 'success' }); }
-        else toast?.({ message: 'Copie refusée : rien n\'a été remplacé.', kind: 'error' });
-      }, true);
+        let outcome: { ok: boolean; undoId?: string };
+        try {
+          outcome = await onImport(new File([json], `pecule-secours-${restoreDate}.json`, { type: 'application/json' }), { requireSetAside: true });
+        } catch (e) {
+          // La promesse « mises de côté d'abord » ne peut pas être tenue : rien n'est remplacé.
+          toast?.({
+            message: e instanceof Error && e.message === 'SET_ASIDE_FAILED'
+              ? 'Impossible de mettre vos données actuelles de côté sur cet appareil : rien n\'a été remplacé.'
+              : 'Copie refusée : rien n\'a été remplacé.',
+            kind: 'error',
+          });
+          return;
+        }
+        const { undoId } = outcome;
+        if (outcome.ok) {
+          reset();
+          toast?.({
+            message: `Copie de secours du ${label} restaurée`, kind: 'success',
+            action: undoId && undo ? {
+              label: 'Annuler',
+              onClick: () => { void undo(undoId).then(done => toast?.(done ? { message: 'Restauration annulée', kind: 'success' } : { message: 'Annulation impossible : voyez « Versions mises de côté ».', kind: 'error' })); },
+            } : undefined,
+          });
+        } else toast?.({ message: 'Copie refusée : rien n\'a été remplacé.', kind: 'error' });
+      }, true, `Remplacer par la copie du ${label}`);
   });
   const disable = () => confirm('Désactiver la sauvegarde de secours ?',
     'Toutes les copies chiffrées gardées par le serveur seront effacées, et cet appareil n\'en enverra plus. Votre fichier Drive et ses copies mensuelles ne changent pas.',

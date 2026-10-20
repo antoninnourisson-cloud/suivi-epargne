@@ -1,9 +1,10 @@
 // Planification : épargne de précaution, plan « solo » après la restitution du capital des
 // parents, aide à la déclaration de revenus, revue des abonnements. Fonctions pures, testées.
-import { AccountType, FiscalConfig, GlobalAppData, PayslipRecord, SavingsAccount, Subscription, WorkBenefits } from '../types';
-import { computeDonationSummary, computePlacementStrategy, subscriptionMonthlyCost, isMonthlyCharge, SavingsSplit, accountsAfterRestitution } from './finance';
-import { netAnnualRate } from './projection';
+import { AccountType, FiscalConfig, PayslipRecord, SavingsAccount, Subscription, WorkBenefits } from '../types';
+import { computePlacementStrategy, subscriptionMonthlyCost, isMonthlyCharge, SavingsSplit, accountsAfterRestitution } from './finance';
+import { netMonthlyRateSchedule, IDLE_ACCOUNT_ID } from './projection';
 import { parseISODate, formatISODay } from './dates';
+import { accruedSinceJanuary, applyMonthlyInterest } from './yearlyInterest';
 
 // ---------------------------------------------------------------------------
 // Épargne de précaution
@@ -45,12 +46,19 @@ export interface SoloPlanYear {
   byAccount: { accountId: string; name: string; amount: number }[];
 }
 export interface SoloMilestone { date: string; label: string }
-export interface SoloPlan { years: SoloPlanYear[]; milestones: SoloMilestone[]; startTotal: number }
+export interface SoloPlan {
+  years: SoloPlanYear[]; milestones: SoloMilestone[]; startTotal: number;
+  /** Versé sans compte où le placer (livrets pleins, ni AV ni PEA) : resté sur le compte courant. */
+  unplaced: number;
+}
 
 /**
  * Simule mois par mois à partir de la restitution (capital des parents retiré) : versement
  * mensuel réparti selon le plan de placement ou votre répartition, plafonds respectés,
- * intérêts nets. Repère les étapes : précaution atteinte, chaque livret plein.
+ * intérêts nets (taux mûr dès la maturité fiscale d'un PEA ou d'une assurance vie ; ceux du
+ * Livret A, du LDDS et du LEP versés au 31 décembre). Ce que
+ * le plan ne peut placer nulle part reste sur le compte courant, compté. Repère les étapes :
+ * précaution atteinte, chaque livret plein.
  */
 export const buildSoloPlan = (
   accounts: SavingsAccount[],
@@ -61,10 +69,22 @@ export const buildSoloPlan = (
 ): SoloPlan => {
   const years = opts.years ?? 4;
   const start = parseISODate(restitutionISO);
-  const sim = accountsAfterRestitution(accounts, restitutionISO)
-    .filter(a => a.type !== AccountType.IMMOBILIER)
-    .map(a => ({ ...a }));
-  const rates = new Map(sim.map(a => [a.id, netAnnualRate(a, fiscal) / 100 / 12]));
+  const after = accountsAfterRestitution(accounts, restitutionISO).filter(a => a.type !== AccountType.IMMOBILIER);
+  // Livret A, LDDS, LEP : intérêts versés au 31 décembre, y compris ceux acquis depuis le
+  // 1er janvier, part des parents comprise jusqu'à la restitution (offerts). Même règle que
+  // le simulateur et projectSavings (./yearlyInterest).
+  const accrued = accruedSinceJanuary(after, start);
+  const sim = after.map(a => ({ ...a, accrued: accrued.get(a.id) ?? 0 }));
+  const rates = new Map(sim.map(a => [a.id, netMonthlyRateSchedule(a, fiscal, start)]));
+  let unplaced = 0;
+  const idle = () => {
+    let cc = sim.find(a => a.type === AccountType.COMPTE_COURANT);
+    if (!cc) {
+      cc = { id: IDLE_ACCOUNT_ID, name: 'Compte courant', type: AccountType.COMPTE_COURANT, institution: '', totalAmount: 0, ownedAmount: 0, parentalCapital: 0, accrued: 0 };
+      sim.push(cc);
+    }
+    return cc;
+  };
   const milestones: SoloMilestone[] = [];
   const fullNoted = new Set<string>();
   let emergencyNoted = false;
@@ -76,14 +96,15 @@ export const buildSoloPlan = (
     const date = new Date(start.getFullYear(), start.getMonth() + m, 1);
     for (const a of sim) {
       if (a.type === AccountType.COMPTE_COURANT) continue;
-      const interest = a.totalAmount * (rates.get(a.id) || 0);
-      a.totalAmount += interest; a.ownedAmount += interest;
+      a.ownedAmount += applyMonthlyInterest(a, rates.get(a.id)?.(m) || 0, date.getMonth() === 11);
     }
     if (monthly > 0) {
       for (const st of computePlacementStrategy(monthly, sim, fiscal, opts.split)) {
-        if (st.infoOnly || !st.accountId) continue;
-        const a = sim.find(x => x.id === st.accountId);
-        if (a) { a.totalAmount += st.fillAmount; a.ownedAmount += st.fillAmount; }
+        if (st.infoOnly) continue;
+        const target = st.accountId ? sim.find(x => x.id === st.accountId) : undefined;
+        const a = target || idle();
+        if (!target) unplaced += st.fillAmount;
+        a.totalAmount += st.fillAmount; a.ownedAmount += st.fillAmount;
       }
     }
     for (const a of sim) {
@@ -105,73 +126,15 @@ export const buildSoloPlan = (
       });
     }
   }
-  return { years: out.filter((y, i, arr) => arr.findIndex(z => z.year === y.year) === i), milestones, startTotal: Math.round(startTotal) };
+  return { years: out.filter((y, i, arr) => arr.findIndex(z => z.year === y.year) === i), milestones, startTotal: Math.round(startTotal), unplaced: Math.round(unplaced) };
 };
 
 // ---------------------------------------------------------------------------
-// Aide à la déclaration de revenus
+// Aide à la déclaration de revenus : déplacée dans ./taxReturn (réexportée ici).
 // ---------------------------------------------------------------------------
 
-export interface TaxReturnLine {
-  box: string;          // case du formulaire (ex. « 1AJ »)
-  label: string;
-  amount?: number;
-  note: string;
-  confidence: 'exact' | 'estimate' | 'info';
-}
-
-/**
- * Ce qu'il faut vérifier ou reporter sur la déclaration de l'année `incomeYear` (déposée
- * au printemps suivant). Les montants pré-remplis par l'administration restent la
- * référence : l'app aide à les contrôler.
- */
-export const buildTaxReturnChecklist = (
-  data: Pick<GlobalAppData, 'payslips' | 'donations' | 'accounts'>,
-  incomeYear: number,
-  opts: { estimatedNetTaxableBeforeAllowance?: number; allowanceRate?: number; allowanceCap?: number; ceiling75?: number } = {}
-): TaxReturnLine[] => {
-  const lines: TaxReturnLine[] = [];
-  const slips = (data.payslips || []).filter(p => p.extracted?.period?.startsWith(`${incomeYear}-`));
-  const months = new Set(slips.map(p => p.extracted.period));
-  const taxable = slips.reduce((s, p) => s + (p.extracted.netTaxable || 0), 0);
-  if (months.size > 0 && taxable > 0) {
-    lines.push({
-      box: '1AJ', label: 'Salaires', amount: Math.round(taxable), confidence: months.size >= 12 ? 'exact' : 'estimate',
-      note: months.size >= 12 ? 'Somme des nets imposables de vos 12 fiches : comparez au montant pré-rempli.'
-        : `Somme de ${months.size} fiche${months.size > 1 ? 's' : ''} sur 12 : le cumul « net imposable » de votre fiche de décembre fait foi.`,
-    });
-  } else if (opts.estimatedNetTaxableBeforeAllowance) {
-    lines.push({ box: '1AJ', label: 'Salaires', amount: Math.round(opts.estimatedNetTaxableBeforeAllowance), confidence: 'estimate',
-      note: 'Estimation depuis votre salaire brut. Le cumul « net imposable » de votre fiche de décembre fait foi.' });
-  }
-  const withheld = slips.reduce((s, p) => s + (p.extracted.incomeTaxWithheld || 0), 0);
-  if (withheld > 0) {
-    lines.push({ box: '8HV', label: 'Impôt déjà prélevé à la source', amount: Math.round(withheld), confidence: months.size >= 12 ? 'exact' : 'estimate',
-      note: 'Pré-rempli par l\'administration ; sert à calculer le solde à payer ou à rembourser.' });
-  }
-  const base = lines.find(l => l.box === '1AJ')?.amount;
-  if (base && opts.allowanceRate) {
-    const allowance = Math.min(base * opts.allowanceRate, opts.allowanceCap ?? Infinity);
-    lines.push({ box: '1AK', label: 'Frais réels (facultatif)', confidence: 'info',
-      note: `L'abattement automatique de 10 % vaut environ ${Math.round(allowance).toLocaleString('fr-FR')} €. Déclarez vos frais réels (trajets, repas…) seulement s'ils dépassent ce montant.` });
-  }
-  const don = computeDonationSummary(data.donations || [], incomeYear, { ceiling75: opts.ceiling75 });
-  if (don.total75 > 0) lines.push({ box: '7UD', label: 'Dons aux organismes d\'aide aux personnes en difficulté', amount: Math.round(don.total75), confidence: 'exact', note: 'Réduction de 75 %. Gardez les reçus fiscaux.' });
-  if (don.total66 > 0) lines.push({ box: '7UF', label: 'Autres dons', amount: Math.round(don.total66), confidence: 'exact', note: 'Réduction de 66 %, dans la limite de 20 % du revenu imposable.' });
-  if (don.missingReceipts.length > 0) lines.push({ box: '—', label: 'Reçus manquants', confidence: 'info', note: `${don.missingReceipts.length} don${don.missingReceipts.length > 1 ? 's' : ''} sans reçu fiscal noté : réclamez-le avant de déclarer.` });
-
-  const yearStart = `${incomeYear}-01-01`, yearEnd = `${incomeYear}-12-31`;
-  const avWithdrawals = (data.accounts || []).filter(a => a.type === AccountType.ASSURANCE_VIE)
-    .flatMap(a => (a.movements || []).filter(m => m.type === 'OUT' && !m.kind && m.date >= yearStart && m.date <= yearEnd));
-  if (avWithdrawals.length > 0) {
-    lines.push({ box: '2CH / 2DH / 2ZZ', label: 'Rachat d\'assurance vie', confidence: 'info',
-      note: 'Votre assureur vous envoie un relevé (IFU) au printemps : les montants sont pré-remplis, vérifiez-les avec lui.' });
-  }
-  if ((data.accounts || []).some(a => [AccountType.LIVRET_A, AccountType.LDDS, AccountType.LEP].includes(a.type))) {
-    lines.push({ box: '—', label: 'Intérêts des livrets', confidence: 'info', note: 'Livret A, LDDS et LEP sont exonérés : rien à déclarer.' });
-  }
-  return lines;
-};
+export { buildTaxReturnChecklist } from './taxReturn';
+export type { TaxReturnLine } from './taxReturn';
 
 // ---------------------------------------------------------------------------
 // Revue des abonnements

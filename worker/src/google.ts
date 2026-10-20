@@ -88,16 +88,21 @@ export const revokeToken = (token: string) =>
 
 const DATA_FILE_NAME = 'suivi_epargne.json';
 
-/** Lit le fichier de données de l'utilisateur (même recherche que l'app). `null` si absent. */
 /** Fichier de données de l'utilisateur, passé par `migrate()` comme dans l'app : un ancien
- *  format ou un fichier abîmé ne fausse pas les rappels. `null` s'il n'existe pas. */
+ *  format ou un fichier abîmé ne fausse pas les rappels. `null` s'il n'existe pas.
+ *  Même recherche que l'app (findConfigFiles) : avec des fichiers en double, c'est le plus
+ *  récemment modifié qui compte. Avant, le plus ancien (tri par date de création) était lu,
+ *  et les rappels partaient de données périmées. */
 export const readDataFile = async (accessToken: string): Promise<GlobalAppData | null> => {
   const q = encodeURIComponent(`name = '${DATA_FILE_NAME}' and trashed = false`);
-  const list = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)&orderBy=createdTime`, {
+  const order = encodeURIComponent('modifiedTime desc');
+  const list = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,modifiedTime)&orderBy=${order}`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   if (!list.ok) throw new Error(`DRIVE_LIST_${list.status}`);
-  const files = ((await list.json()) as { files?: { id: string }[] }).files || [];
+  const files = (((await list.json()) as { files?: { id: string; modifiedTime?: string }[] }).files || [])
+    // Tri refait ici, comme dans l'app : l'ordre de l'API n'est pas une garantie.
+    .sort((a, b) => (b.modifiedTime || '').localeCompare(a.modifiedTime || ''));
   if (files.length === 0) return null;
   const res = await fetch(`https://www.googleapis.com/drive/v3/files/${files[0].id}?alt=media`, {
     headers: { Authorization: `Bearer ${accessToken}` },

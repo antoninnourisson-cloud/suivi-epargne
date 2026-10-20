@@ -10,6 +10,8 @@ import { parseFrenchNumber } from '../lib/numbers';
 import { tracksDeposits, PEA_DEPOSIT_CEILING, applyRateChange } from '../lib/finance';
 import { PlusCircle, Save, Users, Calculator, Tag, X, History } from 'lucide-react';
 import { formatEUR } from '../lib/format';
+import { isLikelyForeignAccount } from '../lib/taxReturn';
+import { SegmentedButton } from './ui';
 
 interface AccountFormProps {
   onSave: (account: SavingsAccount) => void;
@@ -41,6 +43,14 @@ export const AccountForm: React.FC<AccountFormProps> = ({ onSave, initialData, o
   const [totalDeposits, setTotalDeposits] = useState(initialData?.totalDeposits !== undefined ? String(initialData.totalDeposits) : '');
   const showDeposits = tracksDeposits(type);
   const parsedDeposits = totalDeposits.trim() === '' ? undefined : parseFrenchNumber(totalDeposits);
+  // Compte tenu à l'étranger (déclaration 3916 / 3916-bis) : Oui, Non, ou pas encore précisé
+  // (undefined). Seule une réponse donnée est enregistrée : un compte non précisé chez une
+  // néobanque ou un courtier reste « à vérifier » dans l'aide à la déclaration. Seul un
+  // NOUVEAU compte crypto part sur « Oui » (affiché, donc visible) : les grandes plateformes
+  // sont établies hors de France.
+  const [heldAbroad, setHeldAbroad] = useState<boolean | undefined>(initialData?.heldAbroad);
+  const heldAbroadValue = heldAbroad ?? (!initialData && type === AccountType.CRYPTO ? true : undefined);
+  const abroadToCheck = heldAbroadValue === undefined && isLikelyForeignAccount({ type, institution, name, heldAbroad: undefined });
 
   const isTaxableType = [AccountType.ASSURANCE_VIE, AccountType.PEA, AccountType.PEE, AccountType.CRYPTO, AccountType.IMMOBILIER].includes(type);
 
@@ -115,6 +125,9 @@ export const AccountForm: React.FC<AccountFormProps> = ({ onSave, initialData, o
     }
 
     onSave({
+      // Champs que ce formulaire n'édite pas (date de vérification du taux, champs inconnus
+      // d'une version plus récente…) : conservés tels quels.
+      ...initialData,
       id: initialData?.id || crypto.randomUUID(),
       // Espaces superflus retirés : « BPVF » et « BPVF  » apparaissaient comme deux établissements.
       name: name.trim().replace(/\s+/g, ' ') || `${type} - ${institution.trim()}`,
@@ -136,6 +149,7 @@ export const AccountForm: React.FC<AccountFormProps> = ({ onSave, initialData, o
       totalDeposits: !showDeposits ? undefined
         : parsedDeposits === null ? initialData?.totalDeposits
         : parsedDeposits !== undefined && parsedDeposits >= 0 ? parsedDeposits : undefined,
+      heldAbroad: heldAbroadValue,
     });
   };
 
@@ -220,6 +234,24 @@ export const AccountForm: React.FC<AccountFormProps> = ({ onSave, initialData, o
 
           <div><label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase mb-1">Date d'ouverture</label><input type="date" value={openingDate} onChange={e => setOpeningDate(e.target.value)} className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl font-bold" /></div>
           {type === AccountType.PEE && <div><label className="text-[11px] font-black text-amber-800 dark:text-amber-300 mb-1 uppercase">Fin contrat</label><input type="date" value={contractEndDate} onChange={e => setContractEndDate(e.target.value)} className="w-full p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-xl font-bold text-slate-800 dark:text-slate-100" /></div>}
+
+          <div className="md:col-span-2 rounded-2xl border border-outline-variant p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm font-medium text-on-surface">Compte détenu à l'étranger ?</p>
+              <SegmentedButton<'yes' | 'no' | 'unset'>
+                label="Compte détenu à l'étranger"
+                options={[{ value: 'yes', label: 'Oui' }, { value: 'no', label: 'Non' }]}
+                value={heldAbroadValue === undefined ? 'unset' : heldAbroadValue ? 'yes' : 'no'}
+                onChange={v => setHeldAbroad(v === 'yes')}
+              />
+            </div>
+            <p className="mt-2 text-xs text-on-surface-variant">
+              {type === AccountType.CRYPTO
+                ? 'Plateforme établie hors de France (Binance, Coinbase, Kraken… : vérifiez le pays dans leurs conditions). Le compte se déclare chaque année avec vos revenus (formulaire 3916-bis), même sans vente. Un portefeuille que vous gardez vous-même n\'est pas concerné.'
+                : 'Banque en ligne, néobanque ou courtier établi hors de France : si l\'IBAN ne commence pas par FR, le compte est sûrement à l\'étranger. Il se déclare chaque année avec vos revenus (formulaire 3916), même sans opération.'}
+            </p>
+            {abroadToCheck && <p className="mt-1 text-xs font-medium text-on-surface">Pas encore précisé : l'aide à la déclaration vous demandera de vérifier ce compte.</p>}
+          </div>
 
           <div className="md:col-span-2">
             <label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase mb-1 flex items-center gap-1"><Tag className="w-3 h-3" /> Étiquettes (libres)</label>

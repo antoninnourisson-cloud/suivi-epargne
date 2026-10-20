@@ -1,6 +1,6 @@
 // Parcours principaux en mode démo (?demo=1) : chaque écran s'affiche, l'ajout rapide
 // fonctionne, la part des parents ne peut pas être retirée, le clavier suffit.
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page } from './fixtures';
 import { LATEST_VERSION } from '../src/changelog';
 
 const SCREENS = [

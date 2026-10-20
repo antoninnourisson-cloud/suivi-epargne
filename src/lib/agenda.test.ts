@@ -37,11 +37,39 @@ describe('buildAgenda', () => {
     expect(events.map(e => e.date)).toEqual([...events.map(e => e.date)].sort());
   });
 
+  it("jour de paie : la ligne reprend l'objectif de la paie en cours (somme en plus comprise), pas les suivantes", () => {
+    const payDay = new Date(2026, 9, 27, 9); // 27 octobre 2026, jour de paie
+    const data = base({
+      config: { ...base().config, paydayDay: 27, paydayAmount: 1000, payAdjustment: { period: '2026-10', extra: 300 } },
+    });
+    const paydays = buildAgenda(data, payDay).events.filter(e => e.kind === 'payday');
+    expect(paydays.map(e => [e.date, e.amount])).toEqual([['2026-10-27', 1300], ['2026-11-27', 1000], ['2026-12-27', 1000]]);
+
+    // Capacité saisie pour cette paie : elle remplace le montant habituel ce jour-là seulement.
+    const manual = base({ config: { ...base().config, paydayDay: 27, paydayAmount: 1000, payAdjustment: { period: '2026-10', capacity: 800 } } });
+    expect(buildAgenda(manual, payDay).events.find(e => e.kind === 'payday')).toMatchObject({ date: '2026-10-27', amount: 800 });
+
+    // Avant la paie, le réglage de la paie précédente ne s'applique pas à la suivante.
+    const before = base({ config: { ...base().config, paydayDay: 27, paydayAmount: 1000, payAdjustment: { period: '2026-09', extra: 300 } } });
+    expect(buildAgenda(before, NOW).events.find(e => e.kind === 'payday')).toMatchObject({ date: '2026-10-27', amount: 1000 });
+  });
+
   it('renvoie à part les maturités fiscales lointaines', () => {
     const data = base({ accounts: [acc({ id: 'av', name: 'AV', type: AccountType.ASSURANCE_VIE, openingDate: '2025-11-28' })] });
     const { events, later } = buildAgenda(data, NOW);
     expect(events.some(e => e.kind === 'maturity')).toBe(false);
     expect(later[0]).toMatchObject({ kind: 'maturity', date: '2033-11-28' });
+    expect(later[0].detail).toContain('prélèvements sociaux (17,2 %) toujours dus');
+  });
+
+  it('PEE : annonce le déblocage du prochain versement, pas une « maturité fiscale »', () => {
+    const pee = acc({ id: 'pee', name: 'PEE', type: AccountType.PEE, openingDate: '2019-01-01', totalAmount: 2000, ownedAmount: 2000, movements: [
+      { id: 'a', date: '2019-01-15', amount: 1000, label: 'Versement', type: 'IN' },
+      { id: 'b', date: '2022-03-10', amount: 1000, label: 'Intéressement', type: 'IN' },
+    ] });
+    const { events } = buildAgenda(base({ accounts: [pee] }), NOW);
+    const e = events.find(x => x.kind === 'maturity');
+    expect(e).toMatchObject({ date: '2027-03-10', title: 'PEE : versements débloqués', amount: 1000, detail: 'Tout votre plan devient disponible' });
   });
 });
 

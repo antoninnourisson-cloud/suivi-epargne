@@ -77,10 +77,10 @@ export const RecurringManager: React.FC<RecurringManagerProps> = ({ accounts, re
                     {!r.active && ' · en pause'}
                   </p>
                 </div>
-                <button type="button" onClick={() => toggle(r.id)} aria-label={r.active ? 'Mettre en pause' : 'Réactiver'} className="p-2.5 text-slate-400 hover:text-indigo-600 rounded-lg">
+                <button type="button" onClick={() => toggle(r.id)} aria-label={r.active ? 'Mettre en pause' : 'Réactiver'} className="p-2.5 text-on-surface-variant hover:text-indigo-600 dark:hover:text-indigo-300 rounded-lg">
                   {r.active ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
                 </button>
-                <button type="button" onClick={() => remove(r.id)} aria-label={`Supprimer ${r.label}`} className="p-2.5 text-slate-400 hover:text-rose-500 rounded-lg">
+                <button type="button" onClick={() => remove(r.id)} aria-label={`Supprimer ${r.label}`} className="p-2.5 text-on-surface-variant hover:text-rose-600 dark:hover:text-rose-300 rounded-lg">
                   <Trash2 className="w-4 h-4" />
                 </button>
               </li>

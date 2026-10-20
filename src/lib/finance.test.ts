@@ -390,7 +390,8 @@ describe('computeWeightedAnnualRate', () => {
 });
 
 describe('computeCapitalGainsTax (PFU / prélèvements sociaux)', () => {
-  const fiscal = LEGACY_CFG; // socialChargesCapital: 0.172, legalMaturity: {pea:5, assuranceVie:8, pee:5}
+  // Attendus en euros, écrits en dur (2026) : 18,6 % de prélèvements sociaux, 17,2 % sur l'assurance vie, PFU 12,8 %.
+  const fiscal = LEGACY_CFG; // hérite des taux 2026 de DEFAULT_FISCAL_CONFIG ; legalMaturity: {pea:5, assuranceVie:8, pee:5}
   const NOW = new Date('2026-01-01T00:00:00Z');
 
   it("n'applique rien à un gain nul ou négatif", () => {
@@ -400,17 +401,17 @@ describe('computeCapitalGainsTax (PFU / prélèvements sociaux)', () => {
 
   it('applique le PFU (12,8% IR + prélèvements sociaux) sur un PEA récent', () => {
     const r = computeCapitalGainsTax({ type: AccountType.PEA, openingDate: '2024-01-01' }, 1000, fiscal, NOW);
-    expect(r.socialCharges).toBeCloseTo(1000 * fiscal.socialChargesCapital, 5);
+    expect(r.socialCharges).toBeCloseTo(186, 5);
     expect(r.incomeTax).toBeCloseTo(128, 5);
-    expect(r.netInterest).toBeCloseTo(1000 - 128 - 1000 * fiscal.socialChargesCapital, 5);
+    expect(r.netInterest).toBeCloseTo(686, 5);
     expect(r.regime).toBe('PFU');
   });
 
   it('exonère un PEA de plus de 5 ans d\'IR, mais garde les prélèvements sociaux', () => {
     const r = computeCapitalGainsTax({ type: AccountType.PEA, openingDate: '2015-01-01' }, 1000, fiscal, NOW);
     expect(r.incomeTax).toBe(0);
-    expect(r.socialCharges).toBeCloseTo(1000 * fiscal.socialChargesCapital, 5);
-    expect(r.netInterest).toBeCloseTo(1000 - 1000 * fiscal.socialChargesCapital, 5);
+    expect(r.socialCharges).toBeCloseTo(186, 5);
+    expect(r.netInterest).toBeCloseTo(814, 5);
     expect(r.regime).toBe('EXONERE_IR');
   });
 

@@ -1,6 +1,6 @@
 // Écran « Actualiser les soldes » en mode démo : une ligne par compte, dépliable, et
 // l'enregistrement d'un nouveau solde se retrouve dans « Mes comptes ».
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page } from './fixtures';
 import { LATEST_VERSION } from '../src/changelog';
 
 const openUpdate = async (page: Page, isMobile: boolean) => {

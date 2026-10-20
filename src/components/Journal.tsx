@@ -181,10 +181,10 @@ export const Journal: React.FC<Props> = ({ accounts, restitution, onDeleteMoveme
               </button>
             )}
             {e.movementId && e.account && (
-              <button type="button" onClick={() => onDeleteMovement(e.account!.id, e.movementId!)} aria-label={`Supprimer « ${e.title} »`} className="p-2 text-slate-400 hover:text-rose-500 shrink-0"><Trash2 className="w-4 h-4" /></button>
+              <button type="button" onClick={() => onDeleteMovement(e.account!.id, e.movementId!)} aria-label={`Supprimer « ${e.title} »`} className="p-2 text-on-surface-variant hover:text-rose-600 dark:hover:text-rose-300 shrink-0"><Trash2 className="w-4 h-4" /></button>
             )}
             {e.kind === 'rate' && e.canRevertRate && e.account && (
-              <button type="button" onClick={() => onRevertRate(e.account!.id, e.rateEntryDate!)} title="Revenir au taux précédent" aria-label="Annuler ce changement de taux" className="p-2 text-slate-400 hover:text-indigo-600 shrink-0"><Undo2 className="w-4 h-4" /></button>
+              <button type="button" onClick={() => onRevertRate(e.account!.id, e.rateEntryDate!)} title="Revenir au taux précédent" aria-label="Annuler ce changement de taux" className="p-2 text-on-surface-variant hover:text-indigo-600 dark:hover:text-indigo-300 shrink-0"><Undo2 className="w-4 h-4" /></button>
             )}
           </li>
         ))}

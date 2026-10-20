@@ -1,13 +1,18 @@
 // Graphique du simulateur « Et si… » : plan actuel (trait pointillé neutre), scénario
 // (trait plein vert sapin) et fourchette P10–P90 tirée de vos mois passés (aire douce de
-// la même teinte que le scénario). Animation coupée si l'utilisateur demande moins de
-// mouvement. Masqué aux lecteurs d'écran : ChartFrame fournit synthèse et tableau.
-import React, { useMemo } from 'react';
+// la même teinte que le scénario). Le tracé s'anime à la première apparition seulement (et
+// jamais si l'utilisateur demande moins de mouvement) : animer chaque mise à jour redessinait
+// le graphique à chaque image pendant 600 ms, ce qui figeait la saisie sur un téléphone moyen.
+// Masqué aux lecteurs d'écran : ChartFrame fournit synthèse et tableau.
+import React, { useEffect, useMemo, useState } from 'react';
 import { ResponsiveContainer, ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip } from 'recharts';
 import { formatEUR } from '../../lib/format';
 import { useIsDark, chartTheme, usePrefersReducedMotion, axisTick } from '../../lib/chartTheme';
 import { formatAxisEUR, maxAbs, niceTicks } from '../../lib/chartData';
 import { ChartTooltipCard, type TooltipRow } from '../charts/ChartParts';
+
+/** Durée de l'animation du premier tracé. */
+const ANIMATION_MS = 600;
 
 export interface SimChartRow {
   label: string;
@@ -24,7 +29,16 @@ export const simulatorColors = (dark: boolean, showScenario: boolean) => {
   return { scenario: t.brand, baseline: showScenario ? t.cursor : t.brand, band: t.brand };
 };
 
-export const SimulatorChart: React.FC<{ data: SimChartRow[]; showScenario: boolean }> = ({ data, showScenario }) => {
+/** Mêmes valeurs ligne à ligne (un objectif saisi, par exemple, ne change pas les courbes). */
+const sameRows = (a: SimChartRow[], b: SimChartRow[]) => a === b || (a.length === b.length && a.every((r, i) => {
+  const s = b[i];
+  return r.label === s.label && r.title === s.title && r.baseline === s.baseline && r.scenario === s.scenario
+    && r.band?.[0] === s.band?.[0] && r.band?.[1] === s.band?.[1];
+}));
+
+// Mémoïsé sur les valeurs : avec useDeferredValue côté écran, le graphique (le plus long à
+// dessiner) n'est redessiné que si une courbe change, après l'affichage de la saisie.
+export const SimulatorChart = React.memo(function SimulatorChart({ data, showScenario }: { data: SimChartRow[]; showScenario: boolean }) {
   const dark = useIsDark();
   const t = chartTheme(dark);
   const c = simulatorColors(dark, showScenario);
@@ -33,7 +47,12 @@ export const SimulatorChart: React.FC<{ data: SimChartRow[]; showScenario: boole
   const hasNegative = data.some(r => r.scenario < 0 || (r.band && r.band[0] < 0));
   const ticks = useMemo(() => niceTicks(scaleMax), [scaleMax]);
   const yScale = hasNegative ? {} : { ticks, domain: [0, ticks[ticks.length - 1]] };
-  const anim = { isAnimationActive: !reduced, animationDuration: 600, animationEasing: 'ease-out' as const };
+  const [drawn, setDrawn] = useState(false);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDrawn(true), ANIMATION_MS);
+    return () => window.clearTimeout(timer);
+  }, []);
+  const anim = { isAnimationActive: !reduced && !drawn, animationDuration: ANIMATION_MS, animationEasing: 'ease-out' as const };
 
   return (
     <ResponsiveContainer width="100%" height="100%">
@@ -65,4 +84,4 @@ export const SimulatorChart: React.FC<{ data: SimChartRow[]; showScenario: boole
       </ComposedChart>
     </ResponsiveContainer>
   );
-};
+}, (prev, next) => prev.showScenario === next.showScenario && sameRows(prev.data, next.data));

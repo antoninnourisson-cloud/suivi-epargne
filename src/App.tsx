@@ -8,21 +8,23 @@ import { usePortfolioData } from './hooks/usePortfolioData';
 import { useTheme } from './hooks/useTheme';
 import { Dialog, DialogState, emptyDialog } from './components/Dialog';
 import { useToasts, ToastContainer, ToastContext } from './components/Toast';
-import { QuickAddModal } from './components/QuickAddModal';
 import { BottomNav } from './components/BottomNav';
-import { AppLockScreen } from './components/AppLockScreen';
+import { AppLockScreen, LockResetNotice } from './components/AppLockScreen';
+import { useAppLock, useLockResetCompletion } from './hooks/useAppLock';
+import { lsDel, lsGet } from './lib/storage';
 import {
-  initGoogleApi, handleAuthClick, handleSignOut, isTokenValid, completeBackendLoginIfPresent
+  initGoogleApi, handleAuthClick, handleSignOut, resumeSession, hasStoredSession
 } from './services/googleDriveService';
-import { isBackendEnabled, hasBackendSession } from './services/backendService';
+import { isBackendEnabled } from './services/backendService';
+import { BootSkeleton } from './components/BootSkeleton';
+import { APP_VERSION } from './appVersion';
+import { whatsNewPending } from './components/whatsNewGate';
 import { disablePush } from './services/pushService';
-import { isLockEnabled } from './services/appLockService';
 import { computeIncome, totalFixedCharges, computeMonthlySavingsCapacity, subscriptionsAsExpenses, computeMonthlyPay, REGULATED_RATE_GROUPS } from './lib/finance';
 import { localTodayISO, parseISODate } from './lib/dates';
 import { formatEUR } from './lib/format';
-import { AccountsView } from './components/AccountsView';
 import { lepTimelineFromData } from './lib/lep';
-import { TaxNoticePanel } from './components/TaxNoticePanel';
+import { computeMonthTarget } from './lib/payAdjustment';
 // Importé ici (et pas dans l'écran, chargé à la demande) pour capter l'invitation d'installation dès le démarrage.
 import './services/installPrompt';
 import { computeBadgeCount, detectPayRaise } from './lib/projection';
@@ -32,29 +34,25 @@ import {
   saveAccount, deleteAccount, quickAdd, planMovementDeletion, deleteMovement, cancelDeposit, removeCancellingMovements,
   recordRestitution, undoRestitution,
 } from './lib/commands';
-import { WhatsNewModal } from './components/WhatsNew';
 import { MovedNotice } from './components/MovedNotice';
 import { Logo } from './components/Logo';
-import { LATEST_VERSION } from './changelog';
 import { ErrorBoundary, lazyWithRetry } from './components/ErrorBoundary';
 import { NAV_ITEMS, NAV_SECTIONS, View, isView, navLabel } from './navigation';
 import { QuickAddFab } from './components/QuickAddFab';
 import { useFiscalWatch } from './hooks/useFiscalWatch';
-import { FiscalWatchCard } from './components/FiscalWatchCard';
 import type { FiscalProposal } from './lib/fiscalWatch';
-import { DriveBackupsPanel, ServerSecurityPanel, CloudBackupPanel } from './components/SettingsPanels';
-import { maybeAutoUpload } from './services/cloudBackup';
+import { syncErrorText } from './lib/syncErrors';
+import { registerReloadBlocker } from './services/swUpdates';
 import { computeEmergencyFund, DEFAULT_EMERGENCY_MONTHS } from './lib/planning';
 import { buildAgenda } from './lib/agenda';
-import { TaxReturnHelper } from './components/TaxReturnHelper';
-import { SoloPlanCard } from './components/SoloPlanCard';
-import { MotivationSettings } from './components/motivation/MotivationSettings';
+import { buildTaxReturnAlert } from './lib/taxReturn';
 import { openSettingsSection } from './components/settings/sections';
 import {
   LogOut,
-  Loader2, Settings as SettingsIcon, AlertTriangle, RotateCw,
-  Sun, Moon, Save, WifiOff
+  Loader2, Settings as SettingsIcon, AlertTriangle,
+  Sun, Moon, WifiOff
 } from 'lucide-react';
+import { Button } from './components/ui';
 
 // Code-splitting : les vues lourdes (recharts, etc.) sont chargées à la demande.
 const Journal = lazyWithRetry(() => import('./components/Journal').then(m => ({ default: m.Journal })));
@@ -71,6 +69,51 @@ const History = lazyWithRetry(() => import('./components/History').then(m => ({ 
 const Simulator = lazyWithRetry(() => import('./components/Simulator').then(m => ({ default: m.Simulator })));
 const ParentalShare = lazyWithRetry(() => import('./components/ParentalShare').then(m => ({ default: m.ParentalShare })));
 const Payslips = lazyWithRetry(() => import('./components/Payslips').then(m => ({ default: m.Payslips })));
+const AccountsView = lazyWithRetry(() => import('./components/AccountsView').then(m => ({ default: m.AccountsView })));
+// Écrans secondaires et fenêtres rarement ouvertes : hors du code de démarrage, chargés à
+// leur premier affichage (chacun dans son propre <Suspense>, voir `Lazy` ci-dessous).
+const FiscalWatchCard = lazyWithRetry(() => import('./components/FiscalWatchCard').then(m => ({ default: m.FiscalWatchCard })));
+const DriveBackupsPanel = lazyWithRetry(() => import('./components/SettingsPanels').then(m => ({ default: m.DriveBackupsPanel })));
+const CloudBackupPanel = lazyWithRetry(() => import('./components/SettingsPanels').then(m => ({ default: m.CloudBackupPanel })));
+const ServerSecurityPanel = lazyWithRetry(() => import('./components/SettingsPanels').then(m => ({ default: m.ServerSecurityPanel })));
+const SetAsideVersionsPanel = lazyWithRetry(() => import('./components/sync/SetAsideVersionsPanel').then(m => ({ default: m.SetAsideVersionsPanel })));
+const TaxNoticePanel = lazyWithRetry(() => import('./components/TaxNoticePanel').then(m => ({ default: m.TaxNoticePanel })));
+const MotivationSettings = lazyWithRetry(() => import('./components/motivation/MotivationSettings').then(m => ({ default: m.MotivationSettings })));
+const TaxReturnHelper = lazyWithRetry(() => import('./components/TaxReturnHelper').then(m => ({ default: m.TaxReturnHelper })));
+const SoloPlanCard = lazyWithRetry(() => import('./components/SoloPlanCard').then(m => ({ default: m.SoloPlanCard })));
+const ConflictDialog = lazyWithRetry(() => import('./components/sync/ConflictDialog').then(m => ({ default: m.ConflictDialog })));
+const LogoutDialog = lazyWithRetry(() => import('./components/sync/LogoutDialog').then(m => ({ default: m.LogoutDialog })));
+const QuickAddModal = lazyWithRetry(() => import('./components/QuickAddModal').then(m => ({ default: m.QuickAddModal })));
+const WhatsNewModal = lazyWithRetry(() => import('./components/WhatsNew').then(m => ({ default: m.WhatsNewModal })));
+/** Morceau chargé à part : rien ne s'affiche à sa place le temps de son chargement. */
+const Lazy = ({ children }: { children: React.ReactNode }) => <Suspense fallback={null}>{children}</Suspense>;
+
+// Mode démo (`?demo=1`, données fictives, sans Google) : en développement, et dans le build de
+// production des tests de bout en bout (__E2E_DEMO__, voir vite.config.ts). Jamais dans le
+// build publié : la condition y vaut `false` et la branche est retirée du bundle.
+const DEMO_ALLOWED: boolean = import.meta.env.DEV || __E2E_DEMO__;
+
+// Écran affiché au démarrage (lien direct, sinon le dernier ouvert, sinon l'Accueil) : demandé
+// dès que la session est connue, en même temps que le jeton et Drive plutôt qu'après.
+const START_VIEW_LOADERS: Partial<Record<View, () => Promise<unknown>>> = {
+  dashboard: () => import('./components/Dashboard'),
+  update: () => import('./components/AccountUpdate'),
+  pilot: () => import('./components/AssistantPilot'),
+  transfers: () => import('./components/TransferManager'),
+  accounts: () => import('./components/AccountsView'),
+  journal: () => import('./components/Journal'),
+  agenda: () => import('./components/Agenda'),
+  yield: () => import('./components/Yield'),
+  history: () => import('./components/History'),
+  simulator: () => import('./components/Simulator'),
+  settings: () => import('./components/Settings'),
+};
+const preloadStartView = () => {
+  const linked = new URLSearchParams(window.location.search).get('view');
+  const last = lsGet('last_view');
+  const view = isView(linked) ? linked : isView(last) ? last : 'dashboard';
+  (START_VIEW_LOADERS[view] ?? START_VIEW_LOADERS.dashboard)?.().catch(() => undefined);
+};
 
 // Squelette pendant le chargement d'un écran : la mise en page ne saute pas.
 const ViewLoader = () => (
@@ -94,29 +137,26 @@ const NavButton = ({ active, onClick, icon: Icon, label }: { active: boolean; on
 
 const App: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [isApiLoaded, setIsApiLoaded] = useState(false);
+  // Bouton de connexion prêt : en mode serveur, tout de suite (redirection vers le Worker) ;
+  // sans serveur, une fois Google Identity Services chargé (voir l'effet plus bas).
+  const [isApiLoaded, setIsApiLoaded] = useState(() => isBackendEnabled());
   const [apiError, setApiError] = useState(false);
-  // Verrou biométrique local (propre à cet appareil, jamais synchronisé) : verrouillé par
-  // défaut si un credential a été enregistré sur CE navigateur, débloqué après succès de
-  // la vérification WebAuthn (voir AppLockScreen / appLockService).
-  const [locked, setLocked] = useState<boolean>(() => isLockEnabled());
-
-  // Ré-active le verrou dès que l'app repasse au premier plan après avoir été masquée
-  // (bouton Home, changement d'appli, écran éteint...). Sur mobile, quitter l'app ne
-  // recharge pas la page — le process JS reste vivant en mémoire tant que l'OS ne le tue
-  // pas — donc sans ceci, un simple aller-retour laisserait l'app déverrouillée
-  // indéfiniment, ce qui viderait le verrou de son intérêt.
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'hidden' && isLockEnabled()) {
-        setLocked(true);
-      }
-    };
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, []);
+  // Session de l'appareil en cours de vérification au démarrage : l'écran de démarrage
+  // s'affiche (plutôt que l'écran de connexion) si une session est enregistrée ou si l'on
+  // revient de la connexion Google (code dans l'adresse).
+  const [sessionPending, setSessionPending] = useState(() => hasStoredSession() || /[#&]login_code=/.test(window.location.hash));
+  // « Quoi de neuf » (et tout l'historique) n'est chargé que s'il a quelque chose à montrer.
+  const [showWhatsNew] = useState(whatsNewPending);
+  // Verrou de l'appareil (biométrie et/ou PIN, propre à ce navigateur, jamais synchronisé) :
+  // verrouillé à l'ouverture et à chaque passage en arrière-plan ; « Code oublié » ne le
+  // retire qu'après une reconnexion Google et un chargement Drive réussi (voir useAppLock).
+  const lock = useAppLock();
+  const { locked, completeReset: completeLockReset } = lock;
 
   const data = usePortfolioData(isAuthenticated);
+  // Mise à jour de l'app : jamais de rechargement tant que des saisies ne sont pas sur Drive.
+  const { hasPendingEdits } = data;
+  useEffect(() => registerReloadBlocker(hasPendingEdits), [hasPendingEdits]);
   const { isDark, toggleTheme } = useTheme();
   const { toasts, addToast, dismiss } = useToasts();
 
@@ -124,8 +164,37 @@ const App: React.FC = () => {
   const [editingAccount, setEditingAccount] = useState<SavingsAccount | undefined>(undefined);
   const [showForm, setShowForm] = useState(false);
   const [dialog, setDialog] = useState<DialogState>(emptyDialog);
+  // Choix entre deux versions (conflit entre appareils, fichier en double) et déconnexion
+  // avec des modifications pas encore sur Drive.
+  const [conflictDialogOpen, setConflictDialogOpen] = useState(false);
+  const [logoutDialogOpen, setLogoutDialogOpen] = useState(false);
   const [moreNavOpen, setMoreNavOpen] = useState(false);
   const [quickAddOpen, setQuickAddOpen] = useState(false);
+
+  // « Code oublié » : le verrou suspendu n'est retiré qu'à la fin d'un chargement Drive
+  // réussi (reconnexion Google faite), quel que soit le chemin (connexion, reconnexion,
+  // « Réessayer »). Jamais avant : la session de l'appareil avait été fermée. Règle testée
+  // dans useAppLock.test.ts (shouldCompleteLockReset).
+  const onLockResetCompleted = useCallback(() => {
+    addToast({
+      kind: 'info',
+      message: 'Verrou retiré de cet appareil. Vous pouvez en définir un nouveau dans Paramètres.',
+      action: { label: 'Paramètres', onClick: () => { openSettingsSection('lock'); setView('settings'); } },
+    });
+  }, [addToast]);
+  useLockResetCompletion(
+    { isLoading: data.isLoadingData, isAuthenticated, loadFailed: data.loadFailed },
+    completeLockReset,
+    onLockResetCompleted,
+  );
+  // Déverrouillage réussi : une demande de retrait du verrou en cours est annulée, et le
+  // propriétaire l'apprend (elle a pu être faite par quelqu'un d'autre).
+  const handleUnlock = () => {
+    const cancelled = lock.unlock();
+    if (!cancelled) return;
+    const when = cancelled.requestedAt.toLocaleString('fr-FR', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
+    addToast({ kind: 'info', message: `Une demande de retrait du verrou, faite le ${when}, vient d'être annulée. Si ce n'était pas vous, gardez votre appareil avec vous.` });
+  };
 
   // Raccourci PWA "Ajouter un mouvement" (appui long sur l'icône, voir vite.config.ts) :
   // ouvre directement la modale au lieu d'atterrir sur le Dashboard nu. On attend
@@ -166,7 +235,7 @@ const App: React.FC = () => {
   }, [dashboardConfig, data.fiscalConfig, data.workBenefits, data.grossAnnual]);
 
   // Veille fiscale hebdomadaire (serveur + Workers AI, sinon Gemini) : propositions à valider.
-  const fiscalWatch = useFiscalWatch(data.geminiApiKey, data.fiscalConfig, data.accounts, isAuthenticated && !data.isLoadingData && !locked);
+  const fiscalWatch = useFiscalWatch(data.geminiApiKey, data.fiscalConfig, data.accounts, isAuthenticated && data.dataShown && !data.isLoadingData && !locked);
   const applyFiscalProposal = (p: FiscalProposal) => {
     const next = p.apply({ fiscal: data.fiscalConfig, accounts: data.accounts });
     data.setFiscalConfig(next.fiscal);
@@ -174,9 +243,9 @@ const App: React.FC = () => {
     addToast({ message: `${p.label} mis à jour`, kind: 'success' });
   };
   const fiscalWatchCard = (compact: boolean) => (
-    <FiscalWatchCard compact={compact} proposals={fiscalWatch.proposals} running={fiscalWatch.running} checkedAt={fiscalWatch.checkedAt}
+    <Lazy><FiscalWatchCard compact={compact} proposals={fiscalWatch.proposals} running={fiscalWatch.running} checkedAt={fiscalWatch.checkedAt}
       lastError={fiscalWatch.lastError} hasKey={fiscalWatch.hasKey} canRun={fiscalWatch.canRun} source={fiscalWatch.source} runningVia={fiscalWatch.runningVia}
-      serverReport={fiscalWatch.serverReport} onApply={applyFiscalProposal} onDismiss={fiscalWatch.dismiss} onRun={fiscalWatch.run} />
+      serverReport={fiscalWatch.serverReport} onApply={applyFiscalProposal} onDismiss={fiscalWatch.dismiss} onRun={fiscalWatch.run} /></Lazy>
   );
   // Depuis l'Accueil, le seul lien vers les Paramètres est « Importer mon avis » (LEP) :
   // il ouvre directement la carte de l'avis d'imposition.
@@ -184,8 +253,19 @@ const App: React.FC = () => {
     if (v === 'settings') openSettingsSection('tax-notice');
     setView(v);
   };
-  const askConfirm = (title: string, message: string, onConfirm: () => void | Promise<void>, danger = false) =>
-    setDialog({ open: true, kind: 'confirm', title, message, danger, confirmLabel: 'Confirmer', onConfirm: () => { void onConfirm(); } });
+  // `confirmLabel` : dire ce que fait le bouton (« Remplacer par la copie d'août 2026 »)
+  // plutôt qu'un « Confirmer » neutre, surtout pour une action qui remplace des données.
+  const askConfirm = (title: string, message: string, onConfirm: () => void | Promise<void>, danger = false, confirmLabel = 'Confirmer') =>
+    setDialog({ open: true, kind: 'confirm', title, message, danger, confirmLabel, onConfirm: () => { void onConfirm(); } });
+
+  // Un conflit qui apparaît ouvre tout de suite l'écran de choix (la bannière permet de le rouvrir).
+  useEffect(() => { if (data.syncConflict) setConflictDialogOpen(true); }, [data.syncConflict]);
+  const hasConflictView = !!data.conflict;
+  useEffect(() => { if (!hasConflictView) setConflictDialogOpen(false); }, [hasConflictView]);
+  // Données rechargées en silence depuis un autre appareil : on le dit, sans interrompre.
+  useEffect(() => {
+    if (data.remoteUpdatedAt) addToast({ message: 'Données mises à jour depuis un autre appareil', kind: 'info' });
+  }, [data.remoteUpdatedAt, addToast]);
 
   // Mois avant la restitution prévue du capital parental (pour la projection).
   const restitutionInMonths = useMemo(() => {
@@ -203,17 +283,22 @@ const App: React.FC = () => {
     [data.expenses, data.subscriptions]
   );
 
-  // Objectif du mois pour la jauge « Placé ce mois-ci » : même montant que le rappel de paie.
-  const { buildData, setLastView, loadDemoData } = data;
+  // Épargne prévue chaque mois (projections, alertes) : même montant que le rappel de paie.
+  const { buildData, setLastView, loadDemoData, resetData, forgetOfflineCopy } = data;
   const monthPlan = useMemo(
     () => data.paydayAmount ?? computeMonthlySavingsCapacity(buildData()),
     [data.paydayAmount, buildData]
   );
+  // Objectif de la paie en cours pour la jauge de l'Accueil : comme le Pilotage, il compte la
+  // capacité et la somme en plus saisies pour cette paie (lib/payAdjustment).
+  const monthGoal = useMemo(() => computeMonthTarget(buildData()).total, [buildData]);
   const monthlyPay = useMemo(() => computeMonthlyPay(buildData()), [buildData]);
   // Instantané complet des données (agenda, bilan annuel).
   const fullData = useMemo(() => buildData(), [buildData]);
   const agendaNext = useMemo(() => buildAgenda(fullData).events.slice(0, 3), [fullData]);
   const lepTimeline = useMemo(() => lepTimelineFromData(fullData), [fullData]);
+  // Saison de la déclaration de revenus (avril à début juin) : rappel dans « À faire ».
+  const taxReturnAlert = useMemo(() => buildTaxReturnAlert(fullData), [fullData]);
   // Épargne de précaution : charges fixes + argent plaisir, multipliés par le nombre de mois choisi.
   const emergency = useMemo(
     () => computeEmergencyFund(data.accounts, totalFixedCharges(data.expenses, data.subscriptions) + (data.leisureBudget || 0), data.config.emergencyMonths ?? DEFAULT_EMERGENCY_MONTHS),
@@ -236,20 +321,23 @@ const App: React.FC = () => {
 
   // Pastille sur l'icône de l'app installée : nombre de choses à faire.
   useEffect(() => {
-    if (!isAuthenticated || data.isLoadingData) return;
+    if (!isAuthenticated || data.isLoadingData || !data.dataShown) return;
     const nav = navigator as Navigator & { setAppBadge?: (n?: number) => Promise<void>; clearAppBadge?: () => Promise<void> };
     const n = computeBadgeCount(fullData);
     (n > 0 ? nav.setAppBadge?.(n) : nav.clearAppBadge?.())?.catch(() => { /* non pris en charge */ });
-  }, [fullData, isAuthenticated, data.isLoadingData]);
+  }, [fullData, isAuthenticated, data.isLoadingData, data.dataShown]);
 
   // Sauvegarde de secours chiffrée (serveur) : au plus une fois par semaine, si les données
   // ont changé. Attend 30 s de calme après le chargement ou la dernière modification, ne
-  // bloque jamais l'écran, et ne part jamais d'un état douteux (erreur, conflit, copie locale).
-  const cloudBackupReady = isAuthenticated && !locked && !data.isLoadingData && !data.syncError && !data.syncConflict
-    && !data.sessionExpired && !data.appOutdated && !data.localBackup;
+  // bloque jamais l'écran, et ne part jamais d'un état douteux (erreur, conflit, copie locale,
+  // copie hors ligne : seulement des données chargées de Drive). Code chargé à ce moment-là.
+  const cloudBackupReady = isAuthenticated && !locked && data.dataShown && !data.offlineDataAt && !data.loadFailed && !data.isLoadingData
+    && !data.syncError && !data.syncConflict && !data.sessionExpired && !data.appOutdated && !data.localBackup;
   useEffect(() => {
     if (!cloudBackupReady || !isBackendEnabled()) return;
-    const t = setTimeout(() => { void maybeAutoUpload(fullData); }, 30_000);
+    const t = setTimeout(() => {
+      import('./services/cloudBackup').then(m => m.maybeAutoUpload(fullData)).catch(() => undefined);
+    }, 30_000);
     return () => clearTimeout(t);
   }, [cloudBackupReady, fullData]);
 
@@ -382,14 +470,24 @@ const App: React.FC = () => {
     lastToastedSaveRef.current = ts;
   }, [data.lastSavedAt, addToast]);
 
-  // Init Google API — une seule fois par chargement de page : en développement, React
-  // (StrictMode) rejoue les effets de montage, ce qui lançait deux initialisations
-  // concurrentes (deux rafraîchissements, deux consommations du code de connexion...).
+  // Démarrage — une seule fois par chargement de page : en développement, React (StrictMode)
+  // rejoue les effets de montage, ce qui lançait deux démarrages concurrents (deux
+  // rafraîchissements, deux consommations du code de connexion...).
+  // Aucun SDK Google n'est attendu : en mode serveur, la session est vérifiée tout de suite, et
+  // l'écran de démarrage est demandé en même temps. Hors ligne, la session est gardée et l'app
+  // s'ouvre sur la dernière copie connue de vos données (voir usePortfolioData).
   // Les données ne sont chargées qu'une fois l'appareil déverrouillé : tant que le verrou
   // est affiché, rien de financier n'est lu ni gardé en mémoire.
   const [loadRequested, setLoadRequested] = useState(false);
+  // Le jeton n'a pas pu être obtenu faute de réseau : la copie hors ligne s'ouvre sans
+  // retenter tout de suite (un nouvel essai est programmé).
+  const bootOfflineRef = useRef(false);
   useEffect(() => {
-    if (loadRequested && !locked) { setLoadRequested(false); void data.loadDriveData(); }
+    if (!loadRequested || locked) return;
+    setLoadRequested(false);
+    const startOffline = bootOfflineRef.current;
+    bootOfflineRef.current = false;
+    void data.loadDriveData(startOffline ? { startOffline } : undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadRequested, locked]);
 
@@ -397,66 +495,58 @@ const App: React.FC = () => {
   useEffect(() => {
     if (initStartedRef.current) return;
     initStartedRef.current = true;
-    // Mode démo (développement uniquement) : données fictives, sans Google.
-    if (import.meta.env.DEV && new URLSearchParams(window.location.search).has('demo')) {
-      import('./dev/demoData').then(({ DEMO_DATA }) => { setIsApiLoaded(true); setIsAuthenticated(true); loadDemoData(DEMO_DATA); }).catch(console.error);
+    // Mode démo : données fictives, sans Google (voir DEMO_ALLOWED).
+    if (DEMO_ALLOWED && new URLSearchParams(window.location.search).has('demo')) {
+      import('./dev/demoData').then(({ DEMO_DATA }) => { setIsApiLoaded(true); setIsAuthenticated(true); setSessionPending(false); loadDemoData(DEMO_DATA); }).catch(console.error);
       return;
     }
-    initGoogleApi()
-      .then(async () => {
-        setIsApiLoaded(true);
-
-        // Mode serveur (Worker configuré) : la session vit côté serveur, plus besoin du
-        // rafraîchissement silencieux de GIS qui échouait souvent en PWA.
-        if (isBackendEnabled()) {
-          try {
-            const justLoggedIn = await completeBackendLoginIfPresent();
-            if (justLoggedIn || hasBackendSession()) {
-              if (!justLoggedIn && !isTokenValid()) await handleAuthClick(true);
-              setIsAuthenticated(true);
-              setLoadRequested(true);
-            }
-          } catch (e) {
-            if (e instanceof TypeError) {
-              // Serveur injoignable : on garde la session, l'utilisateur pourra réessayer.
-              addToast({ message: 'Serveur injoignable — vérifiez votre connexion puis rechargez.', kind: 'error' });
-            } else {
-              console.log('Session serveur invalide, reconnexion requise.', e);
-            }
-          }
-          return;
-        }
-
-        const storedToken = localStorage.getItem('google_token');
-        const persistence = localStorage.getItem('auth_persistence') === 'true';
-
-        if (storedToken && persistence) {
-           if (isTokenValid()) {
-               setIsAuthenticated(true);
-               setLoadRequested(true);
-           } else {
-               try {
-                   await handleAuthClick(true); // Silent
-                   setIsAuthenticated(true);
-                   setLoadRequested(true);
-               } catch (e) {
-                   console.log("Refresh échoué. Login requis.");
-               }
-           }
+    if (hasStoredSession()) preloadStartView();
+    // Retour d'une connexion (peut-être avec un autre compte Google) : la copie hors ligne de
+    // la session précédente est oubliée avant tout chargement.
+    resumeSession({ onNewLogin: forgetOfflineCopy })
+      .then(status => {
+        // Session absente ou refusée : rien de l'ancienne session ne reste sur l'appareil (copie
+        // hors ligne comprise), pour qu'un autre compte ne la voie jamais.
+        if (status === 'signed-out') { resetData(); return; }
+        bootOfflineRef.current = status === 'offline';
+        setIsAuthenticated(true);
+        setLoadRequested(true);
+      })
+      .catch(e => {
+        if (e instanceof TypeError) {
+          // Serveur injoignable au retour de la connexion : l'utilisateur pourra réessayer.
+          addToast({ message: 'Serveur injoignable — vérifiez votre connexion puis rechargez.', kind: 'error' });
+        } else {
+          console.log('Session serveur invalide, reconnexion requise.', e);
         }
       })
-      .catch(err => {
-        // Le timeout d'attente des SDK Google existe précisément pour que l'UI puisse
-        // afficher un vrai message (voir googleDriveService) — il n'était branché sur
-        // rien : l'app restait sur "Chargement API..." pour toujours.
-        console.error("Erreur init Google API", err);
-        setApiError(true);
-      });
-  }, [addToast, loadDemoData]);
+      .finally(() => setSessionPending(false));
+  }, [addToast, loadDemoData, resetData, forgetOfflineCopy]);
+
+  // Sans serveur, le bouton de connexion a besoin de Google Identity Services : chargé
+  // seulement quand l'écran de connexion s'affiche. Un échec (hors ligne, bloqueur de
+  // scripts) s'affiche tout de suite au lieu d'une longue attente.
+  const showLoginScreen = !isAuthenticated && !sessionPending;
+  useEffect(() => {
+    if (!showLoginScreen || isBackendEnabled()) return;
+    if (DEMO_ALLOWED && new URLSearchParams(window.location.search).has('demo')) return;
+    initGoogleApi()
+      .then(() => { setApiError(false); setIsApiLoaded(true); })
+      .catch(err => { console.error('Google Identity Services indisponible', err); setApiError(true); });
+  }, [showLoginScreen]);
+  // Sans serveur, « Se reconnecter » ouvre la fenêtre Google : GIS est chargé dès que la
+  // session expire, pour que la fenêtre s'ouvre au clic sans être bloquée.
+  useEffect(() => {
+    if (data.sessionExpired && !isBackendEnabled()) initGoogleApi().catch(() => undefined);
+  }, [data.sessionExpired]);
 
   const handleLogin = async () => {
     try {
-      await handleAuthClick(false);
+      // Nouvelle connexion, peut-être avec un autre compte Google : la copie hors ligne de la
+      // session précédente ne doit jamais s'afficher sous ce compte.
+      data.forgetOfflineCopy();
+      // Réinitialisation du verrou en attente : choix du compte et accord toujours demandés.
+      await handleAuthClick(false, { chooseAccount: lock.resetPending });
       setIsAuthenticated(true);
       void data.loadDriveData();
     } catch (error) {
@@ -466,7 +556,10 @@ const App: React.FC = () => {
 
   const handleReconnect = async () => {
     try {
-      await handleAuthClick(false);
+      // Même chose : la reconnexion peut se faire avec un autre compte (elle sera réécrite au
+      // prochain chargement réussi).
+      data.forgetOfflineCopy();
+      await handleAuthClick(false, { chooseAccount: lock.resetPending });
       // Chargement normal, pas « recharger l'autre version » : des modifications faites
       // pendant l'expiration de la session restent proposées (copie locale), et un conflit
       // en cours n'est jamais tranché à la place de l'utilisateur.
@@ -476,31 +569,27 @@ const App: React.FC = () => {
     }
   };
 
-  const handleLogout = async () => {
+  const handleLogout = async (opts?: { discardUnsynced?: boolean }) => {
     // Un appareil déconnecté ne doit plus recevoir de notifications (qui contiennent des
     // montants) : désabonnement AVANT de fermer la session, tant qu'elle est valide.
     if (isBackendEnabled()) await disablePush().catch(() => undefined);
     await handleSignOut();
     setIsAuthenticated(false);
-    // Les modifications pas encore sur Drive restent en copie locale chiffrée (voir resetData).
-    data.resetData();
+    // Sauf « Se déconnecter sans envoyer », les modifications pas encore sur Drive restent en
+    // copie locale chiffrée, proposée à la prochaine connexion (voir resetData).
+    data.resetData({ discardUnsynced: opts?.discardUnsynced === true });
     clearStoredDrafts(); // brouillons d'« Actualiser » de cet onglet
   };
 
   /**
-   * Déconnexion demandée par l'utilisateur : si quelque chose n'est pas encore sur Drive, on
-   * le dit et on laisse annuler (sur ordinateur comme sur mobile). `alwaysConfirm` : le
-   * bouton du mobile, plus facile à toucher par erreur, demande toujours confirmation.
+   * Déconnexion demandée par l'utilisateur : si quelque chose n'est pas encore sur Drive, deux
+   * choix clairs (envoyer d'abord, ou se déconnecter sans envoyer) ou annuler, sur ordinateur
+   * comme sur mobile. `alwaysConfirm` : le bouton du mobile, plus facile à toucher par
+   * erreur, demande toujours confirmation.
    */
   const requestLogout = (alwaysConfirm: boolean) => {
     if (data.hasUnsyncedChanges()) {
-      setDialog({
-        open: true, kind: 'confirm', danger: true,
-        title: 'Modifications pas encore sur Drive',
-        message: 'Des modifications ne sont pas encore sur Drive. Si vous vous déconnectez maintenant, elles resteront seulement sur cet appareil, dans une copie chiffrée qui vous sera proposée à votre prochaine connexion avec ce compte Google. Annulez pour attendre la fin de l\'envoi ou exporter vos données d\'abord.',
-        confirmLabel: 'Me déconnecter quand même',
-        onConfirm: () => { void handleLogout(); },
-      });
+      setLogoutDialogOpen(true);
     } else if (alwaysConfirm) {
       setDialog({ open: true, kind: 'confirm', title: 'Se déconnecter ?', message: 'Les données restent sur votre Drive ; il faudra vous reconnecter avec Google.', confirmLabel: 'Se déconnecter', onConfirm: () => { void handleLogout(); } });
     } else {
@@ -522,7 +611,7 @@ const App: React.FC = () => {
     if (patch.accounts) data.setAccounts(patch.accounts);
     if ('parentalRestitution' in patch) data.setParentalRestitution(patch.parentalRestitution);
   };
-  const undoAction = (r: CommandOk) => ({ label: 'Annuler', onClick: () => commit(r.undo(commandStateRef.current)) });
+  const undoAction = (r: CommandOk, label = 'Annuler') => ({ label, onClick: () => commit(r.undo(commandStateRef.current)) });
   // Compte ou mouvement disparu entre-temps : rien à signaler (comme avant les commandes).
   const showCommandError = (e: CommandError) => { if (e.code !== 'not-found') addToast({ message: e.error, kind: 'error' }); };
 
@@ -636,13 +725,14 @@ const App: React.FC = () => {
     addToast({ message: r.message, kind: 'success', action: undoAction(r) });
   };
 
-  // Annulation depuis l'écran (après coup) : les mouvements de restitution sont retirés,
-  // ce qui rend leur part aux parents.
+  // Annulation depuis l'écran (après coup, confirmée dans RestitutionPanel) : les mouvements
+  // de restitution sont retirés, ce qui rend leur part aux parents. « Rétablir » rejoue la
+  // restitution à l'identique (même date, même relevé).
   const handleUndoRestitution = () => {
     const r = undoRestitution(commandStateRef.current);
     if (!r.ok) return;
     commit(r.next);
-    addToast({ message: r.message, kind: 'success' });
+    addToast({ message: r.message, kind: 'success', action: undoAction(r, 'Rétablir') });
   };
 
   // Annule un versement enregistré depuis la liste des virements de paie : retire le
@@ -668,21 +758,29 @@ const App: React.FC = () => {
   // de connexion ou les données, pour ne jamais laisser filtrer d'information (y compris
   // le simple fait qu'une session Google est déjà active) tant que ce n'est pas déverrouillé.
   if (locked) {
-    return <AppLockScreen onUnlock={() => setLocked(false)} onForgot={async () => {
-      await handleLogout().catch(() => undefined);
-      try { ['gemini_api_key', 'suivi_epargne_last_save', 'last_view'].forEach(k => localStorage.removeItem(k)); } catch { /* stockage bloqué */ }
-      setLocked(false);
-    }} />;
+    return <AppLockScreen onUnlock={handleUnlock} hasUnsyncedChanges={data.hasUnsyncedChanges()}
+      resetRequest={lock.resetRequest} onRequestReset={lock.requestReset} onCancelRequest={lock.cancelResetRequest}
+      onForgot={({ discardUnsynced }) => lock.forgetCode(async () => {
+        // Les modifications pas encore sur Drive restent en copie chiffrée, sauf choix contraire.
+        await handleLogout({ discardUnsynced });
+        // Ce que l'appareil garde hors de Drive : clé Gemini, dernier enregistrement, dernière vue.
+        data.setGeminiApiKey('');
+        ['suivi_epargne_last_save', 'last_view'].forEach(lsDel);
+      })} />;
   }
+
+  // Session enregistrée en cours de vérification : la structure de l'app tout de suite.
+  if (!isAuthenticated && sessionPending) return <BootSkeleton message="Ouverture de votre session…" />;
 
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen bg-sapin flex flex-col items-center justify-center p-4">
+      <main className="min-h-screen bg-sapin flex flex-col items-center justify-center p-4">
         <div className="bg-surface-container-low text-on-surface p-8 rounded-3xl shadow-xl max-w-md w-full text-center">
           <Logo className="w-16 h-16 mx-auto mb-6 shadow-lg" />
           <h1 className="text-[32px] leading-10 font-bold text-on-surface mb-1">Pécule</h1>
           <p className="text-sm font-bold text-indigo-700 dark:text-indigo-300 mb-4">Faites pousser votre épargne</p>
           <p className="text-slate-500 dark:text-slate-400 mb-8">Vos données sont stockées en sécurité sur votre Google Drive personnel.</p>
+          {lock.resetPending && <LockResetNotice onCancel={lock.cancelReset} />}
           {apiError ? (
             <div className="text-left bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-xl p-4">
               <p className="text-sm font-black text-rose-700 dark:text-rose-300 mb-2 flex items-center gap-2"><AlertTriangle className="w-4 h-4" /> Impossible de charger les services Google</p>
@@ -697,12 +795,14 @@ const App: React.FC = () => {
           <a href="presentation.html" className="underline underline-offset-2 hover:text-white">Découvrir Pécule</a>
           <a href="confidentialite.html" className="underline underline-offset-2 hover:text-white">Confidentialité</a>
         </p>
-        <p className="mt-2 text-[11px] font-bold text-emerald-100/70">version {LATEST_VERSION}</p>
-      </div>
+        <p className="mt-2 text-[11px] font-bold text-emerald-100/70">version {APP_VERSION}</p>
+      </main>
     );
   }
 
-  if (data.isLoadingData) return <div className="min-h-screen flex justify-center items-center flex-col gap-4 bg-slate-50 dark:bg-slate-900"><Loader2 className="animate-spin w-10 h-10 text-indigo-600"/><p className="text-slate-500 dark:text-slate-400 font-bold">Chargement de vos données…</p></div>;
+  // Données pas encore là (ou rechargées depuis Drive) : la structure de l'app avec des cartes
+  // en attente. La copie hors ligne, elle, reste affichée pendant qu'on rejoint Drive.
+  if ((data.isLoadingData && !data.offlineDataAt) || (!data.dataShown && !data.loadFailed)) return <BootSkeleton />;
 
   return (
     <ToastContext.Provider value={addToast}>
@@ -737,7 +837,7 @@ const App: React.FC = () => {
         </nav>
         <div className="px-3 py-3 border-t border-outline-variant">
             <button onClick={() => requestLogout(false)} className="w-full h-12 flex items-center gap-3 px-4 text-error hover:bg-error/8 rounded-full font-medium text-sm transition-colors"><LogOut className="w-5 h-5" aria-hidden="true" /> Déconnexion</button>
-            <button onClick={() => { openSettingsSection('about'); setView('settings'); }} className="w-full mt-1 px-4 text-left text-[11px] font-medium text-on-surface-variant hover:text-on-surface" title="Historique des mises à jour dans Paramètres">Pécule · version {LATEST_VERSION}{typeof __BUILD_SHA__ !== "undefined" && __BUILD_SHA__ !== "dev" ? ` · ${__BUILD_SHA__}` : ""}</button>
+            <button onClick={() => { openSettingsSection('about'); setView('settings'); }} className="w-full mt-1 px-4 text-left text-[11px] font-medium text-on-surface-variant hover:text-on-surface" title="Historique des mises à jour dans Paramètres">Pécule · version {APP_VERSION}{typeof __BUILD_SHA__ !== "undefined" && __BUILD_SHA__ !== "dev" ? ` · ${__BUILD_SHA__}` : ""}</button>
         </div>
       </aside>
 
@@ -760,9 +860,23 @@ const App: React.FC = () => {
 
         <div className="max-w-7xl mx-auto pb-20">
             {/* --- BANNIÈRES DE SYNCHRONISATION --- */}
-            {data.isOffline && (
+            {data.offlineDataAt ? (
+              // Démarrage hors ligne : dernière copie connue, saisies gardées sur l'appareil.
+              <div role="status" className="mb-4 bg-surface-container-high text-on-surface rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <p className="flex items-start gap-2 text-sm">
+                  <WifiOff className="w-5 h-5 shrink-0 text-on-surface-variant" aria-hidden="true" />
+                  <span>
+                    <strong className="font-bold">Hors ligne : données du {new Date(data.offlineDataAt).toLocaleString('fr-FR', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}</strong>, la dernière fois que Pécule a pu joindre Drive.
+                    {' '}Vos modifications restent sur cet appareil et partiront sur Drive au retour du réseau.
+                  </span>
+                </p>
+                <Button variant="tonal" className="shrink-0" isLoading={data.isLoadingData} onClick={data.retrySync}>{data.isLoadingData ? 'Connexion à Drive…' : 'Réessayer'}</Button>
+              </div>
+            ) : data.isOffline && (
               <div role="status" className="mb-4 inline-flex flex-wrap items-center gap-2 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl px-3 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-200">
-                <WifiOff className="w-4 h-4 shrink-0" aria-hidden="true" /> Hors ligne ou Drive injoignable : vos modifications restent sur cet appareil et partiront sur Drive dès que possible.
+                <WifiOff className="w-4 h-4 shrink-0" aria-hidden="true" /> {data.dataShown
+                  ? 'Hors ligne ou Drive injoignable : vos modifications restent sur cet appareil et partiront sur Drive dès que possible.'
+                  : 'Hors ligne : vos données s\'afficheront dès que Drive sera joignable.'}
                 <button onClick={data.retrySync} className="underline underline-offset-2 hover:text-slate-900 dark:hover:text-white">Réessayer</button>
               </div>
             )}
@@ -779,19 +893,23 @@ const App: React.FC = () => {
               </div>
             )}
             {data.syncConflict && (
-              <div role="alert" className="mb-4 bg-orange-50 dark:bg-orange-950/40 border border-orange-200 dark:border-orange-800 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div className="flex items-center gap-2 text-orange-800 dark:text-orange-300 text-sm font-bold"><AlertTriangle className="w-5 h-5 shrink-0"/> Vos données ont été modifiées sur un autre appareil. Choisissez la version à garder.</div>
+              <div role="alert" className="mb-4 bg-tertiary-container text-on-tertiary-container rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-2 text-sm font-medium"><AlertTriangle className="w-5 h-5 shrink-0" aria-hidden="true"/> Vos données ont changé ici et sur un autre appareil. Rien n'est enregistré tant que vous n'avez pas choisi la version à garder.</div>
+                <Button variant="filled" className="shrink-0" onClick={() => setConflictDialogOpen(true)}>Comparer et choisir</Button>
+              </div>
+            )}
+            {data.duplicateFile && !data.syncConflict && (
+              <div role="status" className="mb-4 bg-surface-container text-on-surface rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-2 text-sm"><AlertTriangle className="w-5 h-5 shrink-0 text-on-surface-variant" aria-hidden="true"/> Un autre fichier de données Pécule existe sur votre Drive{data.duplicateFile.modifiedTime ? ` (modifié le ${new Date(data.duplicateFile.modifiedTime).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })})` : ''}. Pécule a ouvert le plus récent.</div>
                 <div className="flex items-center gap-2 shrink-0">
-                  <button onClick={data.forceSaveToDrive} className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2"><Save className="w-4 h-4"/> Garder mes modifications</button>
-                  <button onClick={data.reloadFromDrive} className="bg-orange-700 hover:bg-orange-800 text-white px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2"><RotateCw className="w-4 h-4"/> Recharger l'autre version</button>
+                  <Button variant="text" onClick={data.dismissDuplicate}>Ignorer</Button>
+                  <Button variant="tonal" onClick={() => { data.compareDuplicate(); setConflictDialogOpen(true); }}>Comparer</Button>
                 </div>
               </div>
             )}
             {data.syncError && !data.sessionExpired && !data.syncConflict && !data.isOffline && (
               <div role="alert" className="mb-4 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-xl p-3 text-rose-700 dark:text-rose-300 text-sm font-bold flex items-center justify-between gap-3">
-                <span className="flex items-center gap-2"><AlertTriangle className="w-4 h-4 shrink-0"/> {data.loadFailed
-                  ? 'Impossible de charger vos données depuis Drive (rien n\'y a été modifié). Nouvel essai automatique.'
-                  : 'La dernière sauvegarde a échoué. Nouvel essai automatique.'}</span>
+                <span className="flex items-center gap-2"><AlertTriangle className="w-4 h-4 shrink-0"/> {syncErrorText(data.loadFailed ? 'load' : 'save', data.syncErrorInfo?.reason)}</span>
                 {/* Recharge si le chargement a échoué, sinon réécrit avec contrôle de révision :
                     jamais d'écriture forcée ici. */}
                 <button onClick={data.retrySync} className="bg-rose-600 hover:bg-rose-700 text-white px-3 py-1.5 rounded-lg font-bold text-xs shrink-0">Réessayer</button>
@@ -810,7 +928,7 @@ const App: React.FC = () => {
             <ErrorBoundary resetKey={view}>
             <Suspense fallback={<ViewLoader />}>
             {view === 'dashboard' && fiscalWatch.proposals.length > 0 && <div className="mb-6">{fiscalWatchCard(true)}</div>}
-            {view === 'dashboard' && <Dashboard accounts={data.accounts} history={data.history} expenses={allCharges} fiscalConfig={data.fiscalConfig} workBenefits={data.workBenefits} onDeleteAccount={handleDeleteAccount} config={dashboardConfig} monthPlan={monthPlan} monthlyPay={monthlyPay} paydayDay={data.paydayDay} trackingStartDate={data.trackingStartDate} payRaise={payRaise && !payRaiseHandled ? { delta: payRaise.delta, period: payRaise.latest.extracted.period || '', hasFixedAmount: data.paydayAmount !== undefined } : null} onAcceptPayRaise={acceptPayRaise} onDismissPayRaise={dismissPayRaise} subscriptions={data.subscriptions} onUpdateFiscalConfig={data.setFiscalConfig} onUpdateAccounts={data.setAccounts} onOpenSettings={() => { openSettingsSection('fiscal'); setView('settings'); }} recurringMovements={data.recurringMovements} onRecordRecurring={(r, date) => handleQuickAdd(r.accountId, r.amount, r.type, r.label, date)} onNavigate={navigateFromDashboard} onAddAccount={() => { setView('accounts'); setEditingAccount(undefined); setShowForm(true); }} lastExportAt={data.config.lastExportAt} onExport={() => { data.exportData(); data.patchConfig({ lastExportAt: localTodayISO() }); }} emergency={emergency} onSetEmergencyMonths={m => data.patchConfig({ emergencyMonths: m })} agendaNext={agendaNext} lepTimeline={lepTimeline}
+            {view === 'dashboard' && <Dashboard accounts={data.accounts} history={data.history} expenses={allCharges} fiscalConfig={data.fiscalConfig} workBenefits={data.workBenefits} onDeleteAccount={handleDeleteAccount} config={dashboardConfig} monthPlan={monthPlan} monthGoal={monthGoal} monthlyPay={monthlyPay} paydayDay={data.paydayDay} trackingStartDate={data.trackingStartDate} payRaise={payRaise && !payRaiseHandled ? { delta: payRaise.delta, period: payRaise.latest.extracted.period || '', hasFixedAmount: data.paydayAmount !== undefined } : null} onAcceptPayRaise={acceptPayRaise} onDismissPayRaise={dismissPayRaise} subscriptions={data.subscriptions} onUpdateFiscalConfig={data.setFiscalConfig} onUpdateAccounts={data.setAccounts} onOpenSettings={() => { openSettingsSection('fiscal'); setView('settings'); }} recurringMovements={data.recurringMovements} onRecordRecurring={(r, date) => handleQuickAdd(r.accountId, r.amount, r.type, r.label, date)} onNavigate={navigateFromDashboard} onAddAccount={() => { setView('accounts'); setEditingAccount(undefined); setShowForm(true); }} lastExportAt={data.config.lastExportAt} onExport={() => { data.exportData(); data.patchConfig({ lastExportAt: localTodayISO() }); }} emergency={emergency} onSetEmergencyMonths={m => data.patchConfig({ emergencyMonths: m })} agendaNext={agendaNext} lepTimeline={lepTimeline} taxReturnAlert={taxReturnAlert}
               payslips={data.payslips} gamification={data.config.gamification} goodMonthThreshold={data.config.goodMonthThreshold}
               milestonesSeen={data.config.milestonesSeen} payReviewsDone={data.config.payReviewsDone} rfrByYear={data.config.rfrByYear}
               restitutionDoneOn={data.parentalRestitution?.done?.date} restitutionPlannedDate={data.parentalRestitution?.plannedDate} onMarkMilestonesSeen={markMilestonesSeen} onValidatePayReview={validatePayReview} />}
@@ -850,6 +968,8 @@ const App: React.FC = () => {
                 setPaydayDay={data.setPaydayDay}
                 paydayAmount={data.paydayAmount}
                 setPaydayAmount={data.setPaydayAmount}
+                payAdjustment={data.config.payAdjustment}
+                onPayAdjustmentChange={next => data.patchConfig({ payAdjustment: next })}
             />}
 
             {view === 'transfers' && <TransferManager accounts={data.accounts} onUpdateAccountsComplex={data.updateAccountsWithMovements} onCommit={commit} onLinkedTransfer={data.executeLinkedTransfer} lastSavedAt={data.lastSavedAt} recurringMovements={data.recurringMovements} onUpdateRecurring={data.setRecurringMovements} />}
@@ -911,10 +1031,10 @@ const App: React.FC = () => {
                 onRestitute={handleRestitution}
                 onUndoRestitution={handleUndoRestitution}
                 soloPlanSlot={data.parentalRestitution?.plannedDate && !data.parentalRestitution.done
-                  ? <SoloPlanCard accounts={data.accounts} fiscalConfig={data.fiscalConfig} monthPlan={monthPlan} restitutionISO={data.parentalRestitution.plannedDate} split={data.savingsSplit} emergencyTarget={emergency?.target} />
+                  ? <Lazy><SoloPlanCard accounts={data.accounts} fiscalConfig={data.fiscalConfig} monthPlan={monthPlan} restitutionISO={data.parentalRestitution.plannedDate} split={data.savingsSplit} emergencyTarget={emergency?.target} /></Lazy>
                   : undefined}
             />}
-            {view === 'donations' && <Donations donations={data.donations} onUpdate={data.setDonations} pickerApiKey={data.pickerApiKey} taxEstimate={taxEstimate} ceiling75={data.fiscalConfig.donation75Ceiling} taxHelper={<TaxReturnHelper data={fullData} estimatedNetTaxableBeforeAllowance={taxEstimate?.beforeAllowance} allowanceRate={data.fiscalConfig.standardAllowance} allowanceCap={data.fiscalConfig.standardAllowanceCap} ceiling75={data.fiscalConfig.donation75Ceiling} />} />}
+            {view === 'donations' && <Donations donations={data.donations} onUpdate={data.setDonations} pickerApiKey={data.pickerApiKey} taxEstimate={taxEstimate} ceiling75={data.fiscalConfig.donation75Ceiling} taxHelper={<Lazy><TaxReturnHelper data={fullData} estimatedNetTaxableBeforeAllowance={taxEstimate?.beforeAllowance} allowanceRate={data.fiscalConfig.standardAllowance} allowanceCap={data.fiscalConfig.standardAllowanceCap} ceiling75={data.fiscalConfig.donation75Ceiling} /></Lazy>} />}
             {view === 'subscriptions' && <Subscriptions subscriptions={data.subscriptions} onUpdate={data.setSubscriptions} monthlyPay={monthlyPay} />}
             {view === 'payslips' && <Payslips payslips={data.payslips} onUpdatePayslips={data.setPayslips} geminiApiKey={data.geminiApiKey} pickerApiKey={data.pickerApiKey} onApplyToPilotage={handleApplyPayslipToPilotage} activePayslipId={data.activePayslipId} onClearActivePayslip={handleClearActivePayslip} />}
 
@@ -929,17 +1049,19 @@ const App: React.FC = () => {
                     pickerApiKey={data.pickerApiKey}
                     onExport={() => { data.exportData(); data.patchConfig({ lastExportAt: localTodayISO() }); }}
                     onImport={data.importData}
-                    backupSlot={<>
-                      <DriveBackupsPanel list={data.listDriveBackups} restore={data.restoreDriveBackup} confirm={(t, m, ok) => askConfirm(t, m, ok, true)} />
-                      <CloudBackupPanel getData={data.buildData} onImport={data.importData} confirm={askConfirm} />
-                    </>}
+                    onUndoImport={data.recoverSetAside}
+                    backupSlot={<Lazy>
+                      <DriveBackupsPanel list={data.listDriveBackups} restore={data.restoreDriveBackup} undo={data.recoverSetAside} confirm={(t, m, ok, label) => askConfirm(t, m, ok, true, label)} />
+                      <CloudBackupPanel getData={data.buildData} onImport={data.importData} undo={data.recoverSetAside} confirm={askConfirm} />
+                      <SetAsideVersionsPanel list={data.listSetAsideVersions} recover={data.recoverSetAside} confirm={askConfirm} />
+                    </Lazy>}
                     fiscalWatchSlot={fiscalWatchCard(false)}
-                    taxNoticeSlot={<TaxNoticePanel geminiApiKey={data.geminiApiKey} rfrByYear={data.config.rfrByYear || {}} householdParts={data.fiscalConfig.lepHouseholdParts}
+                    taxNoticeSlot={<Lazy><TaxNoticePanel geminiApiKey={data.geminiApiKey} rfrByYear={data.config.rfrByYear || {}} householdParts={data.fiscalConfig.lepHouseholdParts}
                       onSave={(y, v) => data.patchConfig({ rfrByYear: { ...(data.config.rfrByYear || {}), [String(y)]: v } })}
-                      onSetParts={parts => data.setFiscalConfig(prev => ({ ...prev, lepHouseholdParts: parts }))} />}
-                    securitySlot={<ServerSecurityPanel discreet={!!data.config.discreetNotifications} onToggleDiscreet={v => data.patchConfig({ discreetNotifications: v || undefined })} confirm={askConfirm}
-                      onSignedOutEverywhere={() => { setIsAuthenticated(false); data.resetData(); addToast({ message: 'Tous les appareils sont déconnectés', kind: 'success' }); }} />}
-                    motivationSlot={<MotivationSettings gamification={data.config.gamification} goodMonthThreshold={data.config.goodMonthThreshold} onChange={patch => data.patchConfig(patch)} />}
+                      onSetParts={parts => data.setFiscalConfig(prev => ({ ...prev, lepHouseholdParts: parts }))} /></Lazy>}
+                    securitySlot={<Lazy><ServerSecurityPanel discreet={!!data.config.discreetNotifications} onToggleDiscreet={v => data.patchConfig({ discreetNotifications: v || undefined })} confirm={askConfirm}
+                      onSignedOutEverywhere={() => { setIsAuthenticated(false); data.resetData(); addToast({ message: 'Tous les appareils sont déconnectés', kind: 'success' }); }} /></Lazy>}
+                    motivationSlot={<Lazy><MotivationSettings gamification={data.config.gamification} goodMonthThreshold={data.config.goodMonthThreshold} onChange={patch => data.patchConfig(patch)} /></Lazy>}
                     paydayDay={data.paydayDay}
                     onOpenPayday={() => setView('pilot')}
                     // Champ par champ, à partir de l'état le plus récent : une saisie ne
@@ -976,12 +1098,16 @@ const App: React.FC = () => {
         <QuickAddFab scrollRef={mainRef} resetKey={view} onClick={() => setQuickAddOpen(true)} />
       )}
 
-      <QuickAddModal
-        open={quickAddOpen}
-        accounts={data.accounts}
-        onClose={() => setQuickAddOpen(false)}
-        onSubmit={handleQuickAdd}
-      />
+      {quickAddOpen && (
+        <Lazy>
+          <QuickAddModal
+            open={quickAddOpen}
+            accounts={data.accounts}
+            onClose={() => setQuickAddOpen(false)}
+            onSubmit={handleQuickAdd}
+          />
+        </Lazy>
+      )}
 
       <BottomNav
         view={view}
@@ -994,10 +1120,41 @@ const App: React.FC = () => {
       <ToastContainer toasts={toasts} onDismiss={dismiss} />
 
       {/* Une fois après chaque mise à jour : ce qui a changé. */}
-      <WhatsNewModal isNewUser={data.accounts.length === 0} />
+      {showWhatsNew && <Lazy><WhatsNewModal isNewUser={data.accounts.length === 0} /></Lazy>}
       <MovedNotice />
 
       <Dialog state={dialog} onClose={closeDialog} />
+      {data.conflict && (
+        <Lazy><ConflictDialog
+          open={conflictDialogOpen}
+          conflict={data.conflict}
+          onClose={() => { setConflictDialogOpen(false); data.closeDuplicateComparison(); }}
+          onResolve={data.resolveConflict}
+          onRetry={data.retryConflictLoad}
+          onResolved={(choice, kind) => {
+            setConflictDialogOpen(false);
+            addToast({
+              kind: 'success',
+              message: kind === 'duplicate'
+                ? (choice === 'local' ? 'Fichier ouvert gardé.' : 'Contenu de l\'autre fichier repris. L\'ancien est mis de côté 30 jours (Paramètres, Sauvegardes).')
+                : `${choice === 'local' ? 'Version de cet appareil gardée' : 'Version de Drive gardée'}. L'autre est mise de côté 30 jours (Paramètres, Sauvegardes).`,
+            });
+          }}
+        /></Lazy>
+      )}
+      {logoutDialogOpen && <Lazy><LogoutDialog
+        open={logoutDialogOpen}
+        onClose={() => setLogoutDialogOpen(false)}
+        canSend={!data.isOffline && !data.syncConflict && !data.sessionExpired && !data.appOutdated && !data.loadFailed && !data.localBackup}
+        cannotSendReason={data.localBackup ? 'Une sauvegarde locale attend votre choix (bandeau en haut de l\'écran) : touchez « Annuler », puis restaurez-la ou ignorez-la avant d\'envoyer.'
+          : data.syncConflict ? 'Un choix entre deux versions est en attente : réglez-le d\'abord pour pouvoir envoyer.'
+          : data.sessionExpired ? 'Votre session Google a expiré : reconnectez-vous pour pouvoir envoyer.'
+          : data.appOutdated ? 'Cette version de Pécule est trop ancienne pour enregistrer sur Drive : mettez-la à jour.'
+          : data.loadFailed && !data.isOffline ? 'Vos données n\'ont pas pu être chargées depuis Drive : rien ne peut être envoyé pour l\'instant.'
+          : 'Vous êtes hors ligne ou Drive est injoignable pour le moment.'}
+        onSend={data.flushPendingChanges}
+        onLogout={async discard => { setLogoutDialogOpen(false); await handleLogout({ discardUnsynced: discard }); }}
+      /></Lazy>}
     </div>
     </ToastContext.Provider>
   );

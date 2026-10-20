@@ -1,6 +1,6 @@
 // « Votre année Pécule » en mode démo (?demo=1) : l'entrée de l'Historique, la feuille des
 // pages, le lien direct de la notification et la désactivation de la motivation.
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page } from './fixtures';
 import { LATEST_VERSION } from '../src/changelog';
 
 // Date figée en milieu d'année : de janvier à mars, l'app propose l'année précédente

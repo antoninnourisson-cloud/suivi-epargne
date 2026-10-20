@@ -28,6 +28,19 @@ describe('intérêts crédités proposés à part', () => {
     expect(suggestCreditedInterest({ ...livretA(), interestRate: 0 }, '2027-01-05')).toBeNull();
   });
 
+  it("ne repropose pas des intérêts déjà notés à l'ancienne (simple versement « Intérêts »)", () => {
+    // Avant leur mise à part, les intérêts se notaient comme un versement ordinaire.
+    const old = (label: string) => ({ ...livretA(), totalAmount: 10240, ownedAmount: 10240,
+      movements: [...livretA().movements!, { id: 'x', date: '2027-01-02', amount: 240, label, type: 'IN' as const }] });
+    expect(suggestCreditedInterest(old('Intérêts'), '2027-01-05')).toBeNull();
+    expect(suggestCreditedInterest(old('intérêts 2026'), '2027-01-05')).toBeNull();
+    expect(suggestCreditedInterest(old('INTERETS'), '2027-01-05')).toBeNull();
+    // Un versement ordinaire n'est pas des intérêts, ni un mouvement de la part des parents.
+    expect(suggestCreditedInterest(old('Virement de paie'), '2027-01-05')).toEqual({ year: 2026, amount: 240 });
+    const parental = { ...old('Intérêts'), movements: [...livretA().movements!, { id: 'p', date: '2027-01-02', amount: 240, label: 'Intérêts', type: 'IN' as const, kind: 'parental' as const }] };
+    expect(suggestCreditedInterest(parental, '2027-01-05')).toEqual({ year: 2026, amount: 240 });
+  });
+
   it('régression : 300 € versés + intérêts de janvier saisis via Actualiser ⇒ PAS un bon mois', () => {
     let s: CommandState = { accounts: [livretA()] };
     s = applyPatch(s, ok(quickAdd(s, { accountId: 'la', amount: 300, type: 'IN', label: 'Virement de paie', date: '2027-01-02' })).next);

@@ -220,7 +220,7 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig, monthPlan,
                   <td className="px-3 sm:px-6 py-3"><div className="font-bold text-slate-800 dark:text-slate-100">{r.name}</div><div className="text-[11px] uppercase text-slate-500 dark:text-slate-400 font-bold">{r.type}</div></td>
                   <td className="px-3 sm:px-6 py-3 text-right font-mono whitespace-nowrap text-slate-600 dark:text-slate-300">
                     {formatRate(r.rate)}
-                    {Math.abs(r.net - r.rate) > 0.005 && <span className="block text-[11px] font-bold text-emerald-700 dark:text-emerald-400" title="Après prélèvements sociaux (et frais éventuels)">net {formatRate(round2(r.net))}</span>}
+                    {Math.abs(r.net - r.rate) > 0.005 && <span className="block text-[11px] font-bold text-emerald-700 dark:text-emerald-400" title="Après frais éventuels, prélèvements sociaux et impôt sur le revenu dû au retrait à ce jour">net {formatRate(round2(r.net))}</span>}
                     {r.hasRateHistory && Math.abs(r.weightedRate - r.rate) > 0.01 && (
                       <span className="block text-[11px] text-indigo-600 dark:text-indigo-400 font-bold normal-case" title="Moyenne pondérée dans le temps suite à un changement de taux">≈ {formatRate(round2(r.weightedRate))} pondéré</span>
                     )}

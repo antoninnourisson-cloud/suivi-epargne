@@ -1,7 +1,9 @@
 name: Déploiement GitHub Pages
 
 # checks (ci.yml) → build → deploy → release.
-# Le déploiement ne part que si les vérifications passent. Après un déploiement réussi,
+# Le déploiement ne part que si les vérifications passent, et il publie le dossier `dist`
+# construit ET testé par ci.yml dans cette même exécution (artefact site-dist) : rien n'est
+# reconstruit entre le test et la mise en ligne. Après un déploiement réussi,
 # la version en tête de src/changelog.ts est publiée comme tag + GitHub Release (une fois).
 on:
   push:
@@ -23,28 +25,18 @@ jobs:
     uses: ./.github/workflows/ci.yml
 
   build:
-    name: Build
+    name: Build vérifié
     needs: checks
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Checkout du code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Récupération du build vérifié par ci.yml
+        # Le dossier `dist` de l'étape « Build de production » de ci.yml (même commit, même
+        # GITHUB_SHA lu par vite.config.ts), déjà passé par e2e/production.spec.ts.
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          persist-credentials: false
-
-      - name: Installation de Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
-        with:
-          node-version-file: .nvmrc
-          cache: npm
-
-      - name: Installation des dépendances
-        run: npm ci
-
-      - name: Build de production
-        # GITHUB_SHA est lu par vite.config.ts (__BUILD_SHA__).
-        run: npm run build
+          name: site-dist
+          path: dist
 
       - name: Préparation de l'artifact Pages
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5

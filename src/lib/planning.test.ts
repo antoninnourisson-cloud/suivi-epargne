@@ -33,6 +33,15 @@ describe('plan solo', () => {
     expect(plan.years[0].total).toBe(22000);
     expect(plan.milestones.map(m => m.label)).toContain('Épargne de précaution atteinte');
     expect(plan.milestones.some(m => m.label === 'Livret A plein')).toBe(true);
+    expect(plan.unplaced).toBe(0);
+  });
+
+  it('compte, et signale, ce qui ne trouve aucun compte où aller', () => {
+    // Livret A plein (part propre au plafond), ni LDDS, ni AV, ni PEA : tout reste sur le compte courant.
+    const accounts = [acc({ id: 'la', name: 'Livret A', type: AccountType.LIVRET_A, ownedAmount: 22950, interestRate: 0 })] as any;
+    const plan = buildSoloPlan(accounts, CFG, 500, '2027-01-01', { years: 1 });
+    expect(plan.unplaced).toBe(6000);
+    expect(plan.years[0].total).toBe(22950 + 6000);
   });
 });
 

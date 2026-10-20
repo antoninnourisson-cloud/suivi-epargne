@@ -31,7 +31,8 @@
   <section>
     <h2>Où sont vos données</h2>
     <p>Toutes les données de l'application (comptes, mouvements, objectifs, réglages) sont enregistrées dans un fichier unique sur <strong>votre propre Google Drive</strong>. L'application n'a accès qu'aux fichiers qu'elle a elle-même créés, et à ceux que vous choisissez de lui ouvrir dans le sélecteur de Google (fiche de paie, avis d'imposition, reçu de don) : c'est l'autorisation Google « drive.file ». Elle ne voit pas le reste de votre Drive, et ne demande aucun accès à vos e-mails.</p>
-    <p>Une <strong>copie locale</strong> de ces données est aussi gardée sur chaque appareil où vous utilisez l'application (stockage du navigateur), pour qu'elle s'ouvre vite et fonctionne hors ligne. Elle est <strong>chiffrée</strong> (AES-GCM, clé non exportable propre à l'appareil) et reste sur l'appareil ; la déconnexion ou l'effacement des données du site la supprime.</p>
+    <p>Une <strong>copie locale</strong> de ces données est aussi gardée sur chaque appareil où vous utilisez l'application (stockage du navigateur), pour qu'elle s'ouvre vite et fonctionne hors ligne. Elle est <strong>chiffrée</strong> (AES-GCM, clé non exportable propre à l'appareil) et reste sur l'appareil ; la déconnexion ou l'effacement des données du site la supprime. Quand vous choisissez entre deux versions (modifications faites sur deux appareils, restauration, import), la version écartée y est aussi gardée <strong>30 jours</strong>, chiffrée de la même façon, puis effacée ; la déconnexion l'efface aussi.</p>
+    <p>Chaque enregistrement note dans le fichier Drive sa date et le <strong>type d'appareil</strong> qui l'a fait (par exemple « téléphone Android (Chrome) », sans modèle ni numéro), pour vous aider à choisir la bonne version si deux appareils ont modifié vos données.</p>
   </section>
 
   <section>
@@ -109,7 +110,7 @@
       <li><strong>marqueurs « déjà envoyé »</strong> : environ 400 jours ;</li>
       <li><strong>sauvegardes de secours chiffrées</strong> : 8 copies au plus, un an chacune ;</li>
       <li><strong>abonnements aux notifications</strong> : jusqu'à leur désactivation ou la déconnexion de l'appareil (ou de tous les appareils) ;</li>
-      <li><strong>jeton Google, e-mail et identifiant</strong> : jusqu'à la suppression de vos données serveur ou le retrait de l'accès chez Google ;</li>
+      <li><strong>jeton Google, e-mail et identifiant</strong> : seulement tant qu'ils servent, c'est-à-dire tant qu'un de vos appareils reste connecté ou reçoit les notifications. Ils sont effacés à la déconnexion du dernier appareil (ou de tous les appareils), à la suppression de vos données serveur, au retrait de l'accès chez Google, et dans tous les cas 61 jours au plus après leur dernière utilisation ;</li>
       <li><strong>votre fichier sur Drive</strong> : tant que vous le gardez ; les copies mensuelles des 12 derniers mois.</li>
     </ul>
   </section>

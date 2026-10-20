@@ -46,7 +46,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ view, setView, moreOpen, s
           if (group.length === 0) return null;
           return (
             <div key={section ?? 'autres'} className="mt-3">
-              {section && <p className="px-2 mb-1 text-[11px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">{section}</p>}
+              {section && <p className="px-2 mb-1 text-[11px] font-black uppercase tracking-wider text-on-surface-variant">{section}</p>}
               <div className="grid grid-cols-3 gap-2">
                 {group.map(item => (
                   <button

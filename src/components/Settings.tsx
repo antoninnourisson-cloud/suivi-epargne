@@ -11,6 +11,7 @@ import {
   Smartphone, Info, Save,
 } from 'lucide-react';
 import { NotificationSettings } from './NotificationSettings';
+import { useToast } from './Toast';
 import { GeminiModelField } from './SettingsPanels';
 import { isBackendEnabled } from '../services/backendService';
 import { LATEST_VERSION } from '../changelog';
@@ -36,7 +37,9 @@ interface SettingsProps {
   onSaveGeminiKey: (key: string) => void;
   onSavePickerKey: (key: string) => void;
   onExport: () => void;
-  onImport: (file: File) => Promise<boolean>;
+  /** `undoId` : version mise de côté juste avant l'import (« Annuler » la remet, via `onUndoImport`). */
+  onImport: (file: File) => Promise<{ ok: boolean; undoId?: string }>;
+  onUndoImport?: (undoId: string) => Promise<boolean>;
   // Panneaux composés par App (sauvegardes Drive, veille fiscale, appareils et confidentialité).
   backupSlot?: React.ReactNode;
   fiscalWatchSlot?: React.ReactNode;
@@ -56,7 +59,8 @@ const prefersReducedMotion = () => {
 type Edit<T> = (prev: T) => T;
 const applyEdits = <T,>(base: T, edits: Edit<T>[]): T => edits.reduce((acc, edit) => edit(acc), base);
 
-export const Settings: React.FC<SettingsProps> = ({ payslips = [], config, workBenefits, geminiApiKey, pickerApiKey, onUpdateFiscal, onUpdateBenefits, onSaveGeminiKey, onSavePickerKey, onExport, onImport, paydayDay, onOpenPayday, backupSlot, fiscalWatchSlot, securitySlot, taxNoticeSlot, motivationSlot, notificationPrefs, onChangeNotificationPrefs }) => {
+export const Settings: React.FC<SettingsProps> = ({ payslips = [], config, workBenefits, geminiApiKey, pickerApiKey, onUpdateFiscal, onUpdateBenefits, onSaveGeminiKey, onSavePickerKey, onExport, onImport, onUndoImport, paydayDay, onOpenPayday, backupSlot, fiscalWatchSlot, securitySlot, taxNoticeSlot, motivationSlot, notificationPrefs, onChangeNotificationPrefs }) => {
+  const toast = useToast();
   const [importMsg, setImportMsg] = useState<string | null>(null);
   // L'import écrase TOUT (comptes, mouvements, objectifs, fiches de paie, réglages) puis
   // resynchronise sur Drive : il faut une confirmation explicite, la boîte de sélection de
@@ -75,7 +79,23 @@ export const Settings: React.FC<SettingsProps> = ({ payslips = [], config, workB
     if (!pendingImport) return;
     const file = pendingImport;
     setPendingImport(null);
-    const ok = await onImport(file);
+    const { ok, undoId } = await onImport(file);
+    // Les données remplacées ont été mises de côté : « Annuler » les remet tout de suite.
+    if (ok && undoId && onUndoImport && toast) {
+      setImportMsg(null);
+      toast({
+        message: 'Données importées (sauvegarde en cours)', kind: 'success',
+        action: {
+          label: 'Annuler',
+          onClick: () => {
+            void onUndoImport(undoId).then(done => toast(done
+              ? { message: 'Import annulé : vos données d\'avant sont revenues', kind: 'success' }
+              : { message: 'Annulation impossible : voyez « Versions mises de côté ».', kind: 'error' }));
+          },
+        },
+      });
+      return;
+    }
     setImportMsg(ok ? 'Données importées (sauvegarde en cours).' : 'Fichier invalide : aucune donnée n\'a été remplacée.');
   };
 
@@ -245,8 +265,9 @@ export const Settings: React.FC<SettingsProps> = ({ payslips = [], config, workB
                   <p className="text-sm font-medium flex items-center gap-2"><AlertTriangle className="w-4 h-4 shrink-0" aria-hidden="true" /> Remplacer toutes vos données ?</p>
                   <p className="mt-2">
                     « {pendingImport.name} » va écraser <strong className="font-medium">l'intégralité</strong> de vos comptes, mouvements,
-                    objectifs, fiches de paie et réglages actuels, puis être synchronisé sur Drive. Cette action
-                    est irréversible — pensez à faire un export avant en cas de doute.
+                    objectifs, fiches de paie et réglages actuels, puis être synchronisé sur Drive. Vos données
+                    actuelles sont d'abord mises de côté sur cet appareil si la place le permet : vous pourrez
+                    annuler juste après. En cas de doute, faites d'abord un export.
                   </p>
                   <div className="mt-3 flex flex-wrap gap-2">
                     <Button variant="danger" onClick={confirmImport}>Remplacer mes données</Button>

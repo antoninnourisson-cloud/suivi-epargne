@@ -9,6 +9,7 @@ import { ExpenseSnapshot, FiscalConfig, GlobalAppData, PortfolioSnapshot, TaxBra
 import { DEFAULT_DECOTE, DEFAULT_FISCAL_CONFIG, DEFAULT_WORK_BENEFITS } from '../constants';
 import { normalizeAccounts, dedupeMonthlySnapshots, migrateFiscalConfig } from './finance';
 import { round2 } from './money';
+import { sanitizePayAdjustment } from './payAdjustment';
 
 /**
  * Version du format. À augmenter quand un changement rend le fichier illisible pour une
@@ -77,6 +78,9 @@ const sanitizeAccount = (a: Record<string, unknown>): Record<string, unknown> =>
     const n = finite(a[k]);
     if (n === undefined) delete out[k]; else out[k] = n;
   }
+  // « Compte détenu à l'étranger » : un oui/non, sinon non précisé (l'aide à la déclaration
+  // demande alors de vérifier plutôt que de supposer).
+  if (a.heldAbroad !== undefined && typeof a.heldAbroad !== 'boolean') delete out.heldAbroad;
   out.movements = arr<unknown>(a.movements).flatMap(m => {
     if (!isObj(m) || (m.type !== 'IN' && m.type !== 'OUT') || typeof m.date !== 'string') return [];
     const amount = finite(m.amount);
@@ -184,12 +188,19 @@ export const migrate = (raw: unknown): GlobalAppData => {
   const r = isObj(raw) ? raw : {};
   const cfgRaw = isObj(r.config) ? r.config : {};
   const config = withDefaults(cfgRaw, DEFAULT_CONFIG);
+  // Réglage de la paie en cours (Pilotage) : écarté s'il est illisible (voir lib/payAdjustment).
+  if (config.payAdjustment !== undefined) {
+    const adj = sanitizePayAdjustment(config.payAdjustment);
+    if (adj) config.payAdjustment = adj; else delete config.payAdjustment;
+  }
   // Ancien format : l'avantage Navigo vivait dans config (navigoBase / navigoRate).
   // Fichier abîmé ou incomplet : chaque avantage est complété champ par champ.
   const workBenefits = isObj(r.workBenefits)
     ? withDefaults(r.workBenefits, DEFAULT_WORK_BENEFITS)
     : { ...DEFAULT_WORK_BENEFITS, navigo: { active: true, basePrice: Number(cfgRaw.navigoBase) || 90.80, refundRate: Number(cfgRaw.navigoRate) || 67.24 } };
-  const { lastView: _lastView, ...rest } = r;
+  // `lastWrite` : signature de la dernière écriture (date, appareil, voir lib/writeStamp),
+  // reposée à chaque enregistrement ; comme `lastView`, ce n'est pas une donnée.
+  const { lastView: _lastView, lastWrite: _lastWrite, ...rest } = r;
   // Listes d'objets : une entrée qui n'est pas un objet (null, texte…) ferait planter les écrans.
   const objects = <T,>(v: unknown) => arr<unknown>(v).filter(isObj) as unknown as T[];
   return {

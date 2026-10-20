@@ -21,7 +21,12 @@ Seule la version en ligne (dernière version de `main`) est maintenue : l'app se
 ## Hors périmètre
 
 - Les failles des services tiers eux-mêmes (Google, Cloudflare) : signalez-les directement à ces services.
-- Une attaque qui demande déjà un accès physique à un appareil déverrouillé.
+- Une attaque qui demande déjà un accès physique à un appareil déverrouillé **dont le compte Google est ouvert** : le fichier est alors lisible sur drive.google.com, sans passer par Pécule. Le verrou de l'app (biométrie ou PIN), lui, est dans le périmètre, avec la limite connue décrite ci-dessous.
+
+## Limites connues
+
+- **Verrou de l'appareil et « Code oublié ».** Le verrou est gardé dans le navigateur de l'appareil. « Code oublié » ne déverrouille jamais : il enregistre une demande de retrait, utilisable seulement 24 heures plus tard (et pendant 7 jours). Pendant ce délai le verrou reste affiché avec la date de la demande, et tout déverrouillage réussi l'annule en avertissant le propriétaire. Ensuite seulement, la session de l'appareil est fermée et il faut se reconnecter à Google (choix du compte, nouvel accord) et charger les données depuis Drive. Ce délai ne protège pas contre tout : quelqu'un qui garde l'appareil plus de 24 heures sans que le propriétaire ouvre Pécule, qui avance l'horloge de l'appareil, ou qui efface les données du site dans les réglages du navigateur (le verrou part avec elles) peut se reconnecter, si le compte Google du propriétaire est ouvert sur l'appareil. Une telle personne peut de toute façon lire le fichier sur drive.google.com. Le retrait reste visible : l'app ne demande plus le code à l'ouverture, et Paramètres affiche la date du dernier retrait par « Code oublié ».
+- **Code PIN court.** Le code est dérivé avec PBKDF2 (310 000 itérations) et les essais sont freinés dans l'app, mais quelqu'un qui copie le stockage du navigateur peut essayer tous les codes à 6 chiffres hors ligne en peu de temps. La biométrie n'a pas cette limite.
 
 ## Les protections en place
 
@@ -38,7 +43,7 @@ Résumé ici, détail dans le README (section *Sécurité et confidentialité*) 
 
 - réservé à une liste d'adresses e-mail ; origines autorisées limitées à l'app ;
 - sessions stockées hachées, expirées après 30 jours d'inactivité (60 jours au plus) ; state OAuth signé et lié au navigateur ; `id_token` vérifié ;
-- jeton Google chiffré (AES-256-GCM) ; limitation du débit par IP ; taille des requêtes bornée ;
+- jeton Google chiffré (AES-256-GCM), gardé seulement tant qu'une session ou une notification s'en sert (61 jours au plus sans usage) ; limitation du débit par IP ; taille des requêtes bornée ;
 - notifications chiffrées de bout en bout (RFC 8291) ;
 - **sauvegarde de secours chiffrée de bout en bout** : chiffrée dans l'app (AES-256-GCM, clé dérivée d'un code de secours de 128 bits jamais transmis), illisible pour le serveur ;
 - veille fiscale : seul le texte de pages publiques est envoyé à Workers AI, et chaque valeur relevée doit figurer dans la page.

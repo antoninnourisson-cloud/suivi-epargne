@@ -25,7 +25,8 @@
 //   code:<sha256(c)>  code de connexion à usage unique, contenu CHIFFRÉ (60 s, effacé à l'échange)
 //   session:<hash>    session de l'app — clé = SHA-256 du jeton, 60 jours au plus (sessions.ts)
 //   sessions:<sub>    index des sessions de l'utilisateur
-//   user:<sub>        refresh token Google CHIFFRÉ (AES-256-GCM, clé en secret du Worker)
+//   user:<sub>        refresh token Google CHIFFRÉ (AES-256-GCM, clé en secret du Worker), gardé
+//                     seulement tant qu'il sert, 61 jours au plus sans usage (userRecords.ts)
 //   push:<sub>        abonnements push des appareils (subscriptions.ts)
 //   sent:<sub>:<k>    rappels déjà envoyés (dédoublonnage, ~400 jours)
 //   health:cron       compte rendu de la dernière tâche quotidienne
@@ -54,6 +55,9 @@ import {
 import {
   StoredSubscription, parseSubscription, upsertSubscription, describeDevices, deviceId, readStoredList,
 } from './subscriptions';
+import {
+  UserRecord, USER_PREFIX, userKey, readUser, writeUser, touchUser, releaseUserIfUnused, RECENT_WRITE_GRACE_MS,
+} from './userRecords';
 
 export interface Env {
   STORE: KVNamespace;
@@ -76,7 +80,6 @@ const SENT_TTL = 400 * DAY;
 const RECONNECT_NOTICE_TTL = 3 * DAY;
 const LOGIN_CODE_TTL = 60;       // minimum KV ; le code est effacé dès l'échange
 
-interface UserRecord { email: string; refreshTokenEnc: string; updatedAt: number }
 interface CronHealth { lastRunAt: string; ok: boolean; error?: string; usersProcessed: number }
 
 // ---------- HTTP utilitaires ----------
@@ -137,15 +140,18 @@ const isEmailAllowed = (email: string | undefined, env: Env): boolean => {
 
 /** Jeton d'accès frais pour un utilisateur, à partir de son refresh token chiffré. */
 const accessTokenFor = async (env: Env, sub: string): Promise<{ access_token: string; expires_in: number }> => {
-  const user = await env.STORE.get<UserRecord>(`user:${sub}`, 'json');
+  const user = await readUser(env.STORE, sub);
   if (!user) throw new GoogleAuthError('invalid_grant', 'NO_USER');
   const refreshToken = await decryptString(user.refreshTokenEnc, env.ENCRYPTION_KEY);
   const tokens = await refreshAccessToken(refreshToken, env.GOOGLE_CLIENT_ID, env.GOOGLE_CLIENT_SECRET);
-  // Google peut faire tourner le refresh token : on garde toujours le plus récent.
+  // Google peut faire tourner le refresh token : on garde toujours le plus récent. Sinon,
+  // l'usage prolonge seulement la durée de vie du compte (au plus une écriture par jour).
   if (tokens.refresh_token && tokens.refresh_token !== refreshToken) {
-    await env.STORE.put(`user:${sub}`, JSON.stringify({
+    await writeUser(env.STORE, sub, {
       ...user, refreshTokenEnc: await encryptString(tokens.refresh_token, env.ENCRYPTION_KEY), updatedAt: Date.now(),
-    }));
+    });
+  } else {
+    await touchUser(env.STORE, sub, user);
   }
   return { access_token: tokens.access_token, expires_in: tokens.expires_in };
 };
@@ -188,7 +194,7 @@ const deletePrefix = async (store: KVNamespace, prefix: string): Promise<number>
  */
 const purgeUser = async (store: KVNamespace, sub: string, alsoSessionHash?: string, opts: { keepBackups?: boolean } = {}): Promise<void> => {
   await deleteAllSessions(store, sub, alsoSessionHash);
-  await store.delete(`user:${sub}`);
+  await store.delete(userKey(sub));
   await store.delete(pushKey(sub));
   await deletePrefix(store, `sent:${sub}:`);
   if (!opts.keepBackups) await deletePrefix(store, backupPrefix(sub));
@@ -205,8 +211,13 @@ const handleAuthStart = async (req: Request, env: Env, url: URL): Promise<Respon
     response_type: 'code',
     scope: OAUTH_SCOPES,
     // offline + consent : garantit la délivrance d'un refresh token à chaque connexion.
+    // `select=1` (réinitialisation du verrou de l'appareil, « Code oublié ») : le choix du
+    // compte est toujours affiché, jamais de reprise silencieuse du compte ouvert. Google
+    // n'offre pas de ressaisie forcée du mot de passe (`prompt` : none, consent,
+    // select_account, combinables) :
+    // https://developers.google.com/identity/protocols/oauth2/web-server#creatingclient
     access_type: 'offline',
-    prompt: 'consent',
+    prompt: url.searchParams.get('select') === '1' ? 'select_account consent' : 'consent',
     // Pas d'include_granted_scopes : Google rajouterait les autorisations accordées
     // autrefois (gmail.send), donc l'écran « application non validée ».
     include_granted_scopes: 'false',
@@ -254,18 +265,21 @@ const handleAuthCallback = async (req: Request, env: Env, url: URL): Promise<Res
     return htmlPage(env, 'Autorisation Drive manquante', 'L’accès à Google Drive est indispensable : relancez la connexion en cochant toutes les autorisations.');
   }
 
-  const existing = await env.STORE.get<UserRecord>(`user:${identity.sub}`, 'json');
+  const existing = await readUser(env.STORE, identity.sub);
   const refreshToken = tokens.refresh_token;
   if (!refreshToken && !existing) {
     return htmlPage(env, 'Connexion incomplète', 'Google n’a pas fourni de jeton de longue durée. Relancez la connexion.', 502);
   }
-  if (refreshToken) {
-    await env.STORE.put(`user:${identity.sub}`, JSON.stringify({
-      email: identity.email!, refreshTokenEnc: await encryptString(refreshToken, env.ENCRYPTION_KEY), updatedAt: Date.now(),
-    } satisfies UserRecord));
-  }
-
+  const record: UserRecord = refreshToken
+    ? { email: identity.email!, refreshTokenEnc: await encryptString(refreshToken, env.ENCRYPTION_KEY), updatedAt: Date.now() }
+    : existing!;
+  // Session AVANT le compte : une déconnexion du dernier appareil (ou la tâche quotidienne)
+  // qui tournerait au même moment voit déjà cette session et ne l'efface pas
+  // (releaseUserIfUnused). Dans l'autre ordre, elle pouvait effacer le compte tout juste
+  // écrit, et la nouvelle session était purgée à son premier /token (NO_USER).
   const { token: sessionToken } = await createSession(env.STORE, identity.sub, identity.email!);
+  // Durée de vie neuve à chaque connexion : le compte survit à toute session ouverte.
+  await writeUser(env.STORE, identity.sub, record);
 
   // La session n'apparaît jamais dans une URL : l'app reçoit un code à usage unique (dans
   // le fragment, jamais envoyé à un serveur) qu'elle échange immédiatement. Le contenu est
@@ -321,6 +335,8 @@ const handleLogout = async (req: Request, env: Env): Promise<Response> => {
     const list = await readPushList(env, s.session.sub);
     const kept = list.filter(x => x.sessionHash !== s.hash);
     if (kept.length !== list.length) await writePushList(env, s.session.sub, kept);
+    // Dernier appareil déconnecté, plus aucune notification : le jeton Google ne sert plus.
+    await releaseUserIfUnused(env.STORE, s.session.sub);
   }
   return json(req, env, { ok: true });
 };
@@ -330,6 +346,9 @@ const handleLogoutAll = async (req: Request, env: Env): Promise<Response> => {
   if (!s) return json(req, env, { error: 'REAUTH_REQUIRED' }, 401);
   const revoked = await deleteAllSessions(env.STORE, s.session.sub, s.hash);
   await env.STORE.delete(pushKey(s.session.sub));
+  // Plus aucune session ni notification : le jeton Google, l'e-mail et l'identifiant partent
+  // aussi (la sauvegarde de secours chiffrée reste, comme les marqueurs « déjà envoyé »).
+  await env.STORE.delete(userKey(s.session.sub));
   return json(req, env, { ok: true, sessionsRevoked: revoked });
 };
 
@@ -610,6 +629,39 @@ const remindUser = async (env: Env, sub: string, now: Date): Promise<void> => {
   }
 };
 
+/**
+ * Conservation du jeton Google (page de confidentialité) : après les rappels, chaque compte
+ * gardé est revu. Plus de session ni de notification : il est effacé. Sinon, sans
+ * notification (ceux qui en ont viennent d'être vérifiés par remindUser), un rafraîchissement
+ * constate un accès retiré chez Google, et tout est alors effacé comme dans /token. Une
+ * panne passagère de Google ne purge rien.
+ */
+const sweepUserRecords = async (env: Env, now: Date, errors: string[]): Promise<void> => {
+  let cursor: string | undefined;
+  do {
+    const page = await env.STORE.list({ prefix: USER_PREFIX, cursor });
+    for (const k of page.keys) {
+      const sub = k.name.slice(USER_PREFIX.length);
+      try {
+        // Date.now() (et non le début de la tâche) : une connexion faite pendant les rappels
+        // reste dans le délai de grâce.
+        if (await releaseUserIfUnused(env.STORE, sub, Date.now(), { graceMs: RECENT_WRITE_GRACE_MS })) continue;
+        if (await env.STORE.get(pushKey(sub))) continue;
+        try {
+          await accessTokenFor(env, sub);
+        } catch (e) {
+          if (isInvalidGrant(e)) await purgeUser(env.STORE, sub, undefined, { keepBackups: true });
+          else console.error('cannot refresh token during retention check', e);
+        }
+      } catch (e) {
+        console.error('retention check failed', e);
+        errors.push(e instanceof Error ? e.message : String(e));
+      }
+    }
+    cursor = page.list_complete ? undefined : page.cursor;
+  } while (cursor);
+};
+
 const runDailyReminders = async (env: Env): Promise<void> => {
   const now = new Date();
   let usersProcessed = 0;
@@ -625,6 +677,7 @@ const runDailyReminders = async (env: Env): Promise<void> => {
       }
       cursor = page.list_complete ? undefined : page.cursor;
     } while (cursor);
+    await sweepUserRecords(env, now, errors);
   } catch (e) {
     errors.push(e instanceof Error ? e.message : String(e));
   } finally {

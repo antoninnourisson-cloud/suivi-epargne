@@ -108,12 +108,33 @@ describe('livret plein prévu', () => {
 describe('place libérée après la restitution', () => {
   const accounts = [la(15200, { ownedAmount: 8200, parentalCapital: 7000 }), lep(10000, { ownedAmount: 7500, parentalCapital: 2500 })];
 
-  it('chiffre la place rendue sur chaque livret et ce qu’elle rapportera', () => {
+  it('chiffre la place rendue sur chaque livret et ce qu’elle rapporte VRAIMENT en plus', () => {
     const [a] = byKind(run({ accounts, restitution: { plannedDate: '2027-01-01' } }), 'restitution-room');
     expect(a.title).toMatch(/^Après la restitution \(1er janvier 2027\), 7\s000\s€ de place sur le Livret A et 2\s500\s€ sur le LEP\.$/);
     expect(a.tone).toBe('info');
-    expect(a.gain?.amount).toBeCloseTo(7000 * 0.017 + 2500 * 0.025, 6);
+    // Sans cette place, l'argent irait sur un LDDS à ouvrir (1,7 %) : seul l'écart compte.
+    // Livret A : 1,7 − 1,7 = 0 ; LEP : 2 500 € × (2,5 − 1,7) % = 20 €.
+    expect(a.gain?.amount).toBeCloseTo(20, 6);
+    expect(a.detail).toContain('un LDDS à ouvrir');
+    // Les intérêts offerts par les parents (7 000 × 1,7 % + 2 500 × 2,5 % = 181,50 €) s'arrêtent.
+    expect(a.detail).toMatch(/environ 182\s€ par an\), s'arrêtent à la restitution\./);
     expect(a.id).toBe('restitution-room-2027-01-01');
+  });
+
+  it('compare au taux NET de l’assurance vie où irait l’argent sinon', () => {
+    // AV ouverte en 2024 : à la restitution elle a moins de 8 ans. 3 % brut × (1 − 17,2 % − 12,8 %) = 2,1 % net.
+    const av = acc('Assurance vie', AccountType.ASSURANCE_VIE, 4000, { id: 'av', interestRate: 3, openingDate: '2024-06-15' });
+    const [a] = byKind(run({ accounts: [...accounts, av], restitution: { plannedDate: '2027-01-01' } }), 'restitution-room');
+    // Livret A 1,7 % < 2,1 % : rien ; LEP : 2 500 € × (2,5 − 2,1) % = 10 €.
+    expect(a.gain?.amount).toBeCloseTo(10, 6);
+    expect(a.detail).toContain("de plus que sur l'Assurance vie (2,1 % net)");
+  });
+
+  it('sans gain notable, ne promet rien mais rappelle la souplesse', () => {
+    const laOnly = [la(15200, { ownedAmount: 8200, parentalCapital: 7000 })];
+    const [a] = byKind(run({ accounts: laOnly, restitution: { plannedDate: '2027-01-01' } }), 'restitution-room');
+    expect(a.gain).toBeUndefined();
+    expect(a.detail).toContain('peu ou pas d\'intérêts en plus');
   });
 
   it('rien si la restitution est faite, non prévue, ou sans capital parental', () => {

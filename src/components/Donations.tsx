@@ -13,6 +13,7 @@ import { computeDonationSummary, DONATION_75_CEILING } from '../lib/finance';
 import { openDrivePicker } from '../services/googleDriveService';
 import { formatEUR } from '../lib/format';
 import { useUndoableRemove } from './Toast';
+import { revealElementById } from './revealElement';
 
 interface DonationsProps {
   // Aide à la déclaration (composée par App).
@@ -123,6 +124,11 @@ export const Donations: React.FC<DonationsProps> = ({ donations, onUpdate, picke
           <div>
             <h2 className="text-2xl font-black text-slate-800 dark:text-slate-100 flex items-center gap-2 mb-1"><HandHeart className="w-6 h-6 text-indigo-600" /> Dons et impôts</h2>
             <p className="text-sm text-slate-500 dark:text-slate-400">Notez vos dons au fil de l'année : au printemps, tout est prêt pour la déclaration. Rappel début avril.</p>
+            {taxHelper && (
+              <button type="button" onClick={() => revealElementById('tax-return', { delayMs: 0 })} className="mt-2 text-sm font-medium text-primary underline underline-offset-2 hover:no-underline">
+                Voir l'aide à la déclaration (intérêts, PER, comptes à l'étranger, crypto…)
+              </button>
+            )}
           </div>
           <select value={year} onChange={e => setYear(Number(e.target.value))} aria-label="Année" className="p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold text-slate-700 dark:text-slate-200">
             {years.map(y => <option key={y} value={y}>{y}</option>)}
@@ -178,8 +184,8 @@ export const Donations: React.FC<DonationsProps> = ({ donations, onUpdate, picke
                   {d.note && <span className="truncate">{d.note}</span>}
                 </p>
               </div>
-              <button type="button" onClick={() => edit(d)} aria-label={`Modifier le don à ${d.organization}`} className="p-2.5 text-slate-400 hover:text-indigo-600 rounded-lg"><Pencil className="w-4 h-4" /></button>
-              <button type="button" onClick={() => remove(d.id)} aria-label={`Supprimer le don à ${d.organization}`} className="p-2.5 text-slate-400 hover:text-rose-500 rounded-lg"><Trash2 className="w-4 h-4" /></button>
+              <button type="button" onClick={() => edit(d)} aria-label={`Modifier le don à ${d.organization}`} className="p-2.5 text-on-surface-variant hover:text-indigo-600 dark:hover:text-indigo-300 rounded-lg"><Pencil className="w-4 h-4" /></button>
+              <button type="button" onClick={() => remove(d.id)} aria-label={`Supprimer le don à ${d.organization}`} className="p-2.5 text-on-surface-variant hover:text-rose-600 dark:hover:text-rose-300 rounded-lg"><Trash2 className="w-4 h-4" /></button>
             </li>
           ))}
         </ul>
@@ -208,7 +214,7 @@ export const Donations: React.FC<DonationsProps> = ({ donations, onUpdate, picke
           {draft.receiptFileId ? (
             <span className="text-xs font-bold text-indigo-600 flex items-center gap-1">
               <Paperclip className="w-3.5 h-3.5" /> {draft.receiptFileName || 'reçu'}
-              <button type="button" onClick={() => set({ receiptFileId: undefined, receiptFileName: undefined })} aria-label="Retirer le reçu" className="p-1 text-slate-400 hover:text-rose-500"><X className="w-3 h-3" /></button>
+              <button type="button" onClick={() => set({ receiptFileId: undefined, receiptFileName: undefined })} aria-label="Retirer le reçu" className="p-1 text-on-surface-variant hover:text-rose-600 dark:hover:text-rose-300"><X className="w-3 h-3" /></button>
             </span>
           ) : (
             <button type="button" onClick={attachReceipt} disabled={pickerBusy} className="text-xs font-bold text-indigo-600 hover:underline flex items-center gap-1 disabled:opacity-50"><Paperclip className="w-3.5 h-3.5" /> Joindre le reçu depuis Drive</button>

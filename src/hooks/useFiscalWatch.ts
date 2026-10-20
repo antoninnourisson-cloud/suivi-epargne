@@ -11,7 +11,6 @@ import { lsGetJSON, lsSetJSON } from '../lib/storage';
 import { FiscalConfig, SavingsAccount, TaxBracket } from '../types';
 import { diffFiscalWatch, FiscalProposal, FiscalWatchResult, isWatchDue, parseFiscalWatch, FISCAL_WATCH_PROMPT, buildSourcesPrompt } from '../lib/fiscalWatch';
 import { getFiscalSources, getServerFiscalWatch, hasBackendSession, isBackendEnabled, runServerFiscalWatch, ServerFiscalWatch } from '../services/backendService';
-import { askGeminiWithSearch } from '../services/geminiService';
 import { formatRate, plainEUR } from '../lib/format';
 
 const KEY = 'fiscal_watch';
@@ -115,6 +114,8 @@ export const useFiscalWatch = (geminiApiKey: string, fiscal: FiscalConfig | unde
     setRunningVia('gemini');
     try {
       let text: string;
+      // Chargé seulement quand la veille passe par Gemini : rien de plus au démarrage.
+      const { askGeminiWithSearch } = await import('../services/geminiService');
       const sources = isBackendEnabled() ? await getFiscalSources().catch(() => []) : [];
       const readable = sources.filter(x => x.ok && x.text);
       if (readable.length >= 3) text = await askGeminiWithSearch(geminiApiKey, buildSourcesPrompt(readable), 90_000, false);

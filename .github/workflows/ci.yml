@@ -6,7 +6,7 @@ name: Vérifications
 #   révisions de taux, restitution, échéances), et de nouvelles failles peuvent être publiées
 #   sans que le code change ;
 # - appelé par deploy.yml (workflow_call) : un déploiement ne part jamais si ces vérifications
-#   échouent.
+#   échouent, et il publie le dossier `dist` construit et testé ici (artefact site-dist).
 on:
   pull_request:
   push:
@@ -64,14 +64,32 @@ jobs:
         run: npm run typecheck
 
       - name: Tests (app + serveur + edge) et couverture
-        # Échoue si la couverture du cœur métier (src/lib, worker/src) passe sous les seuils
-        # de vitest.config.ts.
+        # Échoue si la couverture passe sous les seuils de vitest.config.ts : ceux de toute
+        # l'app (hooks, services, écrans) et ceux, plus exigeants, du cœur métier (src/lib,
+        # worker/src, edge/src).
         run: npm run test:coverage
 
-      - name: Tests de bout en bout (mode démo)
+      - name: Tests de bout en bout (build de production)
+        # En CI, Playwright construit le build de production (dist-e2e : mêmes réglages que le
+        # build publié, CSP et service worker compris, mode démo en plus) et le sert avec
+        # `vite preview` ; voir playwright.config.ts et e2e/target.ts. Les parcours de
+        # synchronisation tournent contre un faux Drive, sans aucun appel à Google ni au serveur.
         run: |
           npx playwright install --with-deps chromium
           npm run e2e
+
+      - name: Build de production
+        # Le build publié : deploy.yml reprend CE dossier (artefact site-dist ci-dessous) au lieu
+        # de reconstruire. Ce qui part en ligne est donc exactement ce qui est testé ici.
+        run: npm run build
+
+      - name: Test du build publié (dossier dist exact)
+        # Le parcours sans démo d'e2e/production.spec.ts, contre le dossier qui sera publié :
+        # l'app démarre, aucune violation CSP ni fichier manquant, le service worker s'installe
+        # et sert l'app hors ligne. Servi tel quel par `vite preview` (voir e2e/target.ts).
+        env:
+          E2E_DIST: dist
+        run: npx playwright test e2e/production.spec.ts
 
       - name: Rapport des tests de bout en bout
         if: failure()
@@ -80,9 +98,6 @@ jobs:
           name: playwright-report
           path: playwright-report/
           retention-days: 7
-
-      - name: Build de production
-        run: npm run build
 
       - name: Taille du build
         run: |
@@ -101,6 +116,17 @@ jobs:
             echo
             echo "Total \`dist/\` : $(du -sk dist | cut -f1) Ko"
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Artefact du build vérifié
+        # Repris tel quel par deploy.yml dans la même exécution. `.nojekyll` est un fichier
+        # caché : include-hidden-files le garde, pour publier le dossier à l'identique.
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: site-dist
+          path: dist/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 3
 
       - name: Audit des dépendances (app et serveur, outils de développement compris)
         # Informatif : une faille publiée dans une dépendance ne doit pas bloquer un

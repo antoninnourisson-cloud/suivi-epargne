@@ -1,12 +1,15 @@
 // Écran « Et si… » : simulateur de VOTRE épargne (part propre, jamais le capital des
 // parents). On combine des scénarios (achat, pause, autre montant mensuel, autre date de
 // restitution), on choisit l'horizon, et l'écran compare au plan actuel, avec une
-// fourchette tirée de vos propres mois passés. Le calcul vit dans src/lib/simulator.ts.
-import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
-import { FlaskConical, Plus, Info, Wallet } from 'lucide-react';
+// fourchette tirée de vos propres mois passés. Le calcul vit dans src/lib/simulator.ts ;
+// la fourchette (1 000 tirages) se calcule dans un Web Worker (useBackgroundSimulation)
+// pour que la saisie reste fluide.
+import React, { useDeferredValue, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { FlaskConical, Plus, Info, Wallet, Loader2 } from 'lucide-react';
 import type { FiscalConfig, ParentalRestitution, PayslipRecord, SavingsAccount } from '../types';
-import type { SavingsSplit } from '../lib/finance';
-import { simulate, pastMonthlySavings, mulberry32, monthDate, Scenario, ScenarioKind, SimulatorResult } from '../lib/simulator';
+import { REGULATED_TYPES, type SavingsSplit } from '../lib/finance';
+import { simulate, pastMonthlySavings, monthDate, Scenario, ScenarioKind, SimulatorResult } from '../lib/simulator';
+import { useBackgroundSimulation } from '../hooks/useBackgroundSimulation';
 import { localTodayISO, parseISODate } from '../lib/dates';
 import { formatEUR, formatSignedEUR } from '../lib/format';
 import { Card, Chip, DataTable, type Column, DeltaBadge, EmptyState, MoneyText, PageHeader, SegmentedButton, StatTile, TextField } from './ui';
@@ -30,6 +33,10 @@ interface SimulatorProps {
 
 const HORIZONS = ['12', '24', '36', '60'] as const;
 const BAND_DELAY_MS = 300;
+/** Graine fixe de la fourchette : même saisie, même fourchette (écran stable). */
+const BAND_SEED = 2026;
+/** Référence stable : un `[]` neuf à chaque rendu relancerait le calcul de la fourchette en boucle. */
+const NO_PAYSLIPS: PayslipRecord[] = [];
 /** Annonce du résultat aux lecteurs d'écran : une phrase, une fois la saisie posée. */
 const ANNOUNCE_DELAY_MS = 800;
 
@@ -51,8 +58,12 @@ const LiveSummary: React.FC<{ text: string }> = ({ text }) => {
   return <p className="sr-only" aria-live="polite" aria-atomic="true">{settled}</p>;
 };
 
-const monthShort = (iso: string) => parseISODate(iso).toLocaleDateString('fr-FR', { month: 'short', year: '2-digit' });
-const monthLong = (iso: string) => parseISODate(iso).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+// Formateurs créés une fois : toLocaleDateString en recrée un à chaque appel (61 mois × 2
+// à chaque rendu).
+const MONTH_SHORT = new Intl.DateTimeFormat('fr-FR', { month: 'short', year: '2-digit' });
+const MONTH_LONG = new Intl.DateTimeFormat('fr-FR', { month: 'long', year: 'numeric' });
+const monthShort = (iso: string) => MONTH_SHORT.format(parseISODate(iso));
+const monthLong = (iso: string) => MONTH_LONG.format(parseISODate(iso));
 const inMonths = (m: number) => (m === 0 ? 'dès aujourd\'hui' : `dans ${m} mois`);
 const eur = (n: number) => formatEUR(n, 0);
 
@@ -60,7 +71,7 @@ const eur = (n: number) => formatEUR(n, 0);
 const tableRows = (r: SimulatorResult) => r.points.filter(p => r.horizon <= 24 || p.month % 3 === 0 || p.month === r.horizon);
 
 export const Simulator: React.FC<SimulatorProps> = ({
-  accounts, fiscalConfig, monthPlan, savingsSplit, paydayDay, payslips = [], trackingStartDate, parentalRestitution,
+  accounts, fiscalConfig, monthPlan, savingsSplit, paydayDay, payslips = NO_PAYSLIPS, trackingStartDate, parentalRestitution,
 }) => {
   const today = useMemo(() => localTodayISO(), []);
   const [horizon, setHorizon] = useState<Horizon>('24');
@@ -81,7 +92,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
   );
 
   // Courbes : recalculées à chaque frappe (deux trajectoires, instantané). Fourchette
-  // (1 000 tirages) : après une courte pause de saisie, pour ne pas figer l'écran.
+  // (1 000 tirages) : dans un Web Worker, après une courte pause de saisie.
   const inputs = useMemo(() => ({ scenarios, h, target }), [scenarios, h, target]);
   const bandInputs = useDebounced(inputs, BAND_DELAY_MS);
   const common = useMemo(() => ({
@@ -92,21 +103,39 @@ export const Simulator: React.FC<SimulatorProps> = ({
     () => simulate({ ...common, horizon: inputs.h, scenarios: inputs.scenarios, target: inputs.target, band: false }),
     [common, inputs],
   );
-  const banded = useMemo(
-    () => simulate({ ...common, horizon: bandInputs.h, scenarios: bandInputs.scenarios, target: bandInputs.target, rng: mulberry32(2026) }),
+  const bandRequest = useMemo(
+    () => ({ ...common, horizon: bandInputs.h, scenarios: bandInputs.scenarios, target: bandInputs.target, seed: BAND_SEED }),
     [common, bandInputs],
   );
+  const { result: banded, pending: bandPending } = useBackgroundSimulation(bandRequest);
   const result = useMemo((): SimulatorResult => {
-    const fresh = bandInputs === inputs;
+    const fresh = bandInputs === inputs && !bandPending;
     // Fourchette d'un instant plus tôt gardée pendant la saisie (même horizon seulement).
-    if (!banded.band || banded.horizon !== lines.horizon) return { ...lines, band: null, bandUnavailable: banded.bandUnavailable };
+    if (!banded?.band || banded.horizon !== lines.horizon) return { ...lines, band: null, bandUnavailable: banded?.bandUnavailable };
     return {
       ...lines,
       points: lines.points.map((p, i) => ({ ...p, p10: banded.points[i].p10, p50: banded.points[i].p50, p90: banded.points[i].p90 })),
       band: banded.band,
       goal: lines.goal && { ...lines.goal, p50Month: fresh ? banded.goal?.p50Month ?? null : null },
     };
-  }, [lines, banded, bandInputs, inputs]);
+  }, [lines, banded, bandPending, bandInputs, inputs]);
+  // Fourchette en cours de calcul (pause de saisie ou Worker au travail) ; rien à attendre
+  // quand il n'y a pas assez de mois passés pour en tirer une.
+  const bandBusy = (bandPending || bandInputs !== inputs) && !banded?.bandUnavailable;
+
+  // Données du graphique mémoïsées, puis différées : la saisie s'affiche d'abord, le
+  // graphique (le plus long à dessiner) suit sans bloquer la frappe suivante.
+  const withScenario = scenarios.length > 0;
+  const chart = useMemo(() => ({
+    showScenario: withScenario,
+    rows: result.points.map((p): SimChartRow => ({
+      label: monthShort(p.date), title: p.month === 0 ? 'Aujourd\'hui' : monthLong(p.date),
+      baseline: Math.round(p.baseline), scenario: Math.round(p.scenario),
+      band: p.p10 !== undefined && p.p90 !== undefined ? [Math.round(p.p10), Math.round(p.p90)] : undefined,
+    })),
+  }), [result, withScenario]);
+  const deferredChart = useDeferredValue(chart);
+  const hasRegulated = accounts.some(a => REGULATED_TYPES.includes(a.type));
 
   const add = (kind: ScenarioKind) => {
     const id = `s${nextId.current++}`;
@@ -129,16 +158,12 @@ export const Simulator: React.FC<SimulatorProps> = ({
     );
   }
 
-  const withScenario = scenarios.length > 0;
   const colors = simulatorColors(dark, withScenario);
   const last = result.points[result.horizon];
+  // Intérêts de livrets gagnés au dernier mois, versés plus tard : ceux du chiffre mis en
+  // avant (scenarioEnd, égal au plan actuel sans scénario).
+  const pendingLivret = result.pendingInterest.scenario;
   const fromToday = result.scenarioEnd - result.start;
-
-  const chartRows: SimChartRow[] = result.points.map(p => ({
-    label: monthShort(p.date), title: p.month === 0 ? 'Aujourd\'hui' : monthLong(p.date),
-    baseline: Math.round(p.baseline), scenario: Math.round(p.scenario),
-    band: p.p10 !== undefined && p.p90 !== undefined ? [Math.round(p.p10), Math.round(p.p90)] : undefined,
-  }));
 
   const legend: LegendItem[] = [
     ...(withScenario ? [{ key: 'scenario', label: 'Scénario', color: colors.scenario, value: eur(result.scenarioEnd) }] : []),
@@ -265,17 +290,30 @@ export const Simulator: React.FC<SimulatorProps> = ({
               legend={<ChartLegend items={legend} />}
               table={<DataTable caption={`Votre épargne sur ${result.horizon} mois${withScenario ? ', plan actuel et scénario' : ''}`} columns={columns} rows={tableRows(result)} rowKey={p => String(p.month)} />}
             >
-              <SimulatorChart data={chartRows} showScenario={withScenario} />
+              <div className="relative h-full">
+                <SimulatorChart data={deferredChart.rows} showScenario={deferredChart.showScenario} />
+                {bandBusy && (
+                  // En haut à gauche, là où une courbe qui monte ne passe pas. Indication visuelle
+                  // seulement (le graphique est masqué aux lecteurs d'écran,
+                  // qui ont la synthèse et le tableau).
+                  <span className="pointer-events-none absolute left-18 top-0 inline-flex items-center gap-1.5 rounded-full bg-surface-container-high px-2.5 py-1 text-xs text-on-surface-variant">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                    Calcul de la fourchette…
+                  </span>
+                )}
+              </div>
             </ChartFrame>
             <p className="mt-4 flex items-start gap-2 text-xs text-on-surface-variant">
               <Info className="w-4 h-4 shrink-0 mt-px" aria-hidden="true" />
               <span>
                 {result.band
-                  ? <>Fourchette tirée de vos propres mois passés ; ce n'est pas une prévision garantie. ({result.band.historyMonths} {history.source === 'payday' ? 'mois de paie' : 'mois'}, {result.band.runs.toLocaleString('fr-FR')} tirages.)</>
+                  ? <>Fourchette tirée de vos propres mois passés : elle suit votre rythme d'épargne, pas les variations des marchés (PEA, crypto…). Ce n'est pas une prévision garantie. ({result.band.historyMonths} {history.source === 'payday' ? 'mois de paie' : 'mois'}, {result.band.runs.toLocaleString('fr-FR')} tirages.)</>
                   : result.bandUnavailable
                     ? <>Pas de fourchette : {result.bandUnavailable.replace(/^./, c => c.toLowerCase())}</>
                     : <>Fourchette en cours de calcul…</>}
                 {' '}Taux nets d'aujourd'hui, versements répartis comme dans le Pilotage.
+                {hasRegulated && <> Les intérêts du Livret A, du LDDS et du LEP s'ajoutent au solde chaque 31 décembre, comme à la banque.</>}
+                {pendingLivret >= 1 && <> Dans {result.horizon} mois, {eur(pendingLivret)} d'intérêts déjà gagnés sur ces livrets attendront le 31 décembre suivant : ils ne sont pas comptés dans les montants ci-dessus.</>}
               </span>
             </p>
           </Card>

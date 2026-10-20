@@ -15,6 +15,29 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '2026.10.20-2',
+    date: '2026-10-20',
+    title: 'Déclaration complète et calculs plus justes',
+    items: [
+      "Aide à la déclaration complète : intérêts (2TR, 2CK), PER (6NS), comptes à l'étranger (8UU, 3916) et ventes de crypto (2086), avec les montants et les liens officiels. Nouvelle question « Compte détenu à l'étranger ? » dans la fiche d'un compte, et un rappel de déclaration pour tout le monde au printemps.",
+      "Calculs : le PEE se débloque versement par versement, 5 ans après chacun. Les taux nets déduisent l'impôt pour la crypto, un PEA de moins de 5 ans et une assurance vie de moins de 8 ans. Les badges fiscaux disent ce qui reste dû (prélèvements sociaux).",
+      "« Et si… » reste fluide pendant le calcul. Dans toutes les projections, les intérêts des livrets sont ajoutés une fois par an, au 31 décembre, comme à la banque.",
+      "Pilotage : la capacité d'épargne du mois et la somme en plus sont gardées jusqu'à la prochaine paie, et l'Accueil les utilise. Annuler une restitution demande une confirmation et peut se rétablir. Plusieurs textes et boutons sont plus lisibles, en clair comme en sombre.",
+    ],
+  },
+  {
+    version: '2026.10.20',
+    date: '2026-10-20',
+    title: 'Plusieurs appareils, hors ligne et verrou renforcé',
+    items: [
+      "Vos données ont changé sur un autre appareil ? Une fenêtre compare les deux versions (date, appareil, montants, différences) : vous choisissez, puis confirmez. L'autre version est gardée de côté dans Paramètres, Sauvegardes, et peut être exportée. Au retour dans l'app, Pécule vérifie tout seul si Drive a changé.",
+      "Pécule s'ouvre sans réseau avec vos dernières données, et vous pouvez continuer à saisir : tout part sur Drive au retour du réseau. Le démarrage est plus rapide, et les nouvelles versions de l'app arrivent quand vous y revenez, sans interrompre une saisie.",
+      "Déconnexion : « Envoyer puis se déconnecter » ou « Se déconnecter sans envoyer ». Après une restauration ou un import, « Annuler » ramène vos données d'avant. Un problème durable avec Drive (espace plein, droits) s'affiche clairement.",
+      "Verrou : « Code oublié » ne déverrouille plus l'app. Le retrait n'est possible que 24 heures après la demande, puis après une reconnexion à Google ; déverrouiller normalement annule la demande. L'écran de verrouillage est aussi plus accessible.",
+      "Le serveur efface votre jeton Google et votre e-mail à la déconnexion de votre dernier appareil, et au plus tard 61 jours après leur dernière utilisation.",
+    ],
+  },
+  {
     version: '2026.10.14',
     date: '2026-10-14',
     title: 'Données mieux protégées et calculs justes',

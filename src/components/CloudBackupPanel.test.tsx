@@ -31,14 +31,17 @@ vi.mock('../services/cloudBackup', async () => {
 });
 
 import { CloudBackupPanel } from './SettingsPanels';
+import { ToastContext } from './Toast';
 
 const data = { ...emptyData(), accounts: [{ id: 'a1', name: 'Livret A', totalAmount: 10, ownedAmount: 10, parentalCapital: 0 }] } as never;
 
-const setup = () => {
-  const onImport = vi.fn(async (_f: File) => true);
+type ImportImpl = (f: File, opts?: { requireSetAside?: boolean }) => Promise<{ ok: boolean; undoId?: string }>;
+const setup = (importImpl: ImportImpl = async () => ({ ok: true }), undo?: (id: string) => Promise<boolean>) => {
+  const onImport = vi.fn(importImpl);
   const confirm = vi.fn((_t: string, _m: string, ok: () => void | Promise<void>) => { void ok(); });
-  render(<CloudBackupPanel getData={() => data} onImport={onImport} confirm={confirm} />);
-  return { onImport, confirm };
+  const toast = vi.fn();
+  render(<ToastContext.Provider value={toast}><CloudBackupPanel getData={() => data} onImport={onImport} undo={undo} confirm={confirm} /></ToastContext.Provider>);
+  return { onImport, confirm, toast };
 };
 
 beforeEach(() => {
@@ -104,6 +107,22 @@ describe('Sauvegarde de secours chiffrée (Réglages)', () => {
     expect(confirm.mock.calls[0][0]).toMatch(/Remplacer vos données par la copie du 30 septembre 2026/);
     const file = onImport.mock.calls[0][0];
     expect(await file.text()).toBe(json);
+    // Les données actuelles doivent être mises de côté d'abord (c'est promis dans la confirmation).
+    expect(onImport.mock.calls[0][1]).toEqual({ requireSetAside: true });
+  });
+
+  it('restauration : si les données actuelles ne peuvent pas être mises de côté, rien n’est remplacé et on le dit', async () => {
+    svc.listServerBackups.mockResolvedValue(['2026-10-07']);
+    svc.decryptServerBackup.mockResolvedValue(JSON.stringify(data));
+    const { onImport, toast } = setup(async () => { throw new Error('SET_ASIDE_FAILED'); });
+    fireEvent.click(await screen.findByRole('button', { name: /Restaurer/ }));
+    fireEvent.change(screen.getByLabelText('Code de secours'), { target: { value: realGenerate().code } });
+    fireEvent.click(screen.getByRole('button', { name: /Déchiffrer et restaurer/ }));
+    await waitFor(() => expect(toast).toHaveBeenCalled());
+    expect(onImport).toHaveBeenCalledTimes(1);
+    expect(toast.mock.calls[0][0]).toEqual({
+      message: 'Impossible de mettre vos données actuelles de côté sur cet appareil : rien n\'a été remplacé.', kind: 'error',
+    });
   });
 
   it('restauration : une copie déchiffrée mais invalide est refusée avant confirmation', async () => {
@@ -116,6 +135,23 @@ describe('Sauvegarde de secours chiffrée (Réglages)', () => {
     expect(await screen.findByText(/rien n'a été remplacé/)).toBeTruthy();
     expect(confirm).not.toHaveBeenCalled();
     expect(onImport).not.toHaveBeenCalled();
+  });
+
+  it('restauration réussie : « Annuler » remet les données mises de côté juste avant', async () => {
+    svc.listServerBackups.mockResolvedValue(['2026-10-07']);
+    svc.decryptServerBackup.mockResolvedValue(JSON.stringify(data));
+    const undo = vi.fn(async (_id: string) => true);
+    const { toast } = setup(async () => ({ ok: true, undoId: 'avant-restauration' }), undo);
+    fireEvent.click(await screen.findByRole('button', { name: /Restaurer/ }));
+    fireEvent.change(screen.getByLabelText('Code de secours'), { target: { value: realGenerate().code } });
+    fireEvent.click(screen.getByRole('button', { name: /Déchiffrer et restaurer/ }));
+    await waitFor(() => expect(toast).toHaveBeenCalled());
+    const shown = toast.mock.calls[0][0] as { message: string; action?: { label: string; onClick: () => void } };
+    expect(shown.message).toBe('Copie de secours du 7 octobre 2026 restaurée');
+    expect(shown.action?.label).toBe('Annuler');
+    shown.action!.onClick();
+    expect(undo).toHaveBeenCalledWith('avant-restauration');
+    await waitFor(() => expect(toast).toHaveBeenLastCalledWith({ message: 'Restauration annulée', kind: 'success' }));
   });
 
   it('désactivation : confirmation, puis copies serveur effacées', async () => {

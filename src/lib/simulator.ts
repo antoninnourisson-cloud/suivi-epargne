@@ -11,12 +11,23 @@
 // computePlacementStrategy (plafonds vérifiés sur le solde réel, part des parents
 // comprise tant qu'elle est là). Les intérêts du capital parental vous reviennent
 // (accord familial) : ils s'ajoutent à votre part, comme dans projectSavings.
+//
+// Livret A, LDDS et LEP : les intérêts s'accumulent mois après mois mais ne sont ajoutés
+// au solde (et ne rapportent eux-mêmes) qu'une fois par an, au 31 décembre, comme à la
+// banque. Ce crédit comprend aussi les intérêts déjà acquis depuis le 1er janvier. Règle et
+// sources dans ./yearlyInterest, partagée avec projectSavings et buildSoloPlan. Les
+// intérêts acquis mais pas encore versés au dernier mois sont rendus à part
+// (`pendingInterest`) : les courbes montrent le solde tel que la banque l'affiche.
+//
+// La fourchette ne tire au sort que vos montants mis de côté : elle ne reflète PAS les
+// variations des marchés (PEA, crypto, unités de compte gardent leur taux net fixe).
 // ================================================
 import { AccountType, FiscalConfig, PayslipRecord, SavingsAccount, AccountMovement } from '../types';
 import { computePlacementStrategy, computeWithdrawalTax, depositsAfterWithdrawal, SavingsSplit } from './finance';
-import { netAnnualRate } from './projection';
+import { netAnnualRate, netMonthlyRateSchedule } from './projection';
 import { recentPayWindows, savedBetween } from './motivation';
 import { parseISODate, formatISODay } from './dates';
+import { accruedSinceJanuary, applyMonthlyInterest, creditsInterestYearly, pendingInterest } from './yearlyInterest';
 
 const MIN_HORIZON = 6;
 const MAX_HORIZON = 60;
@@ -110,8 +121,11 @@ export interface SimulatorInput {
   target?: number;
   /** Montants mis de côté les mois passés (pastMonthlySavings). */
   history?: number[];
-  /** Générateur pour la fourchette ; sans lui, mulberry32(1). */
+  /** Générateur pour la fourchette ; sans lui, mulberry32(seed). Une fonction ne passe pas
+   *  dans un Web Worker : l'écran envoie `seed`. */
   rng?: () => number;
+  /** Graine de la fourchette (1 par défaut) : même graine, même fourchette. */
+  seed?: number;
   runs?: number;
   /** false : pas de fourchette (courbes seules, calcul instantané). */
   band?: boolean;
@@ -157,9 +171,13 @@ export interface SimulatorResult {
   band: { runs: number; historyMonths: number } | null;
   /** Pourquoi il n'y a pas de fourchette. */
   bandUnavailable?: string;
+  /** Intérêts de livrets (Livret A, LDDS, LEP) déjà gagnés au dernier mois mais versés
+   *  seulement au 31 décembre suivant : PAS comptés dans les courbes ni dans l'objectif. */
+  pendingInterest: { baseline: number; scenario: number };
 }
 
-type SimAccount = SavingsAccount & { own: number };
+/** `accrued` : intérêts d'un livret réglementé acquis mais pas encore crédités (31/12). */
+type SimAccount = SavingsAccount & { own: number; accrued: number };
 
 const LIQUID_ORDER: AccountType[] = [AccountType.COMPTE_COURANT, AccountType.LDDS, AccountType.LIVRET_A, AccountType.LEP];
 
@@ -225,16 +243,25 @@ interface PathContext {
   split?: SavingsSplit;
   horizon: number;
   rates: Map<string, number>;
+  /** Taux net mensuel du mois m (0 = premier mois simulé) : PEA et AV passent au taux mûr. */
+  rateAt: Map<string, (m: number) => number>;
   today: string;
+  /** Intérêts des livrets réglementés déjà acquis cette année, crédités au 31 décembre. */
+  accruedThisYear: Map<string, number>;
+  /** Mois civil (0-11) du mois 0. */
+  firstMonth: number;
 }
 
-const runPath = (ctx: PathContext, plan: PathPlan, record?: PurchaseOutcome[]): number[] => {
-  const sim: SimAccount[] = ctx.base.map(a => ({ ...a, own: a.ownedAmount }));
+/** Solde (part propre) au début de chaque mois, et intérêts de livrets pas encore versés à la fin. */
+interface PathResult { series: number[]; pending: number }
+
+const runPath = (ctx: PathContext, plan: PathPlan, record?: PurchaseOutcome[]): PathResult => {
+  const sim: SimAccount[] = ctx.base.map(a => ({ ...a, own: a.ownedAmount, accrued: ctx.accruedThisYear.get(a.id) || 0 }));
   // Ce que le plan ne peut placer nulle part (livrets pleins, ni AV ni PEA) reste sur le
   // compte courant : sans compte courant saisi, un compte courant virtuel le garde.
   let current = sim.find(a => a.type === AccountType.COMPTE_COURANT);
   if (!current) {
-    current = { id: '__current', name: 'Compte courant', type: AccountType.COMPTE_COURANT, institution: '', totalAmount: 0, ownedAmount: 0, parentalCapital: 0, own: 0 };
+    current = { id: '__current', name: 'Compte courant', type: AccountType.COMPTE_COURANT, institution: '', totalAmount: 0, ownedAmount: 0, parentalCapital: 0, own: 0, accrued: 0 };
     sim.push(current);
   }
   const idle = current;
@@ -242,15 +269,25 @@ const runPath = (ctx: PathContext, plan: PathPlan, record?: PurchaseOutcome[]): 
   const at = (m: number) => parseISODate(monthDate(ctx.today, m));
   const total = () => sim.reduce((s, a) => s + a.own, 0);
   const out = [total()];
-  // Restitution déjà passée mais pas encore enregistrée : appliquée tout de suite.
-  const restitutionAt = plan.restitutionMonth === undefined ? undefined : Math.max(1, plan.restitutionMonth);
+  // L'étape m couvre le mois qui mène au point m (1er du mois m). Une restitution datée du
+  // mois m a lieu au point m : APRÈS les intérêts de l'étape (le capital des parents a
+  // rapporté jusque-là, et ces intérêts vous sont offerts), AVANT le versement du mois.
+  // Déjà passée ou dans le mois en cours (≤ 0) : appliquée tout de suite, avant tout intérêt.
+  const restitute = () => { for (const a of sim) a.totalAmount = a.own; };
+  if (plan.restitutionMonth !== undefined && plan.restitutionMonth <= 0) restitute();
   for (let m = 1; m <= ctx.horizon; m++) {
-    if (restitutionAt === m) for (const a of sim) a.totalAmount = a.own;
+    // L'étape m finit le 31 décembre : les intérêts de l'année des livrets réglementés sont
+    // crédités, tous à vous (ceux du capital des parents vous sont offerts).
+    const december = (ctx.firstMonth + m - 1) % 12 === 11;
     for (const a of sim) {
       if (a.type === AccountType.COMPTE_COURANT) continue;
-      const interest = a.totalAmount * (ctx.rates.get(a.id) || 0);
-      a.totalAmount += interest; a.own += interest;
+      const credited = applyMonthlyInterest(a, ctx.rateAt.get(a.id)?.(m - 1) ?? ctx.rates.get(a.id) ?? 0, december);
+      a.own += credited;
+      // Intérêts déjà NETS de l'impôt de sortie (netAnnualRate) : comptés avec les
+      // versements pour qu'un retrait simulé ne les impose pas une seconde fois.
+      if (!creditsInterestYearly(a.type) && a.totalDeposits !== undefined) a.totalDeposits += credited;
     }
+    if (plan.restitutionMonth === m) restitute();
     const dep = plan.deposit(m);
     if (dep > 0) {
       for (const st of computePlacementStrategy(dep, sim, ctx.fiscal, ctx.split)) {
@@ -269,7 +306,7 @@ const runPath = (ctx: PathContext, plan: PathPlan, record?: PurchaseOutcome[]): 
     }
     out.push(total());
   }
-  return out;
+  return { series: out, pending: pendingInterest(sim) };
 };
 
 const quantile = (sorted: number[], q: number) => {
@@ -289,7 +326,10 @@ export const simulate = (input: SimulatorInput): SimulatorResult => {
   const base = input.accounts.filter(a => a.type !== AccountType.IMMOBILIER);
   const ctx: PathContext = {
     base, fiscal: input.fiscal, split: input.split, horizon, today: input.today,
-    rates: new Map(base.map(a => [a.id, netAnnualRate(a, input.fiscal) / 100 / 12])),
+    rates: new Map(base.map(a => [a.id, netAnnualRate(a, input.fiscal, parseISODate(input.today)) / 100 / 12])),
+    rateAt: new Map(base.map(a => [a.id, netMonthlyRateSchedule(a, input.fiscal, parseISODate(input.today))])),
+    accruedThisYear: accruedSinceJanuary(base, parseISODate(input.today)),
+    firstMonth: parseISODate(input.today).getMonth(),
   };
 
   // Restitution : rien à simuler si elle est faite ou s'il n'y a plus de part parentale.
@@ -306,14 +346,16 @@ export const simulate = (input: SimulatorInput): SimulatorResult => {
   const paused = (m: number) => pauses.some(p => p.months > 0 && m >= p.month && m < p.month + p.months);
   const purchases = scenarios.filter((s): s is PurchaseScenario => s.kind === 'purchase');
 
-  const baseline = runPath(ctx, { deposit: () => planMonthly, restitutionMonth: plannedMonth, purchases: [] });
+  const baselinePath = runPath(ctx, { deposit: () => planMonthly, restitutionMonth: plannedMonth, purchases: [] });
+  const baseline = baselinePath.series;
   const outcomes: PurchaseOutcome[] = [];
   const scenarioPlan: PathPlan = {
     deposit: m => (paused(m) ? 0 : scenarioMonthly),
     restitutionMonth: scenarioRestMonth,
     purchases,
   };
-  const scenario = runPath(ctx, scenarioPlan, outcomes);
+  const scenarioPath = runPath(ctx, scenarioPlan, outcomes);
+  const scenario = scenarioPath.series;
 
   // Fourchette : vos mois passés tirés au sort (avec remise), décalés de l'écart entre le
   // montant du scénario et le plan actuel ; les mois en pause restent à 0.
@@ -328,12 +370,12 @@ export const simulate = (input: SimulatorInput): SimulatorResult => {
       ? 'Pas encore de mois terminé dans votre suivi : la fourchette apparaîtra après 3 mois.'
       : `Seulement ${history.length} mois terminé${history.length > 1 ? 's' : ''} dans votre suivi : il en faut au moins ${MIN_HISTORY_MONTHS} pour tirer une fourchette.`;
   } else {
-    const rng = input.rng ?? mulberry32(1);
+    const rng = input.rng ?? mulberry32(input.seed ?? 1);
     const shift = scenarioMonthly - planMonthly;
     const byMonth: number[][] = Array.from({ length: horizon + 1 }, () => []);
     for (let r = 0; r < runs; r++) {
       const draws = Array.from({ length: horizon + 1 }, () => history[Math.min(history.length - 1, Math.floor(rng() * history.length))]);
-      const path = runPath(ctx, { ...scenarioPlan, deposit: m => (paused(m) ? 0 : draws[m] + shift) });
+      const path = runPath(ctx, { ...scenarioPlan, deposit: m => (paused(m) ? 0 : draws[m] + shift) }).series;
       path.forEach((v, m) => byMonth[m].push(v));
     }
     bands = { p10: [], p50: [], p90: [] };
@@ -368,5 +410,6 @@ export const simulate = (input: SimulatorInput): SimulatorResult => {
     } : undefined,
     band: bands ? { runs, historyMonths: history.length } : null,
     bandUnavailable,
+    pendingInterest: { baseline: baselinePath.pending, scenario: scenarioPath.pending },
   };
 };

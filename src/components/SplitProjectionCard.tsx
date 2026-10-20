@@ -1,8 +1,9 @@
 // ================================================
 // FILE: src/components/SplitProjectionCard.tsx
 // Projection de l'épargne selon la répartition : 100 % Livret A, votre répartition (ou
-// 50/50), 100 % Assurance Vie, avec les taux NETS (prélèvements sociaux déduits pour l'AV)
-// et les plafonds des livrets. Part de votre part propre actuelle.
+// 50/50), 100 % Assurance Vie, avec les taux NETS (impôt et prélèvements sociaux d'un
+// retrait déduits, voir netAnnualRate) et les plafonds des livrets. Part de votre part
+// propre actuelle ; ce qui ne trouve pas de place reste compté sur le compte courant.
 // ================================================
 import React, { useMemo, useState } from 'react';
 import { SavingsAccount, AccountType, FiscalConfig } from '../types';
@@ -45,7 +46,7 @@ export const SplitProjectionCard: React.FC<Props> = ({ accounts, fiscalConfig, m
       <div>
         <h3 className="font-black text-slate-800 dark:text-slate-100 flex items-center gap-2"><LineChart className="w-5 h-5 text-indigo-600" /> Projection selon la répartition</h3>
         <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-          Taux nets : {la.name} {formatRate(netAnnualRate(la, fiscalConfig))} · {av.name} {formatRate(Math.round(netAnnualRate(av, fiscalConfig) * 100) / 100)} (après prélèvements sociaux).
+          Taux nets : {la.name} {formatRate(netAnnualRate(la, fiscalConfig))} · {av.name} {formatRate(Math.round(netAnnualRate(av, fiscalConfig) * 100) / 100)} (après impôt et prélèvements sociaux d'un retrait, selon l'ancienneté du contrat).
           Taux supposés constants, à partir de votre part actuelle{restitutionInMonths !== undefined ? ' ; la restitution du capital de vos parents est prise en compte' : ''}.
         </p>
       </div>
@@ -70,6 +71,11 @@ export const SplitProjectionCard: React.FC<Props> = ({ accounts, fiscalConfig, m
             <p className="text-[11px] text-slate-500 dark:text-slate-400">
               dont {formatEUR(sc.result.interest, 0)} d'intérêts nets · {sc.result.byAccount.map(b => `${b.name} ${formatEUR(b.amount, 0)}`).join(' · ')}
             </p>
+            {sc.result.unplaced >= 1 && (
+              <p className="text-[11px] text-amber-800 dark:text-amber-300">
+                {formatEUR(sc.result.unplaced, 0)} versés ne trouvent pas de place (livrets pleins) : ils restent sur le compte courant, sans intérêts.
+              </p>
+            )}
           </div>
         ))}
       </div>

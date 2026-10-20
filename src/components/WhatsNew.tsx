@@ -9,8 +9,9 @@ import { CHANGELOG, LATEST_VERSION, ChangelogEntry } from '../changelog';
 import { parseISODate } from '../lib/dates';
 import { Sparkles, X } from 'lucide-react';
 import { Modal } from './Modal';
+import { SEEN_VERSION_KEY } from './whatsNewGate';
 
-const SEEN_KEY = 'last_seen_version';
+const SEEN_KEY = SEEN_VERSION_KEY;
 
 const readSeen = (): string | null => lsGet(SEEN_KEY);
 const markSeen = () => lsSet(SEEN_KEY, LATEST_VERSION);

@@ -5,19 +5,22 @@
 //   Android / Windows Hello).
 // - Code PIN (repli si le matériel biométrique n'est pas disponible, ou par préférence).
 //
-// Important à comprendre : ceci n'est PAS une authentification serveur. L'app est un
-// site statique sans backend (GitHub Pages) : il n'existe personne pour vérifier
-// cryptographiquement la signature WebAuthn à distance. On se contente donc de la
-// promesse resolve/reject de `navigator.credentials.get()` — elle est authentique (l'OS
-// gère la vérification biométrique lui-même, aucune donnée biométrique ne transite en
-// JS), mais quelqu'un capable d'exécuter du JS arbitraire sur la page (devtools) peut
-// contourner ce verrou. C'est un frein contre l'accès occasionnel (téléphone déverrouillé
-// ramassé par quelqu'un d'autre), pas une garantie cryptographique absolue.
+// Important à comprendre : ceci n'est PAS une authentification serveur. Personne ne
+// vérifie la signature WebAuthn à distance : on se contente de la promesse
+// resolve/reject de `navigator.credentials.get()` — elle est authentique (l'OS gère la
+// vérification biométrique lui-même, aucune donnée biométrique ne transite en JS), mais
+// quelqu'un capable d'exécuter du JS arbitraire sur la page (devtools) peut contourner ce
+// verrou. C'est un frein contre l'accès occasionnel (téléphone déverrouillé ramassé par
+// quelqu'un d'autre), pas une garantie cryptographique absolue.
 //
 // Le credential est stocké en localStorage, donc PROPRE À CHAQUE APPAREIL/NAVIGATEUR —
 // jamais synchronisé sur Drive (une empreinte enregistrée sur un téléphone n'a aucun
 // sens sur un autre appareil).
+//
+// « Code oublié » ne retire JAMAIS le verrou sur place : demande, 24 heures d'attente, puis
+// reconnexion Google (voir « Réinitialisation » en bas de ce fichier et src/hooks/useAppLock.ts).
 // ================================================
+import { lsDel, lsGet, lsSet } from '../lib/storage';
 
 const CREDENTIAL_ID_KEY = 'app_lock_credential_id';
 const PIN_HASH_KEY = 'app_lock_pin_hash';
@@ -46,8 +49,9 @@ export const isLockAvailable = async (): Promise<boolean> => {
   }
 };
 
-export const isBiometricEnabled = (): boolean => !!localStorage.getItem(CREDENTIAL_ID_KEY);
-export const isPinEnabled = (): boolean => !!localStorage.getItem(PIN_HASH_KEY);
+// Lectures sans exception : un stockage bloqué ne doit pas faire planter le démarrage.
+export const isBiometricEnabled = (): boolean => !!lsGet(CREDENTIAL_ID_KEY);
+export const isPinEnabled = (): boolean => !!lsGet(PIN_HASH_KEY);
 // Verrouillé dès qu'AU MOINS une méthode est configurée sur cet appareil (biométrie et/ou
 // PIN peuvent être actives en même temps ; le PIN sert de repli si le matériel biométrique
 // n'est pas disponible, ou simplement par préférence).
@@ -75,6 +79,9 @@ export const enableLock = async (): Promise<void> => {
   }) as PublicKeyCredential | null;
 
   if (!credential) throw new Error('LOCK_SETUP_FAILED');
+  // Nouveau verrou pendant une réinitialisation (on n'atteint Paramètres qu'après la
+  // reconnexion Google) : les anciennes méthodes partent d'abord, la nouvelle reste.
+  completeLockReset();
   localStorage.setItem(CREDENTIAL_ID_KEY, bufferToBase64(credential.rawId));
 };
 
@@ -139,6 +146,12 @@ const pbkdf2Pin = async (pin: string, saltB64: string, iterations: number): Prom
 
 export const enablePin = async (pin: string): Promise<void> => {
   if (!/^\d{6,8}$/.test(pin)) throw new Error('PIN_INVALID_FORMAT');
+  // Comme enableLock : un nouveau code termine une réinitialisation en attente.
+  completeLockReset();
+  await storePin(pin);
+};
+
+const storePin = async (pin: string): Promise<void> => {
   const salt = bufferToBase64(crypto.getRandomValues(new Uint8Array(16)).buffer);
   const hash = await pbkdf2Pin(pin, salt, PIN_ITERATIONS);
   localStorage.setItem(PIN_SALT_KEY, salt);
@@ -172,12 +185,8 @@ export const getPinCooldownSeconds = (): number => {
 
 /**
  * Désactive TOUTES les méthodes de verrouillage sur cet appareil (biométrie + PIN).
- * Utilisé par l'écran de verrouillage lui-même en cas de code oublié / biométrie
- * indisponible : puisque ce verrou n'est qu'un frein de confort local (voir l'en-tête de
- * ce fichier) et non une protection cryptographique des données (qui restent sur Drive,
- * inaccessibles sans le vrai compte Google), il n'y a pas de risque de sécurité à l'ouvrir
- * après confirmation explicite de l'utilisateur — l'alternative serait un verrouillage
- * définitif de l'app sur cet appareil, bien pire.
+ * Jamais appelé directement par l'écran de verrouillage : seulement par
+ * `completeLockReset`, une fois la réinitialisation prouvée (voir plus bas).
  */
 export const resetAllLocks = (): void => {
   disableBiometric();
@@ -199,7 +208,8 @@ export const verifyPin = async (pin: string): Promise<boolean> => {
   if (ok) {
     localStorage.removeItem(PIN_FAILS_KEY);
     // Migration transparente de l'ancien format au premier déverrouillage réussi.
-    if (storedIterations === 0) await enablePin(pin).catch(() => { /* le legacy reste valide */ });
+    // Un ancien code à 4-5 chiffres ne respecte plus le format : il reste à l'ancien format.
+    if (storedIterations === 0 && /^\d{6,8}$/.test(pin)) await storePin(pin).catch(() => { /* le legacy reste valide */ });
   } else {
     try {
       const prev = JSON.parse(localStorage.getItem(PIN_FAILS_KEY) || '{"count":0}');
@@ -208,3 +218,116 @@ export const verifyPin = async (pin: string): Promise<boolean> => {
   }
   return ok;
 };
+
+// --- Réinitialisation (« Code oublié ») ---
+// Menace visée par ce verrou : quelqu'un qui ramasse l'appareil DÉVERROUILLÉ. « Code
+// oublié » ne doit donc pas suffire à entrer, même sur un téléphone où le compte Google du
+// propriétaire est ouvert (Android : quelques touches suffisent pour se reconnecter). D'où :
+//   0. une DEMANDE de retrait (`requestLockReset`), utilisable seulement 24 heures plus tard
+//      et pendant 7 jours. Pendant ce temps le verrou reste affiché, avec la demande et ses
+//      dates ; tout déverrouillage réussi (code ou biométrie) l'annule
+//      (`cancelLockResetRequest`) et le propriétaire en est averti ;
+//   1. puis la session de cet appareil est fermée (serveur compris) et ce qu'il garde effacé ;
+//   2. le verrou est seulement SUSPENDU (`markLockResetPending`) : les méthodes restent
+//      enregistrées, rien n'est lisible tant qu'on ne s'est pas reconnecté ;
+//   3. reconnexion Google complète, avec choix du compte et nouveau consentement ;
+//   4. le verrou n'est retiré (`completeLockReset`) qu'après un chargement Drive réussi.
+// Retrouver son code entre-temps : `cancelLockReset` réactive le verrou tel quel.
+// Limites connues (SECURITY.md) : ce verrou vit dans le stockage du navigateur. Effacer les
+// données du site, ou avancer l'horloge de l'appareil, contourne le délai ; et quiconque
+// peut se connecter au compte Google lit de toute façon le fichier sur Drive.
+const RESET_REQUESTED_KEY = 'app_lock_reset_requested';
+const RESET_PENDING_KEY = 'app_lock_reset_pending';
+const LAST_RESET_KEY = 'app_lock_last_reset';
+const HOUR_MS = 60 * 60 * 1000;
+/** Délai entre la demande de retrait et le moment où il devient possible. */
+export const LOCK_RESET_DELAY_MS = 24 * HOUR_MS;
+/** Durée de validité d'une demande, comptée depuis la demande. */
+export const LOCK_RESET_REQUEST_LIFETIME_MS = 7 * 24 * HOUR_MS;
+// Une demande datée de plus de 5 minutes dans le futur (horloge reculée depuis) est
+// ignorée, plutôt que de faire attendre sans fin.
+const CLOCK_TOLERANCE_MS = 5 * 60 * 1000;
+
+export interface LockResetRequest {
+  requestedAt: Date;
+  /** Le retrait est possible à partir de cette date. */
+  availableAt: Date;
+  /** La demande n'est plus valable à partir de cette date. */
+  expiresAt: Date;
+  /** Délai écoulé : le retrait peut commencer. */
+  ready: boolean;
+}
+
+/** Demande de retrait encore valable, ou `null`. */
+export const getLockResetRequest = (now: Date = new Date()): LockResetRequest | null => {
+  const raw = lsGet(RESET_REQUESTED_KEY);
+  const at = raw ? Date.parse(raw) : NaN;
+  if (!Number.isFinite(at)) return null;
+  const t = now.getTime();
+  if (at > t + CLOCK_TOLERANCE_MS || t >= at + LOCK_RESET_REQUEST_LIFETIME_MS) return null;
+  return {
+    requestedAt: new Date(at),
+    availableAt: new Date(at + LOCK_RESET_DELAY_MS),
+    expiresAt: new Date(at + LOCK_RESET_REQUEST_LIFETIME_MS),
+    ready: t >= at + LOCK_RESET_DELAY_MS,
+  };
+};
+
+/**
+ * « Code oublié » : enregistre la demande, le délai démarre. Une demande encore valable est
+ * gardée telle quelle (redemander ne repousse rien). Lève si le stockage refuse l'écriture.
+ */
+export const requestLockReset = (now: Date = new Date()): LockResetRequest => {
+  const existing = getLockResetRequest(now);
+  if (existing) return existing;
+  localStorage.setItem(RESET_REQUESTED_KEY, now.toISOString());
+  const created = getLockResetRequest(now);
+  if (!created) throw new Error('LOCK_RESET_REQUEST_NOT_SAVED');
+  return created;
+};
+
+/**
+ * Annule la demande (déverrouillage réussi, ou annulation explicite). Renvoie la demande
+ * qui était en cours, pour en avertir le propriétaire, ou `null`.
+ */
+export const cancelLockResetRequest = (now: Date = new Date()): LockResetRequest | null => {
+  const request = getLockResetRequest(now);
+  lsDel(RESET_REQUESTED_KEY);
+  return request;
+};
+
+/** Une réinitialisation attend la reconnexion Google (le verrou est suspendu). */
+export const isLockResetPending = (): boolean => !!lsGet(RESET_PENDING_KEY);
+
+/** Le verrou doit-il être affiché ? (Configuré, et pas suspendu par une réinitialisation.) */
+export const isLockActive = (): boolean => isLockEnabled() && !isLockResetPending();
+
+/**
+ * Suspend le verrou. À appeler seulement APRÈS avoir fermé la session de l'appareil, et
+ * une fois le délai de la demande écoulé (sinon lève `LOCK_RESET_NOT_READY`). Consomme la
+ * demande. Lève si le stockage refuse l'écriture (le verrou reste alors affiché).
+ */
+export const markLockResetPending = (now: Date = new Date()): void => {
+  if (!getLockResetRequest(now)?.ready) throw new Error('LOCK_RESET_NOT_READY');
+  localStorage.setItem(RESET_PENDING_KEY, now.toISOString());
+  lsDel(RESET_REQUESTED_KEY);
+};
+
+/** Code retrouvé : le verrou reprend tel qu'il était. */
+export const cancelLockReset = (): void => lsDel(RESET_PENDING_KEY);
+
+/**
+ * Après une reconnexion Google et un chargement Drive réussis : retire le verrou si une
+ * réinitialisation attendait, et note la date (affichée dans Paramètres, pour repérer un
+ * retrait qu'on n'aurait pas fait soi-même). Renvoie `true` si le verrou vient d'être retiré.
+ */
+export const completeLockReset = (now: Date = new Date()): boolean => {
+  if (!isLockResetPending()) return false;
+  resetAllLocks();
+  lsDel(RESET_PENDING_KEY);
+  lsSet(LAST_RESET_KEY, now.toISOString());
+  return true;
+};
+
+/** Date (ISO) du dernier retrait du verrou par « Code oublié », ou `null`. */
+export const getLastLockReset = (): string | null => lsGet(LAST_RESET_KEY);

@@ -228,18 +228,29 @@ describe('computeReminders', () => {
     });
   });
 
-  describe('dons', () => {
+  describe('déclaration de revenus', () => {
     const donations = [
       { id: 'd1', date: '2026-03-01', amount: 100, organization: 'Restos du cœur', rate: 75 as const, receiptReceived: true },
       { id: 'd2', date: '2026-11-20', amount: 50, organization: 'MSF', rate: 66 as const, receiptReceived: false },
       { id: 'd3', date: '2027-01-05', amount: 999, organization: 'Hors période', rate: 66 as const, receiptReceived: false },
     ];
-    it("rappelle en avril les dons de l'année écoulée et les reçus manquants", () => {
-      const r = computeReminders(base({ donations }), new Date(2027, 3, 10, 9), APP).find(x => x.key === 'donations:2026');
-      expect(r?.message.title).toMatch(/150\s€ de dons en 2026/);
-      expect(r?.message.body).toMatch(/108\s€ de réduction.*1 reçu fiscal manquant/);
+    it("rappelle en avril la déclaration, avec les dons de l'année écoulée et les reçus manquants", () => {
+      const r = computeReminders(base({ donations }), new Date(2027, 3, 10, 9), APP).find(x => x.key === 'tax-return:2026');
+      expect(r?.message.title).toBe('Déclaration des revenus 2026');
+      expect(r?.message.body).toMatch(/À vérifier : vos dons \(7UD, 7UF\)/);
+      expect(r?.message.body).toMatch(/fin mai ou début juin selon votre département/);
+      expect(r?.message.body).toMatch(/Dons : 150\s€, ≈ 108\s€ de réduction d'impôt, 1 reçu fiscal manquant/);
       expect(r?.message.url).toBe(`${APP}?view=donations`);
-      expect(computeReminders(base({ donations }), new Date(2027, 3, 25, 9), APP).some(x => x.key.startsWith('donations'))).toBe(false);
+      expect(computeReminders(base({ donations }), new Date(2027, 3, 25, 9), APP).some(x => x.key.startsWith('tax-return'))).toBe(false);
+    });
+
+    it('rappelle la déclaration à tout le monde, même sans don, avec les comptes à déclarer', () => {
+      const crypto = { id: 'c', name: 'Binance', type: AccountType.CRYPTO, institution: 'Binance', totalAmount: 500, ownedAmount: 500, parentalCapital: 0, heldAbroad: true, movements: [] };
+      const r = computeReminders(base({ accounts: [crypto] }), new Date(2027, 3, 12, 9), APP).find(x => x.key === 'tax-return:2026');
+      expect(r?.message.body).toMatch(/1 compte à l'étranger \(8UU\)/);
+      expect(r?.message.body).not.toMatch(/Dons/);
+      const none = computeReminders(base(), new Date(2027, 3, 12, 9), APP).find(x => x.key === 'tax-return:2026');
+      expect(none?.message.body).toBe('La déclaration en ligne ouvre en avril ; la date limite tombe fin mai ou début juin selon votre département.');
     });
   });
 
@@ -280,6 +291,21 @@ describe('computeReminders', () => {
     });
     it('se tait quand tout est coché', () => {
       expect(at(data({ 't:Revolut commun': { amount: 900 }, 's:la': { amount: 500 } }), 30)).toBeUndefined();
+    });
+    it('compte la somme en plus saisie dans le Pilotage pour cette paie, pas celle de la paie précédente', () => {
+      // Rien à placer d'habitude (0 €) : seule la prime saisie pour cette paie crée la ligne d'épargne.
+      const withExtra = (period?: string) => {
+        const d = data();
+        return { ...d, config: { ...d.config, paydayAmount: 0, ...(period ? { payAdjustment: { period, extra: 300 } } : {}) } };
+      };
+      expect(at(withExtra(), 30)?.message.title).toBe('1 virement de paie à faire ou à cocher');
+      expect(at(withExtra('2026-09'), 30)?.message.title).toBe('2 virements de paie à faire ou à cocher');
+      expect(at(withExtra('2026-08'), 30)?.message.title).toBe('1 virement de paie à faire ou à cocher');
+      // Le rappel du jour de paie annonce le même objectif que le Pilotage.
+      const pay = (d: GlobalAppData) => computeReminders(d, new Date(2026, 8, 27, 9), APP).find(x => x.key === 'payday:2026-09')?.message.title;
+      const d = data();
+      expect(pay({ ...d, config: { ...d.config, payAdjustment: { period: '2026-09', extra: 300 } } })).toMatch(/^Salaire versé : 800\s€ à placer$/);
+      expect(pay({ ...d, config: { ...d.config, payAdjustment: { period: '2026-08', extra: 300 } } })).toMatch(/^Salaire versé : 500\s€ à placer$/);
     });
   });
 
@@ -393,11 +419,12 @@ describe('mode discret', () => {
   it('retire aussi les montants des titres qui en portent', () => {
     const [pay, don, unknown] = applyDiscreetMode([
       r('payday:2026-10', 'Salaire versé : 2 000 € à placer', '900 € Revolut commun · Épargne : 500 € sur Livret A.'),
-      r('donations:2026', 'Déclaration : 150 € de dons en 2026', '≈ 108 € de réduction.'),
+      r('tax-return:2026', 'Déclaration des revenus 2026', 'À vérifier : vos dons (7UD, 7UF). Dons : 150 €, ≈ 108 € de réduction.'),
       r('nouveau:1', 'Titre 12 €', 'Corps 12 €'),
     ]);
     expect(pay.message).toMatchObject({ title: 'Salaire versé', body: 'Votre rappel de paie est prêt.' });
-    expect(don.message.title).toBe('Déclaration de vos dons');
+    // Un titre sans montant (l'année seule) est gardé ; le corps devient générique.
+    expect(don.message).toMatchObject({ title: 'Déclaration des revenus 2026', body: 'Votre aide à la déclaration de revenus est prête dans l’app.' });
     expect(unknown.message).toMatchObject({ title: 'Pécule', body: 'Ouvrez Pécule pour voir le détail.' });
     expect(JSON.stringify([pay, don, unknown].map(x => x.message))).not.toMatch(/\d\s?€/);
   });

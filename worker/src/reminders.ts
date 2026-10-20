@@ -33,6 +33,8 @@ import { DEFAULT_FISCAL_CONFIG } from '../../src/constants';
 import { lepTimelineFromData, describeLepTimeline } from '../../src/lib/lep';
 import { computeGoodMonths, computePayReview, motivationSettings } from '../../src/lib/motivation';
 import { isReminderEnabled } from '../../src/lib/notificationPrefs';
+import { computeMonthTarget } from '../../src/lib/payAdjustment';
+import { buildTaxReturnReminder } from '../../src/lib/taxReturn';
 import type { PushMessage } from './webpush';
 
 export interface Reminder {
@@ -184,7 +186,8 @@ export const computeReminders = (data: GlobalAppData, today: CivilDate | Date, a
     const payPeriod = payPeriodOf(payday, now);
     const daysSincePay = todayN - dayNumberOfLocal(payPeriod.payDate);
     if (daysSincePay >= 0 && daysSincePay < PAYDAY_WINDOW_DAYS) {
-      const amount = data.config.paydayAmount ?? computeMonthlySavingsCapacity(data);
+      // Même objectif que le Pilotage et l'Accueil (réglages de cette paie compris).
+      const amount = computeMonthTarget(data, now).total;
       const steps = amount > 0
         ? computePlacementStrategy(amount, accounts, data.fiscalConfig || DEFAULT_FISCAL_CONFIG, activeSavingsSplit(data.config, now))
         : [];
@@ -218,7 +221,7 @@ export const computeReminders = (data: GlobalAppData, today: CivilDate | Date, a
       const checklist = data.payChecklist && data.payChecklist.month === period.key ? data.payChecklist : undefined;
       let lines = checklist?.lines;
       if (!lines) {
-        const amount = data.config.paydayAmount ?? computeMonthlySavingsCapacity(data);
+        const amount = computeMonthTarget(data, now).total;
         const steps = amount > 0 ? computePlacementStrategy(amount, accounts, data.fiscalConfig || DEFAULT_FISCAL_CONFIG, activeSavingsSplit(data.config, now)) : [];
         lines = buildPayLines(computePayTransfers({
           expenses: data.expenses || [],
@@ -383,22 +386,27 @@ export const computeReminders = (data: GlobalAppData, today: CivilDate | Date, a
   }
 
 
-  // 9. Avril, ouverture de la déclaration en ligne : les dons de l'année écoulée à déclarer.
+  // 9. Avril, ouverture de la déclaration en ligne (le 9 avril en 2026) : rappel pour tout
+  //    le monde, avec les points de l'aide à la déclaration qui concernent l'utilisateur
+  //    (intérêts, PER, comptes à l'étranger, crypto, dons…). Voir src/lib/taxReturn.ts.
   if (M === 3 && D >= 10 && D <= 20) {
-    const sum = computeDonationSummary(data.donations || [], Y - 1);
-    if (sum.count > 0) {
-      const missing = sum.missingReceipts.length;
-      out.push({
-        key: `donations:${sum.year}`,
-        message: {
-          title: `Déclaration : ${eur(sum.total)} de dons en ${sum.year}`,
-          body: `≈ ${eur(sum.reduction)} de réduction d'impôt.` +
-            (missing > 0 ? ` ${missing} reçu${missing > 1 ? 's' : ''} fiscal${missing > 1 ? 'aux' : ''} manquant${missing > 1 ? 's' : ''}.` : ' Tous les reçus sont là.'),
-          url: link('donations'),
-          tag: 'donations',
-        },
-      });
-    }
+    const incomeYear = Y - 1;
+    const reminder = buildTaxReturnReminder(data, incomeYear);
+    const sum = computeDonationSummary(data.donations || [], incomeYear);
+    const missing = sum.missingReceipts.length;
+    const donations = sum.count > 0
+      ? ` Dons : ${eur(sum.total)}, ≈ ${eur(sum.reduction)} de réduction d'impôt` +
+        (missing > 0 ? `, ${missing} reçu${missing > 1 ? 's' : ''} fiscal${missing > 1 ? 'aux' : ''} manquant${missing > 1 ? 's' : ''}.` : ', tous les reçus sont là.')
+      : '';
+    out.push({
+      key: `tax-return:${incomeYear}`,
+      message: {
+        title: reminder.title,
+        body: reminder.detail + donations,
+        url: link('donations'),
+        tag: 'tax-return',
+      },
+    });
   }
 
 
@@ -494,7 +502,7 @@ const DISCREET_BODIES: Record<string, string> = {
   'payday-followup': 'Des virements de paie restent à faire ou à cocher.',
   sub: 'Un prélèvement approche : le détail est dans l’app.',
   recap: 'Le point de paie est prêt.',
-  donations: 'Le récapitulatif de vos dons est prêt.',
+  'tax-return': 'Votre aide à la déclaration de revenus est prête dans l’app.',
   'restitution-prep': 'La restitution approche : le détail est dans l’app.',
   'restitution-day': 'C’est le jour de la restitution : le détail est dans l’app.',
   'year-review': 'Le bilan de l’année est prêt dans Historique.',
@@ -502,7 +510,6 @@ const DISCREET_BODIES: Record<string, string> = {
 // Titres qui portent eux-mêmes un montant : seule partie remplacée d'un titre.
 const DISCREET_TITLES: Record<string, string> = {
   payday: 'Salaire versé',
-  donations: 'Déclaration de vos dons',
   'restitution-day': 'Restitution du capital de vos parents',
 };
 const GENERIC_BODY = 'Ouvrez Pécule pour voir le détail.';

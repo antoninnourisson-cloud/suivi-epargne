@@ -1,5 +1,5 @@
 // Alertes chiffrées en euros (lib/alerts) dans « À faire », en mode démo (?demo=1).
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page } from './fixtures';
 import { LATEST_VERSION } from '../src/changelog';
 
 const openDemo = async (page: Page) => {
@@ -32,5 +32,8 @@ test.describe('Alertes chiffrées (démo)', () => {
     const alert = list.getByRole('listitem').filter({ hasText: /Après la restitution/ });
     await expect(alert).toContainText(/7\s000\s€ de place sur le Livret A/);
     await expect(alert.getByTestId('gain-chip')).toContainText(/€\/an/);
+    // Le gain n'est que l'écart de taux ; les intérêts offerts par les parents s'arrêtent.
+    await expect(alert).toContainText(/de plus que sur l'Assurance vie/);
+    await expect(alert).toContainText(/s'arrêtent à la restitution/);
   });
 });

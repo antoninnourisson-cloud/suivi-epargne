@@ -101,7 +101,9 @@ d'accueil (Partager → *Sur l'écran d'accueil*).
 
 - **Ce que détient le serveur** : ton refresh token Google (portée : fichiers créés par l'app
   sur Drive), chiffré en AES-256-GCM avec une clé stockée à part, dans les
-  secrets Cloudflare ; ton e-mail et ton identifiant Google ; les empreintes des sessions ; les
+  secrets Cloudflare ; ton e-mail et ton identifiant Google (tous trois gardés seulement tant
+  qu'une session ou une notification s'en sert : effacés à la déconnexion du dernier appareil,
+  et 61 jours au plus sans usage, voir `src/userRecords.ts`) ; les empreintes des sessions ; les
   abonnements push ; des marqueurs « déjà envoyé » (~400 jours) ; l'état de la tâche
   quotidienne ; si tu l'as activée, tes sauvegardes de secours **chiffrées par l'app**
   (illisibles pour lui) ; et des données publiques : le dernier relevé de la veille fiscale
@@ -153,7 +155,7 @@ Toutes les routes marquées 🔒 exigent `Authorization: Bearer <session>` ; san
 | `GET /push/devices` 🔒 | — | `{"devices":[{"id","host","createdAt","current"}]}` |
 | `POST /push/remove` 🔒 | `{"id"}` ou `{"endpoint"}` | `{"ok":true,"removed":bool,"devices":n}` |
 | `POST /push/test` 🔒 | — | `{"ok":bool,"delivered":n}` |
-| `GET /status` | — | `{"ok","cron":{"lastRunAt","ok"}}` (surveillance, sans donnée personnelle) |
+| `GET /status` | — | `{"ok","cron":{"lastRunAt","ok"},"site":{"checkedAt","ok","failing","hsts"}}` (surveillance, sans donnée personnelle ; `site` : pages publiques, et script principal cité par `index.html` qui doit répondre 200 en JavaScript, pour repérer un écran blanc) |
 | `PUT /backup` 🔒 | copie chiffrée (≤ 2 Mo) | `{"date"}` ; 8 copies gardées |
 | `GET /backup` 🔒 | — | dates des copies ; `GET /backup/:date` : la copie chiffrée |
 | `DELETE /backup` 🔒 | — | supprime toutes les copies |

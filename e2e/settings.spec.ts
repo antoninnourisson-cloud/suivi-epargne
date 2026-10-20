@@ -1,6 +1,6 @@
 // Paramètres en mode démo (?demo=1) : cartes repliables au clavier, cartes ouvertes
 // mémorisées, saisie gardée dans une carte refermée, liens directs vers une carte.
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page } from './fixtures';
 import { LATEST_VERSION } from '../src/changelog';
 
 const openSettings = async (page: Page, query = '') => {

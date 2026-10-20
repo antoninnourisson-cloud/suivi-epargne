@@ -183,6 +183,8 @@ const livretFullForecast = (input: AlertsInput): Alert | null => {
     const month = new Date(input.today.getFullYear(), input.today.getMonth() + m, 1);
     if (restitutionAt && !restituted && restitutionAt <= formatISODay(month)) { sim = accountsAfterRestitution(sim); restituted = true; }
     for (const st of computePlacementStrategy(monthly, sim, fiscal)) {
+      // Une étape sans compte (livrets pleins, ni AV ni PEA) laisse l'argent sur le compte
+      // courant : elle ne remplit aucun livret, c'est tout ce qui compte ici.
       if (st.infoOnly || !st.accountId) continue;
       const a = sim.find(x => x.id === st.accountId);
       if (a) { a.totalAmount += st.fillAmount; a.ownedAmount += st.fillAmount; }
@@ -193,7 +195,7 @@ const livretFullForecast = (input: AlertsInput): Alert | null => {
     // La suite : où le plan enverra l'argent le mois d'après.
     const next = computePlacementStrategy(monthly, sim, fiscal).find(st => st.accountId !== full.id && st.fillAmount > 0);
     const nextAccount = next?.accountId ? sim.find(a => a.id === next.accountId) : undefined;
-    const nextRate = nextAccount ? netAnnualRate(nextAccount, fiscal) : next?.type === AccountType.LDDS ? next.rate || 0 : 0;
+    const nextRate = nextAccount ? netAnnualRate(nextAccount, fiscal, month) : next?.type === AccountType.LDDS ? next.rate || 0 : 0;
     const nextText = nextAccount ? `prévoyez la suite sur ${nextAccount.type === AccountType.ASSURANCE_VIE ? "l'" : 'le '}${nextAccount.name}`
       : next?.type === AccountType.LDDS ? 'prévoyez d\'ouvrir un LDDS pour la suite'
       : 'prévoyez la suite (PEA ou assurance vie)';
@@ -219,20 +221,48 @@ const livretFullForecast = (input: AlertsInput): Alert | null => {
 // Règle 4 : place libérée sous les plafonds par la restitution
 // ---------------------------------------------------------------------------
 
+/**
+ * Où le plan enverrait l'argent si les livrets réglementés étaient pleins : c'est là que
+ * serait allé l'argent qui remplira la place rendue. Taux net (impôts et prélèvements
+ * sociaux d'un retrait déduits), 0 si l'argent resterait sur le compte courant.
+ */
+const fallbackDestination = (input: AlertsInput, asOf: Date): { label: string; rate: number } => {
+  const fiscal = input.fiscalConfig;
+  const full = usableAccounts(input)
+    .filter(a => a.type !== AccountType.IMMOBILIER)
+    .map(a => (REGULATED_TYPES.includes(a.type) ? { ...a, totalAmount: Math.max(a.totalAmount, ceilingOf(a, fiscal)) } : a));
+  const step = computePlacementStrategy(1000, full, fiscal).find(st => !st.infoOnly && st.fillAmount > 0);
+  const account = step?.accountId ? full.find(a => a.id === step.accountId) : undefined;
+  if (account) return { label: `${account.type === AccountType.ASSURANCE_VIE ? "l'" : 'le '}${account.name}`, rate: netAnnualRate(account, fiscal, asOf) };
+  if (step?.type === AccountType.LDDS) return { label: 'un LDDS à ouvrir', rate: step.rate || 0 };
+  return { label: 'le compte courant', rate: 0 };
+};
+
+/**
+ * Les intérêts du capital des parents vous sont DÉJÀ offerts chaque année : la restitution
+ * les arrête. Le seul gain de la place rendue est l'écart de taux entre le livret et
+ * l'endroit où votre argent serait allé sinon (fallbackDestination).
+ */
 const restitutionRoom = (input: AlertsInput): Alert | null => {
   const r = input.restitution;
   if (!r?.plannedDate || r.done) return null;
   const rows = input.accounts.filter(a => REGULATED_TYPES.includes(a.type) && a.parentalCapital > 0);
   if (rows.length === 0) return null;
-  const gain = rows.reduce((s, a) => s + a.parentalCapital * (a.interestRate || 0) / 100, 0);
+  const fallback = fallbackDestination(input, parseISODate(r.plannedDate));
+  const offered = rows.reduce((s, a) => s + a.parentalCapital * (a.interestRate || 0) / 100, 0);
+  const gain = rows.reduce((s, a) => s + a.parentalCapital * Math.max(0, (a.interestRate || 0) - fallback.rate) / 100, 0);
   const parts = rows.map((a, i) => `${eur(a.parentalCapital)} ${i === 0 ? 'de place ' : ''}sur le ${a.name}`);
+  const worth = gain >= MIN_GAIN_PER_YEAR
+    ? `environ ${eur(gain)} d'intérêts par an de plus que sur ${fallback.label} (${formatRate(fallback.rate)} net).`
+    : `peu ou pas d'intérêts en plus que sur ${fallback.label} (${formatRate(fallback.rate)} net), mais un argent disponible à tout moment.`;
   return {
     id: `restitution-room-${r.plannedDate}`,
     kind: 'restitution-room',
     tone: 'info',
     title: `Après la restitution (${fullDate(r.plannedDate)}), ${listFr(parts)}.`,
-    detail: `Votre plan de placement remplira cette place en priorité : environ ${eur(gain)} d'intérêts par an une fois remplie, pour vous.`,
-    gain: gain >= MIN_GAIN_PER_YEAR ? { amount: gain, per: 'an', label: "d'intérêts par an une fois remplie" } : undefined,
+    detail: `Votre plan de placement remplira cette place en priorité : ${worth}`
+      + (offered >= 1 ? ` Les intérêts du capital de vos parents, qu'ils vous offrent (environ ${eur(offered)} par an), s'arrêtent à la restitution.` : ''),
+    gain: gain >= MIN_GAIN_PER_YEAR ? { amount: gain, per: 'an', label: "d'intérêts par an en plus une fois remplie" } : undefined,
     action: { label: 'Voir la part parentale', view: 'parental' },
   };
 };

@@ -7,14 +7,16 @@
 import { GlobalAppData, AccountType } from '../types';
 import { formatISODay, parseISODate } from './dates';
 import {
-  nextSubscriptionDate, isMonthlyCharge, computeMaturityCountdown, tracksDeposits,
+  nextSubscriptionDate, isMonthlyCharge, computeMaturityCountdown, describeMaturity, computePeeAvailability, tracksDeposits,
   computeMonthlySavingsCapacity, computeMonthSavedAmount, computeAccruedInterest,
   computeAccountBalanceAtDate, computeMonthlyPay, computeDonationSummary,
-  computeAccruedParentalInterest, effectivePayday, subscriptionMonthlyCost,
+  computeAccruedParentalInterest, effectivePayday, subscriptionMonthlyCost, payPeriodOf,
 } from './finance';
+import { computeMonthTarget } from './payAdjustment';
 import { DEFAULT_FISCAL_CONFIG } from '../constants';
 import { signedAmount } from './money';
 import { lepTimelineFromData } from './lep';
+import { buildTaxReturnChecklist, taxReturnTopics } from './taxReturn';
 
 export type AgendaKind = 'payday' | 'subscription' | 'recurring' | 'rates' | 'restitution' | 'fiscal' | 'statement' | 'donations' | 'review' | 'maturity' | 'lep';
 
@@ -43,14 +45,18 @@ export const buildAgenda = (data: GlobalAppData, asOfDate: Date = new Date(), mo
   const events: AgendaEvent[] = [];
   const push = (d: Date, e: Omit<AgendaEvent, 'date'>) => { if (d >= today && d <= horizon) events.push({ ...e, date: formatISODay(d) }); };
 
-  // Paies (les trois prochaines).
+  // Paies (les trois prochaines). Le jour de la paie, la ligne reprend l'objectif de la paie
+  // en cours (réglages du Pilotage compris, comme la jauge de l'Accueil) ; les suivantes, le
+  // montant habituel (rappel de paie ou capacité calculée).
   const payday = data.config?.paydayDay;
   if (payday) {
-    const amount = data.config.paydayAmount ?? computeMonthlySavingsCapacity(data);
+    const recurring = data.config.paydayAmount ?? computeMonthlySavingsCapacity(data);
+    const currentPayDay = formatISODay(payPeriodOf(payday, asOfDate).payDate);
     for (let k = 0, found = 0; found < 3 && k < 4; k++) {
       const y = today.getFullYear(), m = today.getMonth() + k;
       const d = new Date(y, m, effectivePayday(payday, new Date(y, m, 1).getFullYear(), new Date(y, m, 1).getMonth()));
       if (d < today) continue;
+      const amount = formatISODay(d) === currentPayDay ? computeMonthTarget(data, asOfDate).total : recurring;
       push(d, { kind: 'payday', title: 'Paie', detail: amount > 0 ? 'Virements à faire et à cocher dans le Pilotage' : undefined, amount: amount > 0 ? amount : undefined, view: 'pilot' });
       found++;
     }
@@ -108,22 +114,32 @@ export const buildAgenda = (data: GlobalAppData, asOfDate: Date = new Date(), mo
     push(new Date(y, 0, 2), { kind: 'review', title: `Bilan de l'année ${y - 1}`, detail: 'Dans Historique', view: 'history' });
     if (hasTracked) push(new Date(y, 0, 15), { kind: 'statement', title: 'Relevés annuels des placements', detail: accounts.some(a => a.type === AccountType.ASSURANCE_VIE) ? 'Valeur au 31/12, versements et taux servi du fonds euros' : 'Valeur au 31/12 et versements', view: 'update' });
     push(new Date(y, 0, 20), { kind: 'fiscal', title: 'Paramètres fiscaux de l\'année', detail: 'Barème de l\'impôt, plafond LEP, abattement', view: 'settings' });
-    if ((data.donations || []).length > 0) {
-      const d = computeDonationSummary(data.donations || [], y - 1);
-      push(new Date(y, 3, 10), { kind: 'donations', title: 'Déclaration de revenus', detail: d.count > 0 ? `Dons ${y - 1} à déclarer` : 'Ouverture de la déclaration en ligne', amount: d.count > 0 ? d.total : undefined, view: 'donations' });
-    }
+    // Déclaration de revenus, pour tout le monde : l'ouverture en ligne tombe en avril (le
+    // 9 avril en 2026) ; le calendrier exact n'est publié qu'au printemps (voir lib/taxReturn).
+    const topics = taxReturnTopics(buildTaxReturnChecklist(data, y - 1));
+    push(new Date(y, 3, 10), {
+      kind: 'fiscal', title: `Déclaration des revenus ${y - 1}`,
+      detail: `${topics.length > 0 ? `${topics.length} point${topics.length > 1 ? 's' : ''} à vérifier · ` : ''}ouverture en ligne en avril, date limite fin mai ou début juin selon le département`,
+      view: 'donations',
+    });
   }
 
   // Maturités fiscales (PEA, Assurance Vie…).
   const later: AgendaEvent[] = [];
   for (const a of accounts) {
-    const m = computeMaturityCountdown(a, data.fiscalConfig || DEFAULT_FISCAL_CONFIG, asOfDate);
-    if (!m) continue;
-    const e: AgendaEvent = {
-      date: m.maturityDate, kind: 'maturity', title: `${a.name} : maturité fiscale`,
-      detail: m.regimeAfter === 'EXONERE_IR' ? 'Gains exonérés d\'impôt sur le revenu' : 'Taux réduit et abattement annuel', view: 'yield',
-    };
-    if (parseISODate(m.maturityDate) <= horizon) events.push(e); else later.push(e);
+    const fiscal = data.fiscalConfig || DEFAULT_FISCAL_CONFIG;
+    let e: AgendaEvent | undefined;
+    if (a.type === AccountType.PEE) {
+      // PEE : pas de maturité fiscale (toujours sans impôt sur le revenu), mais chaque
+      // versement se débloque 5 ans après sa date.
+      const r = computePeeAvailability(a, fiscal, asOfDate).nextRelease;
+      if (r) e = { date: r.date, kind: 'maturity', title: `${a.name} : versements débloqués`, detail: r.last ? 'Tout votre plan devient disponible' : 'Une partie de votre plan devient disponible', amount: Math.round(r.amount), view: 'accounts' };
+    } else {
+      const m = computeMaturityCountdown(a, fiscal, asOfDate);
+      if (m) e = { date: m.maturityDate, kind: 'maturity', title: `${a.name} : maturité fiscale`, detail: describeMaturity(a, m, fiscal).detail, view: 'yield' };
+    }
+    if (!e) continue;
+    if (parseISODate(e.date) <= horizon) events.push(e); else later.push(e);
   }
 
   events.sort((a, b) => a.date.localeCompare(b.date) || a.kind.localeCompare(b.kind));

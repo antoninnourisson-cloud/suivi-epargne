@@ -10,11 +10,14 @@ import { TodoList, TodoSpec } from './TodoList';
 import type { View } from '../navigation';
 import type { EmergencyFund } from '../lib/planning';
 import type { AgendaEvent } from '../lib/agenda';
+import type { TaxReturnAlert } from '../lib/taxReturn';
+import { revealElementById } from './revealElement';
+import { lsGet, lsSet } from '../lib/storage';
 import { Sprout, LifeBuoy, Download, CalendarDays, ChevronDown, ChartLine, Wallet, ArrowRightLeft, Gift } from 'lucide-react';
 import { lazyWithRetry } from './ErrorBoundary';
 import { SavingsAccount, PortfolioSnapshot, AccountType, Expense, FiscalConfig, WorkBenefits, RecurringMovement, Subscription, PayslipRecord } from '../types';
-import { Landmark, CalendarClock, Save, AlertTriangle, Trash2, Clock, TrendingUp, TrendingDown, PiggyBank, Percent, ShieldAlert, Repeat, FileWarning } from 'lucide-react';
-import { computeAccruedParentalInterest, computeRecentSavingsRate, computeAccountBalanceAtDate, findStaleRegulatedRates, findDueRecurring, computeMonthSavedAmount, computeSavedSince, payPeriodOf, computeSavingsRateHistory, computeUnlockCost, findFiscalReview, applyTaxScale, nextSubscriptionDate, findAvRateUpdatesDue, suggestedRestitutionDate } from '../lib/finance';
+import { Landmark, ClipboardCheck, CalendarClock, Save, AlertTriangle, Trash2, Clock, TrendingUp, TrendingDown, PiggyBank, Percent, ShieldAlert, Repeat, FileWarning } from 'lucide-react';
+import { computeAccruedParentalInterest, computeRecentSavingsRate, computeAccountBalanceAtDate, findStaleRegulatedRates, findDueRecurring, computeMonthSavedAmount, computeSavedSince, payPeriodOf, computeSavingsRateHistory, computeUnlockCost, findFiscalReview, applyTaxScale, nextSubscriptionDate, findAvRateUpdatesDue, suggestedRestitutionDate, computeAvailabilityBreakdown } from '../lib/finance';
 import { parseISODate, formatISODay, daysBetween, localTodayISO } from '../lib/dates';
 import { Button, Card, DeltaBadge, MoneyText, PageHeader, SegmentedButton, Sparkline, StatTile } from './ui';
 import { AvailabilityBar, type AvailabilitySegment } from './dashboard/AvailabilityBar';
@@ -41,8 +44,11 @@ interface DashboardProps {
   // Enregistre l'échéance proposée (passe par le même chemin que l'ajout rapide : notif
   // parents, arrondis, toast).
   onRecordRecurring?: (r: RecurringMovement, date: string) => void;
-  // Objectif d'épargne du mois : montant du rappel de paie, sinon capacité du Pilotage.
+  // Épargne prévue chaque mois : montant du rappel de paie, sinon capacité du Pilotage.
   monthPlan?: number;
+  // Objectif de la paie en cours (jauge) : comme le Pilotage, avec la capacité et la somme en
+  // plus saisies pour cette paie (lib/payAdjustment). Absent = monthPlan.
+  monthGoal?: number;
   // Paie nette mensuelle, pour le taux d'épargne.
   monthlyPay?: number;
   paydayDay?: number;
@@ -71,6 +77,8 @@ interface DashboardProps {
   onSetEmergencyMonths?: (m: number) => void;
   agendaNext?: AgendaEvent[];
   lepTimeline?: LepTimeline | null;
+  // Saison de la déclaration de revenus (lib/taxReturn) : null hors saison.
+  taxReturnAlert?: TaxReturnAlert | null;
   // Motivation (lib/motivation) : bons mois, jalons, point de paie, contrôle des fiches.
   payslips?: PayslipRecord[];
   gamification?: boolean;
@@ -86,7 +94,7 @@ interface DashboardProps {
   onValidatePayReview?: (key: string) => void;
 }
 
-export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalConfig, onDeleteAccount, recurringMovements = [], onRecordRecurring, monthPlan, monthlyPay = 0, paydayDay, trackingStartDate, subscriptions = [], onUpdateFiscalConfig, onOpenSettings, onUpdateAccounts, payRaise, onAcceptPayRaise, onDismissPayRaise, onNavigate, onAddAccount, lastExportAt, onExport, emergency, onSetEmergencyMonths, agendaNext = [], lepTimeline, payslips = [], gamification, goodMonthThreshold, milestonesSeen, payReviewsDone, rfrByYear, restitutionDoneOn, restitutionPlannedDate, onMarkMilestonesSeen, onValidatePayReview }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalConfig, onDeleteAccount, recurringMovements = [], onRecordRecurring, monthPlan, monthGoal, monthlyPay = 0, paydayDay, trackingStartDate, subscriptions = [], onUpdateFiscalConfig, onOpenSettings, onUpdateAccounts, payRaise, onAcceptPayRaise, onDismissPayRaise, onNavigate, onAddAccount, lastExportAt, onExport, emergency, onSetEmergencyMonths, agendaNext = [], lepTimeline, taxReturnAlert, payslips = [], gamification, goodMonthThreshold, milestonesSeen, payReviewsDone, rfrByYear, restitutionDoneOn, restitutionPlannedDate, onMarkMilestonesSeen, onValidatePayReview }) => {
   const [dateRange, setDateRange] = useState<{ start: string; end: string }>(() => {
     try {
         const stored = localStorage.getItem('dashboard_date_range');
@@ -169,42 +177,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalC
     return Math.floor((Date.now() - parseISODate(latest).getTime()) / (1000 * 3600 * 24));
   }, [accounts]);
 
-  // Les seuils de maturité viennent de fiscalConfig.legalMaturity (comme lib/finance.ts et
-  // l'Horloge fiscale) : ils étaient codés en dur ici (5/8), seul écran incapable de suivre
-  // la config — trois réponses différentes possibles pour le même compte.
-  const getAccountStatus = useCallback((account: SavingsAccount): 'AVAILABLE' | 'TAX_LOCKED' | 'HARD_LOCKED' => {
-    const { pea, assuranceVie, pee } = fiscalConfig.legalMaturity;
-    if (account.type === AccountType.PEE) {
-        const now = new Date();
-        if (account.contractEndDate && parseISODate(account.contractEndDate) <= now) return 'AVAILABLE';
-        if (account.openingDate) {
-            const openDate = parseISODate(account.openingDate);
-            const ageInYears = (now.getTime() - openDate.getTime()) / (1000 * 3600 * 24 * 365.25);
-            return ageInYears >= pee ? 'AVAILABLE' : 'HARD_LOCKED';
-        }
-        return 'HARD_LOCKED';
-    }
-    if ([AccountType.IMMOBILIER, AccountType.PER, AccountType.AUTRE].includes(account.type)) return 'HARD_LOCKED';
-    if (!account.openingDate) return 'AVAILABLE';
-    const openDate = parseISODate(account.openingDate);
-    const now = new Date();
-    const ageInYears = (now.getTime() - openDate.getTime()) / (1000 * 3600 * 24 * 365.25);
-    if (account.type === AccountType.PEA) return ageInYears < pea ? 'TAX_LOCKED' : 'AVAILABLE';
-    if (account.type === AccountType.ASSURANCE_VIE) return ageInYears < assuranceVie ? 'TAX_LOCKED' : 'AVAILABLE';
-    return 'AVAILABLE';
-  }, [fiscalConfig]);
-
-  const availabilityStats = useMemo(() => {
-    let available = 0; let taxLocked = 0; let hardLocked = 0;
-    accounts.forEach(acc => {
-      const status = getAccountStatus(acc);
-      const owned = ownedToday(acc); // même convention "à ce jour" que la carte du total
-      if (status === 'AVAILABLE') available += owned;
-      else if (status === 'TAX_LOCKED') taxLocked += owned;
-      else hardLocked += owned;
-    });
-    return { available, taxLocked, hardLocked };
-  }, [accounts, getAccountStatus]);
+  // Disponibilité (lib/finance/availability) : seuils de fiscalConfig.legalMaturity ; un PEE
+  // se débloque versement par versement (5 ans chacun), pas 5 ans après son ouverture.
+  // Même convention « à ce jour » que la carte du total (ownedToday).
+  const availabilityStats = useMemo(
+    () => computeAvailabilityBreakdown(accounts, fiscalConfig, ownedToday),
+    [accounts, fiscalConfig]
+  );
 
   const unlockCost = useMemo(() => computeUnlockCost(accounts, fiscalConfig), [accounts, fiscalConfig]);
   const fiscalReview = useMemo(() => findFiscalReview(fiscalConfig), [fiscalConfig]);
@@ -381,6 +360,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalC
     if (!staleRates) return;
     try { localStorage.setItem('dismissed_rate_revision', staleRates.revision.key); } catch { /* non bloquant */ }
     setDismissedRateRevision(staleRates.revision.key);
+  };
+
+  // --- DÉCLARATION DE REVENUS (avril à début juin) ---
+  // « C'est déclaré » éteint le rappel jusqu'à la saison suivante (clé locale, comme ci-dessus).
+  const [taxReturnFiled, setTaxReturnFiled] = useState(() => lsGet('tax_return_filed'));
+  const markTaxReturnFiled = () => {
+    if (!taxReturnAlert) return;
+    lsSet('tax_return_filed', String(taxReturnAlert.incomeYear));
+    setTaxReturnFiled(String(taxReturnAlert.incomeYear));
   };
 
   // --- ÉLIGIBILITÉ LEP ---
@@ -569,6 +557,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalC
     primary: { label: 'C\'est à jour', onClick: () => onUpdateFiscalConfig(prev => ({ ...prev, paramsReviewedYear: new Date().getFullYear() })) },
     secondary: onOpenSettings ? { label: 'Ouvrir les paramètres', onClick: onOpenSettings } : undefined,
   });
+  if (taxReturnAlert && taxReturnFiled !== String(taxReturnAlert.incomeYear)) todos.push({
+    key: taxReturnAlert.key, icon: ClipboardCheck, tone: 'action', snoozable: true,
+    text: `${taxReturnAlert.title} : Pécule a préparé les cases à vérifier.`,
+    detail: taxReturnAlert.detail,
+    // L'aide est en bas de l'écran « Dons et impôts » : on l'amène à l'écran.
+    primary: onNavigate ? { label: 'Voir les cases', onClick: () => { onNavigate('donations'); revealElementById('tax-return'); } } : undefined,
+    secondary: { label: 'C\'est déclaré', onClick: markTaxReturnFiled },
+  });
   if (payRaise) todos.push({
     key: `raise-${payRaise.period}`, icon: TrendingUp, tone: 'action',
     text: `Votre net a augmenté de ${formatEUR(payRaise.delta, 0)} par mois (fiche de ${formatPeriod(payRaise.period)}).`,
@@ -614,9 +610,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalC
   const dateFieldClass = 'h-10 px-3 rounded-xs border border-outline bg-transparent text-sm text-on-surface tabular-nums hover:border-on-surface focus:border-indigo-600 dark:focus:border-indigo-300 outline-none dark:[color-scheme:dark]';
 
   // --- CARTE « PLACÉ DEPUIS LA PAIE » (jauge du mois + taux d'épargne) ---
-  const savingsCard = ((monthPlan !== undefined && monthPlan > 0) || monthlyPay > 0) && (() => {
-    const hasPlan = monthPlan !== undefined && monthPlan > 0;
-    const plan = monthPlan || 0;
+  const goal = monthGoal ?? monthPlan;
+  const savingsCard = ((goal !== undefined && goal > 0) || monthlyPay > 0) && (() => {
+    const hasPlan = goal !== undefined && goal > 0;
+    const plan = goal || 0;
     const now = new Date();
     const periodEnd = payPeriod
       ? new Date(payPeriod.payDate.getFullYear(), payPeriod.payDate.getMonth() + 1, Math.min(paydayDay!, new Date(payPeriod.payDate.getFullYear(), payPeriod.payDate.getMonth() + 2, 0).getDate()))
@@ -682,7 +679,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalC
   const availabilitySegments: AvailabilitySegment[] = [
     { key: 'available', label: 'Disponible tout de suite', hint: 'Livrets et comptes courants', amount: availabilityStats.available, color: 'bg-primary' },
     ...(availabilityStats.taxLocked > 0 ? [{ key: 'tax', label: 'Disponible avec impôt', hint: 'Assurance vie et PEA récents', amount: availabilityStats.taxLocked, color: 'bg-tertiary', hatch: 'light' as const }] : []),
-    ...(availabilityStats.hardLocked > 0 ? [{ key: 'locked', label: 'Bloqué', hint: 'Retraite, épargne salariale', amount: availabilityStats.hardLocked, color: 'bg-outline', hatch: 'dense' as const }] : []),
+    ...(availabilityStats.hardLocked > 0 ? [{
+      key: 'locked', label: 'Bloqué',
+      // PEE : chaque versement se libère 5 ans après sa date ; on annonce le prochain.
+      // Part de PEE sans date de versement connue : comptée bloquée par prudence, on le dit.
+      hint: (availabilityStats.peeNextRelease
+        ? `Retraite, épargne salariale · ${formatEUR(availabilityStats.peeNextRelease.amount, 0)} de ${availabilityStats.peeNextRelease.name} libres le ${parseISODate(availabilityStats.peeNextRelease.date).toLocaleDateString('fr-FR')}`
+        : 'Retraite, épargne salariale')
+        + (availabilityStats.peeUndated ? ' · épargne salariale sans date de versement connue comptée bloquée par prudence' : ''),
+      amount: availabilityStats.hardLocked, color: 'bg-outline', hatch: 'dense' as const,
+    }] : []),
   ];
   const moreSummary = `${projection ? 'Projection, évolution' : 'Évolution'} et répartition par établissement`;
   const showUnlockDetails = availabilityStats.taxLocked > 0 && (unlockCost.extraTax >= 1 || unlockCost.closesPea || !!unlockCost.nextFree || unlockCost.unknown.length > 0);

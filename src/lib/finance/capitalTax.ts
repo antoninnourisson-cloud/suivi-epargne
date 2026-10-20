@@ -13,12 +13,17 @@ import { socialChargesRateFor } from './income';
 // ATTENTION au sens du résultat : PEA et Assurance Vie sont à fiscalité DIFFÉRÉE — l'impôt
 // n'est dû qu'au retrait, pas chaque année. Ce calcul donne donc le net qu'on toucherait EN
 // RETIRANT les gains, jamais un montant « à déclarer » pour l'année.
-const PFU_INCOME_TAX_RATE = 0.128; // part « impôt » du PFU (12,8 % IR + 18,6 % de prélèvements sociaux en 2026, 17,2 % sur l'assurance vie)
+// Part « impôt sur le revenu » du PFU : 12,8 %, plus les prélèvements sociaux (18,6 % en 2026,
+// 17,2 % sur l'assurance vie), soit 31,4 % (30 % sur l'assurance vie). Vérifié le 2026-10-14 :
+// https://www.impots.gouv.fr/particulier/questions/jai-realise-une-plus-value-mobiliere-comment-est-elle-imposee
+// https://www.service-public.gouv.fr/particuliers/vosdroits/F2329 (prélèvements sociaux 2026)
+export const PFU_INCOME_TAX_RATE = 0.128;
 // Taux réduit d'IR sur les gains d'Assurance Vie après 8 ans (art. 125-0 A du CGI), HORS
 // abattement annuel de 4 600 €/9 200 € : celui-ci porte sur l'ensemble des contrats d'une
 // personne (pas par compte) et dépend de versements antérieurs au 27/09/2017 — non modélisable
 // ici sans ces informations. Le net réel après 8 ans est donc, dans la pratique, souvent
 // LÉGÈREMENT MEILLEUR que ce que ce calcul affiche pour de petits montants de gains annuels.
+// Source (vérifiée le 2026-10-14) : https://www.service-public.gouv.fr/particuliers/vosdroits/F22414
 const AV_REDUCED_INCOME_TAX_RATE = 0.075;
 
 export type CapitalTaxRegime = 'PFU' | 'EXONERE_IR' | 'AV_REDUIT' | 'NON_MODELISE';
@@ -106,11 +111,14 @@ export const computeCapitalGainsTax = (
   }
 };
 
-// --- COMPTE À REBOURS DE MATURITÉ FISCALE (PEA / PEE / Assurance Vie) ---
+// --- COMPTE À REBOURS DE MATURITÉ FISCALE (PEA / Assurance Vie) ---
 // Le régime fiscal ne dépend QUE du type de compte et de son ancienneté — pas du montant
 // des gains — donc indépendant de `computeCapitalGainsTax` (qui, lui, court-circuite à
 // 'PFU' quand `grossInterest` est nul, ce qui serait faux ici pour un compte mature sans
 // intérêt renseigné).
+// Le PEE n'a PAS de maturité fiscale : ses gains sont toujours exonérés d'impôt sur le
+// revenu. Ce qui compte pour lui, c'est le blocage de 5 ans de CHAQUE versement : voir
+// computePeeAvailability (./availability).
 const regimeForAge = (type: AccountType, ageYears: number, fiscalConfig: FiscalConfig): CapitalTaxRegime => {
   switch (type) {
     case AccountType.PEA: return ageYears >= fiscalConfig.legalMaturity.pea ? 'EXONERE_IR' : 'PFU';
@@ -139,8 +147,8 @@ export interface MaturityCountdown {
 
 /**
  * `null` si : pas de date d'ouverture connue, type de compte sans notion de maturité
- * (Livret réglementé, Crypto, Immobilier, PER...), ou déjà mature — dans tous ces cas, rien
- * à annoncer.
+ * fiscale (Livret réglementé, PEE toujours exonéré d'IR, Crypto, Immobilier, PER...), ou
+ * déjà mature — dans tous ces cas, rien à annoncer.
  */
 export const computeMaturityCountdown = (
   account: { type: AccountType; openingDate?: string; interestRate?: number; totalAmount: number },
@@ -152,7 +160,6 @@ export const computeMaturityCountdown = (
   let maturityYears: number | undefined;
   if (account.type === AccountType.PEA) maturityYears = fiscalConfig.legalMaturity.pea;
   else if (account.type === AccountType.ASSURANCE_VIE) maturityYears = fiscalConfig.legalMaturity.assuranceVie;
-  else if (account.type === AccountType.PEE) maturityYears = fiscalConfig.legalMaturity.pee;
   if (maturityYears === undefined) return null;
 
   const opening = parseISODate(account.openingDate);
@@ -175,6 +182,32 @@ export const computeMaturityCountdown = (
   const annualTaxSaving = Math.max(0, grossInterest * (rateBefore - rateAfter));
 
   return { maturityDate: formatISODay(maturityDate), monthsRemaining, regimeBefore, regimeAfter, annualTaxSaving };
+};
+
+const percentFr = (fraction: number) => `${(Math.round(fraction * 1000) / 10).toLocaleString('fr-FR')} %`;
+
+/**
+ * Ce que change la maturité, en mots simples (badge de « Mes comptes », agenda). Les
+ * prélèvements sociaux restent dus après la maturité : on le dit, pour ne pas laisser
+ * croire qu'un retrait ne coûtera plus rien.
+ */
+export const describeMaturity = (
+  account: { type: AccountType },
+  maturity: Pick<MaturityCountdown, 'monthsRemaining' | 'regimeAfter'>,
+  fiscalConfig: FiscalConfig
+): { short: string; detail: string } => {
+  const months = `${maturity.monthsRemaining} mois`;
+  const social = percentFr(socialChargesRateFor(account.type, fiscalConfig));
+  if (maturity.regimeAfter === 'EXONERE_IR') {
+    return {
+      short: `Sans impôt sur le revenu dans ${months}`,
+      detail: `Gains sans impôt sur le revenu ; les prélèvements sociaux (${social}) restent dus au retrait`,
+    };
+  }
+  return {
+    short: `Impôt réduit dans ${months}`,
+    detail: `Impôt sur le revenu réduit à ${percentFr(AV_REDUCED_INCOME_TAX_RATE)} au-delà de ${AV_ANNUAL_ALLOWANCE.toLocaleString('fr-FR')} € de gains retirés par an ; prélèvements sociaux (${social}) toujours dus`,
+  };
 };
 
 /**
@@ -251,12 +284,18 @@ export const tracksDeposits = (type: AccountType) => DEPOSIT_TRACKED_TYPES.inclu
 
 /** Plafond légal des VERSEMENTS sur un PEA (la valorisation peut le dépasser). */
 export const PEA_DEPOSIT_CEILING = 150_000;
-/** Abattement annuel sur les gains d'Assurance Vie de plus de 8 ans (personne seule). */
+/** Abattement annuel sur les gains d'Assurance Vie de plus de 8 ans (personne seule ;
+ *  9 200 € pour un couple). https://www.service-public.gouv.fr/particuliers/vosdroits/F22414 */
 const AV_ANNUAL_ALLOWANCE = 4_600;
+/** Primes (versements) au-delà desquelles les gains d'une AV de plus de 8 ans passent de
+ *  7,5 % à 12,8 %. Même source (vérifiée le 2026-10-14). */
+const AV_REDUCED_RATE_PREMIUM_CAP = 150_000;
 
 /**
  * Versements cumulés après un retrait de `amount` : un retrait emporte versements et gains
- * au prorata de leur poids dans la valeur (règle fiscale des rachats partiels).
+ * au prorata de leur poids dans la valeur (règle fiscale des rachats partiels :
+ * gains = retrait − versements × retrait / valeur du contrat, BOFiP BOI-RPPM-RCM-20-10-20-50
+ * https://bofip.impots.gouv.fr/bofip/3951-PGP.html/identifiant%3DBOI-RPPM-RCM-20-10-20-50-20191220).
  */
 export const depositsAfterWithdrawal = (totalDeposits: number, value: number, amount: number): number =>
   value <= 0 ? totalDeposits : Math.max(0, totalDeposits * (1 - Math.min(1, amount / value)));
@@ -269,18 +308,22 @@ export interface WithdrawalTax {
   gainPart: number;      // part de gains contenue dans le montant retiré
   socialCharges: number;
   incomeTax: number;
-  net: number;           // ce qui arrive réellement sur le compte courant
+  net: number;           // ce qui vous reste du retrait, impôt de l'année réglé
   closesPea: boolean;    // retrait d'un PEA de moins de 5 ans : le plan est clôturé
 }
 
 /**
  * Impôt dû sur un retrait de `amount`. Seule la part de gains est imposée :
- * gains retirés = montant × (valeur − versements) / valeur.
+ * gains retirés = montant × (valeur − versements) / valeur (BOFiP, voir plus haut).
  * - PEA : prélèvements sociaux (18,6 % en 2026), IR exonéré après 5 ans ; PEE : toujours exonéré d'IR ;
- * - Assurance Vie : IR à 7,5 % après 8 ans, sur la part de gains au-delà de l'abattement
- *   annuel (4 600 €, supposé non entamé cette année) ; PFU avant 8 ans. Sur un fonds euros,
- *   les prélèvements sociaux sont en réalité déjà retenus chaque année : on les compte ici
- *   quand même (cas prudent, et exact pour les unités de compte) ;
+ * - Assurance Vie (versements faits depuis le 27/09/2017, cas supposé) : avant 8 ans, PFU de
+ *   12,8 % ; après 8 ans, abattement annuel de 4 600 € (supposé non entamé cette année), puis
+ *   7,5 % sur les gains liés aux 150 000 premiers euros de versements et 12,8 % au-delà,
+ *   l'abattement s'imputant d'abord sur la part à 7,5 % (BOFiP BOI-RPPM-RCM-20-10-20-50).
+ *   Le seuil de 150 000 € porte sur tous les contrats de la personne : on ne connaît ici que
+ *   ceux de ce contrat. L'assureur retient 7,5 % le jour du retrait et l'abattement est rendu
+ *   avec la déclaration : `incomeTax` est l'impôt final de l'année. Prélèvements sociaux :
+ *   17,2 %. Sur un fonds euros, ils sont déjà retenus chaque année (`euroFundPct`) ;
  * - Crypto : PFU (31,4 % en 2026) sur la part de plus-value ;
  * - autres (PER, immobilier…) : non modélisé.
  */
@@ -314,11 +357,18 @@ export const computeWithdrawalTax = (
       incomeTax = closesPea ? gainPart * PFU_INCOME_TAX_RATE : 0; break;
     case AccountType.PEE:
       incomeTax = 0; break;
-    case AccountType.ASSURANCE_VIE:
-      incomeTax = ageYears >= fiscalConfig.legalMaturity.assuranceVie
-        ? Math.max(0, gainPart - AV_ANNUAL_ALLOWANCE) * AV_REDUCED_INCOME_TAX_RATE
-        : gainPart * PFU_INCOME_TAX_RATE;
+    case AccountType.ASSURANCE_VIE: {
+      if (ageYears < fiscalConfig.legalMaturity.assuranceVie) { incomeTax = gainPart * PFU_INCOME_TAX_RATE; break; }
+      // Gains liés aux 150 000 premiers euros de versements : 7,5 % ; le reste : 12,8 %.
+      const reducedShare = account.totalDeposits > AV_REDUCED_RATE_PREMIUM_CAP ? AV_REDUCED_RATE_PREMIUM_CAP / account.totalDeposits : 1;
+      const reducedPart = gainPart * reducedShare;
+      const fullPart = gainPart - reducedPart;
+      // L'abattement s'impute d'abord sur la part à 7,5 %, le reliquat sur la part à 12,8 %.
+      const onReduced = Math.min(reducedPart, AV_ANNUAL_ALLOWANCE);
+      const onFull = Math.min(fullPart, AV_ANNUAL_ALLOWANCE - onReduced);
+      incomeTax = (reducedPart - onReduced) * AV_REDUCED_INCOME_TAX_RATE + (fullPart - onFull) * PFU_INCOME_TAX_RATE;
       break;
+    }
     default:
       incomeTax = gainPart * PFU_INCOME_TAX_RATE;
   }

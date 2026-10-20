@@ -92,6 +92,22 @@ jobs:
           }
           for p in "" presentation.html confidentialite.html; do check_page "$p"; done
 
+          # Écran blanc : « Pécule » est écrit en dur dans index.html, même si l'app ne démarre
+          # pas. Le script principal qu'il cite doit donc aussi répondre 200, avec un type
+          # JavaScript. Filtré par Cloudflare (403) : le serveur le vérifie lui-même (champ
+          # « site » de /status ci-dessus, voir worker/src/siteCheck.ts).
+          code=$("${CURL[@]}" -o home.html -w '%{http_code}' "$SITE/" || echo 000)
+          if [ "$code" = 200 ]; then
+            src=$(grep -oE '<script[^>]*type="module"[^>]*src="[^"]+"' home.html | head -n1 | sed -E 's/.*src="([^"]+)".*/\1/' || true)
+            if [ -z "$src" ]; then fail "Accueil : script principal introuvable dans index.html (écran blanc probable)"
+            else
+              src=${src#./}; src=${src#/}
+              js=$("${CURL[@]}" -o /dev/null -w '%{http_code} %{content_type}' "$SITE/$src" || echo '000 -')
+              if echo "$js" | grep -qiE '^200 .*(javascript|ecmascript)'; then ok "Script principal /$src"
+              else fail "Script principal $SITE/$src : $js (attendu 200 et un type JavaScript : écran blanc probable)"; fi
+            fi
+          fi
+
           # En-têtes de sécurité (Worker edge/) : HSTS attendu sur l'accueil.
           headers=$("${CURL[@]}" -I "$SITE/" || true)
           if echo "$headers" | grep -qi '^strict-transport-security:' || [ "$site_hsts" = true ]; then ok "En-tête HSTS"

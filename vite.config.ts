@@ -5,10 +5,36 @@ import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 import path from 'path';
+import { readFileSync } from 'fs';
+import { latestVersionFromChangelog } from './src/lib/changelogVersion';
+
+// Version de l'app servie par `virtual:app-version` (voir src/appVersion.ts). Au build : la
+// chaîne seule, lue en tête de src/changelog.ts, pour que l'historique complet ne soit chargé
+// qu'avec « Quoi de neuf » et « À propos ». En développement et dans les tests : un simple
+// renvoi vers LATEST_VERSION (une nouvelle entrée compte sans redémarrer le serveur).
+const appVersionPlugin = (): Plugin => {
+  const id = 'virtual:app-version';
+  const resolvedId = `\0${id}`;
+  const changelog = path.resolve(__dirname, 'src/changelog.ts');
+  let isBuild = false;
+  return {
+    name: 'app-version',
+    configResolved(config) { isBuild = config.command === 'build'; },
+    resolveId: source => (source === id ? resolvedId : undefined),
+    load(source) {
+      if (source !== resolvedId) return undefined;
+      if (!isBuild) return "export { LATEST_VERSION as APP_VERSION } from '/src/changelog.ts';";
+      const version = latestVersionFromChangelog(readFileSync(changelog, 'utf8'));
+      if (!version) this.error('Version introuvable en tête de src/changelog.ts');
+      return `export const APP_VERSION = ${JSON.stringify(version)};`;
+    },
+  };
+};
 
 // Origine du Worker, injectée dans la CSP d'index.html (connect-src). Seule l'origine
 // EXACTE est autorisée : ouvrir tout *.workers.dev laisserait un script injecté exfiltrer
-// vers n'importe quel Worker tiers.
+// vers n'importe quel Worker tiers. Elle reçoit aussi un `preconnect` : au démarrage, le
+// premier appel réseau est souvent la demande de jeton au Worker.
 const backendOriginPlugin = (): Plugin => {
   let origin = '';
   let isBuild = false;
@@ -24,7 +50,10 @@ const backendOriginPlugin = (): Plugin => {
     // En production, les connexions au serveur de développement local (ws://localhost)
     // n'ont rien à faire dans la CSP.
     transformIndexHtml: html => {
-      const out = html.replace('__BACKEND_ORIGIN__', origin);
+      const out = html.replace('__BACKEND_ORIGIN__', origin).replace(
+        '<!--__BACKEND_PRECONNECT__-->',
+        origin ? `<link rel="preconnect" href="${origin}" crossorigin />` : '',
+      );
       return isBuild ? out.replace(/ ws:\/\/localhost:5173 ws:\/\/127\.0\.0\.1:5173/, '') : out;
     },
   };
@@ -39,10 +68,16 @@ export default defineConfig({
   // Déclaration de type : `declare const __BUILD_SHA__: string;` dans src/vite-env.d.ts.
   define: {
     __BUILD_SHA__: JSON.stringify((process.env.GITHUB_SHA || 'dev').slice(0, 7)),
+    // Build de production destiné aux tests de bout en bout (playwright.config.ts, dossier
+    // dist-e2e, jamais publié) : seul écart avec le build publié, le mode démo (`?demo=1`)
+    // y reste disponible. Le build publié vaut `false` : la branche démo et ses données
+    // fictives sont retirées du bundle. Déclaration : src/vite-env.d.ts.
+    __E2E_DEMO__: JSON.stringify(process.env.PECULE_E2E_BUILD === '1'),
   },
   plugins: [
     react(),
     backendOriginPlugin(),
+    appVersionPlugin(),
     VitePWA({
       registerType: 'autoUpdate',
       // Réception des notifications push (public/push-sw.js), greffée sur le service

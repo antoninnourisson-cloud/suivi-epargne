@@ -10,6 +10,8 @@ type Variant = 'filled' | 'tonal' | 'outlined' | 'text' | 'danger' | 'primary' |
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: Variant;
   isLoading?: boolean;
+  // React 19 : la ref est une prop ordinaire, transmise au <button> (focus initial d'une boîte).
+  ref?: React.Ref<HTMLButtonElement>;
 }
 
 const VARIANTS: Record<Variant, string> = {

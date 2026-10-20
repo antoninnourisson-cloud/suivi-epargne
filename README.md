@@ -67,7 +67,7 @@ Pécule (anciennement *Suivi Épargne*) est une application web installable (PWA
 ## Fonctionnalités
 
 ### Tableau de bord
-- **Épargne nette** répartie entre *disponible*, *contrainte fiscale* (AV/PEA récents : impôt en plus d'un retrait anticipé, date où il devient gratuit) et *bloqué* (PEE, PER…).
+- **Épargne nette** répartie entre *disponible*, *contrainte fiscale* (AV/PEA récents : impôt en plus d'un retrait anticipé, date où il devient gratuit) et *bloqué* (PER, PEE : chaque versement de PEE se débloque 5 ans après sa date).
 - **Un chiffre principal** : épargne nette, variation sur 30 jours et courbe sur un an ; les détails moins utiles sont repliés.
 - **À faire** : les trois actions les plus importantes, avec « Plus tard », **chiffrées en euros** quand c'est possible (argent qui dort sur le compte courant, compte mieux rémunéré qui a de la place, livret bientôt plein). Plafonds des livrets, révision des taux réglementés (1er février et 1er août), éligibilité au LEP, soldes non actualisés, comptes vides inactifs, intérêts parentaux de fin d'année.
 - **Placé depuis la paie** (jauge face au plan d'épargne), **taux d'épargne** sur douze mois, **épargne de précaution**.
@@ -87,22 +87,23 @@ Pécule (anciennement *Suivi Épargne*) est une application web installable (PWA
 ### Paie et budget
 - Calcul du **« super net »** : barème progressif, décote, charges salariales, CSG non déductible, abattement de 10 %, Navigo, mutuelle, titres-restaurant. **Mode exact** d'après une fiche de paie. Avantages salariaux pré-remplis depuis les fiches de paie.
 - **Votre paie, virement par virement** : liste à cocher (charges fixes, abonnements, épargne projets, argent plaisir, répartition de l'épargne entre les comptes), versements enregistrés en un clic.
+- **Capacité d'épargne du mois** et **somme en plus à placer** (prime, cadeau…) réglables dans le Pilotage pour la paie en cours, jusqu'à la paie suivante (même objectif pour le Pilotage, la jauge de l'Accueil et la relance de paie).
 - **Répartition personnalisée** de l'épargne à partir d'une date, stratégie de placement selon les taux et plafonds, durée de survie.
 - **Fiches de paie** : import depuis Drive (Google Picker), extraction par Gemini (nouvelles tentatives, modèles de repli), relecture obligatoire, graphique du net, hausse de salaire repérée.
 
 ### Rendement et fiscalité
 - **Intérêts réellement acquis** (règle des quinzaines), intérêts attendus au 31 décembre, taux pondérés dans le temps, manque à gagner du cash dormant.
 - **Rendement net** et projection selon la répartition (100 % Livret A, votre répartition, 100 % assurance vie) sur 5, 10 ou 20 ans.
-- **Gains nets si retrait** : PFU, prélèvements sociaux (18,6 %, 17,2 % sur l'assurance vie), part en fonds euros de l'AV, exonération du PEA et du PEE après maturité, abattement de l'AV après 8 ans, cession crypto exonérée jusqu'à 305 €. Plus-values latentes, plafond du PEA, compte à rebours de maturité (« horloge fiscale »).
+- **Gains nets si retrait** : PFU, prélèvements sociaux (18,6 %, 17,2 % sur l'assurance vie), part en fonds euros de l'AV, exonération d'impôt sur le revenu du PEA après 5 ans (le PEE l'est toujours), abattement de l'AV après 8 ans (7,5 %, 12,8 % au-delà de 150 000 € de versements), cession crypto exonérée jusqu'à 305 €. Plus-values latentes, plafond du PEA, compte à rebours de maturité (« horloge fiscale »).
 - **LEP** : plafonds de revenus, alerte et date de fermeture probable. L'avis d'imposition (PDF ou photo) est lu par Gemini, qui en relève le revenu fiscal de référence et le nombre de parts.
 - **Veille fiscale hebdomadaire** : chaque lundi, le serveur relit les pages officielles de service-public.gouv.fr et en fait relever les taux, plafonds et barèmes par **Cloudflare Workers AI** (sans clé, aucune donnée personnelle envoyée) ; Gemini, avec la clé de l'appareil, sert de secours. L'app compare ces valeurs à ses paramètres et **propose** les changements avec leur source ; « Détail du relevé » montre chaque valeur lue, la phrase de la page et « = app » ou « ≠ app ». Barèmes de l'impôt à jour (2026), anciens barèmes conservés.
-- **Dons** : réductions de 66 % et 75 % (plafond de 2 000 €), plafonnées à l'impôt, reçus joints depuis Drive, **aide à la déclaration case par case** (1AJ, 8HV, 7UD, 7UF…).
+- **Dons** : réductions de 66 % et 75 % (plafond de 2 000 €), plafonnées à l'impôt, reçus joints depuis Drive, **aide à la déclaration case par case** (1AJ, 8HV, 7UD, 7UF, intérêts 2TR/2CK, PER 6NS, comptes à l'étranger 8UU/3916/3916-bis, ventes de crypto 2086/3AN/3BN), avec un rappel chaque printemps pour tout le monde (accueil, agenda, notification).
 
 ### Motivation et simulateur
 - **Bons mois** : au moins 500 € mis de côté sur les 30 jours qui suivent chaque paie (seuil réglable, désactivable), série de bons mois et un joker par an.
 - **Jalons** (premier bon mois, épargne de précaution, livret plein, 10 000 €…), signalés une seule fois.
 - **Point de paie** à chaque paie : prévu et réalisé, compte par compte. **Contrôle des fiches de paie** : une fiche qui s'écarte nettement de la médiane des six précédentes est signalée.
-- **Simulateur « Et si… »** (Analyses) : un achat, une pause ou un autre montant d'épargne, projeté sur 1 à 5 ans avec une fourchette tirée de vos propres mois passés.
+- **Simulateur « Et si… »** (Analyses) : un achat, une pause ou un autre montant d'épargne, projeté sur 1 à 5 ans avec une fourchette tirée de vos propres mois passés (votre rythme d'épargne, hors variations des marchés). Les intérêts des livrets réglementés s'ajoutent au solde chaque 31 décembre, comme à la banque (même règle pour le plan solo et la projection selon la répartition, `src/lib/yearlyInterest.ts`).
 
 ### Agenda, bilans et parents
 - **Agenda des douze mois** : paies, prélèvements, révisions de taux, rendez-vous fiscaux, maturités, fermeture du LEP, restitution.
@@ -112,9 +113,9 @@ Pécule (anciennement *Suivi Épargne*) est une application web installable (PWA
 
 ### Notifications, sécurité et données
 - **Notifications push** appareil par appareil (avec le serveur), **activables type par type** : jour de paie, abonnements, échéances, soldes, taux, LEP, impôts, parents, bilans. Mode **discret** sans aucun montant.
-- **Verrou de l'appareil** : biométrie (WebAuthn) ou code PIN de 6 à 8 chiffres (PBKDF2), réactivé dès que l'app passe en arrière-plan.
+- **Verrou de l'appareil** : biométrie (WebAuthn) ou code PIN de 6 à 8 chiffres (PBKDF2), réactivé dès que l'app passe en arrière-plan. « Code oublié » ne déverrouille jamais : le verrou ne peut être retiré que 24 heures après la demande, puis il faut se reconnecter à Google et recharger les données depuis Drive.
 - **Sauvegardes** : copie mensuelle sur Drive (12 mois restaurables), copie locale de secours **chiffrée**, export et import JSON, export CSV, et **sauvegarde de secours chiffrée de bout en bout** sur le serveur (facultative, code de secours détenu par l'utilisateur seul).
-- **Conflits entre appareils** détectés après chaque écriture Drive : l'utilisateur choisit la version à garder, rien n'est écrasé en silence.
+- **Conflits entre appareils** détectés après chaque écriture Drive et au retour dans l'app : l'écran de choix montre les deux versions (date, appareil, principales différences), rien n'est écrasé en silence, et la version écartée reste récupérable 30 jours, chiffrée, sur l'appareil (Paramètres, Sauvegardes).
 - **Quoi de neuf** après chaque mise à jour, historique complet dans Paramètres. Mode sombre.
 
 ## Architecture
@@ -172,7 +173,7 @@ flowchart LR
 - **La veille fiscale du serveur** n'envoie à Workers AI que le texte des pages publiques ; le relevé (`fiscal-watch:latest`) est comparé aux paramètres par l'app, jamais appliqué d'office.
 - **Le site** est servi par GitHub Pages, derrière le proxy Cloudflare : le Worker `pecule-edge` ([`edge/`](edge/)) n'ajoute que des en-têtes de sécurité (HSTS, anti-iframe, politique de permissions). L'ancienne adresse github.io redirige vers pecule-app.com.
 - **Le cron réutilise le code de l'app** (`src/lib/`, `src/types.ts`, `src/constants.ts`) : une notification dit exactement ce que dit la bannière correspondante.
-- **Synchronisation robuste** (`src/hooks/usePortfolioData.ts`) : contrôle de révision Drive (aucune écriture à l'aveugle), écritures en série, quarantaine locale des modifications non synchronisées, coordination entre onglets, mode hors ligne, délais maximaux sur les appels réseau, rechargement automatique quand une nouvelle version est déployée.
+- **Synchronisation robuste** (`src/hooks/usePortfolioData.ts`) : contrôle de révision Drive (aucune écriture à l'aveugle), écritures en série, quarantaine locale des modifications non synchronisées, coordination entre onglets, démarrage hors ligne sur la dernière copie chiffrée (saisies envoyées au retour du réseau, ou choix si Drive a changé), délais maximaux sur les appels réseau, rechargement automatique quand une nouvelle version est déployée (recherchée aussi au retour au premier plan).
 
 Détail du serveur, de ses routes et de son stockage : [worker/README.md](worker/README.md).
 
@@ -198,7 +199,7 @@ Liste complète et raisons : [MAINTENANCE.md §1](MAINTENANCE.md#1-invariants-à
 - **CSP stricte** dans [`index.html`](index.html) : aucun script intégré, origines limitées à Google et à l'origine **exacte** du Worker (injectée au build par `vite.config.ts`).
 - **En-têtes HTTP** ajoutés par le Worker `pecule-edge` devant GitHub Pages : HSTS, `X-Frame-Options: DENY` et `frame-ancestors 'none'`, `nosniff`, `Referrer-Policy`, `Permissions-Policy`, `Cross-Origin-Opener-Policy` (détail : [MAINTENANCE.md § 8](MAINTENANCE.md#8-nom-de-domaine)).
 - **Serveur** :
-  - refresh token chiffré en AES-256-GCM ;
+  - refresh token chiffré en AES-256-GCM, gardé seulement tant qu'une session ou une notification s'en sert (effacé à la déconnexion du dernier appareil, 61 jours au plus sans usage) ;
   - sessions stockées hachées (SHA-256), expirées après 30 jours d'inactivité et 60 jours au plus ;
   - state OAuth signé (HMAC) et lié au navigateur par un cookie `__Host-` ;
   - `id_token` vérifié ;
@@ -228,16 +229,28 @@ npm run lint           # ESLint, avec les règles d'accessibilité jsx-a11y (blo
 npm run typecheck      # types : app + serveur + edge
 npm test               # tests Vitest : app + serveur (worker/test) + edge (edge/test)
 npm run test:coverage  # idem, avec les seuils de couverture de vitest.config.ts (comme la CI)
+                       # (chiffres ci-dessous)
 npm run test:watch     # tests en continu
-npm run e2e            # tests de bout en bout Playwright, en mode démo (ordinateur et mobile)
+npm run e2e            # tests de bout en bout Playwright (ordinateur et mobile), serveur de dev
+                       # E2E_TARGET=build : les mêmes sur le build de production (comme la CI)
 npm run build          # build de production dans dist/
 npm run preview        # sert le build localement
 npm run theme          # régénère src/theme/m3.css depuis scripts/m3-theme.mjs (palette Material)
 ```
 
-Pour `npm run e2e`, installe une fois le navigateur : `npx playwright install chromium` (en local, la config utilise Chrome s'il est installé). Le serveur de développement est lancé automatiquement.
+Pour `npm run e2e`, installe une fois le navigateur : `npx playwright install chromium` (en local, la config utilise Chrome s'il est installé). Le serveur de développement est lancé automatiquement. En CI (ou avec `E2E_TARGET=build`), Playwright construit le **build de production** dans `dist-e2e/` et le sert avec `vite preview` : CSP de production, service worker et minification sont donc testés ([`e2e/target.ts`](e2e/target.ts)). La CI repasse ensuite `e2e/production.spec.ts` sur `dist`, le dossier exact que `deploy.yml` publie (`E2E_DIST=dist`, servi tel quel). La plupart des parcours tournent en mode démo ; ceux de la synchronisation (conflit, sauvegarde locale, hors ligne, session expirée, échec de lecture) tournent sans démo, contre un faux Drive en mémoire ([`e2e/fakeDrive.ts`](e2e/fakeDrive.ts)), sans aucun appel à Google ni au serveur. Aucun test ne joint le vrai serveur : les tests importent `test` depuis [`e2e/fixtures.ts`](e2e/fixtures.ts), qui coupe ces appels (règle ESLint).
 
-**Mode démo**, sans compte Google : <http://localhost:5173/?demo=1>. L'app se charge avec des données fictives ([`src/dev/demoData.ts`](src/dev/demoData.ts)), et rien n'est lu ni écrit sur Drive. Ce mode n'existe qu'en développement (`import.meta.env.DEV`).
+**Couverture des tests unitaires** (mesurée le 19 octobre 2026, seuils plancher dans [`vitest.config.ts`](vitest.config.ts), vérifiés par la CI). Deux chiffres, à ne pas confondre :
+
+| Périmètre | Instructions | Branches | Fonctions | Lignes |
+|---|---:|---:|---:|---:|
+| **Toute l'app** (écrans, hooks, services, App.tsx, serveur, edge) | 63,7 % | 53,7 % | 49,4 % | 66,6 % |
+| Cœur métier (`src/lib`, `worker/src`, `edge/src`) | 95,2 % | 85,8 % | 95,9 % | 97,5 % |
+| Filets anti-perte (synchronisation Drive, copies locales, sauvegarde de secours, session, verrou) | 89,9 % | 81,3 % | 87,6 % | 94,3 % |
+
+Les écrans sont surtout couverts par les tests de bout en bout, qui ne comptent pas dans ces chiffres.
+
+**Mode démo**, sans compte Google : <http://localhost:5173/?demo=1>. L'app se charge avec des données fictives ([`src/dev/demoData.ts`](src/dev/demoData.ts)), et rien n'est lu ni écrit sur Drive. Ce mode n'existe qu'en développement et dans le build des tests de bout en bout (`dist-e2e/`, jamais publié) : dans le build publié, il est retiré du code.
 
 **Avec le serveur local** : dans `worker/`, `npm run setup-secrets -- --dev` (génère `.dev.vars`), puis `npm run dev` (port 8787). Ensuite, à la racine, crée `.env.development.local` :
 
@@ -258,11 +271,11 @@ Avant chaque mise à jour visible, ajoute une entrée **en tête** de [`src/chan
 
 | Workflow | Déclencheur | Rôle |
 |---|---|---|
-| [`ci.yml`](.github/workflows/ci.yml) · *Vérifications* | PR, push sur `main`, chaque lundi à 6 h UTC, appel par `deploy.yml` | lint, types, tests avec seuils de couverture, tests de bout en bout Playwright, build (tailles dans le résumé), audit des dépendances (informatif) |
-| [`deploy.yml`](.github/workflows/deploy.yml) · *GitHub Pages* | push sur `main` | `ci.yml` → build → GitHub Pages → tag `v<version>` et Release avec les puces du changelog (une fois par version) |
+| [`ci.yml`](.github/workflows/ci.yml) · *Vérifications* | PR, push sur `main`, chaque lundi à 6 h UTC, appel par `deploy.yml` | lint, types, tests avec seuils de couverture (toute l'app, cœur métier, filets anti-perte), tests de bout en bout Playwright sur le build de production, build publié (tailles dans le résumé) testé tel quel par `e2e/production.spec.ts` puis gardé en artefact `site-dist`, audit des dépendances (informatif) |
+| [`deploy.yml`](.github/workflows/deploy.yml) · *GitHub Pages* | push sur `main` | `ci.yml` → reprise de son build testé (`site-dist`, sans reconstruire) → GitHub Pages → tag `v<version>` et Release avec les puces du changelog (une fois par version) |
 | [`worker.yml`](.github/workflows/worker.yml) · *Serveur* | push sur `main` touchant `worker/`, `src/lib/`, `src/types.ts` ou `src/constants.ts`, ou lancement manuel | types, tests, puis `wrangler deploy` |
 | [`edge.yml`](.github/workflows/edge.yml) · *En-têtes de sécurité* | push sur `main` touchant `edge/`, ou lancement manuel | types, tests, puis `wrangler deploy` du Worker `pecule-edge` (HSTS, anti-iframe… devant GitHub Pages ; actif une fois le DNS Cloudflare en « Proxied », voir [MAINTENANCE.md](MAINTENANCE.md#8-nom-de-domaine)) |
-| [`monitor.yml`](.github/workflows/monitor.yml) · *Surveillance* | chaque jour à 6 h 30 UTC, ou lancement manuel | site, pages publiques, serveur (`/status`), certificat TLS, HSTS ; ouvre/ferme une issue `panne` |
+| [`monitor.yml`](.github/workflows/monitor.yml) · *Surveillance* | chaque jour à 6 h 30 UTC, ou lancement manuel | site (script principal compris : un écran blanc est détecté), pages publiques, serveur (`/status`), certificat TLS, HSTS ; ouvre/ferme une issue `panne` |
 
 - **App** : l'URL du serveur est dans [`.env.production`](.env.production). Le commit déployé est injecté au build (`__BUILD_SHA__`).
 - **Serveur** : le déploiement est automatique dès que les secrets du dépôt **`CLOUDFLARE_API_TOKEN`** et **`CLOUDFLARE_ACCOUNT_ID`** existent (Settings → Secrets and variables → Actions). Sans eux, le job est sauté, et `npm run deploy` dans `worker/` reste possible. Les secrets du Worker (`GOOGLE_CLIENT_SECRET`, `ENCRYPTION_KEY`, `VAPID_*`, `ALLOWED_EMAILS`) se posent avec `npm run setup-secrets` : voir [worker/README.md](worker/README.md).
@@ -302,15 +315,17 @@ Avant chaque mise à jour visible, ajoute une entrée **en tête** de [`src/chan
 │   │   ├── fiscalWatch.ts  veille fiscale (propositions bornées et sourcées)
 │   │   ├── cloudBackupCrypto.ts  chiffrement de la sauvegarde de secours, code de secours
 │   │   ├── motivation.ts · simulator.ts · alerts.ts · yearReview.ts · driveWriteCheck.ts
-│   │   └── lep.ts · notificationPrefs.ts · agenda.ts · planning.ts · projection.ts …
+│   │   └── lep.ts · notificationPrefs.ts · agenda.ts · planning.ts · taxReturn.ts · projection.ts …
 │   ├── services/           Google (Drive, Picker), Gemini, serveur, sauvegarde de secours,
 │   │                       push, verrou, coffre local
 │   ├── theme/m3.css        rôles de couleur Material (généré)
+│   ├── workers/            Web Worker du simulateur (fourchette calculée hors de l'écran)
 │   ├── dev/                données du mode démo
 │   ├── changelog.ts        historique des mises à jour (« Quoi de neuf », Releases)
 │   └── constants.ts · types.ts · navigation.ts · App.tsx · index.tsx · index.css (@theme Tailwind 4)
-├── e2e/                    tests Playwright en mode démo (parcours, alertes, motivation,
-│                           restitution, simulateur, actualiser, votre année)
+├── e2e/                    tests Playwright : parcours en mode démo (alertes, motivation,
+│                           restitution, simulateur, actualiser, votre année), synchronisation
+│                           contre un faux Drive (fakeDrive.ts), build publié (production.spec.ts)
 ├── worker/                 serveur Cloudflare : voir worker/README.md
 │   ├── src/                index (routes, crons) · google · sessions · security · crypto ·
 │   │                       subscriptions · webpush · reminders · fiscalSources · fiscalWatchJob

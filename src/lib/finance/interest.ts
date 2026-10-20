@@ -337,12 +337,18 @@ export const computeExpectedYearInterest = (
   return { total: r.totalAnnual, parental: r.totalAnnualParental, own: r.totalAnnualOwned };
 };
 
+/** Libellé qui désigne des intérêts (« Intérêts », « intérêts 2026 », « Interets »…). */
+const isInterestLabel = (label: string | undefined) => /(^|[^\p{L}])int[ée]r[êe]ts?($|[^\p{L}])/iu.test(label || '');
+
 /**
  * Intérêts à proposer quand un solde remonte (« Actualiser ») : ceux de l'année précédente,
  * crédités au 31 décembre (livrets réglementés, la plupart des livrets bancaires, fonds
  * euros) et visibles en début d'année, moins ce qui a déjà été enregistré hors épargne
  * depuis le 31/12. Proposés du 1er janvier au 31 mars seulement : en cours d'année, la
  * hausse d'un livret est un versement (ses intérêts ne tombent qu'au 31 décembre).
+ * Déjà enregistré : tout mouvement hors épargne (correction, variation de valeur) et, pour
+ * les saisies d'avant cette mise à part, tout mouvement dont le libellé parle d'intérêts
+ * (« Intérêts », « Intérêts 2026 »…), depuis le 31/12.
  * `null` si rien à proposer. `account` : le compte AVANT l'actualisation.
  */
 export const suggestCreditedInterest = (
@@ -356,7 +362,8 @@ export const suggestCreditedInterest = (
   if (!(expected > 0.005)) return null;
   const from = `${year}-12-31`;
   const recorded = (account.movements || [])
-    .filter(m => (m.kind === 'adjustment' || m.kind === 'valuation') && m.date >= from && m.date <= dateISO)
+    .filter(m => m.kind !== 'parental' && m.date >= from && m.date <= dateISO)
+    .filter(m => m.kind === 'adjustment' || m.kind === 'valuation' || isInterestLabel(m.label))
     .reduce((s, m) => s + signedAmount(m), 0);
   const amount = Math.round(Math.max(0, expected - Math.max(0, recorded)) * 100) / 100;
   return amount > 0.005 ? { year, amount } : null;

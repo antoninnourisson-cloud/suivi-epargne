@@ -31,7 +31,7 @@ Ouvrez ensuite <http://localhost:5173/?demo=1> : l'app se charge avec des donné
    npm run lint            # ESLint, règles d'accessibilité comprises
    npm run typecheck       # app + serveur + edge
    npm run test:coverage   # tests Vitest et seuils de couverture
-   npm run e2e             # tests de bout en bout (Playwright, mode démo)
+   npm run e2e             # tests de bout en bout (Playwright : mode démo et faux Drive)
    npm run build
    ```
 
