@@ -3,6 +3,7 @@
 // de l'adresse avant l'échange, panne réseau distinguée d'une session refusée (« hors ligne »
 // plutôt que déconnexion), délai maximal.
 import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest';
+import { describeDevice } from '../lib/writeStamp';
 
 vi.stubEnv('VITE_BACKEND_URL', 'https://api.test/');
 type Backend = typeof import('./backendService');
@@ -79,7 +80,7 @@ describe('serveur : session et jetons', () => {
     expect(await api.consumeLoginCode()).toEqual({ session: 's', access_token: 'ya29', expires_in: 3599 });
     expect(window.location.search).toBe('?view=pilot');
     // Sans IndexedDB (jsdom) : pas de clé d'appareil, session non liée comme avant.
-    expect(JSON.parse(String(lastCall()[1].body))).toEqual({ code: 'abc-123', device: 'appareil' });
+    expect(JSON.parse(String(lastCall()[1].body))).toEqual({ code: 'abc-123', device: describeDevice(navigator.userAgent) });
     // La session n'est pas encore enregistrée : l'appelant range d'abord le jeton.
     expect(api.hasBackendSession()).toBe(false);
   });
