@@ -204,9 +204,13 @@ export const AppLockScreen: React.FC<AppLockScreenProps> = ({
     try {
       await onForgot({ discardUnsynced: hasUnsyncedChanges && discardUnsynced });
     } catch (e) {
-      setAlert(e instanceof Error && e.message === 'NOT_READY'
+      const reason = e instanceof Error ? e.message : '';
+      setAlert(reason === 'NOT_READY'
         ? 'Le retrait du verrou n\'est pas encore possible : le verrou reste en place.'
-        : 'La session de cet appareil n\'a pas pu être fermée : le verrou reste en place. Réessayez, ou rechargez Pécule.');
+        // Les autres appareils doivent être prévenus avant tout retrait (useAppLock).
+        : reason === 'ALERT_NOT_SENT'
+          ? 'Vos autres appareils n\'ont pas pu être prévenus : connectez cet appareil à Internet, puis réessayez. Le verrou reste en place.'
+          : 'La session de cet appareil n\'a pas pu être fermée : le verrou reste en place. Réessayez, ou rechargez Pécule.');
       setForgetting(false);
     }
   };
@@ -322,8 +326,8 @@ export const AppLockScreen: React.FC<AppLockScreenProps> = ({
               Pour protéger vos données, le verrou n'est jamais retiré sur place. Voici comment faire :
             </p>
             <ol className="list-decimal pl-5 space-y-1.5 text-sm text-on-surface mb-3">
-              <li>Vous demandez le retrait. Il sera possible dans 24 heures, et pendant 7 jours. Si quelqu'un d'autre le demande à votre place, il suffit de déverrouiller Pécule pour l'annuler.</li>
-              <li>Le moment venu, Pécule ferme la session de cet appareil et efface ce qu'il y garde (clé Gemini, préférences d'affichage).</li>
+              <li>Vous demandez le retrait. Il sera possible dans 24 heures, et pendant 7 jours. Vos autres appareils qui reçoivent les notifications de Pécule en sont prévenus. Si quelqu'un d'autre le demande à votre place, il suffit de déverrouiller Pécule pour l'annuler.</li>
+              <li>Le moment venu, avec une connexion Internet (vos autres appareils doivent avoir été prévenus), Pécule ferme la session de cet appareil et efface ce qu'il y garde (clé Gemini, préférences d'affichage).</li>
               <li>Vous vous reconnectez avec Google : il faudra choisir votre compte et redonner votre accord.</li>
               <li>Une fois vos données chargées depuis Drive, le verrou est retiré. Vous pourrez en définir un nouveau dans Paramètres.</li>
             </ol>
@@ -387,6 +391,6 @@ export const LockResetNotice: React.FC<{ onCancel: () => void }> = ({ onCancel }
   <div className="text-left rounded-2xl bg-secondary-container text-on-secondary-container p-4 mb-6 text-sm">
     <p className="font-medium mb-1 flex items-center gap-2"><LockKeyhole className="w-4 h-4 shrink-0" aria-hidden="true" /> Réinitialisation du verrou</p>
     <p className="mb-2">Reconnectez-vous avec votre compte Google. Le verrou de cet appareil sera retiré une fois vos données chargées depuis Drive.</p>
-    <Button variant="text" className="-ml-4" onClick={onCancel}>J'ai retrouvé mon code</Button>
+    <Button variant="text" className="-ml-3" onClick={onCancel}>J'ai retrouvé mon code</Button>
   </div>
 );

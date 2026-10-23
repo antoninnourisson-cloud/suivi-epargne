@@ -1,6 +1,7 @@
-// Textes des pages officielles utilisées par la veille fiscale. Le navigateur ne peut pas
-// les lire lui-même (pages d'autres sites), et la recherche Google de Gemini n'est pas
-// incluse dans la clé gratuite : le serveur télécharge donc ces pages et en garde le texte
+// Textes des pages officielles utilisées par la veille fiscale (service-public.gouv.fr, et
+// insee.fr pour l'inflation). Le navigateur ne peut pas les lire lui-même (pages d'autres
+// sites), et la recherche Google de Gemini n'est pas incluse dans la clé gratuite : le
+// serveur télécharge donc ces pages et en garde le texte
 // utile. Il les fait lire chaque semaine par Cloudflare Workers AI (fiscalWatchJob.ts) ;
 // l'app peut aussi les faire lire par Gemini en secours (GET /fiscal-sources). Liste fixe :
 // aucune adresse ne vient de l'extérieur.
@@ -16,6 +17,11 @@ export const FISCAL_SOURCE_URLS: { url: string; topic: string }[] = [
   { url: 'https://www.service-public.gouv.fr/particuliers/vosdroits/F1989', topic: 'Abattement de 10 % pour frais professionnels' },
   { url: 'https://www.service-public.gouv.fr/particuliers/vosdroits/F426', topic: 'Réduction d\'impôt pour les dons' },
   { url: 'https://www.service-public.gouv.fr/particuliers/vosdroits/F2329', topic: 'Prélèvements sociaux sur les revenus du patrimoine et des placements' },
+  // Remboursement de l'abonnement de transport par l'employeur : exonéré jusqu'à 75 % du prix
+  // « pour l'année 2026 » (mesure temporaire) ; une prorogation se lit ici.
+  { url: 'https://www.service-public.gouv.fr/particuliers/vosdroits/F19846', topic: "Prise en charge des frais de transport par l'employeur" },
+  // Série annuelle de l'inflation (INSEE) : rendement après inflation de l'écran Rendement.
+  { url: 'https://www.insee.fr/fr/statistiques/4268033', topic: "L'essentiel sur l'inflation (INSEE)" },
 ];
 
 const MAX_CHARS = 20000;

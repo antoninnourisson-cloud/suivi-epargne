@@ -2,6 +2,8 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import { watchForAppUpdates, createSafeReload } from './services/swUpdates';
+import { cleanUpStorage } from './lib/storageKeys';
+import { localTodayISO } from './lib/dates';
 import './index.css';
 
 // La PWA (vite-plugin-pwa, registerType 'autoUpdate') met à jour son service worker en
@@ -34,6 +36,10 @@ if ('serviceWorker' in navigator) {
   // ouverte ne le fait jamais seule. Vérification au retour au premier plan et toutes les heures.
   watchForAppUpdates(navigator.serviceWorker);
 }
+
+// Ménage du stockage local, une fois au démarrage : clés d'anciennes versions, repères et
+// reports expirés (voir lib/storageKeys). Sans effet si le stockage est bloqué.
+try { cleanUpStorage(window.localStorage, localTodayISO()); } catch { /* stockage inaccessible */ }
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {

@@ -34,17 +34,19 @@ export const AvailabilityBar: React.FC<{ segments: AvailabilitySegment[]; childr
         ))}
       </div>
       <dl className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-x-6 gap-y-3">
+        {/* dt et dd directement dans un <div> enfant du <dl> (seule structure valide) : le
+            repère de couleur est dans le <dt>, décalé à gauche. */}
         {segments.map((s, i) => (
-          <div key={s.key} className="min-w-0 flex items-start gap-2.5">
-            <span className={`mt-1 w-3 h-3 rounded-xs shrink-0 ${s.color}`} style={{ backgroundImage: s.hatch ? HATCH[s.hatch] : undefined }} aria-hidden="true" />
-            <div className="min-w-0">
-              <dt className="text-sm text-on-surface-variant">{s.label}</dt>
-              <dd className="text-base font-medium text-on-surface">
-                <MoneyText value={s.amount} decimals={0} />
-                <span className="ml-1.5 text-xs font-normal text-on-surface-variant tabular-nums">{pct(shares[i])}</span>
-              </dd>
-              <dd className="text-xs text-on-surface-variant">{s.hint}</dd>
-            </div>
+          <div key={s.key} className="min-w-0 relative pl-5">
+            <dt className="text-sm text-on-surface-variant">
+              <span className={`absolute left-0 top-1 w-3 h-3 rounded-xs ${s.color}`} style={{ backgroundImage: s.hatch ? HATCH[s.hatch] : undefined }} aria-hidden="true" />
+              {s.label}
+            </dt>
+            <dd className="text-base font-medium text-on-surface">
+              <MoneyText value={s.amount} decimals={0} />
+              <span className="ml-1.5 text-xs font-normal text-on-surface-variant tabular-nums">{pct(shares[i])}</span>
+            </dd>
+            <dd className="text-xs text-on-surface-variant">{s.hint}</dd>
           </div>
         ))}
       </dl>

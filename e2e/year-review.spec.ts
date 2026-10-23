@@ -79,8 +79,8 @@ test.describe('Votre année (démo)', () => {
     await toggle.click();
     await expect(toggle).toHaveAttribute('aria-checked', 'false');
     await goTo(page, 'Historique', isMobile);
-    // Le bilan en chiffres bruts reste affiché, comme avant.
-    await expect(page.getByRole('heading', { name: new RegExp(`Bilan ${YEAR}`) })).toBeVisible();
+    // Un seul bilan annuel : « Votre année » reste, sans second bilan en chiffres bruts.
+    await expect(page.getByRole('heading', { name: new RegExp(`Bilan ${YEAR}`) })).toHaveCount(0);
     const sheet = await openYearSheet(page);
     const pages = sheet.getByRole('list', { name: new RegExp(`Votre année ${YEAR}`) }).locator(':scope > li');
     expect(await pages.count()).toBeGreaterThanOrEqual(4);

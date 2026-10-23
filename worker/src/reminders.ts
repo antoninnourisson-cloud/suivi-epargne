@@ -4,7 +4,6 @@
 // les bannières de l'app (src/lib/finance.ts, importé tel quel) : une notification ne
 // peut donc jamais annoncer autre chose que ce que l'utilisateur verra en ouvrant l'app.
 // ================================================
-import { AccountType } from '../../src/types';
 import type { GlobalAppData } from '../../src/types';
 import {
   findDueRecurring,
@@ -27,7 +26,9 @@ import {
 } from '../../src/lib/finance';
 import { LATEST_TAX_SCALE } from '../../src/constants';
 import { computeYearReview } from '../../src/lib/agenda';
-import { formatISODay } from '../../src/lib/dates';
+import { closingApplies, isYearClosed } from '../../src/lib/yearClosing';
+import { formatISODay, parseISODate } from '../../src/lib/dates';
+import { describeStaleBalances, findStaleBalances } from '../../src/lib/freshness';
 import { formatEUR, frenchDay } from '../../src/lib/format';
 import { DEFAULT_FISCAL_CONFIG } from '../../src/constants';
 import { lepTimelineFromData, describeLepTimeline } from '../../src/lib/lep';
@@ -46,7 +47,12 @@ export interface Reminder {
 
 const eur = (n: number) => formatEUR(n, 0);
 
-const STALE_UPDATE_DAYS = 30;
+/** Empreinte courte et stable d'un texte (clé de dédoublonnage), en base 36. */
+const shortHash = (s: string): string => {
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0;
+  return h.toString(36);
+};
 // Le rappel de paie reste valable quelques jours : un cron manqué (panne, déploiement)
 // ne doit pas faire sauter le mois. La clé mensuelle garantit un seul envoi.
 const PAYDAY_WINDOW_DAYS = 3;
@@ -152,30 +158,23 @@ export const computeReminders = (data: GlobalAppData, today: CivilDate | Date, a
     }
   }
 
-  // 4. Aucune actualisation de solde depuis longtemps (même logique que le Dashboard,
-  //    seuil plus haut : une notification doit rester rare pour rester lue).
+  // 4. Soldes à revérifier, compte par compte (même calcul que « À faire » de l'Accueil,
+  //    lib/freshness) : un versement prévu ne compte pas comme un solde constaté.
   const todayKey = `${monthKey}-${pad2(D)}`;
-  let latest: string | null = null;
-  for (const a of accounts) {
-    for (const m of a.movements || []) {
-      if (m.date <= todayKey && (!latest || m.date > latest)) latest = m.date;
-    }
-  }
-  if (latest) {
-    const [y, mo, d] = latest.split('-').map(Number);
-    const days = todayN - dayNumber(y, mo, d);
-    if (days >= STALE_UPDATE_DAYS) {
-      out.push({
-        // Une seule fois par « dernière date connue » : une nouvelle saisie réarme le rappel.
-        key: `stale:${latest}`,
-        message: {
-          title: 'Soldes à actualiser',
-          body: `Aucune mise à jour de vos comptes depuis ${days} jours.`,
-          url: link('update'),
-          tag: 'stale-balances',
-        },
-      });
-    }
+  const staleBalances = findStaleBalances(accounts, parseISODate(todayKey));
+  const staleText = describeStaleBalances(staleBalances);
+  if (staleText) {
+    out.push({
+      // Une seule fois par liste de comptes (et date de leur dernier constat) : un nouveau
+      // constat ou un nouveau compte en retard réarme le rappel.
+      key: `stale:${shortHash(staleBalances.map(s => `${s.id}@${s.checkedOn ?? '-'}`).join(','))}`,
+      message: {
+        title: staleBalances.length > 1 ? 'Soldes à vérifier' : 'Solde à vérifier',
+        body: `${staleText.replace(/^Soldes? à vérifier : /, '')} Comparez avec votre banque, puis Actualiser.`,
+        url: link('update'),
+        tag: 'stale-balances',
+      },
+    });
   }
 
   // 5. Jour de paie : le plan de placement du Pilotage, pour savoir quoi virer où.
@@ -368,23 +367,7 @@ export const computeReminders = (data: GlobalAppData, today: CivilDate | Date, a
   }
 
 
-  // 8. Mi-janvier : les relevés au 31/12 des placements arrivent. Un seul rappel par an,
-  //    et seulement pour les placements dont la valeur n'a pas encore été actualisée.
-  if (M === 0 && D >= 15 && D <= 20) {
-    const waiting = findAccountsAwaitingAnnualStatement(accounts, now);
-    if (waiting.length > 0) {
-      out.push({
-        key: `annual-statement:${Y}`,
-        message: {
-          title: 'Relevés annuels de vos placements',
-          body: `Reportez la valeur au 31/12 et les versements de ${waiting.map(a => a.name).join(', ')} : les plus-values restent justes.${waiting.some(a => a.type === AccountType.ASSURANCE_VIE) ? ` Pensez aussi au taux servi ${Y - 1} du fonds euros, publié par l'assureur.` : ''}`,
-          url: link('update'),
-          tag: 'annual-statement',
-        },
-      });
-    }
-  }
-
+  // 8. (Relevés annuels des placements : étape de la clôture de l'année, voir le n° 12.)
 
   // 9. Avril, ouverture de la déclaration en ligne (le 9 avril en 2026) : rappel pour tout
   //    le monde, avec les points de l'aide à la déclaration qui concernent l'utilisateur
@@ -411,9 +394,12 @@ export const computeReminders = (data: GlobalAppData, today: CivilDate | Date, a
 
 
   // 10. Fin janvier : vérifier les paramètres fiscaux de l'année (barème, plafond LEP,
-  //     abattement), tant qu'ils n'ont pas été marqués comme vérifiés dans l'app.
+  //     abattement), tant qu'ils n'ont pas été marqués comme vérifiés dans l'app. Tant que la
+  //     clôture de l'année écoulée est ouverte, c'est une de ses étapes (notification 12) : pas
+  //     de seconde notification.
   const year = Y;
-  if (M === 0 && D >= 20 && D <= 25 && (data.fiscalConfig?.paramsReviewedYear ?? 0) < year) {
+  const closingOpen = closingApplies(data, Y - 1) && !isYearClosed(data.config, Y - 1);
+  if (M === 0 && D >= 20 && D <= 25 && (data.fiscalConfig?.paramsReviewedYear ?? 0) < year && !closingOpen) {
     out.push({
       key: `fiscal-review:${year}`,
       message: {
@@ -472,18 +458,24 @@ export const computeReminders = (data: GlobalAppData, today: CivilDate | Date, a
   }
 
 
-  // 12. Début janvier : le bilan de l'année écoulée est prêt (Historique).
-  if (M === 0 && D >= 2 && D <= 6 && accounts.length > 0) {
+  // 12. Début janvier : la clôture de l'année écoulée (src/lib/yearClosing), UNE notification
+  //     au lieu du bilan, des relevés annuels, du taux servi et des paramètres fiscaux séparés :
+  //     soldes au 31 décembre, intérêts, relevés, restitution, bilan, déclaration, paramètres
+  //     fiscaux, archive. Fenêtre d'une semaine pour
+  //     un cron manqué (la clé garantit un seul envoi) ; rien si l'année est déjà clôturée, ni pour
+  //     un tout nouvel utilisateur (aucun compte suivi l'an dernier).
+  if (M === 0 && D >= 2 && D <= 8 && closingOpen) {
     const y = Y - 1;
     const review = computeYearReview(data, y, now);
+    const waiting = findAccountsAwaitingAnnualStatement(accounts, now);
     out.push({
-      key: `year-review:${y}`,
+      key: `year-closing:${y}`,
       message: {
-        title: `Votre bilan ${y}`,
-        body: `${review.saved >= 0 ? '+' : ''}${eur(review.saved)} mis de côté, ${eur(review.interest)} d'intérêts${review.parentalInterest >= 1 ? ` (dont ${eur(review.parentalInterest)} offerts par vos parents)` : ''}. Le détail dans Historique.`,
-        // Ouvre directement « Votre année » de l'année écoulée (lu par Historique).
-        url: `${link('history')}&year=${y}`,
-        tag: 'year-review',
+        title: `Clôture de l'année ${y}`,
+        body: `${review.saved >= 0 ? '+' : ''}${eur(review.saved)} mis de côté, ${eur(review.interest)} d'intérêts${review.parentalInterest >= 1 ? ` (dont ${eur(review.parentalInterest)} offerts par vos parents)` : ''}. `
+          + `Soldes au 31 décembre, intérêts${waiting.length > 0 ? `, relevés de ${waiting.map(a => a.name).join(', ')}` : ''}, paramètres fiscaux, bilan et archive : tout est dans Historique, étape par étape.`,
+        url: link('history'),
+        tag: 'year-closing',
       },
     });
   }
@@ -505,7 +497,8 @@ const DISCREET_BODIES: Record<string, string> = {
   'tax-return': 'Votre aide à la déclaration de revenus est prête dans l’app.',
   'restitution-prep': 'La restitution approche : le détail est dans l’app.',
   'restitution-day': 'C’est le jour de la restitution : le détail est dans l’app.',
-  'year-review': 'Le bilan de l’année est prêt dans Historique.',
+  'year-closing': 'La clôture de l’année est prête dans Historique.',
+  stale: 'Des soldes de comptes sont à vérifier dans l’app.',
 };
 // Titres qui portent eux-mêmes un montant : seule partie remplacée d'un titre.
 const DISCREET_TITLES: Record<string, string> = {

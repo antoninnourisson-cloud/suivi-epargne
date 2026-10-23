@@ -1,9 +1,14 @@
+// ================================================
+// FILE: src/components/ParentalShare.tsx
+// Part parentale : votre capital et celui de vos parents, compte par compte, puis la
+// restitution. Couleur des parents : rôle « tertiary », comme au Pilotage et à l'Accueil.
+// ================================================
 import React, { useMemo } from 'react';
 import { SavingsAccount, ParentalRestitution } from '../types';
 import { RestitutionPanel } from './RestitutionPanel';
-import { Users, User } from 'lucide-react';
-import { formatEUR } from '../lib/format';
+import { Users, User, Wallet } from 'lucide-react';
 import { AccountTotal } from './AccountTotal';
+import { Button, Card, EmptyState, MoneyText, PageHeader, StatTile } from './ui';
 
 interface ParentalShareProps {
   accounts: SavingsAccount[];
@@ -14,11 +19,19 @@ interface ParentalShareProps {
   onRestitute: (date: string) => void;
   onUndoRestitution: () => void;
   soloPlanSlot?: React.ReactNode;
+  /** État vide : ouvre Mes comptes, où l'on indique la part des parents compte par compte. */
+  onOpenAccounts?: () => void;
 }
 
-const fmt = (n: number) => formatEUR(n);
+/** Barre « moi / parents » : la répartition est aussi écrite à côté (la couleur ne porte pas seule l'information). */
+const SplitBar: React.FC<{ ownedPct: number; className?: string }> = ({ ownedPct, className = 'h-3' }) => (
+  <div className={`w-full rounded-full overflow-hidden flex gap-0.5 bg-surface-container-highest ${className}`} aria-hidden="true">
+    {ownedPct > 0 && <div className="h-full bg-primary rounded-full" style={{ width: `${ownedPct}%` }} />}
+    {ownedPct < 100 && <div className="h-full bg-tertiary rounded-full flex-1" />}
+  </div>
+);
 
-export const ParentalShare: React.FC<ParentalShareProps> = ({ accounts, restitution, monthPlan, hasCustomSplit, onPlanRestitution, onRestitute, onUndoRestitution, soloPlanSlot }) => {
+export const ParentalShare: React.FC<ParentalShareProps> = ({ accounts, restitution, monthPlan, hasCustomSplit, onPlanRestitution, onRestitute, onUndoRestitution, soloPlanSlot, onOpenAccounts }) => {
   const { totalOwned, totalParental, rows } = useMemo(() => {
     const rows = accounts
       .filter(a => a.parentalCapital > 0 || a.ownedAmount > 0)
@@ -38,10 +51,7 @@ export const ParentalShare: React.FC<ParentalShareProps> = ({ accounts, restitut
 
   return (
     <div className="space-y-6 animate-fade-in pb-20">
-      <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xs">
-        <h2 className="text-2xl font-black text-slate-800 dark:text-slate-100 flex items-center gap-2 mb-1"><Users className="w-6 h-6 text-indigo-600" /> Part parentale</h2>
-        <p className="text-sm text-slate-500 dark:text-slate-400">Distinguez votre capital réel de l'argent géré pour vos parents.</p>
-      </div>
+      <PageHeader title="Part parentale" subtitle="Distinguez votre capital réel de l'argent géré pour vos parents." />
 
       <RestitutionPanel
         accounts={accounts}
@@ -55,63 +65,73 @@ export const ParentalShare: React.FC<ParentalShareProps> = ({ accounts, restitut
 
       {soloPlanSlot}
 
+      {noParental && !restitution?.done && (
+        <Card variant="filled" padding="none">
+          <EmptyState
+            icon={Users}
+            title="Aucun capital de vos parents sur vos comptes"
+            action={onOpenAccounts && <Button variant="tonal" onClick={onOpenAccounts}><Wallet className="w-4 h-4" aria-hidden="true" /> Ouvrir Mes comptes</Button>}
+          >
+            Si une partie d'un compte appartient à vos parents, indiquez-la dans Mes comptes, compte par compte : elle sera suivie ici et jamais comptée comme votre épargne.
+          </EmptyState>
+        </Card>
+      )}
+
       {!noParental && <>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-6 rounded-2xl">
-          <p className="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase mb-1 flex items-center gap-2"><User className="w-4 h-4 text-indigo-600" /> Mon capital</p>
-          <p className="text-4xl font-black text-indigo-600">{fmt(totalOwned)}</p>
-        </div>
-        <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-6 rounded-2xl">
-          <p className="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase mb-1 flex items-center gap-2"><Users className="w-4 h-4 text-amber-700 dark:text-amber-400" /> Capital parents</p>
-          <p className="text-4xl font-black text-amber-700 dark:text-amber-400">{fmt(totalParental)}</p>
-        </div>
-      </div>
+        <Card>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+            <StatTile
+              label={<span className="inline-flex items-center gap-2"><User className="w-4 h-4 text-primary" aria-hidden="true" /> Mon capital</span>}
+              value={<MoneyText value={totalOwned} className="text-primary" />}
+              hint={`${ownedPct.toFixed(0)} % du total géré`}
+            />
+            <StatTile
+              label={<span className="inline-flex items-center gap-2"><Users className="w-4 h-4 text-tertiary" aria-hidden="true" /> Capital parents</span>}
+              value={<MoneyText value={totalParental} className="text-tertiary" />}
+              hint={`${(100 - ownedPct).toFixed(0)} % du total géré`}
+            />
+          </div>
+          <SplitBar ownedPct={ownedPct} className="h-3 mt-5" />
+          <p className="text-xs text-on-surface-variant mt-2">Total géré : <MoneyText value={grand} /></p>
+        </Card>
 
-      <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xs">
-        <div className="flex justify-between text-xs font-bold mb-2">
-          <span className="text-indigo-600">Moi {ownedPct.toFixed(0)} %</span>
-          <span className="text-amber-700 dark:text-amber-400">Parents {(100 - ownedPct).toFixed(0)} %</span>
-        </div>
-        <div className="w-full h-4 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden flex">
-          <div className="h-full bg-indigo-600" style={{ width: `${ownedPct}%` }} />
-          <div className="h-full bg-amber-400" style={{ width: `${100 - ownedPct}%` }} />
-        </div>
-        <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-2">Total géré : {fmt(grand)}</p>
-      </div>
-
-      <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xs overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm md:min-w-136">
-            <thead className="bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700">
-              <tr>
-                <th className="px-6 py-3 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Compte</th>
-                <th className="px-6 py-3 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase text-right">Moi</th>
-                <th className="px-6 py-3 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase text-right">Parents</th>
-                <th className="hidden md:table-cell px-6 py-3 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase w-1/3">Répartition</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {rows.map(r => {
-                const pct = r.total > 0 ? (r.owned / r.total) * 100 : 0;
-                return (
-                  <tr key={r.id} className="hover:bg-slate-50 dark:hover:bg-slate-800">
-                    <td className="px-3 md:px-6 py-3"><div className="font-bold text-slate-800 dark:text-slate-100">{r.name}</div><div className="text-[11px] uppercase text-slate-500 dark:text-slate-400 font-bold">{r.type}</div></td>
-                    <td className="px-3 md:px-6 py-3 text-right align-top"><div className="font-mono text-indigo-600 whitespace-nowrap">{fmt(r.owned)}</div><AccountTotal account={{ ownedAmount: r.owned, parentalCapital: r.parental }} /></td>
-                    <td className="px-3 md:px-6 py-3 text-right font-mono text-amber-700 dark:text-amber-400 align-top whitespace-nowrap">{fmt(r.parental)}</td>
-                    <td className="hidden md:table-cell px-6 py-3">
-                      <div className="w-full h-2.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden flex">
-                        <div className="h-full bg-indigo-600" style={{ width: `${pct}%` }} />
-                        <div className="h-full bg-amber-400" style={{ width: `${100 - pct}%` }} />
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-              {rows.length === 0 && <tr><td colSpan={4} className="px-6 py-8 text-center text-slate-500 dark:text-slate-400 italic">Aucun compte à afficher.</td></tr>}
-            </tbody>
-          </table>
-        </div>
-      </div>
+        <Card title="Compte par compte" padding="none">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm tabular-nums">
+              <caption className="sr-only">Votre part et celle de vos parents, compte par compte</caption>
+              <thead>
+                <tr className="border-y border-outline-variant">
+                  <th scope="col" className="px-5 sm:px-6 py-2 text-left text-xs font-medium text-on-surface-variant">Compte</th>
+                  <th scope="col" className="px-3 py-2 text-right text-xs font-medium text-on-surface-variant">Moi</th>
+                  <th scope="col" className="px-5 sm:px-3 py-2 text-right text-xs font-medium text-on-surface-variant">Parents</th>
+                  <th scope="col" className="hidden md:table-cell pl-3 pr-6 py-2 text-left text-xs font-medium text-on-surface-variant w-1/3">Répartition</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-outline-variant">
+                {rows.map(r => {
+                  const pct = r.total > 0 ? (r.owned / r.total) * 100 : 0;
+                  return (
+                    <tr key={r.id}>
+                      <th scope="row" className="px-5 sm:px-6 py-3 text-left align-top font-normal">
+                        <div className="font-medium text-on-surface">{r.name}</div>
+                        <div className="text-xs text-on-surface-variant">{r.type}</div>
+                      </th>
+                      <td className="px-3 py-3 text-right align-top">
+                        <MoneyText value={r.owned} className="text-primary font-medium" />
+                        <AccountTotal account={{ ownedAmount: r.owned, parentalCapital: r.parental }} />
+                      </td>
+                      <td className="px-5 sm:px-3 py-3 text-right align-top"><MoneyText value={r.parental} className="text-tertiary font-medium" /></td>
+                      <td className="hidden md:table-cell pl-3 pr-6 py-3 align-middle">
+                        <SplitBar ownedPct={pct} className="h-2.5" />
+                        <span className="sr-only">{pct.toFixed(0)} % à vous</span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </Card>
       </>}
     </div>
   );

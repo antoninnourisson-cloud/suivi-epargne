@@ -1,41 +1,42 @@
 // src/components/TransferManager.tsx
+// Virements : dépôt sur un compte, virement entre deux comptes, échéances mensuelles.
 import React, { useRef, useState } from 'react';
 import { SavingsAccount, RecurringMovement } from '../types';
-import { Button } from './Button';
-import { ArrowRightLeft, Download, Calendar, ArrowDown, CheckCircle, AlertCircle, Wallet, Repeat } from 'lucide-react';
+import { ArrowDown, CheckCircle, AlertCircle, Wallet } from 'lucide-react';
 import { RecurringManager } from './RecurringManager';
 import { useSaveFeedback } from '../hooks/useSaveFeedback';
 import { useToast } from './Toast';
 import { parseFrenchNumber, safeNumber } from '../lib/numbers';
 import { localTodayISO } from '../lib/dates';
-import { quickAdd, type CommandPatch } from '../lib/commands';
-import { formatEUR } from '../lib/format';
-import { onTablistKeyDown } from '../lib/tablist';
-import { canWithdrawOwn } from '../lib/accountOps';
+import { linkedTransfer, quickAdd, type CommandPatch } from '../lib/commands';
+import { Button, Card, EmptyState, PageHeader, Tabs, TextField } from './ui';
 
 interface TransferManagerProps {
   accounts: SavingsAccount[];
-  /** Repli : enregistre le compte déjà calculé par la commande (sans annulation). */
-  onUpdateAccountsComplex: (updates: { account: SavingsAccount, date: string, cashFlow?: number }[]) => void;
-  /** Applique le résultat d'une commande (comme `commit` dans App) : active « Annuler » après un dépôt. */
-  onCommit?: (patch: CommandPatch) => void;
-  /** `false` si le virement est refusé (part des parents, compte introuvable). */
-  onLinkedTransfer: (sourceId: string, destId: string, amount: number, date: string) => boolean;
-  // Horodatage de la dernière écriture Drive CONFIRMÉE (voir useSaveFeedback).
-  lastSavedAt?: Date | null;
+  /** Applique le résultat d'une commande (`commit` de useAccountActions) : dépôt et virement s'annulent. */
+  onCommit: (patch: CommandPatch) => void;
   recurringMovements: RecurringMovement[];
   onUpdateRecurring: React.Dispatch<React.SetStateAction<RecurringMovement[]>>;
 }
 
-export const TransferManager: React.FC<TransferManagerProps> = ({ accounts, onUpdateAccountsComplex, onCommit, onLinkedTransfer, lastSavedAt, recurringMovements, onUpdateRecurring }) => {
+type Tab = 'deposit' | 'transfer' | 'recurring';
+// Libellés seuls (sans icône) : les trois onglets tiennent sur un écran de 320 px.
+const TABS: { value: Tab; label: string }[] = [
+  { value: 'deposit', label: 'Dépôt' },
+  { value: 'transfer', label: 'Virement' },
+  { value: 'recurring', label: 'Récurrents' },
+];
+
+export const TransferManager: React.FC<TransferManagerProps> = ({ accounts, onCommit, recurringMovements, onUpdateRecurring }) => {
   const today = localTodayISO();
   const addToast = useToast();
   // État le plus récent pour l'annulation (le toast survit à ce rendu).
   const accountsRef = useRef(accounts);
   accountsRef.current = accounts;
-  const [activeTab, setActiveTab] = useState<'deposit' | 'transfer' | 'recurring'>('deposit');
+  const [activeTab, setActiveTab] = useState<Tab>('deposit');
   const [opDate, setOpDate] = useState<string>(today);
-  const { status: saveStatus, markPending } = useSaveFeedback(lastSavedAt);
+  // Seule une écriture Drive CONFIRMÉE est annoncée comme réussie (voir useSaveFeedback).
+  const { status: saveStatus, markPending } = useSaveFeedback();
   const [formError, setFormError] = useState<string | null>(null);
 
   // Deposit State
@@ -64,14 +65,8 @@ export const TransferManager: React.FC<TransferManagerProps> = ({ accounts, onUp
     if (!r.ok) { setFormError(r.code === 'not-found' ? 'Ce compte est introuvable.' : r.error); return; }
 
     markPending();
-    if (onCommit) {
-      onCommit(r.next);
-      addToast?.({ message: r.message, kind: 'success', action: { label: 'Annuler', onClick: () => onCommit(r.undo({ accounts: accountsRef.current })) } });
-    } else {
-      // Compte déjà calculé (mouvement « Dépôt » compris) : le hook le reprend tel quel.
-      const updated = r.next.accounts?.find(a => a.id === depositAccountId);
-      if (updated) onUpdateAccountsComplex([{ account: updated, date: opDate }]);
-    }
+    onCommit(r.next);
+    addToast?.({ message: r.message, kind: 'success', action: { label: 'Annuler', onClick: () => onCommit(r.undo({ accounts: accountsRef.current })) } });
     setDepositAmount('');
   };
 
@@ -85,110 +80,88 @@ export const TransferManager: React.FC<TransferManagerProps> = ({ accounts, onUp
     const amount = safeNumber(transferAmount, 0);
     if (amount <= 0) { setFormError('Saisissez un montant supérieur à 0.'); return; }
 
-    const sourceAcc = accounts.find(a => a.id === sourceAccountId);
-    if (!sourceAcc) { setFormError('Le compte source est introuvable.'); return; }
+    // Même règle pour tout appelant (commande pure) : part propre seulement, le capital des
+    // parents n'est pas mobilisable ; montant au centime ; annulation exacte des deux côtés.
+    const r = linkedTransfer({ accounts }, { sourceId: sourceAccountId, destId: destAccountId, amount, date: opDate });
+    if (!r.ok) { setFormError(r.code === 'not-found' ? 'Le compte source ou destination est introuvable.' : r.error); return; }
 
-    // Part propre seulement : le capital des parents n'est pas mobilisable.
-    if (!canWithdrawOwn(sourceAcc, amount)) {
-      setFormError(`Fonds insuffisants : votre part sur ${sourceAcc.name} n'est que de ${formatEUR(sourceAcc.ownedAmount)}.`);
-      return;
-    }
-
-    if (!onLinkedTransfer(sourceAccountId, destAccountId, amount, opDate)) {
-      setFormError('Virement refusé : il entamerait la part de vos parents.');
-      return;
-    }
     markPending();
+    onCommit(r.next);
+    addToast?.({ message: r.message, kind: 'success', action: { label: 'Annuler', onClick: () => onCommit(r.undo({ accounts: accountsRef.current })) } });
     setTransferAmount('');
   };
+
+  const header = <PageHeader title="Virements" subtitle="Dépôt sur un compte, virement entre deux comptes, ou échéances qui reviennent chaque mois." />;
 
   // Auparavant `return null` : l'onglet Virements de la barre du bas s'ouvrait sur une zone
   // entièrement vide, sans explication ni porte de sortie.
   if (accounts.length === 0) {
     return (
-      <div className="text-center py-20 bg-white dark:bg-slate-800 rounded-xl shadow-xs border border-slate-200 dark:border-slate-700">
-        <Wallet className="w-12 h-12 text-slate-300 dark:text-slate-600 mx-auto mb-3" />
-        <h2 className="text-xl font-bold text-slate-600 dark:text-slate-300">Aucun compte pour l'instant</h2>
-        <p className="text-sm text-slate-500 dark:text-slate-400 mt-2 max-w-xs mx-auto">
-          Ajoutez au moins un compte depuis l'écran « Mes comptes » pour pouvoir enregistrer des dépôts et des virements.
-        </p>
+      <div className="animate-fade-in pb-20">
+        {header}
+        <Card>
+          <EmptyState icon={Wallet} title="Aucun compte pour l'instant">
+            Ajoutez au moins un compte depuis l'écran « Mes comptes » pour pouvoir enregistrer des dépôts et des virements.
+          </EmptyState>
+        </Card>
       </div>
     );
   }
 
+  const accountSelect = (id: string, label: string, value: string, onChange: (v: string) => void, placeholder: string, disabledId?: string, withInstitution = false) => (
+    <TextField
+      id={id} label={label}
+      render={p => (
+        <select id={p.id} className={p.className} value={value} onChange={e => onChange(e.target.value)} required>
+          <option value="">{placeholder}</option>
+          {accounts.map(acc => <option key={acc.id} value={acc.id} disabled={acc.id === disabledId}>{withInstitution ? `${acc.name} (${acc.institution})` : acc.name}</option>)}
+        </select>
+      )}
+    />
+  );
+
   return (
-    <div className="space-y-4">
-    <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xs">
-      <h2 className="text-2xl font-black text-slate-800 dark:text-slate-100 flex items-center gap-2"><ArrowRightLeft className="w-6 h-6 text-indigo-600" /> Virements</h2>
-      <p className="text-sm text-slate-500 dark:text-slate-400">Dépôt sur un compte, virement entre deux comptes, ou échéances qui reviennent chaque mois.</p>
-    </div>
-    <div className="bg-white dark:bg-slate-800 rounded-xl shadow-xs border border-slate-200 dark:border-slate-700 overflow-hidden">
-      <div role="tablist" onKeyDown={onTablistKeyDown} aria-label="Type d'opération" className="border-b border-slate-200 dark:border-slate-700 flex">
-        <button role="tab" aria-selected={activeTab === 'deposit'} tabIndex={activeTab === 'deposit' ? 0 : -1} onClick={() => setActiveTab('deposit')} className={`flex-1 min-w-0 px-2 py-4 text-sm font-black flex items-center justify-center gap-2 ${activeTab === 'deposit' ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border-b-2 border-emerald-600' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
-          <Download className="w-4 h-4 hidden sm:block" /> Dépôt
-        </button>
-        <button role="tab" aria-selected={activeTab === 'transfer'} tabIndex={activeTab === 'transfer' ? 0 : -1} onClick={() => setActiveTab('transfer')} className={`flex-1 min-w-0 px-2 py-4 text-sm font-black flex items-center justify-center gap-2 ${activeTab === 'transfer' ? 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-400 border-b-2 border-indigo-600' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
-          <ArrowRightLeft className="w-4 h-4 hidden sm:block" /> Virement
-        </button>
-        <button role="tab" aria-selected={activeTab === 'recurring'} tabIndex={activeTab === 'recurring' ? 0 : -1} onClick={() => setActiveTab('recurring')} className={`flex-1 min-w-0 px-2 py-4 text-sm font-black flex items-center justify-center gap-2 ${activeTab === 'recurring' ? 'bg-violet-50 dark:bg-violet-950/40 text-violet-700 dark:text-violet-400 border-b-2 border-violet-600' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
-          <Repeat className="w-4 h-4 hidden sm:block" /> Récurrents
-        </button>
-      </div>
+    <div className="animate-fade-in pb-20">
+      {header}
+      <Tabs label="Type d'opération" tabs={TABS} value={activeTab} onChange={t => { setActiveTab(t); setFormError(null); }}>
+        <Card className="max-w-xl">
+          <div className="space-y-5">
+            {activeTab !== 'recurring' && (
+              <TextField id="op-date" label="Date de l'opération" type="date" value={opDate} onChange={e => setOpDate(e.target.value)} />
+            )}
 
-      <div className="p-6 max-w-lg mx-auto space-y-6">
-        {activeTab !== 'recurring' && <div className="bg-slate-50 dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-700 flex items-center gap-4">
-          <Calendar className="w-5 h-5 text-slate-500 dark:text-slate-400" />
-          <div className="flex-1">
-            <label htmlFor="op-date" className="text-[11px] font-black text-slate-600 dark:text-slate-300 uppercase block">Date de l'opération</label>
-            <input id="op-date" type="date" value={opDate} onChange={e => setOpDate(e.target.value)} className="w-full bg-transparent font-bold text-slate-700 dark:text-slate-200 outline-hidden" />
+            {activeTab !== 'recurring' && saveStatus === 'saved' && (
+              <p role="status" className="bg-secondary-container text-on-secondary-container p-3 rounded-xl text-sm font-medium flex items-center gap-2">
+                <CheckCircle className="w-4 h-4 shrink-0" aria-hidden="true" /> Enregistré sur Drive
+              </p>
+            )}
+
+            {activeTab !== 'recurring' && formError && (
+              <p role="alert" className="bg-error-container text-on-error-container p-3 rounded-xl text-sm font-medium flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" aria-hidden="true" /> {formError}
+              </p>
+            )}
+
+            {activeTab === 'deposit' ? (
+              <form onSubmit={handleDeposit} className="space-y-5">
+                {accountSelect('dep-account', 'Compte de destination', depositAccountId, setDepositAccountId, 'Choisir un compte', undefined, true)}
+                <TextField id="dep-amount" label="Montant du dépôt" suffix="€" inputMode="decimal" placeholder="0,00" value={depositAmount} onChange={e => setDepositAmount(e.target.value)} />
+                <Button type="submit" isLoading={saveStatus === 'pending'} className="w-full h-12!">Valider le dépôt</Button>
+              </form>
+            ) : activeTab === 'transfer' ? (
+              <form onSubmit={handleTransfer} className="space-y-5">
+                {accountSelect('tr-from', 'Compte de départ', sourceAccountId, setSourceAccountId, 'Choisir un compte', destAccountId)}
+                <div className="flex justify-center -my-2"><ArrowDown className="w-5 h-5 text-on-surface-variant" aria-hidden="true" /></div>
+                {accountSelect('tr-to', "Compte d'arrivée", destAccountId, setDestAccountId, 'Choisir un compte', sourceAccountId)}
+                <TextField id="tr-amount" label="Montant du virement" suffix="€" inputMode="decimal" placeholder="0,00" value={transferAmount} onChange={e => setTransferAmount(e.target.value)} />
+                <Button type="submit" isLoading={saveStatus === 'pending'} className="w-full h-12!">Enregistrer le virement</Button>
+              </form>
+            ) : (
+              <RecurringManager accounts={accounts} recurringMovements={recurringMovements} onUpdate={onUpdateRecurring} />
+            )}
           </div>
-        </div>}
-
-        {saveStatus === 'saved' && (
-            <div role="status" className="bg-emerald-100 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300 p-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2">
-                <CheckCircle className="w-4 h-4"/> Enregistré sur Drive
-            </div>
-        )}
-
-        {formError && (
-            <div role="alert" className="bg-rose-100 dark:bg-rose-950/50 text-rose-800 dark:text-rose-300 p-3 rounded-xl text-sm font-bold flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 shrink-0"/> {formError}
-            </div>
-        )}
-
-        {activeTab === 'deposit' ? (
-          <form onSubmit={handleDeposit} className="space-y-4">
-            <label htmlFor="dep-account" className="sr-only">Compte de destination</label>
-            <select id="dep-account" value={depositAccountId} onChange={e => setDepositAccountId(e.target.value)} className="w-full p-3 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-emerald-500 font-bold" required>
-              <option value="">Compte de destination</option>
-              {accounts.map(acc => <option key={acc.id} value={acc.id}>{acc.name} ({acc.institution})</option>)}
-            </select>
-            <label htmlFor="dep-amount" className="sr-only">Montant du dépôt</label>
-            <input id="dep-amount" type="text" value={depositAmount} onChange={e => setDepositAmount(e.target.value)} className="w-full p-4 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 border border-slate-300 dark:border-slate-700 rounded-lg text-2xl font-black" placeholder="0,00 €" inputMode="decimal" />
-            <Button type="submit" isLoading={saveStatus === 'pending'} className="w-full py-4">Valider le dépôt</Button>
-          </form>
-        ) : activeTab === 'transfer' ? (
-          <form onSubmit={handleTransfer} className="space-y-4">
-            <label htmlFor="tr-from" className="sr-only">Compte de départ</label>
-            <select id="tr-from" value={sourceAccountId} onChange={e => setSourceAccountId(e.target.value)} className="w-full p-3 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-indigo-500 font-bold" required>
-              <option value="">Depuis</option>
-              {accounts.map(acc => <option key={acc.id} value={acc.id} disabled={acc.id === destAccountId}>{acc.name}</option>)}
-            </select>
-            <div className="flex justify-center"><ArrowDown className="text-slate-500 dark:text-slate-400" aria-hidden="true" /></div>
-            <label htmlFor="tr-to" className="sr-only">Compte d'arrivée</label>
-            <select id="tr-to" value={destAccountId} onChange={e => setDestAccountId(e.target.value)} className="w-full p-3 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-indigo-500 font-bold" required>
-              <option value="">Vers</option>
-              {accounts.map(acc => <option key={acc.id} value={acc.id} disabled={acc.id === sourceAccountId}>{acc.name}</option>)}
-            </select>
-            <label htmlFor="tr-amount" className="sr-only">Montant du virement</label>
-            <input id="tr-amount" type="text" value={transferAmount} onChange={e => setTransferAmount(e.target.value)} className="w-full p-4 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 border border-slate-300 dark:border-slate-700 rounded-lg text-2xl font-black" placeholder="0,00 €" inputMode="decimal" />
-            <Button type="submit" isLoading={saveStatus === 'pending'} className="w-full py-4">Enregistrer le virement</Button>
-          </form>
-        ) : (
-          <RecurringManager accounts={accounts} recurringMovements={recurringMovements} onUpdate={onUpdateRecurring} />
-        )}
-      </div>
-    </div>
+        </Card>
+      </Tabs>
     </div>
   );
 };

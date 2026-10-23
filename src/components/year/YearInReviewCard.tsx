@@ -55,8 +55,10 @@ export const YearInReviewCard: React.FC<{ data: GlobalAppData }> = ({ data }) =>
   return (
     <section aria-labelledby="year-in-review-title" className="rounded-3xl p-5 sm:p-6 bg-primary-container text-on-primary-container">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <h3 id="year-in-review-title" className="text-[22px] leading-7 font-normal flex items-center gap-2">
-          <Sparkles className="w-5 h-5" aria-hidden="true" /> {title}
+        {/* flex-wrap : à 320 px, la pastille « année en cours » passe dessous au lieu de couper
+            « Votre année 2026 » sur trois lignes. */}
+        <h3 id="year-in-review-title" className="text-[22px] leading-7 font-normal flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span className="flex items-center gap-2 whitespace-nowrap"><Sparkles className="w-5 h-5 shrink-0" aria-hidden="true" /> {title}</span>
           {!story.complete && <span className="whitespace-nowrap text-xs font-medium px-2 py-0.5 rounded-lg bg-surface-container-lowest/60 text-on-surface">année en cours</span>}
         </h3>
         {options.length > 1 && (
@@ -74,7 +76,7 @@ export const YearInReviewCard: React.FC<{ data: GlobalAppData }> = ({ data }) =>
       <p className="text-[44px] leading-[52px] font-normal tracking-tight tabular-nums">{story.headline.value}</p>
       <p className="mt-1 text-sm">{story.empty ? 'Votre année se racontera au fil des mois.' : story.headline.text}</p>
       <div className="mt-4">
-        <Button variant="filled" onClick={() => setOpen(true)} aria-haspopup="dialog">Voir votre année {year}</Button>
+        <Button variant="filled" className="max-sm:h-12" onClick={() => setOpen(true)} aria-haspopup="dialog">Voir votre année {year}</Button>
       </div>
       <YearInReviewSheet open={open} onClose={() => setOpen(false)} story={story} />
     </section>

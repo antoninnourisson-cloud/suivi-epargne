@@ -157,7 +157,7 @@ test.describe('Synchronisation avec Drive (faux Drive)', () => {
     await expect(page.getByRole('dialog', { name: 'Vos données ont changé sur un autre appareil' })).toHaveCount(0);
   });
 
-  test('session expirée : bandeau « Se reconnecter », plus aucune écriture, saisie gardée', async ({ page }) => {
+  test('session expirée : bandeau « Se reconnecter », plus aucune écriture, saisie gardée', async ({ page, isMobile }) => {
     const drive = await installFakeDrive(page);
     await page.goto('/');
     await expect(home(page)).toBeAttached({ timeout: 20_000 });
@@ -167,6 +167,10 @@ test.describe('Synchronisation avec Drive (faux Drive)', () => {
     const alert = page.getByRole('alert').filter({ hasText: 'Votre session Google a expiré' });
     await expect(alert).toBeVisible({ timeout: 15_000 });
     await expect(alert.getByRole('button', { name: 'Se reconnecter' })).toBeVisible();
+    // L'indicateur de synchronisation le dit aussi (il restait vert, « Sur Drive à … »).
+    const indicator = isMobile ? page.getByRole('banner') : page.locator('aside');
+    await expect(indicator.getByText(isMobile ? 'Reconnexion' : 'Reconnexion requise', { exact: true })).toBeVisible();
+    await expect(indicator.getByText(/Sur Drive à|Synchronisé/)).toHaveCount(0);
     await page.waitForTimeout(SAVE_WAIT_MS);
     expect(lddsWritten(drive.writes)).not.toContain(3100);
     // La saisie reste sur l'appareil (copie locale), prête à partir après reconnexion.

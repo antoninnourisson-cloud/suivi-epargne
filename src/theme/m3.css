@@ -1,64 +1,8 @@
 /* Généré par scripts/m3-theme.mjs (npm run theme) : ne pas modifier à la main. */
 
 @theme {
-  /* Couleur principale (vert sapin), en tons Material. */
-  --color-indigo-50: #e3fee4;
-  --color-indigo-100: #d7f2d9;
-  --color-indigo-200: #c4dec6;
-  --color-indigo-300: #8ecd9c;
-  --color-indigo-400: #6eab7d;
-  --color-indigo-500: #4d895d;
-  --color-indigo-600: #336f46;
-  --color-indigo-700: #1b5932;
-  --color-indigo-800: #004521;
-  --color-indigo-900: #003417;
-  --color-indigo-950: #00210d;
-  --color-sapin-50: #e3fee4;
-  --color-sapin-100: #d7f2d9;
-  --color-sapin-200: #c4dec6;
-  --color-sapin-300: #8ecd9c;
-  --color-sapin-400: #6eab7d;
-  --color-sapin-500: #4d895d;
-  --color-sapin-600: #336f46;
-  --color-sapin-700: #1b5932;
-  --color-sapin-800: #004521;
-  --color-sapin-900: #003417;
-  --color-sapin-950: #00210d;
+  /* Vert sapin de la marque, identique en clair et en sombre (écrans de connexion et de verrou). */
   --color-sapin: #14532d;
-  /* Neutres Material, légèrement teintés de vert. */
-  --color-slate-50: #f8faf4;
-  --color-slate-100: #ecefe9;
-  --color-slate-200: #e1e3dd;
-  --color-slate-300: #c5c7c2;
-  --color-slate-400: #949792;
-  --color-slate-500: #686b67;
-  --color-slate-600: #575a56;
-  --color-slate-700: #444843;
-  --color-slate-800: #272b27;
-  --color-slate-900: #151815;
-  --color-slate-950: #0c0f0c;
-  --color-gray-50: #f8faf4;
-  --color-gray-100: #ecefe9;
-  --color-gray-200: #e1e3dd;
-  --color-gray-300: #c5c7c2;
-  --color-gray-400: #949792;
-  --color-gray-500: #686b67;
-  --color-gray-600: #575a56;
-  --color-gray-700: #444843;
-  --color-gray-800: #272b27;
-  --color-gray-900: #151815;
-  --color-gray-950: #0c0f0c;
-  --color-stone-50: #f8faf4;
-  --color-stone-100: #ecefe9;
-  --color-stone-200: #e1e3dd;
-  --color-stone-300: #c5c7c2;
-  --color-stone-400: #949792;
-  --color-stone-500: #686b67;
-  --color-stone-600: #575a56;
-  --color-stone-700: #444843;
-  --color-stone-800: #272b27;
-  --color-stone-900: #151815;
-  --color-stone-950: #0c0f0c;
 
   /* Rôles Material 3 (clair/sombre), utilisables en classes : bg-surface-container, text-on-surface… */
   --color-primary: var(--md-primary);
@@ -90,10 +34,24 @@
   --color-inverse-on-surface: var(--md-inverse-on-surface);
   --color-scrim: var(--md-scrim);
   --color-shadow: var(--md-shadow);
+  --color-inverse-error: var(--md-inverse-error);
   --color-tertiary: var(--md-tertiary);
   --color-on-tertiary: var(--md-on-tertiary);
   --color-tertiary-container: var(--md-tertiary-container);
   --color-on-tertiary-container: var(--md-on-tertiary-container);
+  /* Rôles de sens : text-gain, bg-loss-container, text-on-parents-container… */
+  --color-gain: var(--md-gain);
+  --color-on-gain: var(--md-on-gain);
+  --color-gain-container: var(--md-gain-container);
+  --color-on-gain-container: var(--md-on-gain-container);
+  --color-loss: var(--md-loss);
+  --color-on-loss: var(--md-on-loss);
+  --color-loss-container: var(--md-loss-container);
+  --color-on-loss-container: var(--md-on-loss-container);
+  --color-parents: var(--md-parents);
+  --color-on-parents: var(--md-on-parents);
+  --color-parents-container: var(--md-parents-container);
+  --color-on-parents-container: var(--md-on-parents-container);
 }
 
 :root {
@@ -126,10 +84,23 @@
   --md-inverse-on-surface: #eff2eb;
   --md-scrim: #000000;
   --md-shadow: #000000;
+  --md-inverse-error: #ffb4ab;
   --md-tertiary: #795900;
   --md-on-tertiary: #ffffff;
   --md-tertiary-container: #ffdf9f;
   --md-on-tertiary-container: #261a00;
+  --md-gain: #006d43;
+  --md-on-gain: #ffffff;
+  --md-gain-container: #bdeecd;
+  --md-on-gain-container: #002111;
+  --md-loss: #b91d00;
+  --md-on-loss: #ffffff;
+  --md-loss-container: #ffdad3;
+  --md-on-loss-container: #350f08;
+  --md-parents: #795900;
+  --md-on-parents: #ffffff;
+  --md-parents-container: #ffdf9f;
+  --md-on-parents-container: #261a00;
 }
 
 html.dark {
@@ -162,8 +133,21 @@ html.dark {
   --md-inverse-on-surface: #2e312d;
   --md-scrim: #000000;
   --md-shadow: #000000;
+  --md-inverse-error: #ba1a1a;
   --md-tertiary: #f9bd22;
   --md-on-tertiary: #402d00;
   --md-tertiary-container: #5c4300;
   --md-on-tertiary-container: #ffdf9f;
+  --md-gain: #72dba0;
+  --md-on-gain: #003920;
+  --md-gain-container: #234f37;
+  --md-on-gain-container: #bdeecd;
+  --md-loss: #ffb4a5;
+  --md-on-loss: #650b00;
+  --md-loss-container: #6b392f;
+  --md-on-loss-container: #ffdad3;
+  --md-parents: #f9bd22;
+  --md-on-parents: #402d00;
+  --md-parents-container: #5c4300;
+  --md-on-parents-container: #ffdf9f;
 }

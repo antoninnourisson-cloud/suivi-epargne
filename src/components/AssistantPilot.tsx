@@ -1,6 +1,6 @@
 // src/components/AssistantPilot.tsx
-import React, { useState, useMemo, useEffect, useId } from 'react';
-import { SavingsAccount, Expense, AccountType, FiscalConfig, WorkBenefits, PayslipRecord, Subscription, PayChecklist as PayChecklistData, PayAdjustment } from '../types';
+import React, { useState, useMemo, useEffect, useId, useRef } from 'react';
+import { SavingsAccount, Expense, AccountType, FiscalConfig, WorkBenefits, PayslipRecord, Subscription, PayChecklist as PayChecklistData, PayAdjustment, AppDoc } from '../types';
 import { PayChecklist } from './PayChecklist';
 import { SavingsSplitEditor } from './SavingsSplitEditor';
 import { computeIncome, computeMaturityCountdown, computePeeAvailability, describeMaturity, computePlacementStrategy, payslipSuperNet, subscriptionsAsExpenses, computePayTransfers, computeRecentSavingsRate, activeSavingsSplit, payPeriodOf } from '../lib/finance';
@@ -12,8 +12,9 @@ import { isBackendEnabled } from '../services/backendService';
 import { Calculator, Receipt, Info, Plus, Trash2, Coins, FileCheck2, Wand2, BellRing, PieChart, SlidersHorizontal, Sigma } from 'lucide-react';
 import { formatEUR, formatPeriod, formatRate } from '../lib/format';
 import { useUndoableRemove } from './Toast';
+import { focusAfterRemoval } from './focusAfterRemoval';
 import { buildWaterfall, heroContext, AmountSource } from '../lib/pilotView';
-import { Button, MoneyText, PageHeader, StatTile, Tabs, TextField, fieldClass } from './ui';
+import { Button, IconButton, MoneyText, PageHeader, StatTile, Tabs, TextField, fieldClass } from './ui';
 import { Disclosure } from './pilot/Disclosure';
 import { BudgetWaterfall } from './pilot/BudgetWaterfall';
 import { BookletFill } from './pilot/BookletFill';
@@ -21,24 +22,21 @@ import { SurvivalCard } from './pilot/SurvivalCard';
 import { FiscalClock } from './pilot/FiscalClock';
 
 
+/**
+ * Réglages du Pilotage, enregistrés dans le fichier de données (config). Un réglage de plus
+ * = une clé ici : App passe la config et une seule fonction de mise à jour.
+ */
+export type PilotConfig = Pick<AppDoc['config'],
+  'grossAnnual' | 'leisureBudget' | 'projectSavings' | 'taxRateManual' | 'extraMonthlyIncome'
+  | 'paydayDay' | 'paydayAmount' | 'savingsSplit' | 'savingsSplitFrom' | 'payAdjustment'>;
+
 interface AssistantPilotProps {
   accounts: SavingsAccount[];
   expenses: Expense[];
   onUpdateExpenses: React.Dispatch<React.SetStateAction<Expense[]>>;
-  grossAnnual: number;
-  setGrossAnnual: (val: number) => void;
-  leisureBudget: number;
-  setLeisureBudget: (val: number) => void;
-  projectSavings: number;
-  setProjectSavings: (val: number) => void;
-  navigoBase: number;
-  setNavigoBase: (val: number) => void;
-  navigoRate: number;
-  setNavigoRate: (val: number) => void;
-  taxRateManual: number;
-  setTaxRateManual: (val: number) => void;
-  extraMonthlyIncome: number;
-  setExtraMonthlyIncome: (val: number) => void;
+  config: PilotConfig;
+  /** Modifie un ou plusieurs réglages (les autres restent tels quels). */
+  onPatchConfig: (patch: Partial<PilotConfig>) => void;
   fiscalConfig: FiscalConfig;
   workBenefits: WorkBenefits;
   // Quand définie, le détail budgétaire (brut mensuel, net avant impôt, charges, navigo,
@@ -49,31 +47,39 @@ interface AssistantPilotProps {
   subscriptions: Subscription[];
   onOpenSubscriptions: () => void;
   payChecklist?: PayChecklistData;
-  savingsSplit?: { accountId: string; pct: number }[];
-  savingsSplitFrom?: string;
-  onSavingsSplitChange: (split: { accountId: string; pct: number }[] | undefined, from: string | undefined) => void;
   onPayChecklistChange: (next: PayChecklistData | undefined) => void;
   onRecordPayDeposit: (accountId: string, amount: number) => string | undefined;
   onCancelPayDeposit: (accountId: string, movementId: string) => void;
-  paydayDay?: number;
-  setPaydayDay: (day: number | undefined) => void;
-  paydayAmount?: number;
-  setPaydayAmount: (amount: number | undefined) => void;
-  // Capacité d'épargne et somme en plus saisies pour la paie en cours (enregistrées dans le
-  // fichier de données, ignorées à la paie suivante : voir lib/payAdjustment).
-  payAdjustment?: PayAdjustment;
-  onPayAdjustmentChange: (next: PayAdjustment | undefined) => void;
 }
 
 export const AssistantPilot: React.FC<AssistantPilotProps> = ({
-  accounts, expenses, onUpdateExpenses,
-  grossAnnual, setGrossAnnual, leisureBudget, setLeisureBudget, projectSavings, setProjectSavings,
-  navigoBase, navigoRate, taxRateManual, setTaxRateManual,
-  extraMonthlyIncome, fiscalConfig, workBenefits, activePayslip, onClearActivePayslip,
-  subscriptions, onOpenSubscriptions, savingsSplit, savingsSplitFrom, onSavingsSplitChange, payChecklist, onPayChecklistChange, onRecordPayDeposit, onCancelPayDeposit, paydayDay, setPaydayDay, paydayAmount, setPaydayAmount, payAdjustment, onPayAdjustmentChange
+  accounts, expenses, onUpdateExpenses, config, onPatchConfig,
+  fiscalConfig, workBenefits, activePayslip, onClearActivePayslip,
+  subscriptions, onOpenSubscriptions, payChecklist, onPayChecklistChange, onRecordPayDeposit, onCancelPayDeposit,
 }) => {
+  const { grossAnnual, leisureBudget, projectSavings, taxRateManual, extraMonthlyIncome, paydayDay, paydayAmount, savingsSplit, savingsSplitFrom } = config;
+  // Capacité d'épargne et somme en plus saisies pour la paie en cours (enregistrées dans le
+  // fichier de données, ignorées à la paie suivante : voir lib/payAdjustment).
+  const payAdjustment: PayAdjustment | undefined = config.payAdjustment;
+  const setGrossAnnual = (grossAnnual: number) => onPatchConfig({ grossAnnual });
+  const setLeisureBudget = (leisureBudget: number) => onPatchConfig({ leisureBudget });
+  const setProjectSavings = (projectSavings: number) => onPatchConfig({ projectSavings });
+  const setTaxRateManual = (taxRateManual: number) => onPatchConfig({ taxRateManual });
+  const setExtraMonthlyIncome = (extraMonthlyIncome: number) => onPatchConfig({ extraMonthlyIncome });
+  const setPaydayDay = (paydayDay: number | undefined) => onPatchConfig({ paydayDay });
+  const setPaydayAmount = (paydayAmount: number | undefined) => onPatchConfig({ paydayAmount });
+  const onSavingsSplitChange = (split: { accountId: string; pct: number }[] | undefined, from: string | undefined) =>
+    onPatchConfig({ savingsSplit: split, savingsSplitFrom: from });
+  const onPayAdjustmentChange = (next: PayAdjustment | undefined) => onPatchConfig({ payAdjustment: next });
   const [showDetails, setShowDetails] = useState(false);
   const removeWithUndo = useUndoableRemove();
+  // Après la suppression d'une charge, le focus va sur la charge voisine (sinon sur le titre).
+  const expenseListRef = useRef<HTMLUListElement>(null);
+  const expensesTitleId = useId();
+  const removeExpense = (e: Expense, index: number) => {
+    removeWithUndo(expenses, e, onUpdateExpenses, `Charge « ${e.name} » supprimée`);
+    focusAfterRemoval(() => expenseListRef.current, index, () => document.getElementById(expensesTitleId));
+  };
   // Réglages de la paie en cours : enregistrés (l'Accueil et la relance de paie affichent le
   // même objectif), ignorés dès la paie suivante.
   const periodKey = payPeriodOf(paydayDay).key;
@@ -111,11 +117,11 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
   const autoValues = useMemo(
     () =>
       computeIncome(
-        { grossAnnual, extraMonthlyIncome, navigoBase, navigoRate, taxRateManual },
+        { grossAnnual, extraMonthlyIncome, taxRateManual },
         fiscalConfig,
         workBenefits
       ),
-    [grossAnnual, extraMonthlyIncome, fiscalConfig, workBenefits, navigoBase, navigoRate, taxRateManual]
+    [grossAnnual, extraMonthlyIncome, fiscalConfig, workBenefits, taxRateManual]
   );
 
   // Bascule d'affichage : quand une fiche de paie sert de référence, on montre ses
@@ -327,8 +333,8 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
 
   // Montant à placer : expliqué en une phrase (hero) puis ligne par ligne (D'où vient ce chiffre).
   const payLabel = display.isReal
-    ? (effectiveSuperNet === undefined ? 'Paie nette du mois (estimation)' : 'Net réel perçu (fiche de paie)')
-    : 'Paie nette du mois, après impôt';
+    ? (effectiveSuperNet === undefined ? 'Paie nette après impôt (estimation)' : 'Net réel perçu (fiche de paie)')
+    : 'Paie nette après impôt';
   const waterfall = useMemo(() => buildWaterfall({
     pay: effectiveSuperNetForCalc,
     payLabel,
@@ -377,7 +383,7 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
         <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-6">
           <StatTile size="hero" label="À placer ce mois" value={<MoneyText value={budgetData.totalToInvest} />} />
           <dl className="grid grid-cols-2 gap-x-8 gap-y-1 text-sm">
-            <dt className="text-on-surface-variant">Paie du mois</dt>
+            <dt className="text-on-surface-variant">Paie nette après impôt</dt>
             <dt className="text-on-surface-variant">Dépenses prévues</dt>
             <dd className="text-lg text-on-surface"><MoneyText value={effectiveSuperNetForCalc} decimals={0} /></dd>
             <dd className="text-lg text-on-surface"><MoneyText value={plannedSpending} decimals={0} /></dd>
@@ -414,11 +420,11 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
 
       {/* d. Les réglages, repliés par groupe. */}
       <section aria-labelledby="pilot-settings-title" className="pt-2">
-        <h3 id="pilot-settings-title" className="text-lg font-medium text-on-surface flex items-center gap-2"><SlidersHorizontal className="w-5 h-5 text-indigo-600 dark:text-indigo-300" aria-hidden="true" /> Mes paramètres</h3>
+        <h3 id="pilot-settings-title" className="text-lg font-medium text-on-surface flex items-center gap-2"><SlidersHorizontal className="w-5 h-5 text-primary" aria-hidden="true" /> Mes paramètres</h3>
         <p className="text-sm text-on-surface-variant mt-1 mb-4">Salaire, charges et budgets : le montant à placer se recalcule dès que vous les modifiez.</p>
         <div className="rounded-2xl border border-outline-variant bg-surface-container-lowest dark:bg-surface-container-low divide-y divide-outline-variant overflow-hidden">
 
-          <Disclosure appearance="plain" headingLevel={4} title="Revenus et salaire" icon={Calculator} summary={effectiveSuperNet === undefined ? '—' : `${formatEUR(effectiveSuperNet, 0)} nets par mois`}>
+          <Disclosure appearance="plain" headingLevel={4} title="Revenus et salaire" icon={Calculator} summary={effectiveSuperNet === undefined ? '—' : `${formatEUR(effectiveSuperNet, 0)} nets après impôt par mois`}>
             {activePayslip && (
               <div className="mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl bg-tertiary-container text-on-tertiary-container p-3">
                 <p className="flex items-start gap-2 text-sm">
@@ -444,18 +450,19 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
               {activePayslip
                 ? readOnlyValue('Net avant impôt', showEUR(display.netBeforeTax))
                 : <TextField label="Net avant impôt" render={p => <NumberInput id={p.id} describedBy={p.describedBy} invalid={p.invalid} value={Math.round(autoValues.netBeforeTax * 100) / 100} onChange={updateFromNet} min={0} suffix="€" className={`${p.className} tabular-nums`} />} />}
-              {readOnlyValue(activePayslip ? 'Net réel perçu' : 'Reste à vivre', showEUR(effectiveSuperNet))}
+              {readOnlyValue(activePayslip ? 'Net réel perçu' : 'Paie nette après impôt', showEUR(effectiveSuperNet))}
             </div>
 
-            <button
+            <Button
               type="button"
+              variant="text"
               onClick={() => setShowDetails(!showDetails)}
               aria-expanded={showDetails}
               aria-controls="pilot-salary-detail"
-              className="mt-3 h-10 px-3 -ml-3 rounded-full text-sm font-medium text-indigo-700 dark:text-indigo-200 hover:bg-indigo-600/8 inline-flex items-center gap-2"
+              className="mt-3 -ml-3"
             >
               <Info className="w-4 h-4" aria-hidden="true" /> {showDetails ? 'Masquer le détail du salaire' : 'Voir le détail du salaire'}
-            </button>
+            </Button>
 
             {showDetails && (
               <div id="pilot-salary-detail" className="mt-2 rounded-xl bg-surface-container p-4 text-sm max-w-xl">
@@ -463,6 +470,7 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
                   {detailRow('Salaire brut mensuel', showEUR(display.grossMonth), true, false)}
                   {detailRow(<>Charges salariales{!activePayslip && ` (${formatRate(Math.round(fiscalConfig.salaryChargesRate * 10000) / 100)})`}</>, <>− {showEUR(display.socialCharges)}</>)}
                   {detailRow('Remboursement Navigo', <>+ {showEUR(display.navigoGain)}</>)}
+                  {!activePayslip && extraMonthlyIncome > 0 && detailRow('Autre salaire', <>+ {showEUR(extraMonthlyIncome)}</>)}
                   {(activePayslip ? display.mutuelleCost !== undefined : workBenefits.mutuelle.active) && detailRow('Mutuelle (part salarié)', <>− {showEUR(display.mutuelleCost)}</>)}
                   {(activePayslip ? display.swileCost !== undefined : workBenefits.mealVouchers.active) && detailRow('Titres-restaurant (part salarié)', <>− {showEUR(display.swileCost)}</>)}
                   {detailRow('= Net cash avant impôt', showEUR(display.superNetRaw), true)}
@@ -490,6 +498,17 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
                       className="w-56"
                       render={p => <NumberInput id={p.id} describedBy={p.describedBy} invalid={p.invalid} value={taxRateManual} onChange={setTaxRateManual} min={0} suffix="%" placeholder="Auto" className={`${p.className} tabular-nums`} />}
                     />
+                    {/* Second salaire (autre employeur), net par mois : il s'ajoute à la paie nette après impôt
+                        et aux salaires imposables, avec l'abattement de 10 % propre aux salaires
+                        (voir computeIncome). Revenus d'indépendant et loyers suivent d'autres règles
+                        (pas cet abattement) : le texte d'aide les écarte de ce champ. Longtemps lu
+                        sans pouvoir être modifié : une valeur reprise d'un ancien fichier se corrige ici. */}
+                    <TextField
+                      label="Autre salaire (net par mois)"
+                      supporting="Salaire d'un autre employeur, avant impôt. Il compte dans l'impôt estimé. Revenus d'indépendant ou loyers : ne les mettez pas ici, ils ne sont pas imposés comme un salaire. 0 = aucun."
+                      className="w-full sm:w-72"
+                      render={p => <NumberInput id={p.id} describedBy={p.describedBy} invalid={p.invalid} value={extraMonthlyIncome} onChange={setExtraMonthlyIncome} min={0} suffix="€" className={`${p.className} tabular-nums`} />}
+                    />
                   </div>
                 )}
               </div>
@@ -498,7 +517,7 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
 
           <Disclosure appearance="plain" headingLevel={4} title="Charges fixes et abonnements" icon={Receipt} summary={`${formatEUR(budgetData.totalFixed, 0)} par mois`}>
             <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
-              <h5 className="text-sm font-medium text-on-surface">Charges saisies</h5>
+              <h5 id={expensesTitleId} tabIndex={-1} className="text-sm font-medium text-on-surface outline-none">Charges saisies</h5>
               {!isAddingExpense && (
                 <Button variant="tonal" onClick={() => setIsAddingExpense(true)} className="h-9 px-4"><Plus className="w-4 h-4" aria-hidden="true" /> Ajouter une charge fixe</Button>
               )}
@@ -516,22 +535,22 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
             )}
 
             {expenses.length > 0 ? (
-              <ul className="divide-y divide-outline-variant max-h-72 overflow-y-auto">
-                {expenses.map(e => (
+              <ul ref={expenseListRef} className="divide-y divide-outline-variant max-h-72 overflow-y-auto">
+                {expenses.map((e, index) => (
                   <li key={e.id} className="flex items-center gap-3 py-1.5 text-sm">
                     <span className="flex-1 min-w-0 truncate text-on-surface">
                       {e.name}
                       {e.paymentMethod && <span className="ml-2 text-xs text-on-surface-variant">{e.paymentMethod}</span>}
                     </span>
                     <MoneyText value={e.amount} className="text-on-surface" />
-                    <button
-                      type="button"
-                      aria-label={`Supprimer la charge ${e.name}`}
-                      onClick={() => removeWithUndo(expenses, e, onUpdateExpenses, `Charge « ${e.name} » supprimée`)}
-                      className="w-10 h-10 shrink-0 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-on-surface/8 hover:text-error"
-                    >
-                      <Trash2 className="w-4 h-4" aria-hidden="true" />
-                    </button>
+                    <IconButton
+                      label={`Supprimer la charge ${e.name}`}
+                      icon={Trash2}
+                      tone="danger"
+                      onClick={() => removeExpense(e, index)}
+                      data-focus-after-removal
+                      className="-my-1"
+                    />
                   </li>
                 ))}
               </ul>
@@ -544,7 +563,7 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
 
             <div className="mt-5 flex flex-wrap items-center justify-between gap-3 mb-1">
               <h5 className="text-sm font-medium text-on-surface">Abonnements (automatique)</h5>
-              <Button variant="text" onClick={onOpenSubscriptions} className="h-9 px-3">Gérer les abonnements</Button>
+              <Button variant="text" size="sm" onClick={onOpenSubscriptions}>Gérer les abonnements</Button>
             </div>
             {subscriptionCharges.length > 0 ? (
               <ul className="divide-y divide-outline-variant max-h-60 overflow-y-auto">
@@ -572,7 +591,7 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
           <Disclosure appearance="plain" headingLevel={4} title="Budgets et montant du mois" icon={Coins} summary={`${formatEUR(leisureBudget, 0)} plaisir · ${formatEUR(projectSavings, 0)} projets`}>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <TextField label="Argent plaisir" supporting="Ce qui reste sur le compte courant pour le mois." render={p => <NumberInput id={p.id} describedBy={p.describedBy} invalid={p.invalid} value={leisureBudget} onChange={setLeisureBudget} min={0} suffix="€" className={`${p.className} tabular-nums`} />} />
-              <TextField label="Épargne projets" supporting="Mise de côté pour un projet, avant le placement." render={p => <NumberInput id={p.id} describedBy={p.describedBy} invalid={p.invalid} value={projectSavings} onChange={setProjectSavings} min={0} suffix="€" className={`${p.className} tabular-nums`} />} />
+              <TextField label="Épargne projets" supporting="Argent qui part vers un compte hors de Pécule : il ne compte pas comme épargne. Pour suivre un projet, placez-le plutôt sur un compte de Pécule avec une étiquette (voyage, apport…) : « Mes comptes » en affiche le total." render={p => <NumberInput id={p.id} describedBy={p.describedBy} invalid={p.invalid} value={projectSavings} onChange={setProjectSavings} min={0} suffix="€" className={`${p.className} tabular-nums`} />} />
               <div>
                 <TextField
                   id="savings-capacity"
@@ -589,7 +608,7 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
                       : `Calculée : ${formatEUR(budgetData.theoreticalCapacity, 0)}. Modifiez-la si ce mois est différent.`}
                 />
                 {(savedCapacity !== undefined || capacityText !== null) && (
-                  <Button variant="text" onClick={resetCapacity} className="mt-1 h-9 px-3">Revenir au calcul</Button>
+                  <Button variant="text" size="sm" onClick={resetCapacity} className="mt-1">Revenir au calcul</Button>
                 )}
               </div>
               <TextField

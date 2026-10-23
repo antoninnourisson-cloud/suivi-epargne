@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { applyDecote, migrateFiscalConfig, computeDonationSummary as _cds,
   computeIncomeTax,
   computeIncome,
+  nonDeductibleCsgFromNet,
   computeSavingsCapacity,
   computeWeightedAnnualRate,
   computeCapitalGainsTax,
@@ -134,6 +135,32 @@ describe('computeIncome (super net)', () => {
     expect(r.netTaxableYear).toBeCloseTo(32614.35, 1);
     expect(r.taxAmount).toBeCloseTo(3070.53, 1);
     expect(r.monthlyTax).toBeCloseTo(255.88, 1);
+  });
+
+  it('traite l\'autre salaire comme un salaire : imposable, avec l\'abattement de 10 % sur le total', () => {
+    const base = computeIncome(baseInput, LEGACY_CFG, NO_BENEFITS);
+    const r = computeIncome({ ...baseInput, extraMonthlyIncome: 500 }, LEGACY_CFG, NO_BENEFITS);
+    // Il s'ajoute au net avant impôt, et aux salaires imposables (case 1AJ) avec sa CSG/CRDS
+    // non déductible : brut retrouvé avec le taux de charges du salaire principal.
+    const taxableExtra = (500 + nonDeductibleCsgFromNet(500, LEGACY_CFG.salaryChargesRate)) * 12;
+    expect(r.netBeforeTax - base.netBeforeTax).toBeCloseTo(500, 6);
+    expect(r.netTaxableBeforeAllowance - base.netTaxableBeforeAllowance).toBeCloseTo(taxableExtra, 6);
+    // …et l'abattement de 10 % porte sur l'ensemble des salaires (sous le plafond ici).
+    expect(r.netTaxableYear - base.netTaxableYear).toBeCloseTo(taxableExtra * 0.9, 6);
+    expect(r.taxAmount).toBeGreaterThan(base.taxAmount);
+  });
+
+  it('CSG/CRDS non déductible d\'un salaire connu par son net : 2,9 % de 98,25 % du brut retrouvé', () => {
+    // Net 780 € avec 22 % de charges ⇒ brut 1 000 € ⇒ 1 000 × 0,9825 × 0,029.
+    expect(nonDeductibleCsgFromNet(780, 0.22)).toBeCloseTo(1000 * 0.9825 * 0.029, 9);
+    // Même résultat que pour le salaire principal au même brut.
+    const main = computeIncome({ ...baseInput, grossAnnual: 12_000 }, LEGACY_CFG, NO_BENEFITS);
+    const viaNet = nonDeductibleCsgFromNet(main.netSalaryOnly, LEGACY_CFG.salaryChargesRate);
+    expect((main.netSalaryOnly + viaNet) * 12).toBeCloseTo(main.netTaxableBeforeAllowance, 6);
+    // Rien à ajouter sans salaire ; taux de charges aberrant : le net sert de brut.
+    expect(nonDeductibleCsgFromNet(0, 0.22)).toBe(0);
+    expect(nonDeductibleCsgFromNet(-50, 0.22)).toBe(0);
+    expect(nonDeductibleCsgFromNet(100, 1.2)).toBeCloseTo(100 * 0.9825 * 0.029, 9);
   });
 
   it('exclut le remboursement Navigo de l\'assiette imposable', () => {

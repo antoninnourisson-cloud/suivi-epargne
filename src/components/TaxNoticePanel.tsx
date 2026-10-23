@@ -60,12 +60,12 @@ export const TaxNoticePanel: React.FC<Props> = ({ geminiApiKey, rfrByYear, house
       </Hint>
 
       <input ref={fileRef} type="file" accept="application/pdf,image/*" onChange={onFile} className="hidden" tabIndex={-1} aria-hidden="true" />
-      <Button type="button" disabled={busy || !geminiApiKey} onClick={() => fileRef.current?.click()}>
+      <Button type="button" disabled={busy || !geminiApiKey} onClick={() => fileRef.current?.click()} aria-describedby={!geminiApiKey ? 'tax-notice-why' : undefined}>
         {busy ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> : <Upload className="w-4 h-4" aria-hidden="true" />}
         {busy ? 'Lecture de l\'avis…' : 'Importer un avis d\'imposition'}
       </Button>
       {!geminiApiKey && (
-        <p className="text-sm text-on-surface-variant mt-2 flex flex-wrap items-center gap-x-1">
+        <p id="tax-notice-why" className="text-sm text-on-surface-variant mt-2 flex flex-wrap items-center gap-x-1">
           La lecture de l'avis demande une clé Gemini.
           {embedded && <Button variant="text" className="-ml-3 sm:ml-0" onClick={() => openSettingsSection('keys')}>Ajouter la clé Gemini</Button>}
         </p>

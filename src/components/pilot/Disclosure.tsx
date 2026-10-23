@@ -35,7 +35,7 @@ export const Disclosure: React.FC<DisclosureProps> = ({
           onClick={() => setOpen(o => !o)}
           className={`w-full min-h-14 px-5 sm:px-6 py-3 flex items-center gap-3 text-left hover:bg-on-surface/5 transition-colors ${appearance === 'card' ? (open ? 'rounded-t-2xl' : 'rounded-2xl') : ''}`}
         >
-          {Icon && <Icon className="w-5 h-5 shrink-0 text-indigo-600 dark:text-indigo-300" aria-hidden="true" />}
+          {Icon && <Icon className="w-5 h-5 shrink-0 text-primary" aria-hidden="true" />}
           <span className="flex-1 min-w-0 text-base font-medium text-on-surface">{title}</span>
           {summary !== undefined && summary !== null && (
             <span className="hidden sm:inline text-sm text-on-surface-variant tabular-nums truncate max-w-[50%]">{summary}</span>

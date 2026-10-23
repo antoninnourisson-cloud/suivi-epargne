@@ -39,7 +39,7 @@
 //   Le calendrier de l'année suivante n'est publié qu'au printemps : formulation prudente.
 // ================================================
 import { AccountMovement, AccountType, GlobalAppData, SavingsAccount } from '../types';
-import { computeAccruedInterest, computeDonationSummary, isInitialBalance } from './finance';
+import { computeAccruedInterest, computeDonationSummary, cryptoDisposalsOfYear, CRYPTO_EXEMPT_DISPOSALS, hasTaxableYearlyInterest, isInitialBalance } from './finance';
 import { formatEUR } from './format';
 
 export type TaxReturnSection = 'income' | 'savings' | 'deductions' | 'abroad' | 'crypto';
@@ -82,15 +82,12 @@ export const TAX_LINKS = {
 } as const;
 
 /** Total annuel des prix de cession de crypto en dessous duquel les ventes sont exonérées. */
-export const CRYPTO_EXEMPT_DISPOSALS_TOTAL = 305;
+export const CRYPTO_EXEMPT_DISPOSALS_TOTAL = CRYPTO_EXEMPT_DISPOSALS;
 /** Acompte d'impôt retenu par la banque sur les intérêts imposables (prélèvement non libératoire). */
 export const INTEREST_WITHHOLDING_RATE = 0.128;
 
 /** Dates de la campagne, sans chiffre inventé : le calendrier exact sort au printemps. */
 export const TAX_RETURN_CALENDAR_TEXT = 'La déclaration en ligne ouvre en avril ; la date limite tombe fin mai ou début juin selon votre département.';
-
-/** Comptes dont les intérêts sont imposables (livret bancaire, compte à terme, compte rémunéré). */
-const TAXABLE_INTEREST_TYPES = [AccountType.COMPTE_COURANT, AccountType.AUTRE];
 
 /**
  * Établissements souvent établis à l'étranger : un compte chez eux est probablement à
@@ -146,7 +143,7 @@ export const buildTaxReturnChecklist = (
     });
   } else if (opts.estimatedNetTaxableBeforeAllowance) {
     lines.push({ id: 'salary', section: 'income', box: '1AJ', label: 'Salaires', amount: Math.round(opts.estimatedNetTaxableBeforeAllowance), confidence: 'estimate',
-      note: 'Estimation depuis votre salaire brut. Le cumul « net imposable » de votre fiche de décembre fait foi.',
+      note: 'Estimation depuis les salaires saisis dans le Pilotage. Le cumul « net imposable » de votre fiche de décembre fait foi.',
       link: TAX_LINKS.declaration, topic: 'vos salaires (1AJ)' });
   }
   const withheld = slips.reduce((s, p) => s + (p.extracted.incomeTaxWithheld || 0), 0);
@@ -166,8 +163,9 @@ export const buildTaxReturnChecklist = (
   // Intérêts de l'année entière, sur le solde total du compte : c'est ce que la banque
   // déclare au nom du titulaire, part des parents comprise.
   const interestOf = (a: SavingsAccount) => computeAccruedInterest(a, incomeYear, new Date(incomeYear + 1, 0, 1));
+  // Livret bancaire, compte à terme, compte rémunéré, PEL et CEL imposés (voir capitalTax).
   const interestRows = accounts
-    .filter(a => TAXABLE_INTEREST_TYPES.includes(a.type))
+    .filter(a => hasTaxableYearlyInterest(a, new Date(incomeYear, 11, 31)))
     .map(a => ({ a, interest: interestOf(a) }))
     .filter(r => r.interest >= 0.5);
   const local = interestRows.filter(r => !r.a.heldAbroad);
@@ -241,8 +239,19 @@ export const buildTaxReturnChecklist = (
         });
   }
   const don = computeDonationSummary(data.donations || [], incomeYear, { ceiling75: opts.ceiling75 });
-  if (don.total75 > 0) lines.push({ id: 'donations-75', section: 'deductions', box: '7UD', label: 'Dons aux organismes d\'aide aux personnes en difficulté', amount: Math.round(don.total75), confidence: 'exact', note: 'Réduction de 75 %. Gardez les reçus fiscaux.', link: TAX_LINKS.donations, topic: 'vos dons (7UD, 7UF)' });
-  if (don.total66 > 0) lines.push({ id: 'donations-66', section: 'deductions', box: '7UF', label: 'Autres dons', amount: Math.round(don.total66), confidence: 'exact', note: 'Réduction de 66 %, dans la limite de 20 % du revenu imposable.', link: TAX_LINKS.donations, topic: 'vos dons (7UD, 7UF)' });
+  // 2025 : deux cases selon la date du don (plafond relevé le 14 octobre, voir finance/donations).
+  const boxes75 = don.boxes75.map(b => b.box);
+  for (const b of don.boxes75) {
+    lines.push({
+      id: don.boxes75.length > 1 ? `donations-75-${b.box}` : 'donations-75', section: 'deductions', box: b.box,
+      label: `Dons aux organismes d'aide aux personnes en difficulté${b.period ? ` ${b.period}` : ''}`, amount: Math.round(b.amount), confidence: 'exact',
+      note: don.boxes75.length > 1 || b.period
+        ? `Réduction de 75 %, dans la limite de 1 000 € pour les dons faits jusqu'au 13 octobre ${incomeYear} et de ${formatEUR(don.ceiling75, 0)} au total sur l'année ; l'excédent passe en case 7UF. Gardez les reçus fiscaux.`
+        : 'Réduction de 75 %. Gardez les reçus fiscaux.',
+      link: TAX_LINKS.donations, topic: `vos dons (${[...boxes75, '7UF'].join(', ')})`,
+    });
+  }
+  if (don.total66 > 0) lines.push({ id: 'donations-66', section: 'deductions', box: '7UF', label: 'Autres dons', amount: Math.round(don.total66), confidence: 'exact', note: 'Réduction de 66 %, dans la limite de 20 % du revenu imposable.', link: TAX_LINKS.donations, topic: `vos dons (${[...(boxes75.length ? boxes75 : ['7UD']), '7UF'].join(', ')})` });
   if (don.missingReceipts.length > 0) lines.push({ id: 'donations-receipts', section: 'deductions', box: '—', label: 'Reçus manquants', confidence: 'todo', note: `${don.missingReceipts.length} don${don.missingReceipts.length > 1 ? 's' : ''} sans reçu fiscal noté : réclamez-le avant de déclarer.`, link: TAX_LINKS.donations });
 
   // --- Comptes à l'étranger (8UU, 3916 / 3916-bis) ---
@@ -273,9 +282,8 @@ export const buildTaxReturnChecklist = (
   // --- Cryptomonnaies : ventes (2086, 3AN / 3BN) ---
   const cryptos = accounts.filter(a => a.type === AccountType.CRYPTO);
   if (cryptos.length > 0) {
-    const withdrawals = cryptos.reduce((s, a) => s + (a.movements || [])
-      .filter(m => m.type === 'OUT' && isCashFlow(m) && inYear(m, incomeYear))
-      .reduce((t, m) => t + m.amount, 0), 0);
+    // Même total que l'écran Rendement et le simulateur (seuil annuel des 305 €).
+    const withdrawals = cryptoDisposalsOfYear(cryptos, incomeYear);
     const gather = 'Pour chaque vente, rassemblez sa date, son prix et ses frais, la valeur totale de votre portefeuille ce jour-là, et le total de vos achats depuis le début (relevés de la plateforme).';
     if (withdrawals > 0) {
       // Les retraits notés ne sont qu'un indice des ventes : formulation conditionnelle.

@@ -226,7 +226,8 @@ export const verifyPin = async (pin: string): Promise<boolean> => {
 //   0. une DEMANDE de retrait (`requestLockReset`), utilisable seulement 24 heures plus tard
 //      et pendant 7 jours. Pendant ce temps le verrou reste affiché, avec la demande et ses
 //      dates ; tout déverrouillage réussi (code ou biométrie) l'annule
-//      (`cancelLockResetRequest`) et le propriétaire en est averti ;
+//      (`cancelLockResetRequest`) et le propriétaire en est averti. Ses AUTRES appareils
+//      (notifications activées) reçoivent aussitôt une alerte du serveur ;
 //   1. puis la session de cet appareil est fermée (serveur compris) et ce qu'il garde effacé ;
 //   2. le verrou est seulement SUSPENDU (`markLockResetPending`) : les méthodes restent
 //      enregistrées, rien n'est lisible tant qu'on ne s'est pas reconnecté ;
@@ -293,8 +294,35 @@ export const requestLockReset = (now: Date = new Date()): LockResetRequest => {
 export const cancelLockResetRequest = (now: Date = new Date()): LockResetRequest | null => {
   const request = getLockResetRequest(now);
   lsDel(RESET_REQUESTED_KEY);
+  lsDel(RESET_ALERTED_KEY);
   return request;
 };
+
+// Alerte des AUTRES appareils (notification « retrait du verrou demandé », envoyée par le
+// serveur) : la date de la demande déjà signalée, pour ne l'envoyer qu'une fois et la
+// réessayer si l'appareil était hors ligne (voir useAppLock).
+const RESET_ALERTED_KEY = 'app_lock_reset_alerted';
+
+/** La demande a-t-elle déjà été signalée aux autres appareils ? */
+export const isLockResetAlertSent = (request: LockResetRequest): boolean =>
+  lsGet(RESET_ALERTED_KEY) === request.requestedAt.toISOString();
+
+export const markLockResetAlertSent = (request: LockResetRequest): void =>
+  lsSet(RESET_ALERTED_KEY, request.requestedAt.toISOString());
+
+// Alerte qui n'a pas pu partir avant le retrait faute de session serveur valable sur cet
+// appareil (expirée, ou fermée depuis un autre appareil) : la date de la demande, gardée à
+// travers le retrait. Elle part avec la session suivante, dès la reconnexion (useAppLock).
+const RESET_ALERT_PENDING_KEY = 'app_lock_reset_alert_pending';
+
+/** Date de la demande dont l'alerte attend une session serveur, ou `null`. */
+export const getPendingLockResetAlert = (): Date | null => {
+  const raw = lsGet(RESET_ALERT_PENDING_KEY);
+  const t = raw ? Date.parse(raw) : NaN;
+  return Number.isFinite(t) ? new Date(t) : null;
+};
+
+export const clearPendingLockResetAlert = (): void => lsDel(RESET_ALERT_PENDING_KEY);
 
 /** Une réinitialisation attend la reconnexion Google (le verrou est suspendu). */
 export const isLockResetPending = (): boolean => !!lsGet(RESET_PENDING_KEY);
@@ -305,12 +333,17 @@ export const isLockActive = (): boolean => isLockEnabled() && !isLockResetPendin
 /**
  * Suspend le verrou. À appeler seulement APRÈS avoir fermé la session de l'appareil, et
  * une fois le délai de la demande écoulé (sinon lève `LOCK_RESET_NOT_READY`). Consomme la
- * demande. Lève si le stockage refuse l'écriture (le verrou reste alors affiché).
+ * demande. `carryAlert` : l'alerte des autres appareils n'a pas pu partir (pas de session
+ * serveur), elle est gardée pour la session suivante. Lève si le stockage refuse l'écriture
+ * (le verrou reste alors affiché).
  */
-export const markLockResetPending = (now: Date = new Date()): void => {
-  if (!getLockResetRequest(now)?.ready) throw new Error('LOCK_RESET_NOT_READY');
+export const markLockResetPending = (now: Date = new Date(), { carryAlert = false }: { carryAlert?: boolean } = {}): void => {
+  const request = getLockResetRequest(now);
+  if (!request?.ready) throw new Error('LOCK_RESET_NOT_READY');
+  if (carryAlert) localStorage.setItem(RESET_ALERT_PENDING_KEY, request.requestedAt.toISOString());
   localStorage.setItem(RESET_PENDING_KEY, now.toISOString());
   lsDel(RESET_REQUESTED_KEY);
+  lsDel(RESET_ALERTED_KEY);
 };
 
 /** Code retrouvé : le verrou reprend tel qu'il était. */

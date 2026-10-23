@@ -27,7 +27,8 @@ describe('quickAdd', () => {
     const r = ok(quickAdd(s0, { accountId: 'av', amount: 100.004, type: 'IN', label: 'Virement de paie', date: '2026-10-01', id: 'x' }));
     const s1 = applyPatch(s0, r.next);
     expect(acc(s1, 'av')).toMatchObject({ ownedAmount: 4400, totalAmount: 4400, totalDeposits: 4100 });
-    expect(r).toMatchObject({ movementId: 'x', message: 'Virement de paie — Assurance vie' });
+    expect(r.movementId).toBe('x');
+    expect(r.message).toMatch(/^Virement de paie : \+100\s€ sur Assurance vie$/);
     expect(applyPatch(s1, r.undo(s1))).toEqual(s0);
   });
 
@@ -38,6 +39,7 @@ describe('quickAdd', () => {
     // …mais autorise toute la part propre
     const all = ok(quickAdd(state(), { accountId: 'la', amount: 8200, type: 'OUT', label: 'Retrait', date: '2026-10-01' }));
     expect(acc(applyPatch(state(), all.next), 'la')).toMatchObject({ ownedAmount: 0, parentalCapital: 7000, totalAmount: 7000 });
+    expect(all.message).toMatch(/^Retrait : −8\s200\s€ sur Livret A$/);
   });
 
   it('refuse un compte inconnu ou un montant invalide', () => {

@@ -3,7 +3,7 @@
 // Garde-fous HTTP du Worker, sans état et testables hors Cloudflare :
 // - origines autorisées (CORS) et URL de retour après connexion (pas de redirection ouverte) ;
 // - state OAuth signé (HMAC) au lieu d'une écriture KV, lié au navigateur par un cookie ;
-// - lecture bornée des corps JSON.
+// - lecture bornée des corps JSON, en flux (abandon dès que la limite est dépassée).
 // ================================================
 import { b64urlDecode, b64urlEncode, randomToken, utf8 } from './crypto';
 
@@ -116,12 +116,36 @@ const MAX_BODY_BYTES = 4096;
 
 export class BodyTooLargeError extends Error { constructor() { super('BODY_TOO_LARGE'); } }
 
-/** JSON du corps, ou `{}` s'il est vide ou invalide. Lève BodyTooLargeError au-delà de `max`. */
-export const readJsonBody = async (req: Request, max = MAX_BODY_BYTES): Promise<Record<string, unknown>> => {
+/**
+ * Corps lu en flux, octet par octet compté : abandonné dès que `max` est dépassé, sans
+ * jamais charger en mémoire un corps énorme (envoi « chunked », sans Content-Length).
+ */
+export const readBodyText = async (req: Request, max = MAX_BODY_BYTES): Promise<string> => {
   const declared = Number(req.headers.get('Content-Length') || '0');
   if (declared > max) throw new BodyTooLargeError();
-  const text = await req.text();
-  if (utf8(text).length > max) throw new BodyTooLargeError();
+  if (!req.body) return '';
+  const reader = req.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > max) {
+      await reader.cancel().catch(() => undefined);
+      throw new BodyTooLargeError();
+    }
+    chunks.push(value);
+  }
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const c of chunks) { bytes.set(c, offset); offset += c.byteLength; }
+  return new TextDecoder().decode(bytes);
+};
+
+/** JSON du corps, ou `{}` s'il est vide ou invalide. Lève BodyTooLargeError au-delà de `max`. */
+export const readJsonBody = async (req: Request, max = MAX_BODY_BYTES): Promise<Record<string, unknown>> => {
+  const text = await readBodyText(req, max);
   if (!text) return {};
   try {
     const v = JSON.parse(text);

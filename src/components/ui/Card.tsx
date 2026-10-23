@@ -35,7 +35,7 @@ export const Card: React.FC<CardProps> = ({
       {title && (
         <div className={`flex items-start justify-between gap-3 ${padding === 'none' ? 'px-5 pt-5 sm:px-6 sm:pt-6' : ''} mb-4`}>
           <H id={titleId} className="text-base font-medium text-on-surface flex items-center gap-2 min-w-0">
-            {Icon && <Icon className="w-5 h-5 shrink-0 text-indigo-600 dark:text-indigo-300" aria-hidden="true" />}
+            {Icon && <Icon className="w-5 h-5 shrink-0 text-primary" aria-hidden="true" />}
             <span className="min-w-0">{title}</span>
           </H>
           {action && <div className="shrink-0 flex items-center gap-2">{action}</div>}

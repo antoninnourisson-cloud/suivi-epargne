@@ -10,7 +10,7 @@ import { computePlacementStrategy, missingSplitAccounts } from '../lib/finance';
 import { parseFrenchNumber } from '../lib/numbers';
 import { parseISODate } from '../lib/dates';
 import { Plus, X, Info } from 'lucide-react';
-import { SegmentedButton, MoneyText } from './ui';
+import { Button, IconButton, SegmentedButton, MoneyText } from './ui';
 
 type Split = { accountId: string; pct: number }[];
 
@@ -71,7 +71,7 @@ export const SavingsSplitEditor: React.FC<Props> = ({ accounts, split, from, sam
                 <select
                   value={row.accountId}
                   onChange={e => setRows(split!.map((r, j) => (j === i ? { ...r, accountId: e.target.value } : r)))}
-                  className="flex-1 min-w-0 h-10 px-3 rounded-xs bg-transparent border border-outline text-sm text-on-surface hover:border-on-surface focus:border-indigo-600 dark:focus:border-indigo-300 focus:border-2 outline-none dark:bg-surface-container-low"
+                  className="flex-1 min-w-0 h-10 px-3 rounded-xs bg-transparent border border-outline text-sm text-on-surface hover:border-on-surface focus:border-primary focus:border-2 outline-none dark:bg-surface-container-low"
                   aria-label="Compte"
                 >
                   {eligible.filter(a => a.id === row.accountId || !split!.some(r => r.accountId === a.id)).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
@@ -86,17 +86,17 @@ export const SavingsSplitEditor: React.FC<Props> = ({ accounts, split, from, sam
                     if (v !== null && v >= 0) setRows(split!.map((r, j) => (j === i ? { ...r, pct: v } : r)));
                   }}
                   onBlur={() => setDrafts(d => { const { [i]: _, ...rest } = d; return rest; })}
-                  className="w-20 text-right tabular-nums h-10 px-3 rounded-xs bg-transparent border border-outline text-sm text-on-surface hover:border-on-surface focus:border-indigo-600 dark:focus:border-indigo-300 focus:border-2 outline-none"
+                  className="w-20 text-right tabular-nums h-10 px-3 rounded-xs bg-transparent border border-outline text-sm text-on-surface hover:border-on-surface focus:border-primary focus:border-2 outline-none"
                   aria-label="Pourcentage"
                 />
                 <span className="text-sm text-on-surface-variant" aria-hidden="true">%</span>
-                <button type="button" onClick={() => { setDrafts({}); setRows(split!.filter((_, j) => j !== i)); }} aria-label="Retirer ce compte de la répartition" className="w-10 h-10 shrink-0 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-on-surface/8 hover:text-error"><X className="w-5 h-5" aria-hidden="true" /></button>
+                <IconButton label="Retirer ce compte de la répartition" icon={X} tone="danger" onClick={() => { setDrafts({}); setRows(split!.filter((_, j) => j !== i)); }} className="-my-1" />
               </div>
             ))}
           </div>
           <div className="flex flex-wrap items-center gap-3">
             {split!.length < eligible.length && (
-              <button type="button" onClick={() => setRows([...split!, { accountId: eligible.find(a => !split!.some(r => r.accountId === a.id))!.id, pct: 0 }])} className="h-10 px-3 -ml-3 rounded-full text-sm font-medium text-indigo-700 dark:text-indigo-200 hover:bg-indigo-600/8 inline-flex items-center gap-2"><Plus className="w-4 h-4" aria-hidden="true" /> Ajouter un compte</button>
+              <Button type="button" variant="text" onClick={() => setRows([...split!, { accountId: eligible.find(a => !split!.some(r => r.accountId === a.id))!.id, pct: 0 }])} className="-ml-3 max-sm:h-12"><Plus className="w-4 h-4" aria-hidden="true" /> Ajouter un compte</Button>
             )}
             <span className={`text-sm tabular-nums ${Math.abs(total - 100) < 0.01 ? 'text-on-surface-variant' : 'text-on-tertiary-container bg-tertiary-container rounded-sm px-2 py-0.5'}`}>
               Total : {total.toLocaleString('fr-FR')} %{Math.abs(total - 100) >= 0.01 && ' (ramené à 100 % dans le calcul)'}
@@ -104,7 +104,7 @@ export const SavingsSplitEditor: React.FC<Props> = ({ accounts, split, from, sam
           </div>
           <label className="flex flex-wrap items-center gap-2 text-sm text-on-surface-variant">
             À partir du
-            <input type="date" value={from || ''} onChange={e => onChange(split, e.target.value || undefined)} className="h-10 px-3 rounded-xs bg-transparent border border-outline text-sm text-on-surface hover:border-on-surface focus:border-indigo-600 dark:focus:border-indigo-300 focus:border-2 outline-none dark:[color-scheme:dark]" />
+            <input type="date" value={from || ''} onChange={e => onChange(split, e.target.value || undefined)} className="h-10 px-3 rounded-xs bg-transparent border border-outline text-sm text-on-surface hover:border-on-surface focus:border-primary focus:border-2 outline-none dark:[color-scheme:dark]" />
             <span className="text-xs">{from ? `(plan automatique jusqu'au ${parseISODate(from).toLocaleDateString('fr-FR')})` : '(vide = dès maintenant)'}</span>
           </label>
           {preview.length > 0 && (

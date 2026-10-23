@@ -11,13 +11,14 @@
 // toujours de saisir le code.
 // ================================================
 import type { GlobalAppData } from '../types';
+import type { BackupEnrollment } from '../lib/recoveryCodeCheck';
 import { lsDel, lsGetJSON, lsSetJSON } from '../lib/storage';
 import { canonicalize, withoutDeviceOnlyFields } from '../lib/schema';
 import {
   CloudBackupError, b64urlDecode, b64urlEncode, decryptBackup, deriveBackupKey, encryptBackup, newSalt,
   parseBackupBlob, parseRecoveryCode, sha256b64url, shouldAutoUpload, type CloudBackupBlobV1,
 } from '../lib/cloudBackupCrypto';
-import { BACKEND_URL, getSessionToken, hasBackendSession, isBackendEnabled } from './backendService';
+import { backendFetch, hasBackendSession, isBackendEnabled } from './backendService';
 
 export { generateRecoveryCode } from '../lib/cloudBackupCrypto';
 
@@ -29,7 +30,11 @@ const STORE = 'keys';
 const KEY_ID = 'current';
 const STATUS_KEY = 'cloud_backup_status';
 
-interface StoredKey { key: CryptoKey; salt: string; kcv: string; enabledAt: string }
+/**
+ * `codeCheckedAt` : dernière fois que le code de secours a été retapé juste sur cet appareil
+ * (vérification annuelle, voir verifyRecoveryCode). Absent : jamais depuis l'activation.
+ */
+interface StoredKey { key: CryptoKey; salt: string; kcv: string; enabledAt: string; codeCheckedAt?: string }
 
 export interface CloudBackupStatus {
   lastUploadAt?: string;
@@ -113,30 +118,22 @@ const deleteKey = async () => {
   await idb<unknown>('readwrite', s => s.delete(KEY_ID));
 };
 
-/** Sauvegarde de secours activée sur CET appareil ? (et depuis quand) */
-export const getDeviceEnrollment = async (): Promise<{ enabledAt: string } | null> => {
+/** Sauvegarde de secours activée sur CET appareil ? (depuis quand, code vérifié quand) */
+export const getDeviceEnrollment = async (): Promise<BackupEnrollment | null> => {
   const k = await loadKey();
-  return k ? { enabledAt: k.enabledAt } : null;
+  return k ? { enabledAt: k.enabledAt, ...(k.codeCheckedAt ? { codeCheckedAt: k.codeCheckedAt } : {}) } : null;
 };
 
 // ---------- Serveur ----------
 
+// Requêtes signées par la clé de l'appareil (voir backendService : session liée à l'appareil).
 const api = async (path: string, init: RequestInit = {}): Promise<Response> => {
-  const token = getSessionToken();
-  if (!token) fail('SESSION_EXPIRED');
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 30_000);
+  if (!hasBackendSession()) fail('SESSION_EXPIRED');
   let res: Response;
   try {
-    res = await fetch(`${BACKEND_URL}${path}`, {
-      ...init,
-      signal: controller.signal,
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, ...(init.headers || {}) },
-    });
+    res = await backendFetch(path, init, 30_000);
   } catch {
     return fail('OFFLINE');
-  } finally {
-    clearTimeout(timer);
   }
   if (res.status === 401) fail('SESSION_EXPIRED');
   if (res.status === 413) fail('TOO_LARGE');
@@ -146,10 +143,36 @@ const api = async (path: string, init: RequestInit = {}): Promise<Response> => {
   return res;
 };
 
+/** Effacement des copies programmé sur le serveur (7 jours après la demande, annulable). */
+export interface ServerDeletion { requestedAt: string; purgeAt: string }
+export interface ServerBackups {
+  /** Dates (AAAA-MM-JJ) des copies gardées, la plus récente d'abord. */
+  dates: string[];
+  deletion: ServerDeletion | null;
+}
+
+const isDeletion = (v: unknown): v is ServerDeletion =>
+  !!v && typeof (v as ServerDeletion).requestedAt === 'string' && typeof (v as ServerDeletion).purgeAt === 'string';
+
+/** Copies gardées par le serveur, et l'effacement programmé s'il y en a un. */
+export const getServerBackups = async (): Promise<ServerBackups> => {
+  const body = await (await api('/backup')).json() as { dates?: unknown; deletion?: unknown };
+  return {
+    dates: Array.isArray(body.dates) ? body.dates.filter((d): d is string => typeof d === 'string') : [],
+    deletion: isDeletion(body.deletion) ? { requestedAt: body.deletion.requestedAt, purgeAt: body.deletion.purgeAt } : null,
+  };
+};
+
 /** Dates (AAAA-MM-JJ) des copies gardées par le serveur, la plus récente d'abord. */
-export const listServerBackups = async (): Promise<string[]> => {
-  const { dates } = await (await api('/backup')).json() as { dates?: string[] };
-  return Array.isArray(dates) ? dates : [];
+export const listServerBackups = async (): Promise<string[]> => (await getServerBackups()).dates;
+
+/**
+ * Effacement des copies programmé, ou `null` : une seule lecture côté serveur, faite à chaque
+ * ouverture de l'app (BackupDeletionNotice), pour qu'il reste visible même sans notification.
+ */
+export const getServerDeletion = async (): Promise<ServerDeletion | null> => {
+  const body = await (await api('/backup/deletion')).json() as { deletion?: unknown };
+  return isDeletion(body.deletion) ? { requestedAt: body.deletion.requestedAt, purgeAt: body.deletion.purgeAt } : null;
 };
 
 const fetchBlob = async (date: string): Promise<CloudBackupBlobV1> =>
@@ -189,6 +212,21 @@ export const enableWithExistingCode = async (code: string): Promise<void> => {
   if (kcv !== blob.kcv) fail('WRONG_CODE');
   await saveKey({ key, salt: blob.salt, kcv, enabledAt: new Date().toISOString() });
   clearStatus();
+};
+
+/**
+ * Vérification annuelle : le code retapé est-il celui de la sauvegarde de cet appareil ?
+ * Tout se passe ici (même sel, même valeur de contrôle) : rien n'est envoyé. Un code juste
+ * est noté (`codeCheckedAt`), ce qui retire le rappel de l'Accueil pour un an.
+ * Lève NOT_ENABLED sans sauvegarde sur l'appareil, TYPO/INVALID_CODE pour un code illisible.
+ */
+export const verifyRecoveryCode = async (code: string, now = new Date()): Promise<boolean> => {
+  const stored = await loadKey();
+  if (!stored) return fail('NOT_ENABLED');
+  const { kcv } = await deriveBackupKey(readCode(code), b64urlDecode(stored.salt), ['encrypt']);
+  if (kcv !== stored.kcv) return false;
+  await saveKey({ ...stored, codeCheckedAt: now.toISOString() });
+  return true;
 };
 
 // ---------- Envoi ----------
@@ -253,10 +291,21 @@ export const decryptServerBackup = async (date: string, code: string): Promise<s
 
 // ---------- Désactivation ----------
 
-/** Efface toutes les copies du serveur, puis la clé et le statut de cet appareil. */
-export const disableAndDeleteServerCopies = async (): Promise<number> => {
-  const { deleted } = await (await api('/backup', { method: 'DELETE' })).json() as { deleted?: number };
+/**
+ * Désactive la sauvegarde : le serveur PROGRAMME l'effacement de toutes les copies dans 7
+ * jours (annulable d'ici là, et annoncé aux appareils : une session volée ne peut pas les
+ * détruire sur-le-champ), puis la clé et le statut de cet appareil sont effacés. Renvoie le
+ * nombre de copies et la date d'effacement (`null` s'il n'y avait aucune copie).
+ */
+export const disableAndScheduleDeletion = async (): Promise<{ copies: number; purgeAt: string | null }> => {
+  const body = await (await api('/backup', { method: 'DELETE' })).json() as { copies?: number; purgeAt?: string };
   await deleteKey();
   clearStatus();
-  return deleted ?? 0;
+  return { copies: body.copies ?? 0, purgeAt: typeof body.purgeAt === 'string' ? body.purgeAt : null };
+};
+
+/** Annule l'effacement programmé des copies. Renvoie `true` s'il y en avait un. */
+export const cancelServerDeletion = async (): Promise<boolean> => {
+  const { cancelled } = await (await api('/backup/deletion', { method: 'DELETE' })).json() as { cancelled?: boolean };
+  return !!cancelled;
 };

@@ -14,11 +14,16 @@ export const lsDel = (key: string): void => {
   try { localStorage.removeItem(key); } catch { /* stockage bloqué */ }
 };
 
-/** Valeur JSON enregistrée, ou `fallback` si absente, illisible ou stockage bloqué. */
-export const lsGetJSON = <T>(key: string, fallback: T): T => {
+/**
+ * Valeur JSON enregistrée, ou `fallback` si absente, illisible, refusée par `isValid` (valeur
+ * abîmée ou d'un ancien format) ou stockage bloqué.
+ */
+export const lsGetJSON = <T>(key: string, fallback: T, isValid?: (v: unknown) => v is T): T => {
   try {
     const raw = localStorage.getItem(key);
-    return raw ? JSON.parse(raw) as T : fallback;
+    if (!raw) return fallback;
+    const value: unknown = JSON.parse(raw);
+    return !isValid || isValid(value) ? value as T : fallback;
   } catch { return fallback; }
 };
 

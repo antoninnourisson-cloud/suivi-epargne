@@ -121,18 +121,32 @@ export const computePeeAvailability = (
 
 export type AvailabilityStatus = 'AVAILABLE' | 'TAX_LOCKED' | 'HARD_LOCKED';
 
+/** PEL : avant le 4e anniversaire, un retrait clôture le plan (F16140, vérifié le 2026-10-21). */
+const PEL_TERM_YEARS = 4;
+
 /**
- * Disponibilité d'un compte (hors PEE, calculé versement par versement) : retraite,
- * immobilier et « Autre » bloqués ; PEA et assurance vie pas encore mûrs « avec impôt » ;
- * le reste disponible. Seuils de fiscalConfig.legalMaturity, ancienneté par date
- * anniversaire (comme le compte à rebours de maturité).
+ * Disponibilité d'un compte (hors PEE, calculé versement par versement) : retraite et
+ * immobilier bloqués ; PEL bloqué avant son 4e anniversaire (date inconnue : bloqué, par
+ * prudence) ; compte à terme bloqué jusqu'à son échéance (`contractEndDate`) ; « Autre »
+ * disponible sauf s'il est marqué bloqué ; PEA et assurance vie pas encore mûrs « avec
+ * impôt » ; le reste disponible (livrets, CEL, compte-titres, crypto…). Seuils de
+ * fiscalConfig.legalMaturity, ancienneté par date anniversaire.
+ * Sources (vérifiées le 2026-10-21) : PEL https://www.service-public.gouv.fr/particuliers/vosdroits/F16140 ;
+ * CEL (retraits libres) https://www.service-public.gouv.fr/particuliers/vosdroits/F16136
  */
 export const accountAvailabilityStatus = (
-  account: Pick<SavingsAccount, 'type' | 'openingDate'>,
+  account: Pick<SavingsAccount, 'type' | 'openingDate'> & Partial<Pick<SavingsAccount, 'contractEndDate' | 'blocked'>>,
   fiscalConfig: Pick<FiscalConfig, 'legalMaturity'>,
   asOfDate: Date = new Date()
 ): AvailabilityStatus => {
-  if ([AccountType.IMMOBILIER, AccountType.PER, AccountType.AUTRE, AccountType.PEE].includes(account.type)) return 'HARD_LOCKED';
+  if ([AccountType.IMMOBILIER, AccountType.PER, AccountType.PEE].includes(account.type)) return 'HARD_LOCKED';
+  if (account.type === AccountType.AUTRE) return account.blocked ? 'HARD_LOCKED' : 'AVAILABLE';
+  if (account.type === AccountType.PEL) {
+    return account.openingDate && accountAgeYears(account.openingDate, asOfDate) >= PEL_TERM_YEARS ? 'AVAILABLE' : 'HARD_LOCKED';
+  }
+  if (account.type === AccountType.COMPTE_A_TERME) {
+    return account.contractEndDate && account.contractEndDate > formatISODay(asOfDate) ? 'HARD_LOCKED' : 'AVAILABLE';
+  }
   if (!account.openingDate) return 'AVAILABLE';
   const age = accountAgeYears(account.openingDate, asOfDate);
   const { pea, assuranceVie } = fiscalConfig.legalMaturity;

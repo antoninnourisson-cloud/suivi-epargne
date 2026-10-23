@@ -31,11 +31,11 @@ export const Tabs = <T extends string>({ label, tabs, value, onChange, children,
               aria-controls={`${base}-panel`}
               tabIndex={selected ? 0 : -1}
               onClick={() => onChange(t.value)}
-              className={`relative h-12 px-4 flex items-center justify-center gap-2 text-sm font-medium whitespace-nowrap transition-colors hover:bg-on-surface/8 ${selected ? 'text-indigo-700 dark:text-indigo-200' : 'text-on-surface-variant'}`}
+              className={`relative h-12 px-4 flex items-center justify-center gap-2 text-sm font-medium whitespace-nowrap transition-colors hover:bg-on-surface/8 ${selected ? 'text-primary' : 'text-on-surface-variant'}`}
             >
               {t.icon && <t.icon className="w-4 h-4" aria-hidden="true" />}
               {t.label}
-              {selected && <span className="absolute left-2 right-2 bottom-0 h-[3px] rounded-t-full bg-indigo-600 dark:bg-indigo-300" aria-hidden="true" />}
+              {selected && <span className="absolute left-2 right-2 bottom-0 h-[3px] rounded-t-full bg-primary" aria-hidden="true" />}
             </button>
           );
         })}

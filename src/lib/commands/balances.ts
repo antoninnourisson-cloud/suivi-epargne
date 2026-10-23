@@ -12,6 +12,7 @@ import { depositsAfterCashFlow, tracksDeposits } from '../finance';
 import { formatEUR } from '../format';
 import { EPS } from '../money';
 import { CommandResult, CommandState, fail } from './types';
+import { laterDay } from './accounts';
 
 export interface BalanceUpdate {
   accountId: string;
@@ -87,6 +88,8 @@ export const planBalanceUpdate = (acc: SavingsAccount, u: BalanceUpdate): { acco
   return {
     account: {
       ...acc, ownedAmount: owned, parentalCapital: parental, totalAmount: round2(owned + parental), totalDeposits,
+      // Solde constaté à la date du relevé (jamais reculée par un relevé plus ancien).
+      balanceCheckedAt: laterDay(acc.balanceCheckedAt, u.date),
       movements: [...(acc.movements || []), ...created],
     },
     created,
@@ -112,6 +115,7 @@ export const updateBalances = (state: CommandState, input: { updates: BalanceUpd
   if (planned.size === 0) return fail('nothing-to-do', 'Aucun solde modifié.');
   const changedIds = [...planned.keys()];
   const snap = snapshotBalances(state.accounts, changedIds);
+  const checkedBefore = new Map(state.accounts.filter(a => planned.has(a.id)).map(a => [a.id, a.balanceCheckedAt]));
   const only = planned.size === 1 ? [...planned.values()][0] : undefined;
   return {
     ok: true,
@@ -119,6 +123,19 @@ export const updateBalances = (state: CommandState, input: { updates: BalanceUpd
     createdIds,
     next: { accounts: state.accounts.map(a => planned.get(a.id) ?? a) },
     message: only ? `${only.name} actualisé` : `${planned.size} comptes actualisés`,
-    undo: current => ({ accounts: restoreBalances(current.accounts, snap, createdIds) }),
+    // Soldes exacts d'avant, et la date du dernier constat d'avant.
+    undo: current => {
+      const restored = restoreBalances(current.accounts, snap, createdIds);
+      // Annulation refusée (part propre qui deviendrait négative) : rien ne change.
+      if (restored === current.accounts) return { accounts: restored };
+      return {
+        accounts: restored.map(a => {
+          if (!checkedBefore.has(a.id)) return a;
+          const { balanceCheckedAt: _now, ...rest } = a;
+          const before = checkedBefore.get(a.id);
+          return before ? { ...rest, balanceCheckedAt: before } : rest;
+        }),
+      };
+    },
   };
 };

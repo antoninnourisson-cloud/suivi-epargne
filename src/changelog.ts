@@ -15,6 +15,56 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '2026.10.23-4',
+    date: '2026-10-23',
+    title: 'Sécurité renforcée : reconnectez-vous une fois',
+    items: [
+      "Après cette mise à jour, reconnectez-vous une fois sur chaque appareil : votre session est désormais liée à l'appareil, et un jeton de connexion copié ailleurs ne sert plus à rien.",
+      "Paramètres liste vos appareils connectés, avec « Déconnecter » pour fermer une session que vous ne reconnaissez pas.",
+      "Quand « Code oublié » est utilisé sur un appareil, vos autres appareils sont prévenus par notification.",
+      "Désactiver la sauvegarde de secours n'efface plus les copies sur-le-champ : elles le sont 7 jours plus tard, et vous pouvez annuler. Le serveur garde aussi des copies sur toute l'année.",
+      "Avant d'activer la sauvegarde de secours, vous recopiez deux morceaux du code de secours, et une fois par an l'Accueil vous invite à vérifier que vous l'avez toujours.",
+      "La clé Gemini et les traces d'usage sont effacées à la déconnexion, et le serveur n'enregistre plus aucune adresse IP.",
+    ],
+  },
+  {
+    version: '2026.10.23-3',
+    date: '2026-10-23',
+    title: "Clôture de l'année et lecture des relevés",
+    items: [
+      "Nouvelle « Clôture de l'année », en tête de l'Historique et sur l'Accueil en janvier et février : soldes au 31 décembre, intérêts, relevés annuels, restitution, « Votre année », déclaration, paramètres fiscaux et archive, en une seule liste au lieu de rappels séparés.",
+      "« Lire un relevé » (dans Actualiser et sur chaque compte) lit le relevé de votre banque, PDF ou capture, avec Gemini et votre clé. Pécule propose le solde et les opérations, écarte les doublons, vérifie les totaux, et rien n'est enregistré avant « Importer ». L'import s'annule.",
+      "Vous pouvez télécharger l'archive d'une année : vos données réimportables et un fichier des mouvements lisible dans Excel.",
+      "Après la restitution du capital de vos parents, l'app passe d'elle-même à des textes sans eux.",
+    ],
+  },
+  {
+    version: '2026.10.23-2',
+    date: '2026-10-23',
+    title: 'Nouveaux comptes et calculs plus fins',
+    items: [
+      "Nouveaux types de comptes : livret bancaire, CEL, PEL, compte à terme et compte-titres, avec leur fiscalité expliquée simplement. Un compte « Autre » peut être marqué « Argent bloqué ».",
+      "PEA, assurance vie, compte-titres et crypto : « Mes comptes » et « Rendement » montrent le gain et le rendement annuel réellement obtenus.",
+      "Chaque compte a sa date de dernier solde vérifié, avec un bouton « Solde vérifié » ; le rappel nomme les comptes à revérifier.",
+      "« Rendement » montre aussi le taux après inflation (chiffre de l'INSEE), l'impôt en moins grâce au PER, et quand l'option pour le barème (case 2OP) pourrait coûter moins.",
+      "Calculs plus justes : plafonds des dons 2025 (1 000 € jusqu'au 13 octobre, 2 000 € sur l'année), seuil de 305 € des cryptos sur toutes les ventes de l'année, remboursement de transport au-delà de 50 % limité à 75 % pour 2026, intérêts acquis sans la quinzaine en cours.",
+      "L'argent qui dort sur le compte courant est chiffré de la même façon partout, seulement si son solde a été vérifié récemment.",
+    ],
+  },
+  {
+    version: '2026.10.23',
+    date: '2026-10-23',
+    title: 'Toute l\'app en Material, Accueil plus clair',
+    items: [
+      "Tous les écrans ont le même style, en clair comme en sombre, et ne défilent plus sur le côté même sur un petit téléphone. Le Journal se lit enfin bien sur mobile.",
+      "L'Accueil montre un seul chiffre pour le mois en cours. Le taux d'épargne ne tombe plus à 0 % quand de l'argent a été placé, et « Reste à vivre » s'appelle partout « Paie nette après impôt ».",
+      "Nouvelle carte « Affichage » dans Paramètres : Automatique, Clair ou Sombre. Le mode Automatique suit votre appareil, sans éclair blanc au démarrage.",
+      "Un ajout rapide ou un virement entre vos comptes s'annule depuis le message de confirmation, et un toucher hors de la fenêtre n'efface plus votre saisie.",
+      "Exports CSV lisibles directement dans Excel en français, et l'export de l'Accueil suit la période choisie.",
+      "L'app réagit plus vite et s'ouvre plus légère, avec de plus grandes zones de toucher et des boutons mieux nommés pour les lecteurs d'écran.",
+    ],
+  },
+  {
     version: '2026.10.20-2',
     date: '2026-10-20',
     title: 'Déclaration complète et calculs plus justes',

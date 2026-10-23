@@ -13,7 +13,7 @@ export const b64urlEncode = (bytes: Uint8Array): string => {
   return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 };
 
-export const b64urlDecode = (s: string): Uint8Array => {
+export const b64urlDecode = (s: string): Uint8Array<ArrayBuffer> => {
   const b64 = s.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - (s.length % 4)) % 4);
   const bin = atob(b64);
   const out = new Uint8Array(bin.length);
@@ -29,7 +29,7 @@ export const concatBytes = (...parts: (Uint8Array | number[])[]): Uint8Array => 
   return out;
 };
 
-export const utf8 = (s: string): Uint8Array => te.encode(s);
+export const utf8 = (s: string): Uint8Array<ArrayBuffer> => new Uint8Array(te.encode(s));
 
 /** Jeton aléatoire (session, state OAuth, code de connexion à usage unique). */
 export const randomToken = (bytes = 32): string => b64urlEncode(crypto.getRandomValues(new Uint8Array(bytes)));

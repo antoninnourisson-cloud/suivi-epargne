@@ -51,7 +51,7 @@ export interface VersionDiff {
   onlyRemote: MovementRef[];
   /** Mouvements présents des deux côtés mais modifiés (montant, libellé, date…). */
   changedMovements: number;
-  /** Autres parties du fichier qui diffèrent, en clair (« Réglages », « Objectifs »…). */
+  /** Autres parties du fichier qui diffèrent, en clair (« Réglages », « Dons »…). */
   sections: string[];
   identical: boolean;
 }
@@ -61,7 +61,6 @@ const SECTION_LABELS: [keyof GlobalAppData, string][] = [
   ['config', 'Réglages'],
   ['expenses', 'Charges fixes'],
   ['subscriptions', 'Abonnements'],
-  ['goals', 'Objectifs'],
   ['recurringMovements', 'Mouvements réguliers'],
   ['payslips', 'Fiches de paie'],
   ['activePayslipId', 'Fiche de paie de référence'],

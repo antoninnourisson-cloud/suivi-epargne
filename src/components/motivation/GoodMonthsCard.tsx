@@ -1,11 +1,12 @@
-// Carte « Bons mois » de l'Accueil : la paie en cours face au seuil, la série, le joker de
-// l'année, l'historique des dernières paies et le prochain jalon. Ton positif : on montre ce
-// qui est acquis, jamais la menace de perdre la série.
+// Carte « Bons mois » de l'Accueil : la série, le joker de l'année, l'historique des dernières
+// paies et le prochain jalon. La paie en cours face au seuil est sur la jauge unique de la carte
+// « Placé depuis la paie » (dashboard/SavingsCard) : plus deux jauges du même montant.
+// Ton positif : on montre ce qui est acquis, jamais la menace de perdre la série.
 import React, { useEffect, useState } from 'react';
 import { CalendarCheck, Check, Flag, Hourglass, Minus, ShieldCheck, Sparkles } from 'lucide-react';
 import type { GoodMonthsSummary, Milestone, MonthResult } from '../../lib/motivation';
-import { daysBetween, parseISODate } from '../../lib/dates';
-import { formatEUR, formatPeriod, frenchDay } from '../../lib/format';
+import { parseISODate } from '../../lib/dates';
+import { formatEUR, formatPeriod } from '../../lib/format';
 import { Button, Card } from '../ui';
 import { MilestonesSheet } from './MilestonesSheet';
 import { deMonth, payMonthName } from './text';
@@ -29,18 +30,11 @@ const STATUS: Record<Status, { label: string; icon: React.ComponentType<{ classN
   pending: { label: 'en cours', icon: Hourglass, dot: 'border-2 border-dashed border-primary text-primary' },
 };
 
-const plural = (n: number, word: string) => `${n} ${word}${n > 1 ? 's' : ''}`;
-
 export const GoodMonthsCard: React.FC<GoodMonthsCardProps> = ({ summary, today, milestones, next, fresh, onAcknowledge }) => {
   const [sheetOpen, setSheetOpen] = useState(false);
-  const { current, threshold, streak, bestStreak, months, jokersUsed } = summary;
+  const { streak, bestStreak, months, jokersUsed } = summary;
   const year = Number(today.slice(0, 4));
   const jokerMonth = months.find(m => m.joker && m.start.startsWith(String(year)));
-  const pct = current ? Math.max(0, Math.min(100, (current.saved / threshold) * 100)) : 0;
-  const reached = !!current?.good;
-  const daysLeft = current ? Math.max(0, daysBetween(parseISODate(today), parseISODate(current.end))) : 0;
-  const since = current ? `depuis la paie du ${frenchDay(parseISODate(current.start))}` : '';
-  const gaugeLabel = `Mis de côté ${since}`;
   // Région d'annonce présente dès le montage et remplie juste après : un lecteur d'écran
   // n'annonce pas une région role="status" insérée déjà pleine.
   const [mounted, setMounted] = useState(false);
@@ -59,26 +53,12 @@ export const GoodMonthsCard: React.FC<GoodMonthsCardProps> = ({ summary, today, 
               <span className="font-medium">Nouveau jalon : </span>
               {fresh.map(m => m.title).join(', ')}.
             </p>
-            {onAcknowledge && <Button variant="text" className="-my-1 h-9 px-4 text-on-tertiary-container dark:text-on-tertiary-container" onClick={onAcknowledge}>Merci</Button>}
+            {onAcknowledge && <Button variant="text" size="sm" className="text-on-tertiary-container! enabled:hover:bg-on-tertiary-container/8!" onClick={onAcknowledge}>Merci</Button>}
           </div>
         )}
       </div>
 
-      {current && (
-        <>
-          <p className="text-sm text-on-surface-variant">
-            <span className="text-base font-medium text-on-surface tabular-nums">{formatEUR(current.saved, 0)}</span>
-            <span className="tabular-nums"> / {formatEUR(threshold, 0)}</span> mis de côté {since}
-            {' · '}{reached ? 'bon mois acquis' : daysLeft > 0 ? `encore ${plural(daysLeft, 'jour')}` : 'dernier jour'}
-          </p>
-          <div className="mt-2 h-2 rounded-full bg-surface-container-highest overflow-hidden" role="progressbar" aria-label={gaugeLabel} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(pct)}
-            aria-valuetext={`${formatEUR(current.saved, 0)} sur ${formatEUR(threshold, 0)}`}>
-            <div className={`h-full rounded-full ${reached ? 'bg-emerald-600 dark:bg-emerald-400' : 'bg-primary'}`} style={{ width: `${pct}%` }} />
-          </div>
-        </>
-      )}
-
-      <div className="mt-4 flex flex-col gap-1 text-sm">
+      <div className="flex flex-col gap-1 text-sm">
         <p className="text-on-surface">
           <span className="font-medium">{streak > 0 ? `Série : ${streak} ${streak > 1 ? 'bons mois' : 'bon mois'}` : 'Série : elle démarre au prochain bon mois'}</span>
           {bestStreak > 0 && <span className="text-on-surface-variant"> · record {bestStreak}</span>}

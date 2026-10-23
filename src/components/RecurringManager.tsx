@@ -4,20 +4,19 @@
 // automatiquement : le Dashboard PROPOSE l'écriture à l'échéance (voir findDueRecurring),
 // l'utilisateur confirme d'un clic.
 // ================================================
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { SavingsAccount, RecurringMovement } from '../types';
 import { Repeat, Plus, Trash2, AlertCircle, Pause, Play } from 'lucide-react';
 import { safeNumber } from '../lib/numbers';
-import { formatEUR } from '../lib/format';
 import { useUndoableRemove } from './Toast';
+import { focusAfterRemoval } from './focusAfterRemoval';
+import { Button, IconButton, ListItem, MoneyText, SegmentedButton, TextField } from './ui';
 
 interface RecurringManagerProps {
   accounts: SavingsAccount[];
   recurringMovements: RecurringMovement[];
   onUpdate: React.Dispatch<React.SetStateAction<RecurringMovement[]>>;
 }
-
-const fmt = (n: number) => formatEUR(n);
 
 export const RecurringManager: React.FC<RecurringManagerProps> = ({ accounts, recurringMovements, onUpdate }) => {
   const [accountId, setAccountId] = useState('');
@@ -46,70 +45,74 @@ export const RecurringManager: React.FC<RecurringManagerProps> = ({ accounts, re
 
   const toggle = (id: string) => onUpdate(recurringMovements.map(r => r.id === id ? { ...r, active: !r.active } : r));
   const removeWithUndo = useUndoableRemove();
+  const listRef = useRef<HTMLUListElement>(null);
+  // Le focus va sur l'échéance voisine, sinon sur le titre « Nouvelle échéance » (WCAG 2.4.3).
   const remove = (id: string) => {
     const r = recurringMovements.find(x => x.id === id);
-    if (r) removeWithUndo(recurringMovements, r, onUpdate, `Échéance « ${r.label} » supprimée`);
+    if (!r) return;
+    removeWithUndo(recurringMovements, r, onUpdate, `Échéance « ${r.label} » supprimée`);
+    focusAfterRemoval(() => listRef.current, recurringMovements.indexOf(r), () => document.getElementById('recurring-new-title'));
   };
 
   const accountName = (id: string) => accounts.find(a => a.id === id)?.name;
-  const inputClass = 'w-full p-3 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 border border-slate-300 dark:border-slate-700 rounded-lg font-bold';
 
   return (
     <div className="space-y-6">
-      <p className="text-xs text-slate-500 dark:text-slate-400 flex items-start gap-2">
-        <Repeat className="w-4 h-4 shrink-0 mt-px text-indigo-600 dark:text-indigo-400" />
-        À l'échéance, le tableau de bord vous proposera d'enregistrer le mouvement en un clic. Rien n'est jamais ajouté sans votre confirmation.
+      <p className="text-sm text-on-surface-variant flex items-start gap-2">
+        <Repeat className="w-4 h-4 shrink-0 mt-0.5 text-primary" aria-hidden="true" />
+        À l'échéance, l'Accueil vous proposera d'enregistrer le mouvement en un clic. Rien n'est jamais ajouté sans votre confirmation.
       </p>
 
       {recurringMovements.length > 0 && (
-        <ul className="space-y-2">
+        <ul ref={listRef} className="divide-y divide-outline-variant border-y border-outline-variant">
           {recurringMovements.map(r => {
             const name = accountName(r.accountId);
             return (
-              <li key={r.id} className={`flex items-center gap-3 p-3 rounded-xl border ${r.active ? 'border-slate-200 dark:border-slate-700' : 'border-dashed border-slate-300 dark:border-slate-700 opacity-60'}`}>
-                <div className="flex-1 min-w-0">
-                  <p className="font-bold text-slate-800 dark:text-slate-100 text-sm truncate">
-                    <span className={r.type === 'IN' ? 'text-emerald-700' : 'text-rose-700'}>{r.type === 'IN' ? '+' : '-'}{fmt(r.amount)}</span>
-                    {' · '}{r.label}
-                  </p>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400 font-bold">
-                    le {r.dayOfMonth} du mois · {name ?? <span className="text-rose-500">compte supprimé</span>}
-                    {!r.active && ' · en pause'}
-                  </p>
-                </div>
-                <button type="button" onClick={() => toggle(r.id)} aria-label={r.active ? 'Mettre en pause' : 'Réactiver'} className="p-2.5 text-on-surface-variant hover:text-indigo-600 dark:hover:text-indigo-300 rounded-lg">
-                  {r.active ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-                </button>
-                <button type="button" onClick={() => remove(r.id)} aria-label={`Supprimer ${r.label}`} className="p-2.5 text-on-surface-variant hover:text-rose-600 dark:hover:text-rose-300 rounded-lg">
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </li>
+              <ListItem
+                key={r.id}
+                headline={r.label}
+                supporting={<>
+                  le {r.dayOfMonth} du mois · {name ?? <span className="text-error font-medium">compte supprimé</span>}
+                  {!r.active && <> · <span className="font-medium">en pause</span></>}
+                </>}
+                trailing={<MoneyText value={r.type === 'IN' ? r.amount : -r.amount} signed tone={r.active ? 'auto' : 'neutral'} />}
+                actions={<>
+                  <IconButton icon={r.active ? Pause : Play} label={r.active ? `Mettre en pause ${r.label}` : `Réactiver ${r.label}`} onClick={() => toggle(r.id)} data-focus-after-removal />
+                  <IconButton icon={Trash2} tone="danger" label={`Supprimer ${r.label}`} onClick={() => remove(r.id)} />
+                </>}
+              />
             );
           })}
         </ul>
       )}
 
-      <form onSubmit={add} className="space-y-3 border-t border-slate-100 dark:border-slate-800 pt-4">
-        <p className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Nouvelle échéance</p>
-        <select value={accountId} onChange={e => setAccountId(e.target.value)} className={inputClass}>
-          <option value="">Compte</option>
-          {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-        </select>
-        <div className="flex gap-2">
-          <button type="button" onClick={() => setType('IN')} className={`flex-1 py-2.5 rounded-lg text-sm font-bold border-2 ${type === 'IN' ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-400 text-emerald-700 dark:text-emerald-300' : 'border-slate-200 dark:border-slate-700 text-slate-400'}`}>Versement</button>
-          <button type="button" onClick={() => setType('OUT')} className={`flex-1 py-2.5 rounded-lg text-sm font-bold border-2 ${type === 'OUT' ? 'bg-rose-50 dark:bg-rose-950/40 border-rose-400 text-rose-700 dark:text-rose-300' : 'border-slate-200 dark:border-slate-700 text-slate-400'}`}>Retrait</button>
+      <form onSubmit={add} className="space-y-4" aria-labelledby="recurring-new-title">
+        <h3 id="recurring-new-title" className="text-base font-medium text-on-surface outline-none">Nouvelle échéance</h3>
+        <TextField
+          label="Compte"
+          render={p => (
+            <select id={p.id} className={p.className} value={accountId} onChange={e => setAccountId(e.target.value)}>
+              <option value="">Choisir un compte</option>
+              {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+            </select>
+          )}
+        />
+        <SegmentedButton
+          label="Sens de l'échéance" value={type} onChange={setType}
+          className="w-full [&>button]:flex-1 max-sm:[&>button]:h-12"
+          options={[{ value: 'IN', label: 'Versement' }, { value: 'OUT', label: 'Retrait' }]}
+        />
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <TextField label="Montant" suffix="€" inputMode="decimal" placeholder="0,00" value={amount} onChange={e => setAmount(e.target.value)} />
+          <TextField label="Jour du mois" supporting="De 1 à 31" inputMode="numeric" value={day} onChange={e => setDay(e.target.value)} />
         </div>
-        <div className="grid grid-cols-2 gap-2">
-          <input type="text" inputMode="decimal" value={amount} onChange={e => setAmount(e.target.value)} placeholder="Montant (€)" className={inputClass} />
-          <input type="text" inputMode="numeric" value={day} onChange={e => setDay(e.target.value)} placeholder="Jour (1-31)" aria-label="Jour du mois" className={inputClass} />
-        </div>
-        <input type="text" value={label} onChange={e => setLabel(e.target.value)} placeholder="Libellé (optionnel)" className={inputClass} />
+        <TextField label="Libellé (facultatif)" placeholder={type === 'IN' ? 'Versement mensuel' : 'Retrait mensuel'} value={label} onChange={e => setLabel(e.target.value)} />
         {error && (
-          <p className="text-sm font-bold text-rose-700 dark:text-rose-300 flex items-center gap-2"><AlertCircle className="w-4 h-4" /> {error}</p>
+          <p role="alert" className="text-sm font-medium text-error flex items-center gap-2"><AlertCircle className="w-4 h-4 shrink-0" aria-hidden="true" /> {error}</p>
         )}
-        <button type="submit" className="w-full py-3 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold flex items-center justify-center gap-2">
-          <Plus className="w-4 h-4" /> Ajouter l'échéance
-        </button>
+        <Button type="submit" className="w-full h-12!">
+          <Plus className="w-4 h-4" aria-hidden="true" /> Ajouter l'échéance
+        </Button>
       </form>
     </div>
   );

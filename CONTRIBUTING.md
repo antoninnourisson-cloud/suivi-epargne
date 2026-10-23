@@ -54,7 +54,7 @@ Elles sont détaillées dans [MAINTENANCE.md](MAINTENANCE.md) (§ 1, *Invariants
 ## Style
 
 - TypeScript strict, composants fonctionnels React, Tailwind 4 pour le style.
-- Design Material 3 Expressive : réutilisez les composants de `src/components/ui/` (Card, StatTile, TextField, Tabs…) et les rôles de couleur Material (`bg-surface-container`, `text-on-surface-variant`…). La palette se régénère avec `npm run theme` (`scripts/m3-theme.mjs` → `src/theme/m3.css`), jamais à la main. Police : Google Sans Flex, hébergée avec l'app.
+- Design Material 3 Expressive : réutilisez les composants de `src/components/ui/` (Card, StatTile, TextField, Tabs…) et les rôles de couleur Material (`bg-surface-container`, `text-on-surface-variant`…). La palette se régénère avec `npm run theme` (`scripts/m3-theme.mjs` → `src/theme/m3.css`), jamais à la main. Aucune classe de palette brute (`bg-slate-800`, `text-indigo-700`…) : `npm run lint` la refuse. Police : Google Sans Flex, hébergée avec l'app.
 - Les textes de l'interface sont en français, vouvoient l'utilisateur et évitent le jargon (« Votre part », pas « ownedAmount »).
 - Accessibilité : chaque champ a un libellé, chaque bouton icône un `aria-label`, chaque modale piège le focus (composant `Modal`).
 - Le fichier `.editorconfig` fixe l'indentation (2 espaces) et les fins de ligne (LF).

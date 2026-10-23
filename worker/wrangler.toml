@@ -40,9 +40,16 @@ name = "API_LIMITER"
 namespace_id = "7302"
 simple = { limit = 60, period = 60 }
 
-# Logs et traces consultables dans le tableau de bord (Workers → suivi-epargne-api → Logs).
+# Journaux consultables dans le tableau de bord (Workers → suivi-epargne-api → Logs) : seulement
+# les messages écrits par le serveur lui-même (console.error : échecs, sans adresse IP, sans
+# jeton ni donnée). Les journaux d'appels (une entrée par requête, avec ses en-têtes, donc
+# l'adresse IP) sont DÉSACTIVÉS, comme l'annonce la page de confidentialité :
+# https://developers.cloudflare.com/workers/observability/logs/workers-logs/
 [observability]
 enabled = true
+
+[observability.logs]
+invocation_logs = false
 
 # Workers AI (veille fiscale hebdomadaire, src/fiscalWatchJob.ts). Offre gratuite : 10 000
 # neurones par jour ; une exécution en consomme moins de 6 000 (plafond codé), en pratique

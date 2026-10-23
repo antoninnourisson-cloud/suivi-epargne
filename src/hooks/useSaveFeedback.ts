@@ -1,9 +1,12 @@
 // ================================================
 // FILE: src/hooks/useSaveFeedback.ts
 // ================================================
-import { useEffect, useRef, useState } from 'react';
+import { createContext, useContext, useEffect, useRef, useState } from 'react';
 
 export type SaveStatus = 'idle' | 'pending' | 'saved';
+
+/** Dernière écriture Drive confirmée (null : aucune pendant cette session). */
+export const LastSavedAtContext = createContext<Date | null>(null);
 
 /**
  * Retour visuel HONNÊTE pour un bouton d'enregistrement.
@@ -16,9 +19,12 @@ export type SaveStatus = 'idle' | 'pending' | 'saved';
  * Drive confirmée — et non sur la retombée de `isSaving`.
  *
  * Usage : appeler `markPending()` au clic, puis afficher `status`. Le passage à 'saved'
- * n'intervient que lorsque `lastSavedAt` avance réellement.
+ * n'intervient que lorsque `lastSavedAt` avance réellement. `lastSavedAt` vient du contexte
+ * LastSavedAtContext (fourni par App) : seuls les écrans qui l'utilisent sont re-rendus à
+ * chaque écriture, pas tous les écrans.
  */
-export const useSaveFeedback = (lastSavedAt: Date | null | undefined, resetAfterMs = 3000) => {
+export const useSaveFeedback = (resetAfterMs = 3000) => {
+  const lastSavedAt = useContext(LastSavedAtContext);
   const [status, setStatus] = useState<SaveStatus>('idle');
   // Horodatage observé au moment du clic : tout `lastSavedAt` strictement postérieur
   // constitue la preuve que NOTRE écriture est bien partie et a été acceptée.

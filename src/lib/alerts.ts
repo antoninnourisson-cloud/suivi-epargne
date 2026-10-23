@@ -5,12 +5,15 @@
 // contrôle des fiches) : rien n'est recalculé ici à part.
 import { AccountType, FiscalConfig, PayslipRecord, SavingsAccount } from '../types';
 import type { View } from '../navigation';
-import { REGULATED_TYPES, accountsAfterRestitution, computePlacementStrategy } from './finance';
-import { netAnnualRate } from './projection';
+import { REGULATED_TYPES, computePlacementStrategy } from './finance';
+import { netAnnualRate, netMonthlyRateSchedule } from './projection';
+import { accrueMonth, placeDeposit, prepareProjection, restituteParentalCapital, startProjection } from './projectionEngine';
 import { detectPayslipAnomalies } from './motivation';
 import { describeAnomaly } from '../components/motivation/text';
 import { formatEUR, formatPeriod, formatRate, frenchDay } from './format';
 import { formatISODay, parseISODate } from './dates';
+import { computeIdleCash, describeIdleDestinations, idleDestinations } from './idleCash';
+import { growthView, withAssumedRates } from './performance';
 
 export type AlertKind = 'dormant-cash' | 'livret-full' | 'better-rate' | 'restitution-room' | 'payslip-anomaly';
 
@@ -47,13 +50,12 @@ export interface AlertsInput {
   /** Restitution du capital des parents : date prévue, et si elle est déjà faite. */
   restitution?: { plannedDate?: string; done?: boolean };
   payslips?: PayslipRecord[];
+  /** Rendement supposé des placements sans taux saisi (withAssumedRates) ; calculé ici s'il manque. */
+  assumedRates?: Readonly<Record<string, number>>;
 }
 
-/** Coussin gardé sur le compte courant : 1,5 mois de dépenses. */
-const CASH_BUFFER_MONTHS = 1.5;
 /** En dessous, une alerte ne vaut pas la peine d'être affichée. */
 const MIN_GAIN_PER_YEAR = 5;
-const MIN_DORMANT_EUR = 300;
 /** Horizon de la prévision « livret plein », en mois. */
 const FULL_FORECAST_MONTHS = 24;
 
@@ -83,8 +85,7 @@ export const sortAlerts = <T extends { tone: 'action' | 'info'; gain?: AlertGain
     .map(({ a }) => a);
 
 /** Comptes candidats comme destination : LEP retiré s'il va fermer. */
-const usableAccounts = (input: AlertsInput) =>
-  input.lepEligible === false ? input.accounts.filter(a => a.type !== AccountType.LEP) : input.accounts;
+const usableAccounts = (input: AlertsInput) => idleDestinations(input.accounts, input.lepEligible);
 
 /** Place restante sous le plafond de chaque livret réglementé. */
 const roomByAccount = (accounts: SavingsAccount[], fiscal: FiscalConfig) =>
@@ -95,31 +96,18 @@ const roomByAccount = (accounts: SavingsAccount[], fiscal: FiscalConfig) =>
 // ---------------------------------------------------------------------------
 
 const dormantCash = (input: AlertsInput, room: Map<string, number>): Alert | null => {
-  const spending = input.monthlySpending ?? 0;
-  if (!(spending > 0)) return null;
-  const current = input.accounts.filter(a => a.type === AccountType.COMPTE_COURANT);
-  if (current.length === 0) return null;
-  const cash = current.reduce((s, a) => s + Math.max(0, a.ownedAmount), 0);
-  const excess = Math.floor(cash - spending * CASH_BUFFER_MONTHS);
-  if (excess < MIN_DORMANT_EUR) return null;
+  // Calcul partagé avec l'écran Rendement (lib/idleCash) : même coussin, mêmes livrets.
+  const idle = computeIdleCash(input);
+  if (!idle) return null;
+  const { placed, gain } = idle;
+  for (const st of idle.steps) if (st.accountId) room.set(st.accountId, Math.max(0, (room.get(st.accountId) || 0) - st.fillAmount));
 
-  // Même ordre que le plan de placement (meilleur taux, puis LEP > Livret A > LDDS), sur
-  // les seuls livrets : l'argent du quotidien doit rester disponible à tout moment.
-  const steps = computePlacementStrategy(excess, usableAccounts(input), input.fiscalConfig)
-    .filter(s => s.isLiquid && !s.infoOnly && s.fillAmount > 0);
-  if (steps.length === 0) return null;
-  const placed = steps.reduce((s, st) => s + st.fillAmount, 0);
-  const gain = steps.reduce((s, st) => s + st.fillAmount * (st.rate || 0) / 100, 0);
-  if (gain < MIN_GAIN_PER_YEAR) return null;
-  for (const st of steps) if (st.accountId) room.set(st.accountId, Math.max(0, (room.get(st.accountId) || 0) - st.fillAmount));
-
-  const names = steps.map(st => (st.accountId ? `le ${st.accountName}` : 'un LDDS à ouvrir'));
   return {
     id: 'dormant-cash',
     kind: 'dormant-cash',
     tone: 'action',
-    title: `${eur(placed)} dorment sur votre compte courant : placés sur ${listFr(names)}, environ ${eur(gain)} d'intérêts par an.`,
-    detail: `Pécule garde ${eur(spending * CASH_BUFFER_MONTHS)} sur le compte courant (un mois et demi de dépenses). Versé le 15 ou le dernier jour du mois, l'argent rapporte dès la quinzaine suivante.`,
+    title: `${eur(placed)} dorment sur votre compte courant : placés sur ${describeIdleDestinations(idle)}, environ ${eur(gain)} d'intérêts par an.`,
+    detail: `Pécule garde ${eur(idle.buffer)} sur le compte courant (un mois et demi de dépenses). Versé le 15 ou le dernier jour du mois, l'argent rapporte dès la quinzaine suivante.`,
     gain: { amount: gain, per: 'an', label: "d'intérêts par an" },
     action: { label: 'Voir le plan', view: 'pilot' },
   };
@@ -173,7 +161,12 @@ const livretFullForecast = (input: AlertsInput): Alert | null => {
   const monthly = input.monthlyPlan ?? 0;
   if (!(monthly > 0)) return null;
   const fiscal = input.fiscalConfig;
-  let sim = usableAccounts(input).filter(a => a.type !== AccountType.IMMOBILIER).map(a => ({ ...a }));
+  // Même moteur que les autres projections « selon votre plan » (./projectionEngine) :
+  // intérêts du mois (versés au 31 décembre pour les livrets réglementés, ce qui les
+  // rapproche du plafond), restitution éventuelle, puis versement réparti par le plan.
+  const setup = prepareProjection(usableAccounts(input), input.today, a => netMonthlyRateSchedule(growthView(a, input.assumedRates), fiscal, input.today));
+  const state = startProjection(setup);
+  const sim = state.accounts;
   const watched = sim.filter(a => REGULATED_TYPES.includes(a.type) && ceilingOf(a, fiscal) - a.totalAmount > 1).map(a => a.id);
   if (watched.length === 0) return null;
   const restitutionAt = input.restitution?.plannedDate && !input.restitution.done ? input.restitution.plannedDate : undefined;
@@ -181,21 +174,18 @@ const livretFullForecast = (input: AlertsInput): Alert | null => {
 
   for (let m = 1; m <= FULL_FORECAST_MONTHS; m++) {
     const month = new Date(input.today.getFullYear(), input.today.getMonth() + m, 1);
-    if (restitutionAt && !restituted && restitutionAt <= formatISODay(month)) { sim = accountsAfterRestitution(sim); restituted = true; }
-    for (const st of computePlacementStrategy(monthly, sim, fiscal)) {
-      // Une étape sans compte (livrets pleins, ni AV ni PEA) laisse l'argent sur le compte
-      // courant : elle ne remplit aucun livret, c'est tout ce qui compte ici.
-      if (st.infoOnly || !st.accountId) continue;
-      const a = sim.find(x => x.id === st.accountId);
-      if (a) { a.totalAmount += st.fillAmount; a.ownedAmount += st.fillAmount; }
-    }
+    accrueMonth(state, m);
+    if (restitutionAt && !restituted && restitutionAt <= formatISODay(month)) { restituteParentalCapital(state); restituted = true; }
+    // Une étape sans compte (livrets pleins, ni AV ni PEA) laisse l'argent sur le compte
+    // courant : elle ne remplit aucun livret, c'est tout ce qui compte ici.
+    placeDeposit(state, monthly, fiscal);
     const full = sim.find(a => watched.includes(a.id) && a.totalAmount >= ceilingOf(a, fiscal) - 1);
     if (!full) continue;
 
     // La suite : où le plan enverra l'argent le mois d'après.
     const next = computePlacementStrategy(monthly, sim, fiscal).find(st => st.accountId !== full.id && st.fillAmount > 0);
     const nextAccount = next?.accountId ? sim.find(a => a.id === next.accountId) : undefined;
-    const nextRate = nextAccount ? netAnnualRate(nextAccount, fiscal, month) : next?.type === AccountType.LDDS ? next.rate || 0 : 0;
+    const nextRate = nextAccount ? netAnnualRate(growthView(nextAccount, input.assumedRates), fiscal, month) : next?.type === AccountType.LDDS ? next.rate || 0 : 0;
     const nextText = nextAccount ? `prévoyez la suite sur ${nextAccount.type === AccountType.ASSURANCE_VIE ? "l'" : 'le '}${nextAccount.name}`
       : next?.type === AccountType.LDDS ? 'prévoyez d\'ouvrir un LDDS pour la suite'
       : 'prévoyez la suite (PEA ou assurance vie)';
@@ -233,7 +223,7 @@ const fallbackDestination = (input: AlertsInput, asOf: Date): { label: string; r
     .map(a => (REGULATED_TYPES.includes(a.type) ? { ...a, totalAmount: Math.max(a.totalAmount, ceilingOf(a, fiscal)) } : a));
   const step = computePlacementStrategy(1000, full, fiscal).find(st => !st.infoOnly && st.fillAmount > 0);
   const account = step?.accountId ? full.find(a => a.id === step.accountId) : undefined;
-  if (account) return { label: `${account.type === AccountType.ASSURANCE_VIE ? "l'" : 'le '}${account.name}`, rate: netAnnualRate(account, fiscal, asOf) };
+  if (account) return { label: `${account.type === AccountType.ASSURANCE_VIE ? "l'" : 'le '}${account.name}`, rate: netAnnualRate(growthView(account, input.assumedRates), fiscal, asOf) };
   if (step?.type === AccountType.LDDS) return { label: 'un LDDS à ouvrir', rate: step.rate || 0 };
   return { label: 'le compte courant', rate: 0 };
 };
@@ -288,7 +278,10 @@ const payslipAnomaly = (input: AlertsInput): Alert | null => {
   };
 };
 
-export const computeAlerts = (input: AlertsInput): Alert[] => {
+export const computeAlerts = (alertsInput: AlertsInput): Alert[] => {
+  // Un placement sans taux saisi rapporte son rendement supposé, comme au Rendement, dans
+  // le simulateur et le plan solo (même compte, même croissance partout).
+  const input: AlertsInput = alertsInput.assumedRates ? alertsInput : { ...alertsInput, assumedRates: withAssumedRates(alertsInput.accounts, alertsInput.today).rates };
   // Place sous les plafonds partagée : l'argent proposé pour le compte courant n'est pas
   // proposé une seconde fois pour un changement de livret.
   const room = roomByAccount(usableAccounts(input), input.fiscalConfig);

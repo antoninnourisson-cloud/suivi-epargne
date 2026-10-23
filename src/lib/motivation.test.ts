@@ -99,6 +99,11 @@ describe('jalons', () => {
     expect(done).toEqual(expect.arrayContaining(['good-month-1', 'streak-3', 'savings-10000', 'livret-full', 'emergency-3', 'emergency-6']));
     expect(done).not.toContain('savings-25000');
   });
+  it('ne parle des parents que tant que leur capital est sur les comptes (mode solo ensuite)', () => {
+    const tier = (accounts: Parameters<typeof computeMilestones>[0]['accounts']) => computeMilestones({ ...base, accounts }).find(m => m.id === 'savings-10000')?.detail;
+    expect(tier([account([], { parentalCapital: 500, totalAmount: 1500 })])).toBe('Votre part, hors capital de vos parents.');
+    expect(tier([account([])])).toBe('Le total de vos comptes.');
+  });
   it('ne récompense ni crypto ni nombre d\'opérations', () => {
     const ids = computeMilestones({ ...base, accounts: [] }).map(m => m.id).join(' ');
     expect(ids).not.toMatch(/crypto|transaction|operation/);

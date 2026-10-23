@@ -65,13 +65,16 @@ const FIELDS: Record<string, { label: string; fmt: (v: unknown) => string; propo
   lepIncomeCeilingOnePart: { label: 'Plafond de revenus LEP (1 part)', fmt: v => eur(v as number), proposal: 'lepIncomeCeiling' },
   lepPerHalfPart: { label: 'Plafond LEP : ajout par demi-part', fmt: v => eur(v as number), proposal: 'lepCeilingPerHalfPart' },
   socialChargesGeneral: { label: 'Prélèvements sociaux (placements)', fmt: v => pct((v as number) * 100), proposal: 'socialChargesCapital' },
-  socialChargesLifeInsurance: { label: 'Prélèvements sociaux (assurance vie)', fmt: v => pct((v as number) * 100), proposal: 'socialChargesLifeInsurance' },
+  socialChargesLifeInsurance: { label: 'Prélèvements sociaux (assurance vie, PEL, CEL)', fmt: v => pct((v as number) * 100), proposal: 'socialChargesLifeInsurance' },
   allowanceCap: { label: "Plafond de l'abattement de 10 %", fmt: v => eur(v as number), proposal: 'standardAllowanceCap' },
   allowanceMin: { label: "Minimum de l'abattement de 10 %", fmt: v => eur(v as number), proposal: 'standardAllowanceMin' },
   decoteSingle: { label: 'Décote (personne seule)', fmt: v => eur(v as number), proposal: 'decote.single' },
   decoteThreshold: { label: 'Seuil de la décote', fmt: v => eur(v as number), proposal: 'decote.threshold' },
   donation75Ceiling: { label: 'Plafond des dons à 75 %', fmt: v => eur(v as number), proposal: 'donation75Ceiling' },
+  transportExemptUntil: { label: 'Remboursement transport exonéré jusqu\'à 75 %', fmt: v => `revenus ${String(v)}`, proposal: 'transportExemptUntil' },
   taxBrackets: { label: "Barème de l'impôt", fmt: brackets, proposal: 'taxBrackets' },
+  inflationAnnual: { label: 'Inflation annuelle (INSEE)', fmt: v => pct(v as number), proposal: 'inflation' },
+  inflationYear: { label: "Année de l'inflation (INSEE)", fmt: v => String(v), proposal: 'inflation' },
 };
 
 const STATUS_LABEL: Record<string, string> = {
@@ -201,12 +204,21 @@ export const useFiscalWatch = (geminiApiKey: string, fiscal: FiscalConfig | unde
     [picked.source, stored.server, fiscal, accounts],
   );
 
-  const dismiss = (p: FiscalProposal) => update({ dismissed: [...(stored.dismissed || []), signature(p)] });
+  const dismiss = useCallback((p: FiscalProposal) => setStored(prev => {
+    const next = { ...prev, dismissed: [...(prev.dismissed || []), signature(p)] };
+    write(next);
+    return next;
+  }), []);
 
-  return {
+  // Objet stable tant que rien ne change : les écrans qui l'affichent ne sont pas re-rendus
+  // à chaque rendu d'App.
+  const canRun = !!geminiApiKey || serverAvailable();
+  return useMemo(() => ({
     proposals, running, runningVia, run, dismiss,
     checkedAt: picked.checkedAt, source: picked.source, serverReport,
     lastAttemptAt: stored.lastAttemptAt, lastError: stored.lastError,
-    hasKey: !!geminiApiKey, canRun: !!geminiApiKey || serverAvailable(),
-  };
+    hasKey: !!geminiApiKey, canRun,
+  }), [proposals, running, runningVia, run, dismiss, picked.checkedAt, picked.source, serverReport, stored.lastAttemptAt, stored.lastError, geminiApiKey, canRun]);
 };
+
+export type FiscalWatch = ReturnType<typeof useFiscalWatch>;

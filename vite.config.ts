@@ -84,12 +84,20 @@ export default defineConfig({
       // worker généré plutôt que de réécrire toute la stratégie de cache à la main.
       workbox: {
         importScripts: ['push-sw.js'],
-        // La police est servie avec l'app : précachée pour l'affichage hors ligne.
+        // La police est servie avec l'app : précachée pour l'affichage hors ligne. Les icônes
+        // de public/ (pwa-*.png, apple-touch-icon.png) sont prises par ce motif : plus de
+        // liste includeAssets, qui les faisait figurer deux fois dans le précache.
         globPatterns: ['**/*.{js,css,html,png,woff2}'],
+        // Pas précachés (75 Kio de moins à l'installation) :
+        // - public/fonts : copie de la police pour les pages statiques (présentation,
+        //   confidentialité), identique octet pour octet à celle de l'app ; elles la chargent
+        //   en ligne, et se rabattent sur une police système hors ligne ;
+        // - le sous-ensemble latin-ext : son unicode-range (index.css) ne le charge que pour
+        //   des caractères hors du français ; hors ligne, une police système les affiche.
+        globIgnores: ['fonts/**', '**/*latin-ext*'],
       },
-      // Seules les icônes réellement présentes dans public/ (les anciennes entrées
-      // favicon.ico / apple-touch-icon.png / mask-icon.svg pointaient vers des fichiers absents).
-      includeAssets: ['pwa-192x192.png', 'pwa-512x512.png', 'apple-touch-icon.png'],
+      // Icônes du manifeste déjà prises par globPatterns : ne pas les ajouter une seconde fois.
+      includeManifestIcons: false,
       manifest: {
         name: 'Pécule',
         short_name: 'Pécule',
@@ -150,6 +158,22 @@ export default defineConfig({
       }
     })
   ],
+  build: {
+    rollupOptions: {
+      output: {
+        // Moins de requêtes à la première visite (avant que le service worker serve tout) :
+        // les icônes (lucide-react) et le kit d'interface (src/components/ui) forment chacun
+        // UN fichier partagé, et les fichiers de moins de 8 Ko sont fusionnés avec un voisin.
+        // Mesuré le 22 octobre 2026 (build de production, même code avec et sans ces deux
+        // réglages) : 96 fichiers JS dont 48 de moins de 1 Kio → 33, aucun sous 1 Kio ;
+        // 30 fichiers JS chargés pour afficher l'Accueil → 5, pour presque le même poids
+        // (203 → 206 Kio gzip : les icônes des autres écrans viennent avec) ; précache
+        // 107 → 44 entrées (572 → 548 Kio gzip).
+        experimentalMinChunkSize: 8000,
+        manualChunks: id => (id.includes('node_modules/lucide-react') ? 'icons' : id.includes('/src/components/ui/') ? 'ui' : undefined),
+      },
+    },
+  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),

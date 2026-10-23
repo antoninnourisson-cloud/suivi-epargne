@@ -19,6 +19,20 @@ import { isInitialBalance, isSavingsFlow } from './savings';
 export const REGULATED_TYPES = [AccountType.LIVRET_A, AccountType.LDDS, AccountType.LEP];
 
 /**
+ * Comptes dont les intérêts de l'année s'ajoutent au capital le 31 décembre : livrets
+ * réglementés, épargne logement et (le plus souvent) livret bancaire. Vérifié le 2026-10-23 :
+ * Livret A https://www.service-public.gouv.fr/particuliers/vosdroits/F2365,
+ * LDDS https://www.service-public.gouv.fr/particuliers/vosdroits/F2368,
+ * LEP https://www.service-public.gouv.fr/particuliers/vosdroits/F2367,
+ * CEL https://www.service-public.gouv.fr/particuliers/vosdroits/F16136,
+ * PEL https://www.service-public.gouv.fr/particuliers/vosdroits/F16140.
+ * Un compte à terme verse ses intérêts selon son contrat (souvent à l'échéance) : pas ici.
+ */
+export const INTEREST_CREDITED_DEC31_TYPES: readonly AccountType[] = [
+  ...REGULATED_TYPES, AccountType.LIVRET_BANCAIRE, AccountType.CEL, AccountType.PEL,
+];
+
+/**
  * Taux en vigueur à une date donnée, d'après l'historique.
  * Convention de `rateHistory` (identique à computeWeightedAnnualRate) : une entrée datée du
  * jour J porte l'ANCIEN taux, valable JUSQU'À J. Le taux courant prend le relais après le
@@ -86,7 +100,8 @@ export const quinzaineEffectiveDate = (d: Date, isDeposit: boolean): Date => {
  *   ont chacun leurs propres règles de valorisation, mais c'est bien plus proche du réel
  *   que de compter une année pleine sur le solde du jour.
  *
- * Année en cours : ne compte que jusqu'à `asOfDate`.
+ * Année en cours : ne compte que jusqu'à `asOfDate` (livrets : les quinzaines terminées à
+ * cette date ; celle qui court n'est pas encore gagnée).
  */
 export const computeAccruedInterest = (
   accountIn: { type: AccountType; totalAmount: number; movements?: AccountMovement[]; interestRate?: number; rateHistory?: RateChange[]; openingDate?: string },
@@ -120,8 +135,14 @@ export const computeAccruedInterest = (
 
   if (REGULATED_TYPES.includes(account.type)) {
     let interest = 0;
-    for (const q of quinzaineStarts(year)) {
-      if (q >= end) break;
+    const starts = quinzaineStarts(year);
+    for (let i = 0; i < starts.length; i++) {
+      const q = starts[i];
+      // Une quinzaine n'est acquise qu'une fois terminée (le 16 ou le 1er suivant) : celle
+      // en cours ne compte pas encore, un retrait avant sa fin l'annulerait. Avec `asOfDate`
+      // au 1er janvier suivant (« Attendu 31/12 »), les 24 quinzaines comptent.
+      const qEnd = starts[i + 1] ?? yearEnd;
+      if (qEnd > end) break;
       let balance = startBalance;
       for (const m of yearMovements) {
         const isDeposit = m.type === 'IN';
@@ -395,16 +416,29 @@ export const quinzaineWithdrawalTip = (
 /**
  * Assurances Vie dont le taux n'a pas été revu depuis le 1er janvier : le taux servi du
  * fonds euros de l'année écoulée est publié par l'assureur en janvier. Signalé du 15
- * janvier au 31 mars.
+ * janvier au 31 mars. Revu = nouveau taux daté de l'année, ou « Taux inchangé »
+ * (`rateReviewedAt`, posé par l'Accueil comme par la clôture de l'année : une seule trace).
  */
 export const findAvRateUpdatesDue = (accounts: SavingsAccount[], asOfDate: Date = new Date()): SavingsAccount[] => {
   const m = asOfDate.getMonth(), d = asOfDate.getDate();
   if (!((m === 0 && d >= 15) || m === 1 || m === 2)) return [];
   const yearStart = `${asOfDate.getFullYear()}-01-01`;
   return accounts.filter(a =>
-    a.type === AccountType.ASSURANCE_VIE && a.totalAmount > 0 &&
-    !(a.rateHistory || []).some(r => r.date >= yearStart)
+    a.type === AccountType.ASSURANCE_VIE && a.totalAmount > 0 && !isRateReviewedSince(a, yearStart)
   );
+};
+
+/** Taux revu depuis `fromISO` : nouveau taux daté de ce jour ou d'après, ou « taux inchangé ». */
+export const isRateReviewedSince = (a: { rateHistory?: RateChange[]; rateReviewedAt?: string }, fromISO: string): boolean =>
+  (a.rateHistory || []).some(r => r.date >= fromISO) || (!!a.rateReviewedAt && a.rateReviewedAt >= fromISO);
+
+/**
+ * « Taux inchangé » : les comptes `ids` sont notés comme revus le `todayISO` (le taux ne
+ * bouge pas). Même liste rendue si rien ne change.
+ */
+export const confirmRatesUnchanged = (accounts: SavingsAccount[], ids: readonly string[], todayISO: string): SavingsAccount[] => {
+  if (!accounts.some(a => ids.includes(a.id) && !(a.rateReviewedAt && a.rateReviewedAt >= todayISO))) return accounts;
+  return accounts.map(a => (ids.includes(a.id) && !(a.rateReviewedAt && a.rateReviewedAt >= todayISO) ? { ...a, rateReviewedAt: todayISO } : a));
 };
 
 // ---------------------------------------------------------------------------

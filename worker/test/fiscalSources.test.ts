@@ -11,7 +11,7 @@ describe('sources de la veille fiscale', () => {
     expect(t).not.toContain('liens');
   });
   it('ne lit que des pages officielles', () => {
-    expect(FISCAL_SOURCE_URLS.every(s => /^https:\/\/www\.(service-public|economie)\.gouv\.fr\//.test(s.url))).toBe(true);
+    expect(FISCAL_SOURCE_URLS.every(s => /^https:\/\/www\.((service-public|economie)\.gouv|insee)\.fr\//.test(s.url))).toBe(true);
   });
   it('signale une page injoignable sans tout faire échouer', async () => {
     const fake = (async (u: string) => (u.includes('F2365') ? new Response('<main>ok 1,7 %</main>') : new Response('', { status: 503 }))) as unknown as typeof fetch;

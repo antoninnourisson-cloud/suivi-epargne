@@ -37,7 +37,9 @@ self.addEventListener('notificationclick', (event) => {
       // écran, sans la recharger.
       for (const w of windows) {
         if (w.url.startsWith(self.registration.scope) && 'focus' in w) {
-          w.postMessage({ type: 'open-view', view, year: target.searchParams.get('year') });
+          // `section` : carte de Paramètres à ouvrir (alertes de sécurité : « Appareils
+          // connectés », sauvegarde de secours).
+          w.postMessage({ type: 'open-view', view, year: target.searchParams.get('year'), section: target.searchParams.get('section') });
           return w.focus();
         }
       }

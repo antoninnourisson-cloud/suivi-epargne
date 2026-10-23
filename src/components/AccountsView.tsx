@@ -1,8 +1,8 @@
-// Écran « Mes comptes » : liste, filtres par étiquette, mouvements de chaque compte,
-// création et modification. Sorti d'App.tsx pour qu'App ne fasse plus que router.
+// Écran « Mes comptes » (Material 3) : liste, filtres par étiquette (total par projet),
+// fraîcheur du solde et performance de chaque compte, mouvements, création et modification.
+// Les calculs viennent de lib (freshness, performance, accountTypes, finance).
 import React, { useMemo, useState } from 'react';
-import { AccountMovement, AccountType, SavingsAccount } from '../types';
-import { usePortfolioData } from '../hooks/usePortfolioData';
+import { AccountMovement, AccountType, FiscalConfig, SavingsAccount } from '../types';
 import type { View } from '../navigation';
 import { AccountForm } from './AccountForm';
 import { MovementSearch } from './MovementSearch';
@@ -10,12 +10,20 @@ import { RegulatedRatesEditor } from './RegulatedRatesEditor';
 import { AccountTotal } from './AccountTotal';
 import { computeMaturityCountdown, computePeeAvailability, describeMaturity } from '../lib/finance';
 import { isRestitutionMovement } from '../lib/accountOps';
-import { formatEUR, formatSignedEUR } from '../lib/format';
-import { PlusCircle, Edit2, Trash2, Clock, ChevronDown, Tag } from 'lucide-react';
+import { formatEUR, formatRate, formatSignedEUR } from '../lib/format';
+import { PlusCircle, Pencil, Trash2, Clock, ChevronDown, Tag, CheckCircle2, TrendingUp, FileText } from 'lucide-react';
 import { signedAmount } from '../lib/money';
+import { localTodayISO, parseISODate } from '../lib/dates';
+import { balanceFreshness, describeCheckAge, offersBalanceCheck } from '../lib/freshness';
+import { accountPerformance, isMarketAccount } from '../lib/performance';
+import { ACCOUNT_TYPE_LABELS, totalsForTag } from '../lib/accountTypes';
+import { Button, Card, Chip, IconButton, MoneyText, PageHeader } from './ui';
 
 interface AccountsViewProps {
-  data: ReturnType<typeof usePortfolioData>;
+  accounts: SavingsAccount[];
+  fiscalConfig: FiscalConfig;
+  /** Mise à jour des taux des livrets (à partir de l'état le plus récent). */
+  onUpdateAccounts: (update: (prev: SavingsAccount[]) => SavingsAccount[]) => void;
   setView: (v: View) => void;
   editingAccount: SavingsAccount | undefined;
   setEditingAccount: (a: SavingsAccount | undefined) => void;
@@ -26,11 +34,34 @@ interface AccountsViewProps {
   handleDeleteMovement: (accountId: string, movementId: string) => void;
   handleRenameMovement: (accountId: string, movementId: string, currentLabel: string) => void;
   hasParental: boolean;
+  /** « Lire un relevé » depuis la fiche d'un compte (proposé pour ce compte). */
+  onReadStatement?: (accountId: string) => void;
 }
 
+const monthYear = (iso: string) => parseISODate(iso).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+const pctText = (fraction: number) => formatRate(Math.round(fraction * 1000) / 10).replace(/^(?=\d)/, '+');
+
+/** Ligne « performance » d'un placement (gain et rendement annuel), ou `null` si rien à dire. */
+const PerformanceLine: React.FC<{ account: SavingsAccount }> = ({ account }) => {
+  const perf = accountPerformance(account);
+  if (!perf) return null;
+  if (!perf.measured && account.totalDeposits === undefined) {
+    return <p className="mt-1 text-xs text-on-surface-variant">Performance : actualisez la valeur du compte pour la mesurer.</p>;
+  }
+  const rate = perf.annualized !== null
+    ? `${pctText(perf.annualized)} par an depuis ${monthYear(perf.since)}`
+    : perf.periodReturn !== null ? `${pctText(perf.periodReturn)} depuis ${monthYear(perf.since)}` : null;
+  return (
+    <p className="mt-1 text-xs text-on-surface-variant flex items-center gap-1 flex-wrap">
+      <TrendingUp className="w-3.5 h-3.5 shrink-0 text-primary" aria-hidden="true" />
+      <span>Gain <MoneyText value={perf.gain} signed tone="auto" className="font-medium" />{account.totalDeposits === undefined ? ' depuis son ajout' : ''}{rate ? ` · ${rate}` : ''}</span>
+    </p>
+  );
+};
+
 export const AccountsView: React.FC<AccountsViewProps> = ({
-  data, setView, editingAccount, setEditingAccount, showForm, setShowForm,
-  handleSaveAccount, handleDeleteAccount, handleDeleteMovement, handleRenameMovement, hasParental,
+  accounts, fiscalConfig, onUpdateAccounts, setView, editingAccount, setEditingAccount, showForm, setShowForm,
+  handleSaveAccount, handleDeleteAccount, handleDeleteMovement, handleRenameMovement, hasParental, onReadStatement,
 }) => {
   const [groupSmallMovements, setGroupSmallMovements] = useState(true);
   const [activeTagFilter, setActiveTagFilter] = useState<string | null>(null);
@@ -57,158 +88,211 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
 
   const allTags = useMemo(() => {
     const set = new Set<string>();
-    data.accounts.forEach(a => (a.tags || []).forEach(t => set.add(t)));
+    accounts.forEach(a => (a.tags || []).forEach(t => set.add(t)));
     return Array.from(set).sort();
-  }, [data.accounts]);
+  }, [accounts]);
 
   const filteredAccounts = useMemo(() => {
-    if (!activeTagFilter) return data.accounts;
-    return data.accounts.filter(a => (a.tags || []).includes(activeTagFilter));
-  }, [data.accounts, activeTagFilter]);
+    if (!activeTagFilter) return accounts;
+    return accounts.filter(a => (a.tags || []).includes(activeTagFilter));
+  }, [accounts, activeTagFilter]);
+  const tagTotal = activeTagFilter ? totalsForTag(accounts, activeTagFilter) : null;
+
+  const openForm = (acc?: SavingsAccount) => { setEditingAccount(acc); setShowForm(true); };
+  // « Solde vérifié » : le solde affiché est bien celui de la banque, aujourd'hui.
+  const markChecked = (acc: SavingsAccount) => handleSaveAccount({ ...acc, balanceCheckedAt: localTodayISO() });
 
   return (
-
-              <div className="space-y-6 animate-fade-in">
-                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-xs border border-slate-200 dark:border-slate-700">
-                  <div><h2 className="text-2xl font-black text-slate-800 dark:text-slate-100">Mes comptes</h2><p className="text-sm text-slate-500 dark:text-slate-400 font-medium">{data.accounts.length} compte{data.accounts.length > 1 ? 's' : ''} · <button onClick={() => setView('journal')} className="underline hover:text-indigo-700 dark:hover:text-indigo-300">voir le journal des mouvements</button></p></div>
-                  {!showForm && <button onClick={() => { setEditingAccount(undefined); setShowForm(true); }} className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-xl font-bold flex gap-2 transition-colors shadow-lg shadow-indigo-200"><PlusCircle className="w-5 h-5"/> Ajouter un compte</button>}
-                </div>
-                {!showForm && <MovementSearch accounts={data.accounts} />}
-                {!showForm && data.accounts.some(a => [AccountType.LIVRET_A, AccountType.LDDS, AccountType.LEP].includes(a.type)) && (
-                  <details className="bg-white dark:bg-slate-800 rounded-2xl shadow-xs border border-slate-200 dark:border-slate-700 group">
-                    <summary className="list-none cursor-pointer p-4 flex items-center justify-between font-bold text-sm text-slate-800 dark:text-slate-100">
-                      Mettre à jour les taux des livrets
-                      <ChevronDown className="w-4 h-4 text-slate-500 transition-transform group-open:rotate-180" />
-                    </summary>
-                    <div className="px-4 pb-4"><RegulatedRatesEditor accounts={data.accounts} onApply={data.setAccounts} /></div>
-                  </details>
-                )}
-                {showForm ? (
-                  <AccountForm
-                      onSave={handleSaveAccount}
-                      initialData={editingAccount}
-                      onCancel={() => { setShowForm(false); setEditingAccount(undefined); }}
-                      fiscalConfig={data.fiscalConfig}
-                      showParental={hasParental || !!editingAccount?.parentalCapital}
-                  />
-                ) : (
-                  <>
-                  {allTags.length > 0 && (
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Tag className="w-3.5 h-3.5 text-slate-400" />
-                      <button onClick={() => setActiveTagFilter(null)} className={`text-xs font-bold px-3 py-1.5 rounded-full transition-colors ${!activeTagFilter ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}>Tous</button>
-                      {allTags.map(t => (
-                        <button key={t} onClick={() => setActiveTagFilter(t === activeTagFilter ? null : t)} className={`text-xs font-bold px-3 py-1.5 rounded-full transition-colors ${activeTagFilter === t ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}>{t}</button>
-                      ))}
-                    </div>
-                  )}
-                  <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xs border border-slate-200 dark:border-slate-700 overflow-hidden">
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left md:min-w-136">
-                        <thead className="bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700">
-                          <tr><th className="px-6 py-4 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider">Compte</th><th className="px-6 py-4 text-[11px] text-right text-slate-500 dark:text-slate-400 uppercase tracking-wider">Ma part</th><th className="hidden md:table-cell px-6 py-4 text-[11px] text-right text-slate-500 dark:text-slate-400 uppercase tracking-wider">Parents</th><th className="hidden md:table-cell px-6 py-4 text-right"></th></tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                          {filteredAccounts.map(acc => (
-                            <React.Fragment key={acc.id}>
-                              <tr className="hover:bg-slate-50 dark:hover:bg-slate-800 group transition-colors">
-                                <td className="px-4 md:px-6 py-4">
-                                  <button type="button" onClick={() => setEditingAccount(editingAccount?.id === acc.id ? undefined : acc)} aria-expanded={editingAccount?.id === acc.id && !showForm}
-                                    className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-1 text-left hover:text-indigo-700 dark:hover:text-indigo-300">
-                                    {acc.name} <ChevronDown className={`w-4 h-4 text-slate-500 transition-transform ${editingAccount?.id === acc.id && !showForm ? 'rotate-180' : ''}`} aria-hidden="true" /><span className="sr-only">: voir les mouvements</span>
-                                  </button>
-                                  <div className="text-[11px] uppercase text-slate-500 dark:text-slate-400 font-bold">{acc.institution}</div>
-                                  {acc.tags && acc.tags.length > 0 && (
-                                    <div className="flex flex-wrap gap-1 mt-1">
-                                      {acc.tags.map(t => <span key={t} className="text-[11px] bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-300 px-1.5 py-0.5 rounded-full font-bold normal-case">{t}</span>)}
-                                    </div>
-                                  )}
-                                  {(() => {
-                                    // PEE : déjà sans impôt sur le revenu, mais chaque versement est
-                                    // bloqué 5 ans : on annonce le prochain déblocage.
-                                    if (acc.type === AccountType.PEE) {
-                                      const pee = computePeeAvailability(acc, data.fiscalConfig);
-                                      const release = pee.nextRelease;
-                                      if (!release) {
-                                        // Dates de versement inconnues : on ne devine aucune date.
-                                        if (!pee.undated || pee.blocked < 0.5) return null;
-                                        return (
-                                          <div className="mt-1 text-[11px] font-bold text-indigo-700 dark:text-indigo-300 flex items-center gap-1">
-                                            <Clock className="w-3 h-3 shrink-0" aria-hidden="true" />
-                                            Date de déblocage inconnue
-                                          </div>
-                                        );
-                                      }
-                                      return (
-                                        <div className="mt-1 text-[11px] font-bold text-indigo-700 dark:text-indigo-300 flex items-center gap-1">
-                                          <Clock className="w-3 h-3 shrink-0" aria-hidden="true" />
-                                          {release.last ? 'Disponible' : `${formatEUR(release.amount, 0)} disponibles`} dans {release.monthsRemaining} mois
-                                        </div>
-                                      );
-                                    }
-                                    // Compte à rebours de maturité fiscale (PEA/AV) : même calcul que
-                                    // Rendement, pour ne jamais annoncer un régime différent d'un écran à
-                                    // l'autre. Les prélèvements sociaux restent dus : on le dit.
-                                    const maturity = computeMaturityCountdown(acc, data.fiscalConfig);
-                                    if (!maturity) return null;
-                                    const text = describeMaturity(acc, maturity, data.fiscalConfig);
-                                    return (
-                                      <div className="mt-1 text-[11px] text-indigo-700 dark:text-indigo-300">
-                                        <div className="font-bold flex items-center gap-1">
-                                          <Clock className="w-3 h-3 shrink-0" aria-hidden="true" />
-                                          {text.short}
-                                        </div>
-                                        <div className="text-slate-600 dark:text-slate-300">{text.detail}</div>
-                                      </div>
-                                    );
-                                  })()}
-                                  <div className="md:hidden mt-2 flex items-center gap-2">
-                                    {acc.parentalCapital > 0 && <span className="text-xs font-bold text-amber-700 dark:text-amber-400 flex-1">Parents : {formatEUR(acc.parentalCapital)}</span>}
-                                    <span className="flex-1" />
-                                    <button onClick={(e) => { e.stopPropagation(); setEditingAccount(acc); setShowForm(true); }} aria-label={`Modifier ${acc.name}`} className="p-2.5 text-indigo-600 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/40 rounded-lg"><Edit2 className="w-4 h-4"/></button>
-                                    <button onClick={(e) => { e.stopPropagation(); handleDeleteAccount(acc); }} aria-label={`Supprimer ${acc.name}`} className="p-2.5 text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/40 rounded-lg"><Trash2 className="w-4 h-4"/></button>
-                                  </div>
-                                </td>
-                                <td className="px-4 md:px-6 py-4 text-right align-top"><div className="font-black text-indigo-700 dark:text-indigo-300 text-lg whitespace-nowrap">{formatEUR(acc.ownedAmount)}</div><AccountTotal account={acc} /></td>
-                                <td className="hidden md:table-cell px-6 py-4 text-right font-bold text-amber-700 dark:text-amber-400">{formatEUR(acc.parentalCapital)}</td>
-                                <td className="hidden md:table-cell px-6 py-4 text-right"><div className="flex justify-end gap-2 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100 transition-opacity">
-                                   <button onClick={(e) => { e.stopPropagation(); setEditingAccount(acc); setShowForm(true); }} aria-label={`Modifier ${acc.name}`} className="p-2 text-indigo-600 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/40 rounded-lg hover:bg-indigo-100 dark:hover:bg-indigo-900"><Edit2 className="w-4 h-4"/></button>
-                                   <button onClick={(e) => { e.stopPropagation(); handleDeleteAccount(acc); }} aria-label={`Supprimer ${acc.name}`} className="p-2 text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/40 rounded-lg hover:bg-rose-100 dark:hover:bg-rose-900"><Trash2 className="w-4 h-4"/></button>
-                                </div></td>
-                              </tr>
-                              {editingAccount?.id === acc.id && !showForm && (
-                                 <tr className="bg-slate-50 dark:bg-slate-900 animate-in slide-in-from-top-2"><td colSpan={4} className="p-4"><div className="space-y-2 p-2">
-                                   <label className="flex items-center gap-2 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase mb-1 cursor-pointer">
-                                     <input type="checkbox" checked={groupSmallMovements} onChange={e => setGroupSmallMovements(e.target.checked)} className="accent-indigo-600" />
-                                     Regrouper les mouvements &lt; 1€
-                                   </label>
-                                   <div className="max-h-60 overflow-y-auto space-y-2">
-                                   {buildDisplayMovements(acc.movements).map(m => (
-                                     <div key={m.id} className={`flex justify-between items-center p-3 rounded-xl text-xs border shadow-xs ${m.grouped ? 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 italic' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700'}`}>
-                                       <div className="flex items-center gap-3">
-                                           <span className="text-on-surface-variant font-mono bg-surface-container-highest px-2 py-1 rounded-sm whitespace-nowrap">{m.date.split('-').reverse().join('/')}</span>
-                                           <span className="font-bold text-slate-700 dark:text-slate-200">{m.label}</span>
-                                           {!m.grouped && !isRestitutionMovement(m) && <button onClick={()=>handleRenameMovement(acc.id, m.id, m.label)} aria-label={`Renommer « ${m.label} »`} className="p-2 -m-1 rounded-sm text-on-surface-variant hover:text-indigo-700 dark:hover:text-indigo-200"><Edit2 className="w-4 h-4" aria-hidden="true"/></button>}
-                                       </div>
-                                       <div className="flex items-center gap-3">
-                                           <span className={`font-mono text-sm ${m.type==='IN'?'text-emerald-700 font-bold':'text-rose-700 font-bold'}`}>{m.type==='IN'?'+':'−'}{formatEUR(m.amount)}</span>
-                                           {!m.grouped && !isRestitutionMovement(m) && <button onClick={()=>handleDeleteMovement(acc.id, m.id)} aria-label={`Supprimer « ${m.label} »`} className="p-2.5 -m-1 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-sm text-on-surface-variant hover:text-rose-600 dark:hover:text-rose-300"><Trash2 className="w-4 h-4" aria-hidden="true"/></button>}
-                                       </div>
-                                     </div>
-                                   ))}
-                                   {(!acc.movements || acc.movements.length===0) && <div className="text-center text-slate-500 dark:text-slate-400 italic py-4">Aucun mouvement historique.</div>}
-                                   </div>
-                                 </div></td></tr>
-                               )}
-                            </React.Fragment>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                  </>
-                )}
+    <div className="space-y-6 animate-fade-in pb-20">
+      <PageHeader
+        title="Mes comptes"
+        subtitle={<>{accounts.length} compte{accounts.length > 1 ? 's' : ''} · <button type="button" onClick={() => setView('journal')} className="underline underline-offset-2 text-primary hover:no-underline">voir le journal</button></>}
+        actions={!showForm ? <Button onClick={() => openForm(undefined)}><PlusCircle className="w-4 h-4" aria-hidden="true" /> Ajouter un compte</Button> : undefined}
+      />
+      {!showForm && <MovementSearch accounts={accounts} />}
+      {!showForm && accounts.some(a => [AccountType.LIVRET_A, AccountType.LDDS, AccountType.LEP].includes(a.type)) && (
+        <details className="rounded-2xl border border-outline-variant bg-surface-container-lowest dark:bg-surface-container-low group">
+          <summary className="list-none cursor-pointer px-5 min-h-12 flex items-center justify-between text-sm font-medium text-on-surface">
+            Mettre à jour les taux des livrets
+            <ChevronDown className="w-4 h-4 text-on-surface-variant transition-transform group-open:rotate-180" aria-hidden="true" />
+          </summary>
+          <div className="px-5 pb-5"><RegulatedRatesEditor accounts={accounts} onApply={onUpdateAccounts} /></div>
+        </details>
+      )}
+      {showForm ? (
+        <AccountForm
+          onSave={handleSaveAccount}
+          initialData={editingAccount}
+          onCancel={() => { setShowForm(false); setEditingAccount(undefined); }}
+          fiscalConfig={fiscalConfig}
+          showParental={hasParental || !!editingAccount?.parentalCapital}
+        />
+      ) : (
+        <>
+          {allTags.length > 0 && (
+            <div className="space-y-2">
+              <div role="group" aria-label="Filtrer par étiquette" className="flex flex-wrap items-center gap-2">
+                <Tag className="w-4 h-4 text-on-surface-variant" aria-hidden="true" />
+                <Chip selected={!activeTagFilter} onClick={() => setActiveTagFilter(null)} className="max-sm:h-12">Tous</Chip>
+                {allTags.map(t => (
+                  <Chip key={t} selected={activeTagFilter === t} onClick={() => setActiveTagFilter(t === activeTagFilter ? null : t)} className="max-sm:h-12">{t}</Chip>
+                ))}
               </div>
-            
+              <p aria-live="polite" className="text-sm text-on-surface">
+                {tagTotal && activeTagFilter && (
+                  <>Total « {activeTagFilter} » : <MoneyText value={tagTotal.owned} className="font-medium" /> de votre part{tagTotal.parental > 0.005 && <> (et <MoneyText value={tagTotal.parental} /> de vos parents)</>}, sur {tagTotal.count} compte{tagTotal.count > 1 ? 's' : ''}.</>
+                )}
+              </p>
+            </div>
+          )}
+          <Card padding="none" className="overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm md:min-w-136">
+                <caption className="sr-only">Vos comptes</caption>
+                <thead className="bg-surface-container border-b border-outline-variant">
+                  <tr>
+                    <th scope="col" className="px-4 md:px-6 py-3 text-xs font-medium text-on-surface-variant">Compte</th>
+                    <th scope="col" className="px-4 md:px-6 py-3 text-xs font-medium text-on-surface-variant text-right">Ma part</th>
+                    {/* Mode solo : plus de colonne des parents. */}
+                    {hasParental && <th scope="col" className="hidden md:table-cell px-6 py-3 text-xs font-medium text-on-surface-variant text-right">Parents</th>}
+                    <th scope="col" className="hidden md:table-cell px-6 py-3 text-right"><span className="sr-only">Actions</span></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-outline-variant">
+                  {filteredAccounts.map(acc => {
+                    const open = editingAccount?.id === acc.id && !showForm;
+                    const fresh = balanceFreshness(acc);
+                    return (
+                      <React.Fragment key={acc.id}>
+                        <tr className="hover:bg-on-surface/4 group transition-colors">
+                          <td className="px-4 md:px-6 py-4 align-top">
+                            <button type="button" onClick={() => setEditingAccount(open ? undefined : acc)} aria-expanded={open}
+                              className="min-h-12 md:min-h-0 font-medium text-on-surface flex items-center gap-1 text-left hover:text-primary">
+                              {acc.name} <ChevronDown className={`w-4 h-4 text-on-surface-variant transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden="true" /><span className="sr-only">: voir les mouvements</span>
+                            </button>
+                            <div className="text-xs text-on-surface-variant">{[acc.institution, ACCOUNT_TYPE_LABELS[acc.type]].filter(Boolean).join(' · ')}</div>
+                            {acc.tags && acc.tags.length > 0 && (
+                              <div className="flex flex-wrap gap-1 mt-1">
+                                {acc.tags.map(t => <span key={t} className="text-xs bg-secondary-container text-on-secondary-container px-2 py-0.5 rounded-sm font-medium">{t}</span>)}
+                              </div>
+                            )}
+                            {(() => {
+                              // PEE : déjà sans impôt sur le revenu, mais chaque versement est
+                              // bloqué 5 ans : on annonce le prochain déblocage.
+                              if (acc.type === AccountType.PEE) {
+                                const pee = computePeeAvailability(acc, fiscalConfig);
+                                const release = pee.nextRelease;
+                                if (!release) {
+                                  // Dates de versement inconnues : on ne devine aucune date.
+                                  if (!pee.undated || pee.blocked < 0.5) return null;
+                                  return (
+                                    <div className="mt-1 text-xs font-medium text-primary flex items-center gap-1">
+                                      <Clock className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                                      Date de déblocage inconnue
+                                    </div>
+                                  );
+                                }
+                                return (
+                                  <div className="mt-1 text-xs font-medium text-primary flex items-center gap-1">
+                                    <Clock className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                                    {release.last ? 'Disponible' : `${formatEUR(release.amount, 0)} disponibles`} dans {release.monthsRemaining} mois
+                                  </div>
+                                );
+                              }
+                              // Compte à rebours de maturité fiscale (PEA/AV) : même calcul que
+                              // Rendement, pour ne jamais annoncer un régime différent d'un écran à
+                              // l'autre. Les prélèvements sociaux restent dus : on le dit.
+                              const maturity = computeMaturityCountdown(acc, fiscalConfig);
+                              if (!maturity) return null;
+                              const text = describeMaturity(acc, maturity, fiscalConfig);
+                              return (
+                                <div className="mt-1 text-xs">
+                                  <div className="font-medium text-primary flex items-center gap-1">
+                                    <Clock className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                                    {text.short}
+                                  </div>
+                                  <div className="text-on-surface-variant">{text.detail}</div>
+                                </div>
+                              );
+                            })()}
+                            {isMarketAccount(acc) && <PerformanceLine account={acc} />}
+                            {fresh.limit !== null && (
+                              <div className="mt-1 flex flex-wrap items-center gap-x-2 text-xs">
+                                <span className={fresh.stale ? 'font-medium text-tertiary' : 'text-on-surface-variant'}>Solde {describeCheckAge(fresh.days)}</span>
+                                {offersBalanceCheck(acc.type, fresh) && (
+                                  <button type="button" onClick={() => markChecked(acc)}
+                                    className="inline-flex items-center gap-1 min-h-12 md:min-h-8 font-medium text-primary hover:underline">
+                                    <CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" /> Solde vérifié<span className="sr-only"> : {acc.name} est à jour aujourd'hui</span>
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                            {/* Téléphone : part des parents et total banque sur leur propre ligne
+                                (un montant n'est jamais coupé), boutons en dessous à droite. Le
+                                total banque quitte la colonne « Ma part », trop étroite à 320 px. */}
+                            <div className="md:hidden mt-2 flex flex-wrap items-center gap-1">
+                              {acc.parentalCapital > 0 && (
+                                <div className="basis-full min-w-0 text-xs">
+                                  <span className="font-medium text-parents whitespace-nowrap">Parents : {formatEUR(acc.parentalCapital)}</span>
+                                  <AccountTotal account={acc} className="sm:hidden" />
+                                </div>
+                              )}
+                              <span className="flex-1" />
+                              <IconButton icon={Pencil} label={`Modifier ${acc.name}`} onClick={e => { e.stopPropagation(); openForm(acc); }} />
+                              <IconButton icon={Trash2} tone="danger" label={`Supprimer ${acc.name}`} onClick={e => { e.stopPropagation(); handleDeleteAccount(acc); }} />
+                            </div>
+                          </td>
+                          <td className="px-4 md:px-6 py-4 text-right align-top"><div className="text-base font-medium text-on-surface whitespace-nowrap tabular-nums">{formatEUR(acc.ownedAmount)}</div><AccountTotal account={acc} className="max-sm:hidden" /></td>
+                          {hasParental && <td className="hidden md:table-cell px-6 py-4 text-right align-top font-medium text-parents tabular-nums">{formatEUR(acc.parentalCapital)}</td>}
+                          <td className="hidden md:table-cell px-4 py-2 text-right align-top">
+                            <div className="flex justify-end md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100 transition-opacity">
+                              <IconButton icon={Pencil} label={`Modifier ${acc.name}`} onClick={e => { e.stopPropagation(); openForm(acc); }} />
+                              <IconButton icon={Trash2} tone="danger" label={`Supprimer ${acc.name}`} onClick={e => { e.stopPropagation(); handleDeleteAccount(acc); }} />
+                            </div>
+                          </td>
+                        </tr>
+                        {open && (
+                          <tr className="bg-surface-container animate-in slide-in-from-top-2">
+                            <td colSpan={hasParental ? 4 : 3} className="p-4">
+                              <div className="space-y-2">
+                                {onReadStatement && (
+                                  <Button variant="tonal" onClick={() => onReadStatement(acc.id)} aria-label={`Lire un relevé de ${acc.name}`}>
+                                    <FileText className="w-4 h-4" aria-hidden="true" /> Lire un relevé
+                                  </Button>
+                                )}
+                                <label className="flex items-center gap-3 min-h-12 text-sm text-on-surface cursor-pointer">
+                                  <input type="checkbox" checked={groupSmallMovements} onChange={e => setGroupSmallMovements(e.target.checked)} className="w-5 h-5 accent-primary" />
+                                  Regrouper les mouvements de moins de 1 €
+                                </label>
+                                <ul className="max-h-60 overflow-y-auto space-y-2">
+                                  {buildDisplayMovements(acc.movements).map(m => (
+                                    <li key={m.id} className={`flex justify-between items-center gap-2 px-3 py-1 rounded-xl text-xs border border-outline-variant ${m.grouped ? 'bg-surface-container-high italic' : 'bg-surface-container-lowest dark:bg-surface-container-low'}`}>
+                                      <div className="flex items-center gap-2 min-w-0">
+                                        <span className="text-on-surface-variant tabular-nums bg-surface-container-highest px-2 py-1 rounded-sm whitespace-nowrap">{m.date.split('-').reverse().join('/')}</span>
+                                        <span className="font-medium text-on-surface break-words">{m.label}</span>
+                                        {!m.grouped && !isRestitutionMovement(m) && <IconButton icon={Pencil} label={`Renommer « ${m.label} »`} onClick={() => handleRenameMovement(acc.id, m.id, m.label)} />}
+                                      </div>
+                                      <div className="flex items-center gap-1 shrink-0">
+                                        <span className={`tabular-nums whitespace-nowrap text-sm font-medium ${m.type === 'IN' ? 'text-gain' : 'text-loss'}`}>{m.type === 'IN' ? '+' : '−'}{formatEUR(m.amount)}</span>
+                                        {!m.grouped && !isRestitutionMovement(m) && <IconButton icon={Trash2} tone="danger" label={`Supprimer « ${m.label} »`} onClick={() => handleDeleteMovement(acc.id, m.id)} />}
+                                      </div>
+                                    </li>
+                                  ))}
+                                </ul>
+                                {(!acc.movements || acc.movements.length === 0) && <p className="text-center text-on-surface-variant italic py-4">Aucun mouvement enregistré.</p>}
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        </>
+      )}
+    </div>
   );
 };

@@ -77,7 +77,7 @@ const iconContrastViolations = (page: Page): Promise<string[]> => page.evaluate(
 
 // Écrans les plus lus, et ceux dont les petites icônes ont été corrigées (Mes comptes, Dons,
 // Fiches de paie ; les échéances récurrentes sont dans « Versements »).
-const VIEWS = ['dashboard', 'transfers', 'pilot', 'journal', 'parental', 'accounts', 'donations', 'payslips'];
+const VIEWS = ['dashboard', 'transfers', 'pilot', 'journal', 'parental', 'accounts', 'yield', 'donations', 'payslips', 'agenda', 'subscriptions', 'history'];
 
 for (const theme of ['light', 'dark'] as const) {
   test.describe(`Contrastes AA, thème ${theme === 'light' ? 'clair' : 'sombre'}`, () => {
@@ -118,6 +118,25 @@ for (const theme of ['light', 'dark'] as const) {
         await expect(page.getByRole('dialog', { name: "Plus d'écrans" })).toBeVisible();
         expect(await contrastViolations(page), 'feuille « Plus »').toEqual([]);
       }
+    });
+
+    // Barre du bas d'« Actualiser les soldes » (surface inversée) : « Enregistrer » y était à
+    // 2,3:1 en sombre. Elle n'apparaît qu'avec un solde modifié.
+    test('barre « Enregistrer » d’Actualiser les soldes', async ({ page }) => {
+      await page.goto('/?demo=1&view=update');
+      await page.getByRole('button', { name: /^LDDS/ }).click();
+      await page.getByLabel('Ma part sur LDDS').fill('3250');
+      await expect(page.getByText('1 compte modifié')).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Enregistrer', exact: true })).toBeVisible();
+      expect(await contrastViolations(page), 'barre d’enregistrement').toEqual([]);
+      expect(await iconContrastViolations(page), 'icônes, Actualiser').toEqual([]);
+    });
+
+    test('écran de connexion', async ({ page }) => {
+      await page.goto('/');
+      await expect(page.getByRole('button', { name: 'Continuer avec Google' })).toBeVisible({ timeout: 20_000 });
+      expect(await contrastViolations(page), 'connexion').toEqual([]);
+      expect(await iconContrastViolations(page), 'icônes, connexion').toEqual([]);
     });
   });
 }

@@ -236,6 +236,14 @@ describe('AppLockScreen : « Code oublié »', () => {
     await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('pas encore possible'));
   });
 
+  it('autres appareils pas prévenus (hors ligne) : refus annoncé, il faut se connecter à Internet', async () => {
+    const onForgot = vi.fn(async () => { throw new Error('ALERT_NOT_SENT'); });
+    render(<AppLockScreen onUnlock={vi.fn()} onForgot={onForgot} resetRequest={request(true)} />);
+    openConfirm();
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Me déconnecter' })); });
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('connectez cet appareil à Internet'));
+  });
+
   it('LockResetNotice : « J’ai retrouvé mon code » revient au verrou', () => {
     const onCancel = vi.fn();
     render(<LockResetNotice onCancel={onCancel} />);

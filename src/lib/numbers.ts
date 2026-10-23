@@ -35,3 +35,11 @@ export const safeNumber = (raw: string, fallback = 0): number => {
   const parsed = parseFrenchNumber(raw);
   return parsed === null ? fallback : parsed;
 };
+
+/**
+ * Taux stocké en fraction (0,186) ↔ affiché en pourcentage (18,6 %). Arrondi pour effacer le
+ * bruit des nombres à virgule (18,6 / 100 donnait 0,18600000000000003) sans perdre une
+ * décimale utile (0,2232 → 22,32 %).
+ */
+export const fractionToPercent = (fraction: number): number => Math.round(fraction * 100 * 1e6) / 1e6;
+export const percentToFraction = (percent: number): number => Math.round((percent / 100) * 1e8) / 1e8;

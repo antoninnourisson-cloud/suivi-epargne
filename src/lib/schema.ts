@@ -5,7 +5,7 @@
 // entre dans l'app : chargement Drive, import, restauration locale, synchronisation entre
 // onglets, et lecture par le serveur de notifications.
 // ================================================
-import { ExpenseSnapshot, FiscalConfig, GlobalAppData, PortfolioSnapshot, TaxBracket } from '../types';
+import { AppDoc, ExpenseSnapshot, FiscalConfig, GlobalAppData, PortfolioSnapshot, TaxBracket, YearClosingRecord } from '../types';
 import { DEFAULT_DECOTE, DEFAULT_FISCAL_CONFIG, DEFAULT_WORK_BENEFITS } from '../constants';
 import { normalizeAccounts, dedupeMonthlySnapshots, migrateFiscalConfig } from './finance';
 import { round2 } from './money';
@@ -29,13 +29,12 @@ const DEFAULT_CONFIG: GlobalAppData['config'] = {
 };
 
 /** Données d'un tout premier lancement. */
-export const emptyData = (): GlobalAppData => ({
+export const emptyData = (): AppDoc => ({
   schemaVersion: APP_SCHEMA_VERSION,
   accounts: [],
   expenses: [],
   history: [],
   expensesHistory: [],
-  goals: [],
   payslips: [],
   recurringMovements: [],
   subscriptions: [],
@@ -54,6 +53,11 @@ const finite = (v: unknown): number | undefined => {
   return Number.isFinite(n) ? n : undefined;
 };
 const OPTIONAL_ACCOUNT_NUMBERS = ['totalDeposits', 'interestRate', 'ceiling'] as const;
+const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
+/** `{ year, ... }` lisible : année entière plausible et nombre fini positif sous `key`. */
+const datedFigure = (v: unknown, key: 'rate' | 'amount'): boolean =>
+  isObj(v) && Number.isInteger(v.year) && (v.year as number) >= 2000 && (v.year as number) <= 2200
+    && typeof v[key] === 'number' && Number.isFinite(v[key]) && (v[key] as number) >= (key === 'rate' ? -50 : 0);
 
 /**
  * Remet un compte d'aplomb sans rien inventer : montants illisibles (texte, NaN, Infinity)
@@ -81,6 +85,9 @@ const sanitizeAccount = (a: Record<string, unknown>): Record<string, unknown> =>
   // « Compte détenu à l'étranger » : un oui/non, sinon non précisé (l'aide à la déclaration
   // demande alors de vérifier plutôt que de supposer).
   if (a.heldAbroad !== undefined && typeof a.heldAbroad !== 'boolean') delete out.heldAbroad;
+  // Date du dernier solde constaté et « argent bloqué » : illisibles = absents.
+  if (a.balanceCheckedAt !== undefined && !(typeof a.balanceCheckedAt === 'string' && ISO_DAY.test(a.balanceCheckedAt))) delete out.balanceCheckedAt;
+  if (a.blocked !== undefined && typeof a.blocked !== 'boolean') delete out.blocked;
   out.movements = arr<unknown>(a.movements).flatMap(m => {
     if (!isObj(m) || (m.type !== 'IN' && m.type !== 'OUT') || typeof m.date !== 'string') return [];
     const amount = finite(m.amount);
@@ -139,7 +146,7 @@ const sanitizeBrackets = (v: unknown): TaxBracket[] | undefined => {
 const FISCAL_NUMBERS = [
   'salaryChargesRate', 'socialChargesCapital', 'standardAllowance', 'socialChargesLifeInsurance', 'standardAllowanceMin',
   'standardAllowanceCap', 'lepCeilingPerHalfPart', 'donation75Ceiling', 'lepIncomeCeiling', 'lepHouseholdParts',
-  'taxScaleYear', 'paramsReviewedYear',
+  'taxScaleYear', 'paramsReviewedYear', 'transportExemptUntil',
 ] as const;
 
 /**
@@ -159,6 +166,8 @@ const sanitizeFiscalConfig = (raw: unknown): FiscalConfig => {
   if (f.decote !== undefined) {
     if (isObj(f.decote)) f.decote = withDefaults(f.decote, DEFAULT_DECOTE); else delete f.decote;
   }
+  // Inflation INSEE datée : écartée si illisible (la valeur livrée avec l'app prend le relais).
+  if (f.inflation !== undefined && !datedFigure(f.inflation, 'rate')) delete f.inflation;
   if (f.taxBracketsHistory !== undefined) {
     const h = arr<unknown>(f.taxBracketsHistory).filter(e => isObj(e) && Array.isArray(e.brackets));
     if (h.length > 0) f.taxBracketsHistory = h; else delete f.taxBracketsHistory;
@@ -175,6 +184,27 @@ const sanitizeFiscalConfig = (raw: unknown): FiscalConfig => {
   };
 };
 
+/**
+ * Clôtures d'année (lib/yearClosing) remises d'aplomb : seules les années « AAAA » à objet
+ * restent ; une date de clôture illisible est retirée (année rouverte), les coches gardent
+ * leurs textes, sans doublon. `undefined` s'il n'en reste rien.
+ */
+const sanitizeYearClosings = (raw: unknown): Record<string, YearClosingRecord> | undefined => {
+  if (!isObj(raw)) return undefined;
+  const out: Record<string, YearClosingRecord> = {};
+  for (const [year, rec] of Object.entries(raw)) {
+    if (!/^\d{4}$/.test(year) || !isObj(rec)) continue;
+    const r: Record<string, unknown> = { ...rec };
+    if (r.closedOn !== undefined && !(typeof r.closedOn === 'string' && ISO_DAY.test(r.closedOn))) delete r.closedOn;
+    if (r.checked !== undefined) {
+      const checked = [...new Set(arr<unknown>(r.checked).filter((c): c is string => typeof c === 'string' && c !== ''))];
+      if (checked.length > 0) r.checked = checked; else delete r.checked;
+    }
+    out[year] = r as YearClosingRecord;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+};
+
 /** Le fichier a été écrit par une version plus récente de l'app que celle-ci. */
 export const isFromNewerApp = (raw: unknown): boolean =>
   isObj(raw) && typeof raw.schemaVersion === 'number' && raw.schemaVersion > APP_SCHEMA_VERSION;
@@ -184,7 +214,7 @@ export const isFromNewerApp = (raw: unknown): boolean =>
  * courante. Les champs INCONNUS sont conservés tels quels : une version de l'app ne doit
  * jamais effacer ce qu'une version plus récente a ajouté.
  */
-export const migrate = (raw: unknown): GlobalAppData => {
+export const migrate = (raw: unknown): AppDoc => {
   const r = isObj(raw) ? raw : {};
   const cfgRaw = isObj(r.config) ? r.config : {};
   const config = withDefaults(cfgRaw, DEFAULT_CONFIG);
@@ -192,6 +222,13 @@ export const migrate = (raw: unknown): GlobalAppData => {
   if (config.payAdjustment !== undefined) {
     const adj = sanitizePayAdjustment(config.payAdjustment);
     if (adj) config.payAdjustment = adj; else delete config.payAdjustment;
+  }
+  // Plafond épargne retraite de l'avis d'impôt : écarté s'il est illisible (redemandé).
+  if (config.retirementCeiling !== undefined && !datedFigure(config.retirementCeiling, 'amount')) delete config.retirementCeiling;
+  // Clôtures d'année : entrées illisibles écartées, champs inconnus conservés.
+  if (config.yearClosings !== undefined) {
+    const closings = sanitizeYearClosings(config.yearClosings);
+    if (closings) config.yearClosings = closings; else delete config.yearClosings;
   }
   // Ancien format : l'avantage Navigo vivait dans config (navigoBase / navigoRate).
   // Fichier abîmé ou incomplet : chaque avantage est complété champ par champ.
@@ -210,7 +247,6 @@ export const migrate = (raw: unknown): GlobalAppData => {
     expenses: objects(r.expenses),
     history: dedupeMonthlySnapshots(sanitizeSnapshots<PortfolioSnapshot>(r.history, ['totalAmount', 'ownedAmount'])),
     expensesHistory: dedupeMonthlySnapshots(sanitizeSnapshots<ExpenseSnapshot>(r.expensesHistory, ['total'])),
-    goals: objects(r.goals),
     payslips: objects(r.payslips),
     recurringMovements: objects(r.recurringMovements),
     subscriptions: objects(r.subscriptions),
@@ -221,7 +257,7 @@ export const migrate = (raw: unknown): GlobalAppData => {
     fiscalConfig: sanitizeFiscalConfig(r.fiscalConfig),
     workBenefits,
     config,
-  } as GlobalAppData;
+  } as AppDoc;
 };
 
 /** JSON à clés triées : deux contenus identiques donnent la même chaîne, quel que soit l'ordre. */
@@ -246,7 +282,7 @@ export const canonicalize = (data: unknown): string => {
 };
 
 /** Retire ce qui ne doit jamais quitter l'appareil (fichier Drive, export, sauvegarde). */
-export const withoutDeviceOnlyFields = (data: GlobalAppData): GlobalAppData => {
+export const withoutDeviceOnlyFields = <T extends GlobalAppData>(data: T): T => {
   const { geminiApiKey: _g, ...config } = data.config as GlobalAppData['config'] & { geminiApiKey?: string };
   return { ...data, config: config as GlobalAppData['config'] };
 };

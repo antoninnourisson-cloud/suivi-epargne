@@ -7,6 +7,7 @@ import { ChevronDown, Clock, ListTodo } from 'lucide-react';
 import { Button, Card, Chip } from './ui';
 import { formatEUR } from '../lib/format';
 import { sortAlerts, type AlertGain } from '../lib/alerts';
+import { pruneSnoozed, storageKey } from '../lib/storageKeys';
 
 export interface TodoSpec {
   key: string;
@@ -42,14 +43,15 @@ const GainChip: React.FC<{ gain: AlertGain }> = ({ gain }) => {
   );
 };
 
-const SNOOZE_KEY = 'todo_snoozed';
+const SNOOZE_KEY = storageKey('todoSnoozed');
+const OPEN_KEY = storageKey('todoOpen');
 const SHOWN_BY_DEFAULT = 2;
-const readSnoozed = (): Record<string, number> => lsGetJSON<Record<string, number>>(SNOOZE_KEY, {});
+const readSnoozed = (): Record<string, number> => lsGetJSON<Record<string, number>>(SNOOZE_KEY, {}, (v): v is Record<string, number> => !!v && typeof v === 'object' && !Array.isArray(v));
 
 export const TodoList: React.FC<{ items: TodoSpec[] }> = ({ items }) => {
   const [snoozed, setSnoozed] = useState(readSnoozed);
   const [showAll, setShowAll] = useState(false);
-  const [open, setOpen] = useState(() => lsGet('todo_open') !== '0');
+  const [open, setOpen] = useState(() => lsGet(OPEN_KEY) !== '0');
   const now = Date.now();
   const visible = items.filter(i => !(snoozed[i.key] > now));
   if (visible.length === 0) return null;
@@ -58,18 +60,19 @@ export const TodoList: React.FC<{ items: TodoSpec[] }> = ({ items }) => {
   const shown = showAll ? sorted : sorted.slice(0, SHOWN_BY_DEFAULT);
 
   const snooze = (key: string) => {
-    const next = { ...snoozed, [key]: now + 7 * 86_400_000 };
+    // Les reports finis sont retirés au passage : la liste ne grossit plus sans fin.
+    const next = { ...pruneSnoozed(snoozed, now), [key]: now + 7 * 86_400_000 };
     setSnoozed(next);
     lsSetJSON(SNOOZE_KEY, next);
   };
-  const toggle = () => setOpen(o => { lsSet('todo_open', o ? '0' : '1'); return !o; });
+  const toggle = () => setOpen(o => { lsSet(OPEN_KEY, o ? '0' : '1'); return !o; });
   const count = `${visible.length} élément${visible.length > 1 ? 's' : ''}`;
 
   return (
     <Card variant="filled" padding="none" aria-labelledby="todo-title">
       <button type="button" onClick={toggle} aria-expanded={open} aria-controls="todo-list" className="w-full flex items-center justify-between gap-3 px-5 py-4 sm:px-6 text-left rounded-2xl hover:bg-on-surface/4 transition-colors">
         <span className="flex items-center gap-2 min-w-0">
-          <ListTodo className="w-5 h-5 shrink-0 text-indigo-600 dark:text-indigo-300" aria-hidden="true" />
+          <ListTodo className="w-5 h-5 shrink-0 text-primary" aria-hidden="true" />
           <span id="todo-title" className="text-base font-medium text-on-surface">À faire</span>
           <span className="min-w-6 h-6 px-2 rounded-full bg-primary text-on-primary text-xs font-medium tabular-nums inline-flex items-center justify-center">
             <span aria-hidden="true">{visible.length}</span>

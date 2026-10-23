@@ -30,16 +30,21 @@ const openCard = async (page: Page, name: string) => {
 };
 
 test.describe('Motivation (démo)', () => {
-  test('la carte « Bons mois » montre la paie en cours et la série', async ({ page }) => {
+  test('la carte « Bons mois » montre la série, la paie en cours est sur la jauge unique', async ({ page }) => {
     await openDemo(page);
     const card = page.getByRole('region', { name: 'Bons mois', exact: true });
     await expect(card).toBeVisible();
-    await expect(card).toContainText('/ 500 € mis de côté depuis la paie du');
     await expect(card).toContainText(/Série : \d+ bons? mois/);
     await expect(card).toContainText(/Joker \d{4}/);
-    await expect(card.getByRole('progressbar', { name: /Mis de côté depuis la paie/ })).toBeVisible();
     await expect(card.getByRole('list', { name: 'Dernières paies' }).getByRole('listitem')).not.toHaveCount(0);
     await expect(card).toContainText('Prochain jalon');
+    // Plus de seconde jauge du même montant : le seuil « bon mois » est sur la jauge de la paie.
+    await expect(card.getByRole('progressbar')).toHaveCount(0);
+    const savings = page.getByRole('region', { name: /^Placé depuis la paie du/ });
+    await expect(savings.getByRole('progressbar', { name: /^Placé depuis la paie du/ })).toHaveAttribute('aria-valuetext', /bon mois dès 500\s€/);
+    await expect(savings).toContainText(/Bon mois (dès 500\s€|acquis)/);
+    // Le taux d'épargne lit la même fenêtre (la paie), plus le mois civil.
+    await expect(savings).toContainText(/Cette paie \d+ %/);
   });
 
   test('le point de paie se valide puis disparaît', async ({ page }) => {

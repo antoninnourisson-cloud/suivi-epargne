@@ -17,6 +17,7 @@ import { DEFAULT_FISCAL_CONFIG } from '../constants';
 import { signedAmount } from './money';
 import { lepTimelineFromData } from './lep';
 import { buildTaxReturnChecklist, taxReturnTopics } from './taxReturn';
+import { closingApplies, isYearClosed } from './yearClosing';
 
 export type AgendaKind = 'payday' | 'subscription' | 'recurring' | 'rates' | 'restitution' | 'fiscal' | 'statement' | 'donations' | 'review' | 'maturity' | 'lep';
 
@@ -57,7 +58,9 @@ export const buildAgenda = (data: GlobalAppData, asOfDate: Date = new Date(), mo
       const d = new Date(y, m, effectivePayday(payday, new Date(y, m, 1).getFullYear(), new Date(y, m, 1).getMonth()));
       if (d < today) continue;
       const amount = formatISODay(d) === currentPayDay ? computeMonthTarget(data, asOfDate).total : recurring;
-      push(d, { kind: 'payday', title: 'Paie', detail: amount > 0 ? 'Virements à faire et à cocher dans le Pilotage' : undefined, amount: amount > 0 ? amount : undefined, view: 'pilot' });
+      // Le montant est ce qu'il faut PLACER, pas la paie reçue : le détail le dit (un seul nom
+      // par montant, comme « l'objectif » du Pilotage et de l'Accueil).
+      push(d, { kind: 'payday', title: 'Jour de paie', detail: amount > 0 ? 'Montant à placer : virements à faire et à cocher dans le Pilotage' : undefined, amount: amount > 0 ? amount : undefined, view: 'pilot' });
       found++;
     }
   }
@@ -109,11 +112,18 @@ export const buildAgenda = (data: GlobalAppData, asOfDate: Date = new Date(), mo
   }
 
   // Rendez-vous annuels.
+  // Clôture de l'année écoulée (lib/yearClosing) : un seul rendez-vous au lieu du bilan, des
+  // relevés annuels et des paramètres fiscaux séparés. Une fois l'année clôturée (ou sans année
+  // à clôturer : tout premier usage), les paramètres fiscaux reviennent seuls le 20 janvier,
+  // s'ils restent à vérifier.
   const hasTracked = accounts.some(a => tracksDeposits(a.type) && a.totalAmount > 0);
   for (let y = today.getFullYear(); y <= horizon.getFullYear(); y++) {
-    push(new Date(y, 0, 2), { kind: 'review', title: `Bilan de l'année ${y - 1}`, detail: 'Dans Historique', view: 'history' });
-    if (hasTracked) push(new Date(y, 0, 15), { kind: 'statement', title: 'Relevés annuels des placements', detail: accounts.some(a => a.type === AccountType.ASSURANCE_VIE) ? 'Valeur au 31/12, versements et taux servi du fonds euros' : 'Valeur au 31/12 et versements', view: 'update' });
-    push(new Date(y, 0, 20), { kind: 'fiscal', title: 'Paramètres fiscaux de l\'année', detail: 'Barème de l\'impôt, plafond LEP, abattement', view: 'settings' });
+    if (!isYearClosed(data.config, y - 1) && closingApplies(data, y - 1)) push(new Date(y, 0, 2), {
+      kind: 'review', title: `Clôture de l'année ${y - 1}`,
+      detail: `Soldes au 31 décembre, intérêts${hasTracked ? `, relevés des placements${accounts.some(a => a.type === AccountType.ASSURANCE_VIE) ? ' et taux servi' : ''}` : ''}, paramètres fiscaux, bilan et archive, dans Historique`,
+      view: 'history',
+    });
+    else if ((data.fiscalConfig?.paramsReviewedYear ?? 0) < y) push(new Date(y, 0, 20), { kind: 'fiscal', title: 'Paramètres fiscaux de l\'année', detail: 'Barème de l\'impôt, plafond LEP, abattement', view: 'settings' });
     // Déclaration de revenus, pour tout le monde : l'ouverture en ligne tombe en avril (le
     // 9 avril en 2026) ; le calendrier exact n'est publié qu'au printemps (voir lib/taxReturn).
     const topics = taxReturnTopics(buildTaxReturnChecklist(data, y - 1));

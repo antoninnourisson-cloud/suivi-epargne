@@ -12,10 +12,11 @@ export const NOTIFICATION_CATEGORIES: NotificationCategory[] = [
   { id: 'stale', label: 'Soldes non actualisés depuis un mois', prefixes: ['stale'] },
   { id: 'rates', label: 'Révision des taux des livrets', prefixes: ['rates'] },
   { id: 'lep', label: 'Éligibilité au LEP', prefixes: ['lep'] },
-  { id: 'tax', label: 'Impôts : déclaration, dons, paramètres fiscaux, relevés annuels', prefixes: ['tax-return', 'donations', 'fiscal-review', 'annual-statement'] },
+  { id: 'tax', label: 'Impôts : déclaration, dons, paramètres fiscaux', prefixes: ['tax-return', 'donations', 'fiscal-review', 'annual-statement'] },
   { id: 'parents', label: 'Capital des parents : intérêts et restitution', prefixes: ['parental', 'restitution-prep', 'restitution-day'] },
   { id: 'recap', label: 'Point de paie (bilan de la paie précédente)', prefixes: ['recap'] },
-  { id: 'year-review', label: "Bilan de l'année", prefixes: ['year-review'] },
+  // Id et préfixe « year-review » gardés (préférences existantes) ; la clôture de janvier l'a remplacé.
+  { id: 'year-review', label: "Clôture et bilan de l'année (janvier)", prefixes: ['year-review', 'year-closing'] },
 ];
 
 export type NotificationPrefs = Record<string, boolean>;

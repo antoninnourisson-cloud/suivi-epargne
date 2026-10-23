@@ -24,6 +24,7 @@ import {
   payPeriodOf,
   computePlacementStrategy,
   findAvRateUpdatesDue,
+  confirmRatesUnchanged,
   applyRateChange,
   activeSavingsSplit,
   computeSavedSince,
@@ -291,6 +292,17 @@ describe('LDDS et taux servi', () => {
     expect(findAvRateUpdatesDue([av], new Date(2027, 0, 20)).map(a => a.id)).toEqual(['av']);
     expect(findAvRateUpdatesDue([{ ...av, rateHistory: [{ date: '2027-01-18', rate: 2.8 }] }], new Date(2027, 0, 20))).toEqual([]);
     expect(findAvRateUpdatesDue([av], new Date(2027, 5, 1))).toEqual([]);
+  });
+  it("« Taux inchangé » (Accueil ou clôture de l'année) éteint le rappel jusqu'au 31 mars, sur tous les appareils", () => {
+    const march = new Date(2027, 2, 10);
+    const confirmed = confirmRatesUnchanged([av], ['av'], '2027-01-12');
+    expect(confirmed[0].rateReviewedAt).toBe('2027-01-12');
+    expect(findAvRateUpdatesDue(confirmed, march)).toEqual([]);
+    // Une confirmation de l'an dernier ne compte pas pour cette année.
+    expect(findAvRateUpdatesDue([{ ...av, rateReviewedAt: '2026-02-01' }], march).map(a => a.id)).toEqual(['av']);
+    // Déjà noté ce jour-là, ou autre compte : même liste.
+    expect(confirmRatesUnchanged(confirmed, ['av'], '2027-01-12')).toBe(confirmed);
+    expect(confirmRatesUnchanged([av], ['autre'], '2027-01-12')).toEqual([av]);
   });
 });
 

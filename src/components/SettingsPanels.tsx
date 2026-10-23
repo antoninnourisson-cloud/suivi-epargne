@@ -7,12 +7,15 @@ import { ArchiveRestore, Smartphone, Loader2, Trash2, LogOut, Activity, ShieldCh
 import type { DriveBackup } from '../services/googleDriveService';
 import type { GlobalAppData } from '../types';
 import {
-  isCloudBackupAvailable, getDeviceEnrollment, listServerBackups, readStatus, generateRecoveryCode, enableWithNewCode,
-  enableWithExistingCode, uploadNow, decryptServerBackup, disableAndDeleteServerCopies, failureCode, FAILURE_MESSAGES,
-  type CloudBackupStatus,
+  isCloudBackupAvailable, getDeviceEnrollment, getServerBackups, readStatus, generateRecoveryCode, enableWithNewCode,
+  enableWithExistingCode, uploadNow, decryptServerBackup, disableAndScheduleDeletion, cancelServerDeletion, failureCode, FAILURE_MESSAGES,
+  verifyRecoveryCode, type CloudBackupStatus, type ServerDeletion,
 } from '../services/cloudBackup';
+import { backupCodeCheckDue, type BackupEnrollment } from '../lib/recoveryCodeCheck';
+import { RecoveryCodeCheck, DownloadCodeButton } from './settings/RecoveryCodeCheck';
+import { ServerSessionsList } from './settings/ServerSessionsList';
 import { validateImport } from '../lib/schema';
-import { Button, TextField } from './ui';
+import { Button, Chip, IconButton, TextField } from './ui';
 import {
   isBackendEnabled, listPushDevices, removePushDevice, logoutAllDevices, deleteServerAccount, getServerHealth,
   PushDevice, ServerHealth,
@@ -60,8 +63,8 @@ export const DriveBackupsPanel: React.FC<{
           <ul className="mt-3 flex flex-wrap gap-2">
             {items.map(b => (
               <li key={b.id}>
-                <button type="button" disabled={busy}
-                  className="h-8 px-3 inline-flex items-center rounded-sm border border-outline text-sm font-medium text-on-surface-variant hover:bg-on-surface/8 disabled:opacity-40 capitalize"
+                <Chip kind="suggestion" disabled={busy}
+                  className="disabled:opacity-40 capitalize"
                   onClick={() => confirm(
                     `Revenir à la copie ${ofMonth(monthLabel(b.month))} ?`,
                     'Toutes vos données actuelles seront remplacées par cette copie, puis enregistrées sur Drive. Elles sont d\'abord mises de côté sur cet appareil : vous pourrez annuler juste après, ou les récupérer pendant 30 jours (« Versions mises de côté »).',
@@ -88,7 +91,7 @@ export const DriveBackupsPanel: React.FC<{
                       finally { setBusy(false); }
                     },
                     `Remplacer par la copie ${ofMonth(monthLabel(b.month))}`,
-                  )}>{monthLabel(b.month)}</button>
+                  )}>{monthLabel(b.month)}</Chip>
               </li>
             ))}
           </ul>
@@ -101,11 +104,12 @@ const dayLabel = (d: string) => new Date(`${d}T12:00:00`).toLocaleDateString('fr
 const dateTimeLabel = (iso: string) => new Date(iso).toLocaleString('fr-FR', { dateStyle: 'long', timeStyle: 'short' });
 const errorMessage = (e: unknown) => FAILURE_MESSAGES[failureCode(e)];
 
-type CloudMode = 'idle' | 'newCode' | 'join' | 'restore';
+type CloudMode = 'idle' | 'newCode' | 'verify' | 'join' | 'restore' | 'check';
 
 /**
- * Sauvegarde de secours chiffrée de bout en bout, gardée par le serveur (8 copies). Le code
- * de secours n'est montré qu'UNE fois ; la restauration passe par le même contrôle qu'un
+ * Sauvegarde de secours chiffrée de bout en bout, gardée par le serveur (conservation
+ * échelonnée, effacement différé de 7 jours). Le code de secours n'est montré qu'UNE fois,
+ * et n'est activé qu'après en avoir recopié deux groupes ; la restauration passe par le même contrôle qu'un
  * import de fichier (validateImport, puis migrate dans importData), qui met d'abord les
  * données actuelles de côté et ne remplace rien s'il ne le peut pas (SET_ASIDE_FAILED).
  */
@@ -118,8 +122,9 @@ export const CloudBackupPanel: React.FC<{
 }> = ({ getData, onImport, undo, confirm }) => {
   const toast = useToast();
   const [available] = useState(isCloudBackupAvailable);
-  const [enrolled, setEnrolled] = useState<{ enabledAt: string } | null | undefined>(undefined);
+  const [enrolled, setEnrolled] = useState<BackupEnrollment | null | undefined>(undefined);
   const [dates, setDates] = useState<string[] | null>(null);
+  const [deletion, setDeletion] = useState<ServerDeletion | null>(null);
   const [status, setStatus] = useState<CloudBackupStatus>(readStatus);
   const [mode, setMode] = useState<CloudMode>('idle');
   const [newCode, setNewCode] = useState<string | null>(null);
@@ -132,11 +137,17 @@ export const CloudBackupPanel: React.FC<{
   const refresh = useCallback(() => {
     void getDeviceEnrollment().then(setEnrolled);
     setStatus(readStatus());
-    listServerBackups().then(d => { setDates(d); setRestoreDate(prev => (prev && d.includes(prev) ? prev : d[0] ?? '')); })
-      .catch(() => setDates([]));
+    getServerBackups().then(({ dates: d, deletion: del }) => {
+      setDates(d);
+      setDeletion(del);
+      setRestoreDate(prev => (prev && d.includes(prev) ? prev : d[0] ?? ''));
+    }).catch(() => setDates([]));
   }, []);
   useEffect(() => { if (available) refresh(); }, [available, refresh]);
-  useCardSummary('cloud', !available || enrolled === undefined ? null : enrolled ? 'Secours chiffré activé' : 'Secours chiffré désactivé');
+  // Un effacement programmé passe avant tout le reste dans le résumé : visible carte fermée.
+  useCardSummary('cloud', !available ? null
+    : deletion ? `Effacement des copies prévu le ${new Date(deletion.purgeAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })}`
+    : enrolled === undefined ? null : enrolled ? 'Secours chiffré activé' : 'Secours chiffré désactivé');
 
   if (!available) return null;
 
@@ -152,6 +163,7 @@ export const CloudBackupPanel: React.FC<{
     if (!newCode) return;
     try { await navigator.clipboard.writeText(newCode); setCopied(true); } catch { setError('Copie impossible : recopiez le code à la main.'); }
   };
+  // « Je l'ai noté » : d'abord recopier deux groupes du code (RecoveryCodeCheck), puis activer.
   const confirmSaved = () => run(async () => {
     await enableWithNewCode(newCode!);
     reset();
@@ -162,6 +174,15 @@ export const CloudBackupPanel: React.FC<{
     await enableWithExistingCode(codeInput);
     reset();
     toast?.({ message: 'Sauvegarde de secours activée sur cet appareil', kind: 'success' });
+  });
+  // Vérification annuelle : le code retapé est comparé sur l'appareil (rien n'est envoyé).
+  const checkCode = () => run(async () => {
+    if (!(await verifyRecoveryCode(codeInput))) {
+      setError('Ce code ne correspond pas à la sauvegarde de cet appareil. Code perdu ? Désactivez puis réactivez la sauvegarde pour en créer un nouveau.');
+      return;
+    }
+    reset();
+    toast?.({ message: "Code de secours vérifié : c'est le bon. Prochain rappel dans un an.", kind: 'success' });
   });
   const sendNow = () => run(async () => {
     await uploadNow(getData());
@@ -174,7 +195,7 @@ export const CloudBackupPanel: React.FC<{
     if (validateImport(parsed).length > 0) { setError('Copie déchiffrée mais illisible par cette version de Pécule : rien n\'a été remplacé.'); return; }
     const label = dayLabel(restoreDate);
     confirm(`Remplacer vos données par la copie du ${label} ?`,
-      'Toutes vos données actuelles (comptes, mouvements, objectifs, fiches de paie, réglages) seront remplacées par cette copie, puis enregistrées sur Drive. Elles sont d\'abord mises de côté sur cet appareil : vous pourrez annuler juste après, ou les récupérer pendant 30 jours (« Versions mises de côté »).',
+      'Toutes vos données actuelles (comptes, mouvements, fiches de paie, réglages) seront remplacées par cette copie, puis enregistrées sur Drive. Elles sont d\'abord mises de côté sur cet appareil : vous pourrez annuler juste après, ou les récupérer pendant 30 jours (« Versions mises de côté »).',
       async () => {
         let outcome: { ok: boolean; undoId?: string };
         try {
@@ -203,12 +224,21 @@ export const CloudBackupPanel: React.FC<{
       }, true, `Remplacer par la copie du ${label}`);
   });
   const disable = () => confirm('Désactiver la sauvegarde de secours ?',
-    'Toutes les copies chiffrées gardées par le serveur seront effacées, et cet appareil n\'en enverra plus. Votre fichier Drive et ses copies mensuelles ne changent pas.',
+    'Cet appareil n\'enverra plus de copie. Les copies chiffrées gardées par le serveur seront effacées dans 7 jours : d\'ici là, vous pourrez annuler cet effacement ici, et vos appareils qui reçoivent les notifications en sont prévenus. Votre fichier Drive et ses copies mensuelles ne changent pas.',
     () => run(async () => {
-      const n = await disableAndDeleteServerCopies();
+      const { copies, purgeAt } = await disableAndScheduleDeletion();
       reset();
-      toast?.({ message: `Sauvegarde de secours désactivée (${n} copie${n > 1 ? 's' : ''} effacée${n > 1 ? 's' : ''})`, kind: 'success' });
+      toast?.({
+        message: purgeAt
+          ? `Sauvegarde de secours désactivée : ${copies} copie${copies > 1 ? 's' : ''} effacée${copies > 1 ? 's' : ''} d'ici le ${dateTimeLabel(purgeAt)}`
+          : 'Sauvegarde de secours désactivée',
+        kind: 'success',
+      });
     }), true);
+  const cancelDeletion = () => run(async () => {
+    await cancelServerDeletion();
+    toast?.({ message: 'Effacement des copies de secours annulé', kind: 'success' });
+  });
 
   const hasCopies = !!dates && dates.length > 0;
 
@@ -217,8 +247,20 @@ export const CloudBackupPanel: React.FC<{
       <CardSubheading icon={ShieldCheck}>Sauvegarde de secours chiffrée</CardSubheading>
       <Hint className="mt-1">
         Une copie de vos données, chiffrée sur cet appareil avant l'envoi, gardée par le serveur de Pécule au cas où le fichier Drive serait abîmé ou supprimé.
-        Le serveur ne peut pas la lire : seul votre <strong className="font-medium text-on-surface">code de secours</strong> permet de la déchiffrer. Envoi automatique au plus une fois par semaine si vos données ont changé ; les 8 dernières copies sont gardées.
+        Le serveur ne peut pas la lire : seul votre <strong className="font-medium text-on-surface">code de secours</strong> permet de la déchiffrer. Envoi automatique au plus une fois par semaine si vos données ont changé ;
+        le serveur garde les copies récentes et au moins une par mois sur un an, et ne les efface jamais sur-le-champ (7 jours de délai, annulable).
       </Hint>
+
+      {deletion && (
+        <Notice tone="error" className="mt-3 p-4!">
+          <p className="text-sm font-medium">Effacement des copies programmé</p>
+          <p className="mt-1">
+            Demandé le {dateTimeLabel(deletion.requestedAt)}. Les copies présentes à cette date seront effacées d'ici le {dateTimeLabel(deletion.purgeAt)} ; celles envoyées depuis ne sont pas concernées.
+            Ce n'est pas vous ? Annulez l'effacement, puis déconnectez les appareils que vous ne reconnaissez pas.
+          </p>
+          <Button variant="tonal" className="mt-3" onClick={cancelDeletion} disabled={busy}>Annuler l'effacement</Button>
+        </Notice>
+      )}
 
       {enrolled === undefined ? <Loader2 className="w-4 h-4 animate-spin mt-3 text-on-surface-variant" aria-label="Chargement" /> : (
         <>
@@ -228,6 +270,9 @@ export const CloudBackupPanel: React.FC<{
                 {status.lastError && status.lastErrorAt && (!status.lastUploadAt || status.lastErrorAt > status.lastUploadAt)
                   && <span className="block text-error">Échec du dernier essai ({dateTimeLabel(status.lastErrorAt)}) : {FAILURE_MESSAGES[status.lastError as keyof typeof FAILURE_MESSAGES] ?? status.lastError}</span>}</>
               : 'Pas activée sur cet appareil.'}
+            {enrolled && (backupCodeCheckDue(enrolled, new Date())
+              ? <span className="block font-medium text-tertiary">Votre code de secours n'a pas été retapé depuis un an : vérifiez qu'il est toujours à portée de main.</span>
+              : enrolled.codeCheckedAt && <span className="block text-on-surface-variant">Code de secours vérifié le {new Date(enrolled.codeCheckedAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}.</span>)}
             {dates && <span className="block text-on-surface-variant">{hasCopies ? `${dates.length} copie${dates.length > 1 ? 's' : ''} sur le serveur, la dernière du ${dayLabel(dates[0])}.` : 'Aucune copie sur le serveur.'}</span>}
           </p>
 
@@ -236,6 +281,7 @@ export const CloudBackupPanel: React.FC<{
               {enrolled ? (
                 <>
                   <Button variant="tonal" onClick={sendNow} disabled={busy}><CloudUpload className="w-4 h-4" aria-hidden="true" /> Envoyer maintenant</Button>
+                  <Button variant="outlined" onClick={() => { reset(); setMode('check'); }} disabled={busy}><KeyRound className="w-4 h-4" aria-hidden="true" /> Vérifier mon code</Button>
                   {hasCopies && <Button variant="outlined" onClick={() => { reset(); setMode('restore'); }} disabled={busy}><CloudDownload className="w-4 h-4" aria-hidden="true" /> Restaurer</Button>}
                   <Button variant="text" onClick={disable} disabled={busy}><Trash2 className="w-4 h-4" aria-hidden="true" /> Désactiver</Button>
                 </>
@@ -252,7 +298,7 @@ export const CloudBackupPanel: React.FC<{
           {mode === 'newCode' && newCode && (
             <Notice tone="warning" className="mt-3 p-4!">
               <p className="text-sm font-medium">Votre code de secours</p>
-              <p className="mt-2 font-mono text-base sm:text-lg font-medium tracking-wider text-on-surface break-all select-all" data-testid="recovery-code">{newCode}</p>
+              <p className="mt-2 font-code text-base sm:text-lg font-medium tracking-wider text-on-surface break-all select-all" data-testid="recovery-code">{newCode}</p>
               <p className="mt-2">
                 Notez-le ou rangez-le dans un gestionnaire de mots de passe, <strong className="font-medium">hors de cet appareil</strong>. Il ne sera <strong className="font-medium">plus jamais affiché</strong> et n'est enregistré nulle part :
                 sans lui, les copies de secours sont illisibles, pour vous comme pour le serveur.
@@ -260,13 +306,19 @@ export const CloudBackupPanel: React.FC<{
               </p>
               <div className="mt-3 flex flex-wrap gap-2">
                 <Button variant="outlined" onClick={copyCode}><Copy className="w-4 h-4" aria-hidden="true" /> {copied ? 'Copié' : 'Copier'}</Button>
-                <Button onClick={confirmSaved} disabled={busy}>Je l'ai mis en lieu sûr</Button>
+                <DownloadCodeButton code={newCode} />
+                <Button onClick={() => { setError(null); setMode('verify'); }} disabled={busy}>Je l'ai mis en lieu sûr</Button>
                 <Button variant="text" onClick={reset} disabled={busy}>Annuler</Button>
               </div>
             </Notice>
           )}
 
-          {(mode === 'join' || mode === 'restore') && (
+          {mode === 'verify' && newCode && (
+            <RecoveryCodeCheck code={newCode} busy={busy} onConfirmed={() => { void confirmSaved(); }}
+              onShowAgain={() => setMode('newCode')} onCancel={reset} />
+          )}
+
+          {(mode === 'join' || mode === 'restore' || mode === 'check') && (
             <div className="mt-3 rounded-xl border border-outline-variant p-4 space-y-3">
               {mode === 'restore' && dates && (
                 <div>
@@ -278,10 +330,13 @@ export const CloudBackupPanel: React.FC<{
                 </div>
               )}
               <TextField label="Code de secours" value={codeInput} onChange={e => setCodeInput(e.target.value)} autoComplete="off" spellCheck={false}
-                placeholder="XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX" className="font-mono" error={error ?? undefined}
-                supporting={mode === 'join' ? 'Le code montré lors de l\'activation sur un autre appareil.' : 'Le déchiffrement a lieu sur cet appareil ; le code n\'est pas envoyé.'} />
+                placeholder="XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX" className="font-code" error={error ?? undefined}
+                supporting={mode === 'join' ? 'Le code montré lors de l\'activation sur un autre appareil.'
+                  : mode === 'check' ? 'Retapez-le depuis votre note. La vérification a lieu sur cet appareil ; le code n\'est pas envoyé.'
+                  : 'Le déchiffrement a lieu sur cet appareil ; le code n\'est pas envoyé.'} />
               <div className="flex flex-wrap gap-2">
-                {mode === 'join'
+                {mode === 'check' ? <Button onClick={checkCode} disabled={busy || !codeInput.trim()} isLoading={busy}>Vérifier ce code</Button>
+                  : mode === 'join'
                   ? <Button onClick={join} disabled={busy || !codeInput.trim()} isLoading={busy}>Activer avec ce code</Button>
                   : <Button onClick={restore} disabled={busy || !codeInput.trim() || !restoreDate}>{busy ? 'Déchiffrement…' : 'Déchiffrer et restaurer'}</Button>}
                 <Button variant="text" onClick={reset} disabled={busy}>Annuler</Button>
@@ -289,7 +344,7 @@ export const CloudBackupPanel: React.FC<{
             </div>
           )}
 
-          {error && mode !== 'join' && mode !== 'restore' && <p role="alert" className="mt-2 text-xs font-medium text-error">{error}</p>}
+          {error && mode !== 'join' && mode !== 'restore' && mode !== 'check' &&<p role="alert" className="mt-2 text-xs font-medium text-error">{error}</p>}
         </>
       )}
     </div>
@@ -339,12 +394,12 @@ export const ServerSecurityPanel: React.FC<{
                   {devices.map(d => (
                     <li key={d.id} className="flex items-center justify-between gap-2 py-1.5 text-sm text-on-surface">
                       <span>{deviceName(d.host)}
-                        {d.current && <span className="ml-1 font-medium text-indigo-700 dark:text-indigo-300">(cet appareil)</span>}
+                        {d.current && <span className="ml-1 font-medium text-primary">(cet appareil)</span>}
                         {d.createdAt && <span className="text-on-surface-variant"> · depuis le {new Date(d.createdAt).toLocaleDateString('fr-FR')}</span>}
                       </span>
                       {!d.current && (
-                        <button type="button" className="p-2 -m-1 rounded-full text-on-surface-variant hover:text-error hover:bg-error/8" aria-label={`Retirer l'appareil ${d.host}`}
-                          onClick={async () => { await removePushDevice(d.id).catch(() => undefined); refresh(); }}><Trash2 className="w-4 h-4" aria-hidden="true" /></button>
+                        <IconButton label={`Retirer l'appareil ${d.host}`} icon={Trash2} tone="danger" className="-my-2"
+                          onClick={async () => { await removePushDevice(d.id).catch(() => undefined); refresh(); }} />
                       )}
                     </li>
                   ))}
@@ -358,14 +413,16 @@ export const ServerSecurityPanel: React.FC<{
             )}
           </div>
 
+          <ServerSessionsList confirm={confirm} onSignedOut={onSignedOutEverywhere} />
+
           <div className="pt-5 mt-5 border-t border-outline-variant">
             <CardSubheading>Sessions et données du serveur</CardSubheading>
-            <Hint className="mt-1">Vos données financières restent sur votre Drive : le serveur ne garde que votre session, vos appareils et l'accès qui sert aux rappels.</Hint>
+            <Hint className="mt-1">Vos données financières restent sur votre Drive : le serveur ne garde que vos sessions, vos appareils, l'accès qui sert aux rappels et, si vous l'avez activée, la sauvegarde de secours chiffrée.</Hint>
             <div className="mt-3 flex flex-wrap gap-2">
               <Button variant="outlined" onClick={() => confirm('Déconnecter tous les appareils ?', 'Toutes les sessions Pécule (téléphone, ordinateur…) seront fermées et plus aucune notification ne sera envoyée. Il faudra vous reconnecter partout.', async () => {
                 try { await logoutAllDevices(); onSignedOutEverywhere(); } catch { toast?.({ message: 'Serveur injoignable, réessayez.', kind: 'error' }); }
               }, true)}><LogOut className="w-4 h-4" aria-hidden="true" /> Déconnecter tous les appareils</Button>
-              <Button variant="text" className="text-error! hover:bg-error/8!" onClick={() => confirm('Supprimer mes données serveur ?', 'Le serveur efface votre session, vos appareils et l\'accès Google qu\'il garde, puis révoque cet accès. Vos données financières restent sur votre Drive. Les notifications s\'arrêtent.', async () => {
+              <Button variant="text" className="text-error! hover:bg-error/8!" onClick={() => confirm('Supprimer mes données serveur ?', 'Le serveur efface tout de suite vos sessions, vos appareils et l\'accès Google qu\'il garde, puis révoque cet accès. Les notifications s\'arrêtent. Vos copies de secours chiffrées, s\'il y en a, sont effacées 7 jours plus tard : en vous reconnectant d\'ici là, vous pourrez annuler. Vos données financières restent sur votre Drive.', async () => {
                 try { await deleteServerAccount(); onSignedOutEverywhere(); } catch { toast?.({ message: 'Serveur injoignable, réessayez.', kind: 'error' }); }
               }, true)}><Trash2 className="w-4 h-4" aria-hidden="true" /> Supprimer mes données serveur</Button>
             </div>

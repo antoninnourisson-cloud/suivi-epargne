@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
-  createSession, loadSession, touchSession, readSessionIndex, deleteAllSessions,
+  createSession, loadSession, touchSession, bindSession, readSessionIndex, deleteAllSessions,
   SESSION_MAX_AGE, SESSION_IDLE_TTL, DAY, MAX_SESSIONS_PER_USER, sessionTtl,
 } from '../src/sessions';
 import { MemoryKV } from './kvFake';
@@ -95,5 +95,43 @@ describe('index des sessions', () => {
     expect(await deleteAllSessions(kv.asKV(), 'u1')).toBe(2);
     expect(kv.keysWithPrefix('session:')).toEqual([`session:${other.hash}`]);
     expect(kv.keysWithPrefix('sessions:')).toEqual(['sessions:u2']);
+  });
+});
+
+describe('liaison à l’appareil et prolongation concurrentes', () => {
+  let kv: MemoryKV;
+  beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); at(0); kv = new MemoryKV(); });
+  afterEach(() => vi.useRealTimers());
+  const key = { x: 'x-de-l-appareil', y: 'y-de-l-appareil' };
+
+  it('une prolongation partie d’une lecture d’avant la liaison ne retire jamais la clé', async () => {
+    const { hash } = await createSession(kv.asKV(), 'u1', 'a@b.c');
+    at(2);
+    const stale = await loadSession(kv.asKV(), hash); // requête /token lue avant la liaison
+    expect(await bindSession(kv.asKV(), hash, (await loadSession(kv.asKV(), hash))!, key, 'phone')).toBe(true);
+    await touchSession(kv.asKV(), hash, stale!);
+    expect(JSON.parse(kv.data.get(`session:${hash}`)!.value)).toMatchObject({ key, device: 'phone' });
+    // Le lendemain, la prolongation garde toujours la clé.
+    at(3.5);
+    await touchSession(kv.asKV(), hash, stale!);
+    const stored = JSON.parse(kv.data.get(`session:${hash}`)!.value);
+    expect(stored).toMatchObject({ key, device: 'phone', refreshedAt: T0 + 3.5 * DAY * 1000 });
+  });
+
+  it('une relecture en retard (sans clé) garde la clé déjà vue par la requête', async () => {
+    const { hash } = await createSession(kv.asKV(), 'u1', 'a@b.c');
+    at(2);
+    const bound = { ...(await loadSession(kv.asKV(), hash))!, key };
+    await touchSession(kv.asKV(), hash, bound);
+    expect(JSON.parse(kv.data.get(`session:${hash}`)!.value).key).toEqual(key);
+  });
+
+  it('une session déconnectée entre-temps n’est pas recréée par la prolongation', async () => {
+    const { hash } = await createSession(kv.asKV(), 'u1', 'a@b.c');
+    at(2);
+    const s = await loadSession(kv.asKV(), hash);
+    await deleteAllSessions(kv.asKV(), 'u1');
+    await touchSession(kv.asKV(), hash, s!);
+    expect(kv.keysWithPrefix('session:')).toEqual([]);
   });
 });

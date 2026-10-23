@@ -1,6 +1,7 @@
 # Worker « de bordure » de Pécule : se place devant GitHub Pages sur pecule-app.com pour
 # ajouter les en-têtes de sécurité HTTP que GitHub Pages ne permet pas de configurer
-# (HSTS, anti-iframe, Permissions-Policy...). Il ne touche ni au contenu ni au cache.
+# (HSTS, anti-iframe, Permissions-Policy...) et les bons en-têtes de cache (un an pour les
+# fichiers hachés, revalidation pour les pages et le service worker). Il ne touche pas au contenu.
 # Déploiement automatique : .github/workflows/edge.yml. Explications : MAINTENANCE.md § 8.
 #
 # Les routes ne s'activent QUE si les enregistrements DNS du domaine sont « Proxied »

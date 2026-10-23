@@ -5,13 +5,13 @@
 // diffère du plan) ; la décocher l'annule. Le plan est figé au premier virement coché :
 // sinon, chaque versement enregistré modifierait les soldes, donc le plan lui-même.
 // ================================================
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useId, useState } from 'react';
 import { PayChecklist as PayChecklistData, PayChecklistLine } from '../types';
 import { PayTransfer, PlacementStep, buildPayLines, payPeriodOf } from '../lib/finance';
 import { formatEUR, toInputAmount } from '../lib/format';
 import { parseFrenchNumber } from '../lib/numbers';
 import { Info, CheckCircle2, RotateCcw, PiggyBank, ArrowRightLeft } from 'lucide-react';
-import { Card, MoneyText } from './ui';
+import { Button, Card, MoneyText } from './ui';
 import { placementReason } from '../lib/pilotView';
 
 interface PayChecklistProps {
@@ -49,6 +49,7 @@ export const PayChecklist: React.FC<PayChecklistProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [checklist?.month, month]);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const idBase = useId();
 
   const liveLines = buildPayLines(transfers, steps);
   const suggestions = steps.filter(st => st.alert && st.hint);
@@ -108,46 +109,57 @@ export const PayChecklist: React.FC<PayChecklistProps> = ({
     const status = isDone
       ? `${entry.alreadyRecorded ? 'Déjà enregistré' : l.kind === 'saving' ? 'Versement enregistré' : 'Fait'}${varied ? ` : ${formatEUR(entry.amount)} (prévu ${formatEUR(l.amount)})` : ''}`
       : (l.kind === 'saving' ? 'Cocher enregistre le versement sur le compte' : 'À faire');
+    const statusId = `${idBase}-${l.key.replace(/\s/g, '_')}`;
     return (
-      <li key={l.key} className={`flex items-start gap-3 py-3 ${isDone ? 'opacity-90' : ''}`}>
-        <input
-          type="checkbox"
-          checked={isDone}
-          disabled={invalid}
-          onChange={() => (isDone ? uncheck(l) : check(l))}
-          aria-label={`${l.label} : ${isDone ? 'fait' : 'à faire'}`}
-          className="mt-0.5 w-5 h-5 shrink-0 accent-indigo-600 dark:accent-indigo-300"
-        />
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-on-surface break-words">
-            {l.label}
-            {detail && <span className="ml-2 text-xs font-normal text-on-surface-variant">{detail}</span>}
-          </p>
-          {reason && <p className="text-xs text-on-surface-variant mt-0.5">{reason}</p>}
-          <p className={`text-xs mt-0.5 flex flex-wrap items-center gap-x-2 ${isDone ? 'text-emerald-700 dark:text-emerald-300' : 'text-on-surface-variant'}`}>
-            {isDone && <CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" />}
-            <span>{status}</span>
-            {!isDone && l.kind === 'saving' && !invalid && (
-              <button type="button" onClick={() => check(l, true)} className="font-medium text-indigo-700 dark:text-indigo-200 hover:underline">Déjà enregistré ?</button>
-            )}
-          </p>
-        </div>
-        {isDone ? (
-          <MoneyText value={entry.amount} className="shrink-0 text-sm font-medium text-on-surface pt-0.5" />
-        ) : (
-          <label className="flex items-center gap-1 shrink-0">
-            <span className="sr-only">Montant réel de {l.label}</span>
+      <li key={l.key} className="py-1">
+        <div className="flex items-start gap-2">
+          {/* Toute la ligne (case, nom, raison) se coche : une cible d'au moins 48 px de haut. */}
+          <label className="flex-1 min-w-0 flex items-start gap-3 min-h-12 py-2 pl-2 -ml-2 pr-1 rounded-xl cursor-pointer hover:bg-on-surface/8 has-disabled:cursor-not-allowed">
             <input
-              type="text"
-              inputMode="decimal"
-              value={drafts[l.key] ?? toInputAmount(l.amount)}
-              onChange={e => setDrafts(d => ({ ...d, [l.key]: e.target.value }))}
-              onKeyDown={e => { if (e.key === 'Enter') check(l); }}
-              aria-invalid={invalid || undefined}
-              className="w-24 h-9 px-2 text-right text-sm tabular-nums font-medium rounded-xs bg-transparent border border-outline text-on-surface hover:border-on-surface focus:border-indigo-600 dark:focus:border-indigo-300 focus:border-2 outline-none aria-[invalid=true]:border-error aria-[invalid=true]:border-2"
+              type="checkbox"
+              checked={isDone}
+              disabled={invalid}
+              onChange={() => (isDone ? uncheck(l) : check(l))}
+              aria-label={l.label}
+              aria-describedby={statusId}
+              className="mt-0.5 w-5 h-5 shrink-0 accent-primary cursor-pointer disabled:cursor-not-allowed"
             />
-            <span className="text-sm text-on-surface-variant" aria-hidden="true">€</span>
+            <span className="min-w-0">
+              <span className="block text-sm font-medium text-on-surface break-words">
+                {l.label}
+                {detail && <span className="ml-2 text-xs font-normal text-on-surface-variant">{detail}</span>}
+              </span>
+              {reason && <span className="block text-xs text-on-surface-variant mt-0.5">{reason}</span>}
+              {/* État de la ligne, juste sous son nom (relié à la case par aria-describedby). */}
+              <span id={statusId} className={`mt-0.5 text-xs flex flex-wrap items-center gap-x-1.5 ${isDone ? 'text-primary' : invalid ? 'text-error' : 'text-on-surface-variant'}`}>
+                {isDone && <CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" />}
+                {invalid ? 'Montant non reconnu : corrigez-le pour pouvoir cocher' : status}
+              </span>
+            </span>
           </label>
+          {isDone ? (
+            <MoneyText value={entry.amount} className="shrink-0 text-sm font-medium text-on-surface pt-2.5" />
+          ) : (
+            <label className="flex items-center gap-1 shrink-0">
+              <span className="sr-only">Montant réel de {l.label}</span>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={drafts[l.key] ?? toInputAmount(l.amount)}
+                onChange={e => setDrafts(d => ({ ...d, [l.key]: e.target.value }))}
+                onKeyDown={e => { if (e.key === 'Enter') check(l); }}
+                aria-invalid={invalid || undefined}
+                className="w-24 h-12 sm:h-10 px-2 text-right text-sm tabular-nums font-medium rounded-xs bg-transparent border border-outline text-on-surface hover:border-on-surface focus:border-primary focus:border-2 outline-none aria-[invalid=true]:border-error aria-[invalid=true]:border-2"
+              />
+              <span className="text-sm text-on-surface-variant" aria-hidden="true">€</span>
+            </label>
+          )}
+        </div>
+        {/* Hors du <label> : un bouton ne se place pas dans la zone qui coche la ligne. */}
+        {!isDone && l.kind === 'saving' && !invalid && (
+          <button type="button" onClick={() => check(l, true)} className="ml-6 -mt-1 px-2 min-h-12 sm:min-h-8 rounded-full text-xs font-medium text-primary hover:bg-primary/8">
+            Déjà enregistré ?{' '}<span className="sr-only">({l.label} : cocher sans l'enregistrer une seconde fois)</span>
+          </button>
         )}
       </li>
     );
@@ -157,7 +169,7 @@ export const PayChecklist: React.FC<PayChecklistProps> = ({
   const savingTotal = frozen ? savingLines.reduce((s, l) => s + l.amount, 0) : totalToInvest;
   const transferTotal = transferLines.reduce((s, l) => s + l.amount, 0);
   const progress = totalLines > 0 && (
-    <span className={`inline-flex items-center gap-1 h-7 px-2.5 rounded-sm text-xs font-medium tabular-nums ${doneCount === totalLines ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-200' : 'bg-secondary-container text-on-secondary-container'}`}>
+    <span className={`inline-flex items-center gap-1 h-7 px-2.5 rounded-sm text-xs font-medium tabular-nums ${doneCount === totalLines ? 'bg-primary-container text-on-primary-container' : 'bg-secondary-container text-on-secondary-container'}`}>
       {doneCount === totalLines ? <><CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" /> Tout est fait</> : `${doneCount}/${totalLines} faits`}
     </span>
   );
@@ -202,9 +214,9 @@ export const PayChecklist: React.FC<PayChecklistProps> = ({
         <p role="status" className="mt-4 text-sm font-medium text-error flex items-center gap-2"><Info className="w-4 h-4 shrink-0" aria-hidden="true" /> Il manque {formatEUR(shortfall)} : les virements et l'épargne prévus dépassent la paie.</p>
       )}
       {frozen && doneCount === 0 && (
-        <button type="button" onClick={() => onChange(undefined)} className="mt-4 h-10 px-3 -ml-3 rounded-full text-sm font-medium text-indigo-700 dark:text-indigo-200 hover:bg-indigo-600/8 inline-flex items-center gap-2">
+        <Button variant="text" onClick={() => onChange(undefined)} className="mt-4 -ml-3 max-sm:h-12">
           <RotateCcw className="w-4 h-4" aria-hidden="true" /> Recalculer le plan sur les soldes actuels
-        </button>
+        </Button>
       )}
       {frozen && doneCount > 0 && (
         <p className="mt-4 text-xs text-on-surface-variant">Plan figé pour la paie de {periodLabel} depuis le premier virement coché. Il repartira des soldes du moment à la prochaine paie.</p>

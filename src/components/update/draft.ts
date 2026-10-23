@@ -14,6 +14,7 @@ import type { BalanceUpdate } from '../../lib/commands';
 import { suggestCreditedInterest, tracksDeposits } from '../../lib/finance';
 import { parseFrenchNumber } from '../../lib/numbers';
 import { round2 } from '../../lib/money';
+import { storageKey } from '../../lib/storageKeys';
 
 export type DraftField = 'owned' | 'parental' | 'date' | 'deposits' | 'cashFlow' | 'bankTotal' | 'interest' | 'cash';
 export type Draft = {
@@ -136,7 +137,7 @@ export const draftToUpdate = (account: SavingsAccount, d: Draft, b: DraftBreakdo
 // modifiés sont gardés ; effacé à l'enregistrement et à l'abandon. Accès protégés (navigation
 // privée, stockage bloqué) : sans stockage, l'écran marche comme avant.
 
-export const UPDATE_DRAFTS_KEY = 'pecule.updateDrafts';
+export const UPDATE_DRAFTS_KEY = storageKey('updateDrafts');
 const DRAFTS_TTL_MS = 12 * 60 * 60 * 1000;
 
 export const saveStoredDrafts = (drafts: Record<string, Draft>, now = Date.now()) => {

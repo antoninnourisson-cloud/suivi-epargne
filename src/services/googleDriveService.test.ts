@@ -93,6 +93,22 @@ describe('updateConfigFile — écriture vérifiée', () => {
     expect((err as ConcurrentWriteError).otherContent).toBeUndefined();
   });
 
+  it("historique illisible après une écriture réussie : l'écriture est gardée, pas d'échec", async () => {
+    for (const failure of [
+      () => new Response('boom', { status: 503 }),
+      () => { throw new TypeError('Failed to fetch'); },
+    ]) {
+      revs = [{ id: 'r1', content: { v: 'initial' }, keepForever: false }];
+      vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) =>
+        (String(input).includes('/revisions?') ? failure() : fakeFetch(input, init))));
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      await expect(updateConfigFile('f', { v: 'mine' }, 'r1')).resolves.toBe('r2');
+      expect(head().content).toEqual({ v: 'mine' });
+      expect(warn).toHaveBeenCalled();
+      warn.mockRestore();
+    }
+  });
+
   it('écriture sans contrôle (choix explicite) : pas de vérification', async () => {
     await updateConfigFile('f', { v: 'mine' }, null);
     expect(calls).toHaveLength(1);

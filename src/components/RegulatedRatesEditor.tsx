@@ -3,6 +3,7 @@
 // Mise à jour des taux des livrets réglementés avec leur date d'effet (ex. Livret A à
 // 1,7 % au 1er août 2026), appliquée à tous les livrets concernés d'un coup. Les intérêts
 // sont recalculés avec l'ancien taux avant cette date et le nouveau après.
+// Champs Material 3 (ui/TextField) : libellé visible et relié, erreur annoncée.
 // ================================================
 import React, { useMemo, useState } from 'react';
 import { SavingsAccount } from '../types';
@@ -11,6 +12,7 @@ import { formatRate } from '../lib/format';
 import { parseFrenchNumber } from '../lib/numbers';
 import { formatISODay } from '../lib/dates';
 import { Percent, Check } from 'lucide-react';
+import { Button, TextField } from './ui';
 
 interface Props {
   accounts: SavingsAccount[];
@@ -29,6 +31,11 @@ export const RegulatedRatesEditor: React.FC<Props> = ({ accounts, onApply, onDon
 
   if (groups.length === 0) return null;
 
+  const edit = (key: string, field: 'rate' | 'date', value: string) => {
+    setDrafts(p => ({ ...p, [key]: { ...p[key], [field]: value } }));
+    setSaved(null);
+  };
+
   const apply = (key: string) => {
     const g = groups.find(x => x.key === key)!;
     const d = drafts[key];
@@ -46,30 +53,24 @@ export const RegulatedRatesEditor: React.FC<Props> = ({ accounts, onApply, onDon
         const d = drafts[g.key];
         const current = g.accounts[0].interestRate;
         const parsed = parseFrenchNumber(d.rate);
+        const invalid = d.rate.trim() !== '' && (parsed === null || parsed < 0);
         return (
-          <div key={g.key} className="flex flex-wrap items-end gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700">
-            <div className="min-w-32 flex-1">
-              <p className="font-bold text-sm text-slate-800 dark:text-slate-100 flex items-center gap-1.5"><Percent className="w-4 h-4 text-indigo-600" /> {g.label}</p>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400">Actuel : {current !== undefined ? formatRate(current) : '—'} · {g.accounts.map(a => a.name).join(', ')}</p>
+          <div key={g.key} className="flex flex-wrap items-start gap-3 p-4 rounded-xl bg-surface-container-low border border-outline-variant">
+            <div className="min-w-40 flex-1 basis-full sm:basis-auto">
+              <p className="font-medium text-sm text-on-surface flex items-center gap-1.5"><Percent className="w-4 h-4 text-primary" aria-hidden="true" /> {g.label}</p>
+              <p className="text-xs text-on-surface-variant">Actuel : {current !== undefined ? formatRate(current) : '—'} · {g.accounts.map(a => a.name).join(', ')}</p>
             </div>
-            <label className="block">
-              <span className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Nouveau taux (%)</span>
-              <input type="text" inputMode="decimal" value={d.rate} onChange={e => { setDrafts(p => ({ ...p, [g.key]: { ...p[g.key], rate: e.target.value } })); setSaved(null); }}
-                className={`block w-24 p-2 bg-white dark:bg-slate-800 border rounded-lg font-bold text-slate-800 dark:text-slate-100 ${parsed === null && d.rate ? 'border-rose-400' : 'border-slate-200 dark:border-slate-700'}`} />
-            </label>
-            <label className="block">
-              <span className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">À partir du</span>
-              <input type="date" value={d.date} onChange={e => { setDrafts(p => ({ ...p, [g.key]: { ...p[g.key], date: e.target.value } })); setSaved(null); }}
-                className="block p-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg font-bold text-slate-800 dark:text-slate-100" />
-            </label>
-            <button type="button" onClick={() => apply(g.key)} disabled={parsed === null || !d.date}
-              className="px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-sm font-black flex items-center gap-1">
-              {saved === g.key ? <><Check className="w-4 h-4" /> Appliqué</> : 'Appliquer'}
-            </button>
+            <TextField className="w-32" label="Nouveau taux" aria-label={`Nouveau taux, ${g.label}`} suffix="%" inputMode="decimal" value={d.rate}
+              error={invalid ? 'Taux illisible' : undefined} onChange={e => edit(g.key, 'rate', e.target.value)} />
+            <TextField className="w-44" label="À partir du" aria-label={`À partir du, ${g.label}`} type="date" value={d.date}
+              onChange={e => edit(g.key, 'date', e.target.value)} />
+            <Button className="sm:mt-[30px]" onClick={() => apply(g.key)} disabled={parsed === null || parsed < 0 || !d.date}>
+              {saved === g.key ? <><Check className="w-4 h-4" aria-hidden="true" /> Appliqué</> : 'Appliquer'}
+            </Button>
           </div>
         );
       })}
-      <p className="text-[11px] text-slate-500 dark:text-slate-400">Les intérêts sont recalculés avec l'ancien taux avant la date d'effet et le nouveau après. Les taux réglementés changent en général le 1er février ou le 1er août.</p>
+      <p className="text-xs text-on-surface-variant">Les intérêts sont recalculés avec l'ancien taux avant la date d'effet et le nouveau après. Les taux réglementés changent en général le 1er février ou le 1er août.</p>
     </div>
   );
 };

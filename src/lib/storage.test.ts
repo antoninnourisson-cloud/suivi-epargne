@@ -37,6 +37,15 @@ describe('stockage local sans erreur', () => {
     expect(lsGetJSON('j', [])).toEqual([]);
   });
 
+  it('rend la valeur par défaut quand le validateur refuse la valeur lue', () => {
+    vi.stubGlobal('localStorage', memoryStorage());
+    const isRange = (v: unknown): v is { start: string } => !!v && typeof (v as { start?: unknown }).start === 'string';
+    lsSetJSON('r', { start: 7 });
+    expect(lsGetJSON('r', { start: 'défaut' }, isRange)).toEqual({ start: 'défaut' });
+    lsSetJSON('r', { start: '2026-01-01' });
+    expect(lsGetJSON('r', { start: 'défaut' }, isRange)).toEqual({ start: '2026-01-01' });
+  });
+
   it('ne lève jamais quand le stockage est bloqué', () => {
     vi.stubGlobal('localStorage', blockedStorage);
     expect(lsGet('k')).toBeNull();

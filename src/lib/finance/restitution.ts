@@ -91,3 +91,18 @@ export const accountsAfterRestitution = <T extends { ownedAmount: number; parent
 /** Comptes d'une répartition personnalisée qui n'existent plus (supprimés depuis). */
 export const missingSplitAccounts = (split: SavingsSplit | undefined, accounts: { id: string }[]) =>
   (split || []).filter(s => !accounts.some(a => a.id === s.accountId));
+
+/**
+ * Mois calendaires avant la restitution prévue (projection du Rendement) ; undefined si
+ * aucune n'est prévue ou si elle est faite. Date passée mais restitution pas encore notée :
+ * 0 (le capital part tout de suite), comme dans le simulateur, pour que les deux écrans
+ * donnent le même solde. Date lue en heure locale (parseISODate) : `new Date('2027-01-01')`
+ * tombe le 31 décembre dans un fuseau négatif.
+ */
+export const monthsUntilRestitution = (r: { plannedDate?: string; done?: unknown } | undefined, now: Date = new Date()): number | undefined => {
+  if (!r?.plannedDate || r.done) return undefined;
+  const d = parseISODate(r.plannedDate);
+  if (Number.isNaN(d.getTime())) return undefined;
+  const months = (d.getFullYear() - now.getFullYear()) * 12 + d.getMonth() - now.getMonth();
+  return Math.max(0, months);
+};

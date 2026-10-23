@@ -6,6 +6,7 @@
 // - sinon : le graphique a la hauteur `chartClassName` et le tableau s'ouvre dessous.
 import React, { useId, useState } from 'react';
 import { Table2, ChartArea } from 'lucide-react';
+import { Button } from '../Button';
 
 interface ChartFrameProps {
   summary: React.ReactNode;
@@ -25,17 +26,20 @@ export const ChartFrame: React.FC<ChartFrameProps> = ({ summary, legend, table, 
   const swapped = fill && showData;
 
   const toggle = (
-    <button
+    <Button
       type="button"
+      variant="text"
+      size="sm"
       aria-expanded={showData}
       aria-controls={tableId}
       onClick={() => setShowData(v => !v)}
-      className={`inline-flex items-center gap-1.5 rounded-full ${compact ? 'h-7 px-2 -mr-2' : 'h-8 px-3 -ml-3'} text-xs font-medium text-indigo-700 dark:text-indigo-200 hover:bg-indigo-600/8 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600`}
+      // Bouton texte compact (12 px) : il accompagne le graphique sans lui voler la place.
+      className={`text-xs ${compact ? 'h-7! px-2! -mr-2' : '-ml-3'}`}
     >
       {fill && showData
         ? <><ChartArea className="w-4 h-4" aria-hidden="true" /> Revenir au graphique</>
         : <><Table2 className="w-4 h-4" aria-hidden="true" /> {showData ? 'Masquer les données' : 'Voir les données'}</>}
-    </button>
+    </Button>
   );
 
   return (

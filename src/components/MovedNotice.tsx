@@ -6,11 +6,13 @@
 import React, { useEffect, useState } from 'react';
 import { Sprout, Loader2 } from 'lucide-react';
 import { Modal } from './Modal';
+import { Button } from './ui';
 import { disablePush } from '../services/pushService';
+import { storageKey } from '../lib/storageKeys';
 
 const NEW_APP_URL = 'https://pecule-app.com/';
 const OLD_HOST_SUFFIX = '.github.io';
-const PENDING_KEY = 'suivi_epargne_pending';
+const PENDING_KEY = storageKey('pending');
 
 /** `true` quand l'ancienne adresse redirige déjà vers le nouveau domaine. */
 const oldAddressRedirects = async (): Promise<boolean> => {
@@ -31,6 +33,8 @@ const leaveOldAddress = async () => {
   try { await Promise.all((await caches.keys()).map(k => caches.delete(k))); } catch { /* idem */ }
   try { localStorage.clear(); sessionStorage.clear(); } catch { /* stockage bloqué */ }
   try { indexedDB.deleteDatabase('pecule-vault'); } catch { /* idem */ }
+  // Clé de la session serveur de cet appareil (backendService) : la session vient de partir avec localStorage.
+  try { indexedDB.deleteDatabase('pecule-device-key'); } catch { /* idem */ }
   window.location.replace(NEW_APP_URL);
 };
 
@@ -58,27 +62,26 @@ export const MovedNotice: React.FC = () => {
 
   return (
     <Modal open={moved} onClose={() => undefined} label="Pécule a déménagé" className="max-w-md p-6">
-      <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
-        <Sprout className="w-5 h-5 text-indigo-600" aria-hidden="true" /> Pécule a déménagé
+      <h2 className="text-[22px] leading-7 font-normal text-on-surface flex items-center gap-2">
+        <Sprout className="w-5 h-5 text-primary" aria-hidden="true" /> Pécule a déménagé
       </h2>
-      <p className="text-sm text-slate-600 dark:text-slate-300 mt-3">
+      <p className="text-sm text-on-surface-variant mt-3">
         L'app a maintenant sa propre adresse : <b>pecule-app.com</b>. Vos données ne bougent pas : elles restent sur votre Google Drive.
       </p>
-      <ul className="list-disc pl-5 mt-3 space-y-1 text-sm text-slate-600 dark:text-slate-300">
+      <ul className="list-disc pl-5 mt-3 space-y-1 text-sm text-on-surface-variant">
         <li>Reconnectez-vous avec le même compte Google.</li>
         <li>Sur chaque appareil, réactivez les notifications, le verrou et la clé Gemini (Paramètres).</li>
         <li>Sur téléphone, installez l'app depuis la nouvelle adresse, puis supprimez l'ancienne icône.</li>
       </ul>
       {unsaved && (
-        <p role="status" className="mt-3 text-xs font-bold text-amber-800 dark:text-amber-300">
+        <p role="status" className="mt-3 text-sm font-medium text-tertiary">
           Des modifications sont encore en cours d'envoi vers Drive : patientez quelques secondes avant de continuer.
         </p>
       )}
-      <button type="button" onClick={go} disabled={busy || unsaved}
-        className="w-full mt-5 flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white py-3 rounded-xl font-bold">
+      <Button variant="filled" onClick={go} disabled={busy || unsaved} className="w-full mt-5">
         {busy && <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />}
         Continuer sur pecule-app.com
-      </button>
+      </Button>
     </Modal>
   );
 };

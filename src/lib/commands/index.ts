@@ -4,7 +4,10 @@
 // l'écran qui l'appelle. Voir MAINTENANCE.md §1.
 export * from './types';
 export * from './quickAdd';
+export * from './transfer';
 export * from './movements';
 export * from './restitution';
 export * from './accounts';
 export * from './balances';
+export * from './edits';
+export * from './statement';

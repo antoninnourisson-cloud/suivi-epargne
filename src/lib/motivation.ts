@@ -14,6 +14,7 @@ import { signedAmount } from './money';
 import { formatISODay, parseISODate, MS_PER_DAY } from './dates';
 import { computeEmergencyFund } from './planning';
 import { plainEUR } from './format';
+import { hasParentalCapital } from './parentalMode';
 
 export const DEFAULT_GOOD_MONTH_THRESHOLD = 500;
 /** Durée d'un « mois » de suivi, compté à partir de la paie (jusqu'à la paie suivante au plus). */
@@ -138,6 +139,21 @@ export interface GoodMonthsSummary {
 }
 
 /**
+ * Début du suivi de l'épargne : premier versement d'épargne, ou « Repartir de zéro » s'il est
+ * plus récent (undefined : rien encore). Avant cette date, rien n'était enregistré.
+ */
+export const savingsTrackingFrom = (
+  accounts: { type: AccountType; movements?: AccountMovement[] }[],
+  trackingStartISO?: string,
+): string | undefined => {
+  const firstFlow = accounts
+    .filter(a => !SAVINGS_EXCLUDED.has(a.type))
+    .flatMap(a => (a.movements || []).filter(m => isSavingsFlow(m, trackingStartISO)).map(m => m.date))
+    .sort()[0];
+  return [firstFlow, trackingStartISO].filter((d): d is string => !!d).sort().pop();
+};
+
+/**
  * Bons mois des 12 dernières paies. Les fenêtres antérieures au début du suivi (premier
  * versement d'épargne ou « Repartir de zéro ») ne comptent pas : on ne pénalise pas les mois
  * d'avant l'app. Un mois raté par an est couvert par un joker.
@@ -152,11 +168,7 @@ export const computeGoodMonths = (input: {
   count?: number;
 }): GoodMonthsSummary => {
   const threshold = input.threshold ?? DEFAULT_GOOD_MONTH_THRESHOLD;
-  const firstFlow = input.accounts
-    .filter(a => !SAVINGS_EXCLUDED.has(a.type))
-    .flatMap(a => (a.movements || []).filter(m => isSavingsFlow(m, input.trackingStartISO)).map(m => m.date))
-    .sort()[0];
-  const trackingFrom = [firstFlow, input.trackingStartISO].filter((d): d is string => !!d).sort().pop();
+  const trackingFrom = savingsTrackingFrom(input.accounts, input.trackingStartISO);
   const windows = recentPayWindows(input.today, input.paydayDay, input.payslips, input.count ?? 12)
     .filter(w => trackingFrom !== undefined && w.end > trackingFrom);
 
@@ -253,7 +265,8 @@ export const computeMilestones = (input: {
   for (const tier of SAVINGS_TIERS) {
     list.push({
       id: `savings-${tier}`, title: `${eur(tier)} d'épargne`,
-      detail: 'Votre part, hors capital de vos parents.',
+      // Mode solo (après la restitution) : plus de mention des parents.
+      detail: hasParentalCapital(accounts) ? 'Votre part, hors capital de vos parents.' : 'Le total de vos comptes.',
       achieved: mySavings >= tier,
       progress: Math.min(1, Math.max(0, mySavings / tier)),
     });

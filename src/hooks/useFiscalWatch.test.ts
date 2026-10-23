@@ -157,8 +157,8 @@ describe('carte de la veille', () => {
     const { FiscalWatchCard } = await import('../components/FiscalWatchCard');
     const report = describeServerWatch(server(daysAgo(1), { livretACeiling: { value: 22950, quote: 'est de 22 950 €' }, lepCeiling: { value: 12000 } }), DEFAULT_FISCAL_CONFIG, [la]);
     render(createElement(FiscalWatchCard, {
-      proposals: [], running: false, checkedAt: daysAgo(1), hasKey: false, canRun: true, source: 'server', serverReport: report,
-      onApply: () => {}, onDismiss: () => {}, onRun: () => {},
+      watch: { proposals: [], running: false, checkedAt: daysAgo(1), hasKey: false, canRun: true, source: 'server', serverReport: report, dismiss: () => {}, run: () => {} },
+      onApply: () => {},
     }));
     expect(screen.getByText('Source : IA Cloudflare (veille hebdomadaire du serveur)')).toBeTruthy();
     expect(screen.getByText(/Détail du relevé : 2 valeurs, 1 différente de l'app/)).toBeTruthy();
@@ -171,8 +171,8 @@ describe('carte de la veille', () => {
     const { createElement } = await import('react');
     const { FiscalWatchCard } = await import('../components/FiscalWatchCard');
     render(createElement(FiscalWatchCard, {
-      proposals: [], running: false, checkedAt: daysAgo(1), hasKey: true, source: 'gemini',
-      onApply: () => {}, onDismiss: () => {}, onRun: () => {},
+      watch: { proposals: [], running: false, checkedAt: daysAgo(1), hasKey: true, source: 'gemini', dismiss: () => {}, run: () => {} },
+      onApply: () => {},
     }));
     expect(screen.getByText('Source : Gemini (votre clé)')).toBeTruthy();
     expect(screen.queryByText(/Détail du relevé/)).toBeNull();

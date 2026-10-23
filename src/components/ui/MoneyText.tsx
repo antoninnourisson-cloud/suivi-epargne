@@ -13,7 +13,7 @@ interface MoneyTextProps {
 }
 
 const toneClass = (value: number) =>
-  value > 0 ? 'text-emerald-700 dark:text-emerald-300' : value < 0 ? 'text-rose-700 dark:text-rose-300' : '';
+  value > 0 ? 'text-gain' : value < 0 ? 'text-loss' : '';
 
 export const MoneyText: React.FC<MoneyTextProps> = ({ value, decimals = 'auto', signed = false, tone = 'neutral', className = '' }) => (
   <span className={`tabular-nums whitespace-nowrap ${tone === 'auto' ? toneClass(value) : ''} ${className}`}>

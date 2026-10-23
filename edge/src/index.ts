@@ -4,8 +4,15 @@
 //
 // GitHub Pages ne permet pas de choisir ses en-têtes HTTP. Ce Worker relaie chaque
 // requête telle quelle vers l'origine (fetch(request) sur une route = GitHub Pages) et
-// ajoute seulement des en-têtes de sécurité à la réponse. Il ne modifie ni le contenu,
-// ni le statut, ni les en-têtes de cache de l'origine.
+// ajoute des en-têtes de sécurité à la réponse. Il ne modifie ni le contenu, ni le statut.
+//
+// Cache (réponses 200 et 304 seulement ; le reste garde l'en-tête de l'origine) :
+// - fichiers au nom haché par Vite (/assets/nom-HASH.js, workbox-HASH.js) : un an,
+//   « immutable » : leur contenu ne change jamais sous le même nom ;
+// - pages HTML, service worker (sw.js), son extension push (push-sw.js, importée par sw.js,
+//   donc servie par le cache HTTP : voir updateViaCache), registerSW.js et le manifeste :
+//   « no-cache », revalidés à chaque fois, pour qu'une mise à jour arrive tout de suite.
+// Sans ce Worker, Cloudflare imposait 4 heures à tout (réglage « Browser Cache TTL »).
 //
 // La politique de contenu complète (CSP) reste dans la balise <meta> d'index.html, seule
 // source de vérité : ici, uniquement frame-ancestors, qu'une balise <meta> ne peut pas
@@ -31,12 +38,37 @@ export const SECURITY_HEADERS: Readonly<Record<string, string>> = {
 /** Ajouté (pas remplacé) : si l'origine envoyait un jour sa propre CSP, les deux s'appliqueraient. */
 const FRAME_ANCESTORS_CSP = "frame-ancestors 'none'";
 
-const withSecurityHeaders = (res: Response): Response => {
+export const IMMUTABLE = 'public, max-age=31536000, immutable';
+export const REVALIDATE = 'no-cache';
+
+// Nom haché par Vite : « nom-XXXXXXXX.ext » (8 caractères base64url ; le nom peut contenir des tirets).
+const HASHED_ASSET = /^\/assets\/[^/]+-[A-Za-z0-9_-]{8}\.[a-z0-9]+$/;
+const HASHED_WORKBOX = /^\/workbox-[0-9a-f]{8}\.js$/;
+const ALWAYS_FRESH = new Set(['/sw.js', '/push-sw.js', '/registerSW.js', '/manifest.webmanifest']);
+
+/** En-tête Cache-Control à imposer pour ce chemin, ou `null` pour garder celui de l'origine. */
+export const cacheControlFor = (pathname: string, contentType: string | null): string | null => {
+  if (HASHED_ASSET.test(pathname) || HASHED_WORKBOX.test(pathname)) return IMMUTABLE;
+  if (ALWAYS_FRESH.has(pathname) || pathname.endsWith('/') || pathname.endsWith('.html')) return REVALIDATE;
+  if ((contentType || '').startsWith('text/html')) return REVALIDATE;
+  return null;
+};
+
+const withSecurityHeaders = (res: Response, pathname: string): Response => {
   // Les en-têtes d'une réponse fetch() sont immuables : copie (le corps est relayé en flux,
   // sans être lu ni modifié).
   const out = new Response(res.body, res);
   for (const [name, value] of Object.entries(SECURITY_HEADERS)) out.headers.set(name, value);
   out.headers.append('Content-Security-Policy', FRAME_ANCESTORS_CSP);
+  if (res.status === 200 || res.status === 304) {
+    const cache = cacheControlFor(pathname, res.headers.get('Content-Type'));
+    if (cache) {
+      out.headers.set('Cache-Control', cache);
+      // Un « Expires » de l'origine contredirait la nouvelle durée (Cache-Control l'emporte,
+      // mais autant ne rien laisser d'ambigu).
+      out.headers.delete('Expires');
+    }
+  }
   return out;
 };
 
@@ -59,6 +91,6 @@ export default {
     // relayé sans aucune modification.
     if (request.method !== 'GET' && request.method !== 'HEAD') return fetch(request);
 
-    return withSecurityHeaders(await fetch(request));
+    return withSecurityHeaders(await fetch(request), url.pathname);
   },
 } satisfies ExportedHandler;

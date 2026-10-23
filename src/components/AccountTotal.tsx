@@ -11,7 +11,9 @@ const hasTwoShares = (a: { ownedAmount: number; parentalCapital: number }) =>
 
 export const AccountTotal: React.FC<{ account: { ownedAmount: number; parentalCapital: number }; className?: string }> = ({ account, className }) =>
   hasTwoShares(account) ? (
-    <div className={`text-[11px] font-bold text-slate-500 dark:text-slate-400 ${className ?? ''}`} title="Montant affiché par la banque (votre part + celle de vos parents)">
-      Total banque : {formatEUR(account.ownedAmount + account.parentalCapital, 2)}
+    // Sur un écran étroit, le montant passe sous « Total banque : » plutôt que d'élargir
+    // la colonne ; il n'est jamais coupé.
+    <div className={`text-xs text-on-surface-variant ${className ?? ''}`} title="Montant affiché par la banque (votre part + celle de vos parents)">
+      Total banque : <span className="whitespace-nowrap">{formatEUR(account.ownedAmount + account.parentalCapital, 2)}</span>
     </div>
   ) : null;

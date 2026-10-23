@@ -3,6 +3,7 @@ import { simulate, mulberry32, pastMonthlySavings, monthIndex, Scenario } from '
 import { buildSoloPlan } from './planning';
 import { projectSavings } from './projection';
 import { parseISODate } from './dates';
+import { withAssumedRates } from './performance';
 import { DEFAULT_FISCAL_CONFIG as CFG } from '../constants';
 import { AccountType, AccountMovement, SavingsAccount } from '../types';
 
@@ -46,6 +47,42 @@ describe('simulateur « Et si… » : courbe de référence', () => {
     expect(solo.years[1].total).toBe(Math.round(r.points[12].baseline));
     const proj = projectSavings(simple(), CFG, 500, 1, undefined, undefined, parseISODate(today));
     expect(proj.total).toBeCloseTo(r.points[12].baseline, 6);
+  });
+
+  it('PEA sans taux saisi : même rendement supposé (observé) dans Rendement, « Et si… » et le plan solo', () => {
+    // PEA suivi depuis 2023 : 10 000 € devenus 11 500 € (≈ +5 % par an observés, pris pour hypothèse).
+    const today = '2026-10-19';
+    const accounts = [
+      ...simple(),
+      acc({
+        id: 'pea', name: 'PEA', type: AccountType.PEA, ownedAmount: 11500, interestRate: undefined, openingDate: '2023-10-01',
+        movements: [
+          { id: 'i', date: '2023-10-01', amount: 10000, type: 'IN', label: 'Ouverture', tag: 'initial' },
+          { id: 'v', date: '2026-10-01', amount: 1500, type: 'IN', label: 'Valorisation', kind: 'valuation' },
+        ],
+      }),
+    ];
+    const { rates } = withAssumedRates(accounts, parseISODate(today));
+    expect(rates.pea).toBeGreaterThan(4);
+    const sim = simulate({ accounts, fiscal: CFG, monthlyPlan: 500, horizon: 24, today, restitution: { done: true }, assumedRates: rates });
+    const flat = simulate({ accounts, fiscal: CFG, monthlyPlan: 500, horizon: 24, today, restitution: { done: true } });
+    // Le PEA pousse : plus de 400 € d'écart en deux ans avec la courbe à 0 %.
+    expect(sim.points[24].baseline - flat.points[24].baseline).toBeGreaterThan(400);
+    // Rendement (projectSavings), année par année, sur la même courbe.
+    for (const years of [1, 2]) {
+      const proj = projectSavings(accounts, CFG, 500, years, undefined, undefined, parseISODate(today), rates);
+      expect(proj.total).toBeCloseTo(sim.points[years * 12].baseline, 6);
+    }
+    // Plan solo : chaque 31 décembre tombe au point du 1er janvier suivant (mois 3, 15).
+    const solo = buildSoloPlan(accounts, CFG, 500, today, { years: 2, assumedRates: rates });
+    expect(solo.years[0].total).toBe(Math.round(sim.points[3].baseline));
+    expect(solo.years[1].total).toBe(Math.round(sim.points[15].baseline));
+    expect(solo.years[2].total).toBe(Math.round(sim.points[24].baseline));
+    // Mois par mois : la projection Rendement à n mois suit aussi le simulateur.
+    for (let m = 1; m <= 24; m++) {
+      const proj = projectSavings(accounts, CFG, 500, m / 12, undefined, undefined, parseISODate(today), rates);
+      expect(proj.total).toBeCloseTo(sim.points[m].baseline, 6);
+    }
   });
 
   it('Livret A seul, 20 000 € à 1,7 % le 19 octobre : 20 340 € au 1er janvier partout', () => {

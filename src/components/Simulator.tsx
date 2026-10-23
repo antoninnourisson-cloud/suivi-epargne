@@ -10,6 +10,8 @@ import type { FiscalConfig, ParentalRestitution, PayslipRecord, SavingsAccount }
 import { REGULATED_TYPES, type SavingsSplit } from '../lib/finance';
 import { simulate, pastMonthlySavings, monthDate, Scenario, ScenarioKind, SimulatorResult } from '../lib/simulator';
 import { useBackgroundSimulation } from '../hooks/useBackgroundSimulation';
+import { withAssumedRates, type ProjectionHypotheses } from '../lib/performance';
+import { ProjectionAssumptionsNote } from './ProjectionAssumptionsNote';
 import { localTodayISO, parseISODate } from '../lib/dates';
 import { formatEUR, formatSignedEUR } from '../lib/format';
 import { Card, Chip, DataTable, type Column, DeltaBadge, EmptyState, MoneyText, PageHeader, SegmentedButton, StatTile, TextField } from './ui';
@@ -29,6 +31,8 @@ interface SimulatorProps {
   payslips?: PayslipRecord[];
   trackingStartDate?: string;
   parentalRestitution?: ParentalRestitution;
+  /** Rendement supposé des placements sans taux saisi (useDerivedData) ; calculé ici s'il manque. */
+  hypotheses?: ProjectionHypotheses;
 }
 
 const HORIZONS = ['12', '24', '36', '60'] as const;
@@ -71,7 +75,7 @@ const eur = (n: number) => formatEUR(n, 0);
 const tableRows = (r: SimulatorResult) => r.points.filter(p => r.horizon <= 24 || p.month % 3 === 0 || p.month === r.horizon);
 
 export const Simulator: React.FC<SimulatorProps> = ({
-  accounts, fiscalConfig, monthPlan, savingsSplit, paydayDay, payslips = NO_PAYSLIPS, trackingStartDate, parentalRestitution,
+  accounts, fiscalConfig, monthPlan, savingsSplit, paydayDay, payslips = NO_PAYSLIPS, trackingStartDate, parentalRestitution, hypotheses,
 }) => {
   const today = useMemo(() => localTodayISO(), []);
   const [horizon, setHorizon] = useState<Horizon>('24');
@@ -95,10 +99,12 @@ export const Simulator: React.FC<SimulatorProps> = ({
   // (1 000 tirages) : dans un Web Worker, après une courte pause de saisie.
   const inputs = useMemo(() => ({ scenarios, h, target }), [scenarios, h, target]);
   const bandInputs = useDebounced(inputs, BAND_DELAY_MS);
+  // Même hypothèse de rendement qu'au Rendement et dans le plan solo pour un placement sans taux saisi.
+  const projection = useMemo(() => hypotheses ?? withAssumedRates(accounts), [hypotheses, accounts]);
   const common = useMemo(() => ({
-    accounts, fiscal: fiscalConfig, monthlyPlan: plan, today, split: savingsSplit, history: history.amounts,
+    accounts, assumedRates: projection.rates, fiscal: fiscalConfig, monthlyPlan: plan, today, split: savingsSplit, history: history.amounts,
     restitution: parentalRestitution ? { plannedDate: parentalRestitution.plannedDate, done: !!parentalRestitution.done } : undefined,
-  }), [accounts, fiscalConfig, plan, today, savingsSplit, history.amounts, parentalRestitution]);
+  }), [accounts, projection.rates, fiscalConfig, plan, today, savingsSplit, history.amounts, parentalRestitution]);
   const lines = useMemo(
     () => simulate({ ...common, horizon: inputs.h, scenarios: inputs.scenarios, target: inputs.target, band: false }),
     [common, inputs],
@@ -207,9 +213,10 @@ export const Simulator: React.FC<SimulatorProps> = ({
 
   return (
     <div>
-      <PageHeader title="Et si…" subtitle="Comparez votre épargne avec et sans un achat, une pause ou un autre rythme. Seule votre part compte : le capital de vos parents n'est jamais utilisé." />
+      <PageHeader title="Et si…" subtitle={`Comparez votre épargne avec et sans un achat, une pause ou un autre rythme.${hasParental ? " Seule votre part compte : le capital de vos parents n'est jamais utilisé." : ''}`} />
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] items-start">
+      {/* grid-cols-1 (minmax(0, 1fr)) : sur téléphone, la colonne ne s'élargit jamais au-delà de l'écran. */}
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] items-start">
         <Card title="Scénarios" icon={FlaskConical}>
           <div className="space-y-5">
             <div>
@@ -233,7 +240,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
               <ul aria-label="Scénarios choisis" className="space-y-3">
                 {scenarios.map(s => (
                   <ScenarioEditor key={s.id} scenario={s} horizon={h} rank={rank(s)} minRestitutionDate={today}
-                    onChange={update} onRemove={() => remove(s.id)} />
+                    onChange={update} onRemove={() => remove(s.id)} withParents={hasParental} />
                 ))}
               </ul>
             ) : (
@@ -241,9 +248,11 @@ export const Simulator: React.FC<SimulatorProps> = ({
             )}
 
             <div className="space-y-2">
-              <p className="text-sm font-medium text-on-surface-variant">Horizon</p>
+              {/* Sur téléphone, « mois » passe dans le titre : quatre « 12 mois » ne tiennent pas
+                  sur 320 px. Les lecteurs d'écran entendent toujours « 12 mois ». */}
+              <p className="text-sm font-medium text-on-surface-variant">Horizon<span className="sm:hidden" aria-hidden="true"> (en mois)</span></p>
               <SegmentedButton<Horizon> label="Horizon" value={horizon} onChange={setHorizon} className="w-full [&>button]:flex-1 [&>button]:px-1.5 [&>button]:gap-1 [&>button]:whitespace-nowrap"
-                options={HORIZONS.map(v => ({ value: v, label: `${v} mois` }))} />
+                options={HORIZONS.map(v => ({ value: v, label: <>{v}<span className="max-sm:sr-only"> mois</span></> }))} />
             </div>
 
             <TextField label="Objectif (facultatif)" supporting="Le mois où vous l'atteindriez s'affiche avec le résultat."
@@ -266,7 +275,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
               {result.purchases.map(p => (
                 <p key={p.id} className="text-sm text-on-surface-variant">
                   Achat de {eur(p.amount)} {inMonths(p.month)} : pris sur {p.takenFrom.map(t => `${t.name} (${eur(t.amount)})`).join(', ') || 'rien'}{p.tax > 0.5 ? `, dont ${eur(p.tax)} d'impôt sur les gains` : ''}.
-                  {p.shortfall > 0.5 && <span className="block text-error font-medium">Il manquerait {eur(p.shortfall)} : votre part ne suffit pas (celle des parents n'est pas utilisable).</span>}
+                  {p.shortfall > 0.5 && <span className="block text-error font-medium">Il manquerait {eur(p.shortfall)} : {hasParental ? "votre part ne suffit pas (celle des parents n'est pas utilisable)" : 'votre épargne disponible ne suffit pas'}.</span>}
                 </p>
               ))}
               {result.restitution.scenarioIgnored && (
@@ -316,6 +325,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
                 {pendingLivret >= 1 && <> Dans {result.horizon} mois, {eur(pendingLivret)} d'intérêts déjà gagnés sur ces livrets attendront le 31 décembre suivant : ils ne sont pas comptés dans les montants ci-dessus.</>}
               </span>
             </p>
+            <ProjectionAssumptionsNote assumptions={projection.assumptions} className="mt-4" />
           </Card>
         </div>
       </div>

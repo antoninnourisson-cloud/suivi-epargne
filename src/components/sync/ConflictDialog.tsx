@@ -72,7 +72,7 @@ const VersionCard: React.FC<{
           <dt className="text-on-surface-variant">Contenu</dt>
           <dd className="text-on-surface">{plural(summary.accountCount, 'compte', 'comptes')}, {plural(summary.movementCount, 'mouvement', 'mouvements')}</dd>
         </dl>
-        <Button variant="text" className="self-start -ml-3 h-8 px-3" onClick={() => downloadJSON(exportName, version.data)}>
+        <Button variant="text" size="sm" className="self-start -ml-3" onClick={() => downloadJSON(exportName, version.data)}>
           <Download className="w-4 h-4" aria-hidden="true" /> Exporter cette version
         </Button>
       </>
@@ -193,7 +193,7 @@ export const ConflictDialog: React.FC<{
             {w.replaced[choice]}{replacesSomething && ' L\'autre version reste récupérable 30 jours sur cet appareil, jusqu\'à votre déconnexion : Paramètres, Sauvegardes, « Versions mises de côté ». Pour la garder plus longtemps, exportez-la.'}
           </p>
           {replacesSomething && setAside && (
-            <Button variant="text" className="mt-1 -ml-3 h-8 px-3" disabled={busy} onClick={() => downloadJSON(setAside.name, setAside.data)}>
+            <Button variant="text" size="sm" className="mt-1 -ml-3" disabled={busy} onClick={() => downloadJSON(setAside.name, setAside.data)}>
               <Download className="w-4 h-4" aria-hidden="true" /> Exporter l'autre version
             </Button>
           )}

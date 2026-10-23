@@ -1,17 +1,22 @@
 // Planification : épargne de précaution, plan « solo » après la restitution du capital des
 // parents, aide à la déclaration de revenus, revue des abonnements. Fonctions pures, testées.
 import { AccountType, FiscalConfig, PayslipRecord, SavingsAccount, Subscription, WorkBenefits } from '../types';
-import { computePlacementStrategy, subscriptionMonthlyCost, isMonthlyCharge, SavingsSplit, accountsAfterRestitution } from './finance';
-import { netMonthlyRateSchedule, IDLE_ACCOUNT_ID } from './projection';
+import { subscriptionMonthlyCost, isMonthlyCharge, SavingsSplit, accountsAfterRestitution } from './finance';
+import { netMonthlyRateSchedule } from './projection';
 import { parseISODate, formatISODay } from './dates';
-import { accruedSinceJanuary, applyMonthlyInterest } from './yearlyInterest';
+import { prepareProjection, projectedTotal, runProjection } from './projectionEngine';
+import { currentAccountBuffer } from './idleCash';
+import { growthView } from './performance';
 
 // ---------------------------------------------------------------------------
 // Épargne de précaution
 // ---------------------------------------------------------------------------
 
-/** Comptes disponibles sans délai ni impôt : ce qui compte pour la précaution. */
-const EMERGENCY_TYPES = [AccountType.LIVRET_A, AccountType.LDDS, AccountType.LEP, AccountType.COMPTE_COURANT];
+/**
+ * Comptes disponibles sans délai ni impôt : ce qui compte pour la précaution. Livret
+ * bancaire et CEL aussi : retraits libres (garder 300 € sur un CEL).
+ */
+const EMERGENCY_TYPES = [AccountType.LIVRET_A, AccountType.LDDS, AccountType.LEP, AccountType.LIVRET_BANCAIRE, AccountType.CEL, AccountType.COMPTE_COURANT];
 export const DEFAULT_EMERGENCY_MONTHS = 3;
 
 export interface EmergencyFund {
@@ -19,10 +24,24 @@ export interface EmergencyFund {
   monthlySpending: number; // charges fixes + argent plaisir
   target: number;
   current: number;         // votre part seulement (le capital des parents n'est pas à vous)
+  /** Gardé sur le compte courant pour les dépenses du quotidien : pas compté dans `current` (toujours renseigné par computeEmergencyFund). */
+  cashBuffer?: number;
   missing: number;
   pct: number;
   reached: boolean;
 }
+
+/**
+ * Épargne de précaution disponible (votre part) : livrets et comptes sans délai, plus ce qui
+ * dépasse sur les comptes courants le coussin des dépenses du quotidien (`cashBuffer`, un mois
+ * et demi de dépenses, le même que l'alerte « argent qui dort ») : un même euro ne sert pas
+ * deux fois, aux dépenses du mois et à l'imprévu.
+ */
+export const emergencySavingsOf = (accounts: Pick<SavingsAccount, 'type' | 'ownedAmount'>[], cashBuffer: number): number => {
+  const current = accounts.filter(a => a.type === AccountType.COMPTE_COURANT).reduce((s, a) => s + Math.max(0, a.ownedAmount), 0);
+  const others = accounts.filter(a => a.type !== AccountType.COMPTE_COURANT && EMERGENCY_TYPES.includes(a.type)).reduce((s, a) => s + Math.max(0, a.ownedAmount), 0);
+  return others + Math.max(0, current - Math.max(0, cashBuffer));
+};
 
 export const computeEmergencyFund = (
   accounts: SavingsAccount[],
@@ -31,9 +50,10 @@ export const computeEmergencyFund = (
 ): EmergencyFund | null => {
   if (!(monthlySpending > 0) || !(months > 0)) return null;
   const target = Math.round(monthlySpending * months);
-  const current = accounts.filter(a => EMERGENCY_TYPES.includes(a.type)).reduce((s, a) => s + Math.max(0, a.ownedAmount), 0);
+  const cashBuffer = currentAccountBuffer(monthlySpending);
+  const current = emergencySavingsOf(accounts, cashBuffer);
   const missing = Math.max(0, target - current);
-  return { months, monthlySpending, target, current, missing, pct: Math.min(100, (current / target) * 100), reached: missing <= 0 };
+  return { months, monthlySpending, target, current, cashBuffer, missing, pct: Math.min(100, (current / target) * 100), reached: missing <= 0 };
 };
 
 // ---------------------------------------------------------------------------
@@ -65,68 +85,57 @@ export const buildSoloPlan = (
   fiscal: FiscalConfig,
   monthly: number,
   restitutionISO: string,
-  opts: { years?: number; split?: SavingsSplit; emergencyTarget?: number } = {}
+  opts: {
+    years?: number; split?: SavingsSplit; emergencyTarget?: number; cashBuffer?: number;
+    /** Rendement supposé des placements sans taux saisi (withAssumedRates), comme au Rendement. */
+    assumedRates?: Readonly<Record<string, number>>;
+  } = {}
 ): SoloPlan => {
   const years = opts.years ?? 4;
   const start = parseISODate(restitutionISO);
-  const after = accountsAfterRestitution(accounts, restitutionISO).filter(a => a.type !== AccountType.IMMOBILIER);
-  // Livret A, LDDS, LEP : intérêts versés au 31 décembre, y compris ceux acquis depuis le
-  // 1er janvier, part des parents comprise jusqu'à la restitution (offerts). Même règle que
-  // le simulateur et projectSavings (./yearlyInterest).
-  const accrued = accruedSinceJanuary(after, start);
-  const sim = after.map(a => ({ ...a, accrued: accrued.get(a.id) ?? 0 }));
-  const rates = new Map(sim.map(a => [a.id, netMonthlyRateSchedule(a, fiscal, start)]));
-  let unplaced = 0;
-  const idle = () => {
-    let cc = sim.find(a => a.type === AccountType.COMPTE_COURANT);
-    if (!cc) {
-      cc = { id: IDLE_ACCOUNT_ID, name: 'Compte courant', type: AccountType.COMPTE_COURANT, institution: '', totalAmount: 0, ownedAmount: 0, parentalCapital: 0, accrued: 0 };
-      sim.push(cc);
-    }
-    return cc;
-  };
+  const after = accountsAfterRestitution(accounts, restitutionISO);
+  // Même moteur que projectSavings et le simulateur (./projectionEngine) : intérêts nets
+  // du mois, puis versement réparti. Livret A, LDDS, LEP : intérêts versés au 31 décembre,
+  // y compris ceux acquis depuis le 1er janvier, part des parents comprise jusqu'à la
+  // restitution (offerts).
+  const setup = prepareProjection(after, start, a => netMonthlyRateSchedule(growthView(a, opts.assumedRates), fiscal, start));
   const milestones: SoloMilestone[] = [];
   const fullNoted = new Set<string>();
   let emergencyNoted = false;
-  const startTotal = sim.reduce((s, a) => s + a.ownedAmount, 0);
+  const startTotal = setup.base.reduce((s, a) => s + a.ownedAmount, 0);
   const out: SoloPlanYear[] = [];
   const ceilingOf = (a: SavingsAccount) => a.ceiling ?? (a.type === AccountType.LIVRET_A ? fiscal.ceilings.livretA : a.type === AccountType.LDDS ? fiscal.ceilings.ldds : a.type === AccountType.LEP ? fiscal.ceilings.lep : undefined);
 
-  for (let m = 0; m < years * 12; m++) {
-    const date = new Date(start.getFullYear(), start.getMonth() + m, 1);
-    for (const a of sim) {
-      if (a.type === AccountType.COMPTE_COURANT) continue;
-      a.ownedAmount += applyMonthlyInterest(a, rates.get(a.id)?.(m) || 0, date.getMonth() === 11);
-    }
-    if (monthly > 0) {
-      for (const st of computePlacementStrategy(monthly, sim, fiscal, opts.split)) {
-        if (st.infoOnly) continue;
-        const target = st.accountId ? sim.find(x => x.id === st.accountId) : undefined;
-        const a = target || idle();
-        if (!target) unplaced += st.fillAmount;
-        a.totalAmount += st.fillAmount; a.ownedAmount += st.fillAmount;
+  const state = runProjection(setup, fiscal, {
+    months: years * 12,
+    deposit: () => monthly,
+    split: opts.split,
+    // Étape m : le mois qui commence `m − 1` mois après la restitution (repères datés du 1er).
+    onMonth: (s, m) => {
+      const date = new Date(start.getFullYear(), start.getMonth() + m - 1, 1);
+      for (const a of s.accounts) {
+        const c = ceilingOf(a);
+        if (c && !fullNoted.has(a.id) && a.totalAmount >= c - 1) {
+          fullNoted.add(a.id);
+          milestones.push({ date: formatISODay(date), label: `${a.name} plein` });
+        }
       }
-    }
-    for (const a of sim) {
-      const c = ceilingOf(a);
-      if (c && !fullNoted.has(a.id) && a.totalAmount >= c - 1) {
-        fullNoted.add(a.id);
-        milestones.push({ date: formatISODay(date), label: `${a.name} plein` });
+      if (opts.emergencyTarget && !emergencyNoted) {
+        // Même règle que computeEmergencyFund : le coussin du compte courant n'en fait pas partie.
+        if (emergencySavingsOf(s.accounts.map(a => ({ ...a, ownedAmount: a.own })), opts.cashBuffer ?? 0) >= opts.emergencyTarget) {
+          emergencyNoted = true; milestones.push({ date: formatISODay(date), label: 'Épargne de précaution atteinte' });
+        }
       }
-    }
-    if (opts.emergencyTarget && !emergencyNoted) {
-      const liquid = sim.filter(a => EMERGENCY_TYPES.includes(a.type)).reduce((s, a) => s + a.ownedAmount, 0);
-      if (liquid >= opts.emergencyTarget) { emergencyNoted = true; milestones.push({ date: formatISODay(date), label: 'Épargne de précaution atteinte' }); }
-    }
-    if (date.getMonth() === 11 || m === years * 12 - 1) {
-      out.push({
-        year: date.getFullYear(),
-        total: Math.round(sim.reduce((s, a) => s + a.ownedAmount, 0)),
-        byAccount: sim.filter(a => a.ownedAmount > 0.5).map(a => ({ accountId: a.id, name: a.name, amount: Math.round(a.ownedAmount) })),
-      });
-    }
-  }
-  return { years: out.filter((y, i, arr) => arr.findIndex(z => z.year === y.year) === i), milestones, startTotal: Math.round(startTotal), unplaced: Math.round(unplaced) };
+      if (date.getMonth() === 11 || m === years * 12) {
+        out.push({
+          year: date.getFullYear(),
+          total: Math.round(projectedTotal(s)),
+          byAccount: s.accounts.filter(a => a.own > 0.5).map(a => ({ accountId: a.id, name: a.name, amount: Math.round(a.own) })),
+        });
+      }
+    },
+  });
+  return { years: out.filter((y, i, arr) => arr.findIndex(z => z.year === y.year) === i), milestones, startTotal: Math.round(startTotal), unplaced: Math.round(state.unplaced) };
 };
 
 // ---------------------------------------------------------------------------

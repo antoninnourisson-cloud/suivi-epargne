@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { computeLepTimeline, buildLepIncomeYears, describeLepTimeline, lepClosureDate } from './lep';
+import { computeLepTimeline, buildLepIncomeYears, describeLepTimeline, lepClosureDate, lepTimelineFromData } from './lep';
 import { AccountType } from '../types';
+import { computeIncome } from './finance';
+import { migrate } from './schema';
 
 const lep = [{ type: AccountType.LEP }];
 const NOW = new Date('2026-10-03T12:00:00');
@@ -50,5 +52,21 @@ describe('éligibilité au LEP dans le temps', () => {
   });
   it('rien sans LEP', () => {
     expect(computeLepTimeline([{ type: AccountType.LIVRET_A }], [{ year: 2026, rfr: 99999, source: 'avis' }], 23028, NOW)).toBeNull();
+  });
+});
+
+describe('estimation du revenu de l\'année en cours', () => {
+  it('compte l\'autre salaire du Pilotage, comme le revenu fiscal de référence', () => {
+    const asOf = new Date(2026, 5, 15);
+    const lep = { id: 'l', name: 'LEP', type: AccountType.LEP, totalAmount: 100, ownedAmount: 100, parentalCapital: 0 };
+    const doc = migrate({ accounts: [lep], config: { grossAnnual: 24_000, extraMonthlyIncome: 0 } });
+    const second = { ...doc, config: { ...doc.config, extraMonthlyIncome: 600 } };
+    const current = (t: ReturnType<typeof lepTimelineFromData>) => t?.years.find(y => y.year === 2026);
+    const alone = current(lepTimelineFromData(doc, asOf));
+    const both = current(lepTimelineFromData(second, asOf));
+    const expected = computeIncome({ grossAnnual: 24_000, extraMonthlyIncome: 600, taxRateManual: 0 }, second.fiscalConfig, second.workBenefits).netTaxableYear;
+    expect(alone?.source).toBe('estimation');
+    expect(both?.rfr).toBe(Math.round(expected));
+    expect(both!.rfr).toBeGreaterThan(alone!.rfr + 600 * 12 * 0.9);
   });
 });

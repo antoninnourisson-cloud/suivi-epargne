@@ -9,6 +9,7 @@ import { CHANGELOG, LATEST_VERSION, ChangelogEntry } from '../changelog';
 import { parseISODate } from '../lib/dates';
 import { Sparkles, X } from 'lucide-react';
 import { Modal } from './Modal';
+import { Button, IconButton } from './ui';
 import { SEEN_VERSION_KEY } from './whatsNewGate';
 
 const SEEN_KEY = SEEN_VERSION_KEY;
@@ -27,9 +28,9 @@ const unseenEntries = (): ChangelogEntry[] => {
 
 const EntryBlock: React.FC<{ e: ChangelogEntry }> = ({ e }) => (
   <div>
-    <p className="text-sm font-black text-slate-800 dark:text-slate-100">{e.title}</p>
-    <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1">{parseISODate(e.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
-    <ul className="list-disc pl-5 space-y-1 text-sm text-slate-600 dark:text-slate-300">
+    <p className="text-sm font-medium text-on-surface">{e.title}</p>
+    <p className="text-xs text-on-surface-variant mb-1">{parseISODate(e.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
+    <ul className="list-disc pl-5 space-y-1 text-sm text-on-surface-variant">
       {e.items.map((it, i) => <li key={i}>{it}</li>)}
     </ul>
   </div>
@@ -45,11 +46,11 @@ export const WhatsNewModal: React.FC<{ isNewUser?: boolean }> = ({ isNewUser }) 
   return (
     <Modal open={entries.length > 0} onClose={close} label="Quoi de neuf" variant="sheet" className="max-w-md p-6">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-black text-slate-800 dark:text-slate-100 flex items-center gap-2"><Sparkles className="w-5 h-5 text-indigo-600" aria-hidden="true" /> Quoi de neuf</h2>
-        <button onClick={close} aria-label="Fermer" className="p-2 -m-1 text-slate-500 dark:text-slate-400"><X className="w-5 h-5" /></button>
+        <h2 className="text-[22px] leading-7 font-normal text-on-surface flex items-center gap-2"><Sparkles className="w-5 h-5 text-primary" aria-hidden="true" /> Quoi de neuf</h2>
+        <IconButton label="Fermer" icon={X} onClick={close} className="-my-2 -mr-2" />
       </div>
       <div className="space-y-5">{entries.map(e => <EntryBlock key={e.version} e={e} />)}</div>
-      <button onClick={close} className="mt-6 w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black">C'est noté</button>
+      <Button variant="filled" className="mt-6 w-full" onClick={close}>C'est noté</Button>
     </Modal>
   );
 };

@@ -3,9 +3,11 @@
 //
 // Ouvrir une carte depuis ailleurs : `openSettingsSection('tax-notice')` puis afficher
 // l'écran Paramètres. Depuis une adresse : `?view=settings&section=tax-notice`.
+import { storageKey } from '../../lib/storageKeys';
+
 const SETTINGS_SECTIONS = [
   'benefits', 'fiscal', 'tax-notice', 'fiscal-watch',
-  'motivation', 'notifications', 'keys',
+  'display', 'motivation', 'notifications', 'keys',
   'lock', 'data', 'account',
   'about',
 ] as const;
@@ -17,7 +19,7 @@ export const isSettingsSection = (v: unknown): v is SettingsSection =>
 export const sectionAnchor = (id: SettingsSection) => `settings-${id}`;
 
 export const OPEN_SECTION_EVENT = 'pecule:open-settings-section';
-const OPEN_KEY = 'settings_open_cards';
+const OPEN_KEY = storageKey('settingsOpenCards');
 
 // Carte demandée avant que l'écran Paramètres (chargé à la demande) soit monté.
 let pending: SettingsSection | null = null;

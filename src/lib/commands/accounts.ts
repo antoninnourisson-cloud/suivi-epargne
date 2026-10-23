@@ -5,6 +5,9 @@ import { tracksDeposits } from '../finance';
 import { EPS } from '../money';
 import { CommandResult, CommandState, fail } from './types';
 
+/** La plus récente de deux dates 'YYYY-MM-DD' (la première peut manquer). */
+export const laterDay = (a: string | undefined, b: string): string => (a && a > b ? a : b);
+
 /**
  * Enregistre la fiche d'un compte :
  * - total recalculé : il vaut TOUJOURS part propre + part des parents (le formulaire
@@ -13,6 +16,8 @@ import { CommandResult, CommandState, fail } from './types';
  * - compte existant : des mouvements qui expliquent l'écart (« Correction de solde » de
  *   nature `adjustment`, hors épargne ; part des parents à part), sinon l'historique ne
  *   totalise plus le solde. Le compte reste à sa place dans la liste ;
+ * - solde constaté (`balanceCheckedAt`) : daté du jour à la création et quand la fiche change
+ *   un solde (le bouton « Solde vérifié » de « Mes comptes » passe lui-même la date du jour) ;
  * - refus : saisie illisible, part des parents négative, ou total inférieur à la part des
  *   parents (votre part deviendrait négative).
  */
@@ -29,9 +34,10 @@ export const saveAccount = (state: CommandState, input: { account: SavingsAccoun
 
   const existing = state.accounts.find(a => a.id === normalized.id);
   if (!existing) {
-    const withInitial: SavingsAccount = normalized.ownedAmount > 0
-      ? { ...normalized, movements: [{ id: crypto.randomUUID(), date: today, amount: normalized.ownedAmount, label: 'Solde initial', type: 'IN', tag: 'initial' }] }
-      : normalized;
+    const created: SavingsAccount = { ...normalized, balanceCheckedAt: laterDay(normalized.balanceCheckedAt, today) };
+    const withInitial: SavingsAccount = created.ownedAmount > 0
+      ? { ...created, movements: [{ id: crypto.randomUUID(), date: today, amount: created.ownedAmount, label: 'Solde initial', type: 'IN', tag: 'initial' }] }
+      : created;
     return {
       ok: true, isNew: true,
       next: { accounts: [...state.accounts, withInitial] },
@@ -48,9 +54,10 @@ export const saveAccount = (state: CommandState, input: { account: SavingsAccoun
     ? { ownLabel: 'Correction de solde', splitValuation: true, cashFlow: round2(normalized.totalDeposits! - existing.totalDeposits!) }
     : { ownLabel: 'Correction de solde', ownKind: 'adjustment' });
   const snap = snapshotBalances(state.accounts, [existing.id]);
+  const saved = added.length > 0 ? { ...normalized, balanceCheckedAt: laterDay(normalized.balanceCheckedAt, today) } : normalized;
   return {
     ok: true, isNew: false,
-    next: { accounts: state.accounts.map(a => (a.id === existing.id ? { ...normalized, movements: [...(a.movements || []), ...added] } : a)) },
+    next: { accounts: state.accounts.map(a => (a.id === existing.id ? { ...saved, movements: [...(a.movements || []), ...added] } : a)) },
     message: `« ${normalized.name} » enregistré`,
     // La fiche d'avant (nom, taux…) puis ses soldes exacts ; les mouvements ajoutés depuis sont rejoués.
     undo: current => ({

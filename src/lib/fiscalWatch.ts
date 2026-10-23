@@ -7,9 +7,10 @@
 // tromper ou inventer) et chaque proposition garde sa source pour vérification.
 // ================================================
 import { FiscalConfig, SavingsAccount, TaxBracket } from '../types';
-import { REGULATED_RATE_GROUPS, applyRateChange } from './finance';
+import { REGULATED_RATE_GROUPS, applyRateChange, transportExemptUntil, TRANSPORT_TEMPORARY_LAST_YEAR, DONATION_75_CEILING, DONATION_75_RAISE_DATE } from './finance';
 import { localTodayISO } from './dates';
 import { formatRate, plainEUR } from './format';
+import { inflationOf } from './inflation';
 
 export interface WatchedValue<T = number> { value: T; source?: string; effectiveDate?: string }
 
@@ -29,7 +30,12 @@ export interface FiscalWatchResult {
   decoteSingle?: WatchedValue;
   decoteThreshold?: WatchedValue;
   donation75Ceiling?: WatchedValue;
+  // Dernière année de revenus où le remboursement transport est exonéré jusqu'à 75 % du prix.
+  transportExemptUntil?: WatchedValue;
   taxBrackets?: WatchedValue<TaxBracket[]> & { year?: number };
+  // Inflation annuelle moyenne (INSEE, indice des prix à la consommation), en %, et son année.
+  inflationAnnual?: WatchedValue & { year?: number };
+  inflationYear?: WatchedValue;
 }
 
 export interface FiscalProposal {
@@ -48,6 +54,21 @@ const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFin
 const inRange = (w: WatchedValue | undefined, min: number, max: number): w is WatchedValue => !!w && isNum(w.value) && w.value >= min && w.value <= max;
 const differs = (a: number | undefined, b: number, tol: number) => a === undefined || Math.abs(a - b) > tol;
 const safeSource = (u?: string) => (u && /^https:\/\//.test(u) ? u : undefined);
+/**
+ * Source officielle : un site de l'État (service-public.gouv.fr, impots.gouv.fr,
+ * legifrance.gouv.fr, bofip.impots.gouv.fr, economie.gouv.fr…). Une baisse de plafond légal
+ * n'est proposée que sur une telle source : un modèle qui recopie un exemple ou une page
+ * périmée ne doit pas faire reculer un plafond relevé par la loi.
+ */
+export const isOfficialSource = (u?: string): boolean => {
+  if (!safeSource(u)) return false;
+  try { return /(^|\.)gouv\.fr$/.test(new URL(u as string).hostname); } catch { return false; }
+};
+/** Source de l'inflation annuelle : l'INSEE (insee.fr) ou un site de l'État. */
+const isInflationSource = (u?: string): boolean => {
+  if (!safeSource(u)) return false;
+  try { return isOfficialSource(u) || /(^|\.)insee\.fr$/.test(new URL(u as string).hostname); } catch { return false; }
+};
 const effectiveOr = (d?: string) => (d && /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : localTodayISO());
 
 /** Lit une réponse de Gemini (texte brut, éventuellement entouré de ```json). */
@@ -76,11 +97,15 @@ export const parseFiscalWatch = (text: string): FiscalWatchResult | null => {
 
 export const diffFiscalWatch = (r: FiscalWatchResult, fiscal: FiscalConfig, accounts: SavingsAccount[]): FiscalProposal[] => {
   const out: FiscalProposal[] = [];
+  // Plafond légal (`ceiling`) : une baisse exige une source officielle (isOfficialSource).
+  const lowersWithoutOfficialSource = (w: WatchedValue, current: number | undefined) =>
+    current !== undefined && w.value < current && !isOfficialSource(w.source);
   const field = (
     key: keyof FiscalConfig, label: string, w: WatchedValue | undefined, min: number, max: number,
-    current: number | undefined, fmt: (n: number) => string, tol: number,
+    current: number | undefined, fmt: (n: number) => string, tol: number, ceiling = false,
   ) => {
     if (!inRange(w, min, max) || !differs(current, w.value, tol)) return;
+    if (ceiling && lowersWithoutOfficialSource(w, current)) return;
     out.push({
       key, label, current: current === undefined ? '—' : fmt(current), proposed: fmt(w.value), source: safeSource(w.source),
       apply: s => ({ ...s, fiscal: { ...s.fiscal, [key]: w.value } }),
@@ -88,6 +113,7 @@ export const diffFiscalWatch = (r: FiscalWatchResult, fiscal: FiscalConfig, acco
   };
   const ceil = (k: 'livretA' | 'ldds' | 'lep', label: string, w?: WatchedValue) => {
     if (!inRange(w, 1000, 100000) || !differs(fiscal.ceilings[k], w.value, 0.5)) return;
+    if (lowersWithoutOfficialSource(w, fiscal.ceilings[k])) return;
     out.push({
       key: `ceiling.${k}`, label, current: eur(fiscal.ceilings[k]), proposed: eur(w.value), source: safeSource(w.source),
       apply: s => ({ ...s, fiscal: { ...s.fiscal, ceilings: { ...s.fiscal.ceilings, [k]: w.value } } }),
@@ -114,13 +140,53 @@ export const diffFiscalWatch = (r: FiscalWatchResult, fiscal: FiscalConfig, acco
   ceil('livretA', 'Plafond du Livret A', r.livretACeiling);
   ceil('ldds', 'Plafond du LDDS', r.lddsCeiling);
   ceil('lep', 'Plafond du LEP', r.lepCeiling);
-  field('lepIncomeCeiling', 'Plafond de revenus LEP (1 part)', r.lepIncomeCeilingOnePart, 15000, 40000, fiscal.lepIncomeCeiling, eur, 0.5);
-  field('lepCeilingPerHalfPart', 'Plafond LEP : ajout par demi-part', r.lepPerHalfPart, 2000, 15000, fiscal.lepCeilingPerHalfPart, eur, 0.5);
+  field('lepIncomeCeiling', 'Plafond de revenus LEP (1 part)', r.lepIncomeCeilingOnePart, 15000, 40000, fiscal.lepIncomeCeiling, eur, 0.5, true);
+  field('lepCeilingPerHalfPart', 'Plafond LEP : ajout par demi-part', r.lepPerHalfPart, 2000, 15000, fiscal.lepCeilingPerHalfPart, eur, 0.5, true);
   field('socialChargesCapital', 'Prélèvements sociaux (placements)', r.socialChargesGeneral, 0.1, 0.3, fiscal.socialChargesCapital, n => pct(n * 100), 0.0005);
-  field('socialChargesLifeInsurance', 'Prélèvements sociaux (assurance vie)', r.socialChargesLifeInsurance, 0.1, 0.3, fiscal.socialChargesLifeInsurance, n => pct(n * 100), 0.0005);
-  field('standardAllowanceCap', 'Plafond de l\'abattement de 10 %', r.allowanceCap, 10000, 25000, fiscal.standardAllowanceCap, eur, 0.5);
-  field('standardAllowanceMin', 'Minimum de l\'abattement de 10 %', r.allowanceMin, 300, 1000, fiscal.standardAllowanceMin, eur, 0.5);
-  field('donation75Ceiling', 'Plafond des dons à 75 %', r.donation75Ceiling, 500, 3000, fiscal.donation75Ceiling, eur, 0.5);
+  field('socialChargesLifeInsurance', 'Prélèvements sociaux (assurance vie, PEL, CEL)', r.socialChargesLifeInsurance, 0.1, 0.3, fiscal.socialChargesLifeInsurance, n => pct(n * 100), 0.0005);
+  field('standardAllowanceCap', 'Plafond de l\'abattement de 10 %', r.allowanceCap, 10000, 25000, fiscal.standardAllowanceCap, eur, 0.5, true);
+  field('standardAllowanceMin', 'Minimum de l\'abattement de 10 %', r.allowanceMin, 300, 1000, fiscal.standardAllowanceMin, eur, 0.5, true);
+  // Dons à 75 % : les pages officielles citent encore l'ancien plafond (1 000 € pour les dons
+  // d'avant le 14 octobre 2025). Sous le plafond en vigueur, rien n'est proposé sans une date
+  // d'effet postérieure à ce relèvement : sinon c'est l'ancienne règle qui a été relevée.
+  const donation = r.donation75Ceiling;
+  const staleDonationCeiling = !!donation && isNum(donation.value) && donation.value < DONATION_75_CEILING
+    && !(donation.effectiveDate && /^\d{4}-\d{2}-\d{2}$/.test(donation.effectiveDate) && donation.effectiveDate > DONATION_75_RAISE_DATE);
+  if (!staleDonationCeiling) field('donation75Ceiling', 'Plafond des dons à 75 %', donation, 500, 3000, fiscal.donation75Ceiling, eur, 0.5, true);
+
+  // Remboursement transport : seule une prorogation (année plus tardive) est proposée ; la
+  // fin d'une mesure temporaire n'a pas besoin de la veille, elle est déjà dans l'app.
+  const tr = r.transportExemptUntil;
+  const maxYear = new Date().getFullYear() + 5;
+  if (inRange(tr, TRANSPORT_TEMPORARY_LAST_YEAR + 1, maxYear) && Number.isInteger(tr.value) && tr.value > transportExemptUntil(fiscal) && isOfficialSource(tr.source)) {
+    const v = tr.value;
+    out.push({
+      key: 'transportExemptUntil', label: 'Remboursement transport exonéré jusqu\'à 75 %',
+      current: `revenus ${transportExemptUntil(fiscal)}`, proposed: `revenus ${v}`, source: safeSource(tr.source),
+      apply: s => ({ ...s, fiscal: { ...s.fiscal, transportExemptUntil: v } }),
+    });
+  }
+
+  // Inflation INSEE : une nouvelle année (ou un chiffre révisé) remplace la valeur datée.
+  // Année absente de la réponse : la dernière année close (le chiffre paraît mi-janvier).
+  // Seule une année CLOSE est acceptée : un chiffre de l'année en cours est un glissement sur
+  // un mois, pas la moyenne annuelle ; et seulement lu sur insee.fr ou un site de l'État.
+  const inf = r.inflationAnnual;
+  if (inRange(inf, -5, 20) && isInflationSource(inf.source)) {
+    const thisYear = new Date().getFullYear();
+    const rawYear = inf.year ?? r.inflationYear?.value;
+    const year = rawYear === undefined ? thisYear - 1
+      : typeof rawYear === 'number' && Number.isInteger(rawYear) && rawYear >= 2000 && rawYear <= thisYear - 1 ? rawYear : undefined;
+    const cur = inflationOf(fiscal);
+    if (year !== undefined && (year > cur.year || (year === cur.year && differs(cur.rate, inf.value, 0.005)))) {
+      const figure = { rate: inf.value, year, ...(safeSource(inf.source) ? { source: safeSource(inf.source) } : {}) };
+      out.push({
+        key: 'inflation', label: 'Inflation annuelle (INSEE)', current: `${pct(cur.rate)} (${cur.year})`, proposed: `${pct(inf.value)} (${year})`,
+        source: safeSource(inf.source),
+        apply: s => ({ ...s, fiscal: { ...s.fiscal, inflation: figure } }),
+      });
+    }
+  }
 
   const d = fiscal.decote ?? { single: 0, rate: 0.4525, threshold: 0 };
   if (inRange(r.decoteSingle, 500, 1500) && differs(d.single, r.decoteSingle.value, 0.5)) {
@@ -160,7 +226,7 @@ export const isWatchDue = (lastCheckISO: string | undefined, now: Date = new Dat
   !lastCheckISO || now.getTime() - new Date(lastCheckISO).getTime() >= WATCH_INTERVAL_DAYS * 86_400_000;
 
 // Utilisé par le service pour construire la question posée à Gemini.
-export const FISCAL_WATCH_PROMPT = `Tu es un assistant de veille fiscale française. Utilise la recherche Google pour trouver les valeurs OFFICIELLES EN VIGUEUR AUJOURD'HUI (privilégie service-public.fr, impots.gouv.fr, economie.gouv.fr, legifrance.gouv.fr, banque-france.fr). Réponds UNIQUEMENT par un objet JSON, sans texte autour, de cette forme (omets un champ si tu n'es pas sûr ; chaque valeur a la source https exacte où tu l'as lue) :
+export const FISCAL_WATCH_PROMPT = `Tu es un assistant de veille fiscale française. Utilise la recherche Google pour trouver les valeurs OFFICIELLES EN VIGUEUR AUJOURD'HUI (privilégie service-public.fr, impots.gouv.fr, economie.gouv.fr, legifrance.gouv.fr, banque-france.fr ; insee.fr pour l'inflation). Réponds UNIQUEMENT par un objet JSON, sans texte autour, de cette forme (omets un champ si tu n'es pas sûr ; chaque valeur a la source https exacte où tu l'as lue) :
 {
   "livretARate": {"value": 1.7, "effectiveDate": "AAAA-MM-JJ", "source": "https://..."},
   "lepRate": {"value": 2.5, "effectiveDate": "AAAA-MM-JJ", "source": "..."},
@@ -175,10 +241,12 @@ export const FISCAL_WATCH_PROMPT = `Tu es un assistant de veille fiscale frança
   "allowanceMin": {"value": 509, "source": "..."},
   "decoteSingle": {"value": 897, "source": "..."},
   "decoteThreshold": {"value": 1982, "source": "..."},
-  "donation75Ceiling": {"value": 1000, "source": "..."},
-  "taxBrackets": {"year": 2026, "value": [{"limit": 11600, "rate": 0}, {"limit": 29579, "rate": 0.11}, {"limit": 84577, "rate": 0.30}, {"limit": 181917, "rate": 0.41}, {"limit": null, "rate": 0.45}], "source": "..."}
+  "donation75Ceiling": {"value": 2000, "source": "..."},
+  "transportExemptUntil": {"value": 2026, "source": "..."},
+  "taxBrackets": {"year": 2026, "value": [{"limit": 11600, "rate": 0}, {"limit": 29579, "rate": 0.11}, {"limit": 84577, "rate": 0.30}, {"limit": 181917, "rate": 0.41}, {"limit": null, "rate": 0.45}], "source": "..."},
+  "inflationAnnual": {"value": 0.9, "year": 2025, "source": "https://www.insee.fr/..."}
 }
-Les exemples ci-dessus ne sont que des formats : vérifie chaque valeur. Taux des livrets en % annuel ; prélèvements sociaux en fraction (0,186 = 18,6 %) ; "taxBrackets" = le barème le plus récent publié pour l'impôt sur le revenu (une part), "year" = année de publication du barème, "limit" = borne haute de la tranche (null pour la dernière). Les montants de plafond de revenus LEP sont ceux applicables pour une ouverture aujourd'hui.`;
+Les exemples ci-dessus ne sont que des formats : vérifie chaque valeur. Taux des livrets en % annuel ; prélèvements sociaux en fraction (0,186 = 18,6 %) ; "taxBrackets" = le barème le plus récent publié pour l'impôt sur le revenu (une part), "year" = année de publication du barème, "limit" = borne haute de la tranche (null pour la dernière). Les montants de plafond de revenus LEP sont ceux applicables pour une ouverture aujourd'hui. "donation75Ceiling" = plafond des dons ouvrant droit à 75 % pour un don fait aujourd'hui. "transportExemptUntil" = dernière année de revenus pour laquelle la prise en charge facultative de l'abonnement de transport public par l'employeur (au-delà des 50 % obligatoires, jusqu'à 75 % du prix) est exonérée d'impôt. "inflationAnnual" = hausse MOYENNE des prix à la consommation (INSEE) de la dernière année complète publiée, en %, et "year" = cette année-là (pas un glissement sur un mois).`;
 
 
 /**
@@ -189,9 +257,9 @@ Les exemples ci-dessus ne sont que des formats : vérifie chaque valeur. Taux de
 export const buildSourcesPrompt = (sources: { url: string; topic: string; text: string }[]): string => {
   const format = FISCAL_WATCH_PROMPT.slice(FISCAL_WATCH_PROMPT.indexOf('{'), FISCAL_WATCH_PROMPT.lastIndexOf('}') + 1);
   const docs = sources.map((s, i) => `=== PAGE ${i + 1} — ${s.topic} — ${s.url} ===\n${s.text}`).join('\n\n');
-  return `Tu es un assistant de veille fiscale française. Voici le texte de pages officielles (service-public.gouv.fr) lues aujourd'hui. N'utilise QUE ces textes : relève les valeurs EN VIGUEUR AUJOURD'HUI et omets tout champ absent des textes. Pour chaque valeur, "source" est l'adresse de la page où tu l'as lue. Réponds UNIQUEMENT par un objet JSON de cette forme :
+  return `Tu es un assistant de veille fiscale française. Voici le texte de pages officielles (service-public.gouv.fr, insee.fr) lues aujourd'hui. N'utilise QUE ces textes : relève les valeurs EN VIGUEUR AUJOURD'HUI et omets tout champ absent des textes. Pour chaque valeur, "source" est l'adresse de la page où tu l'as lue. Réponds UNIQUEMENT par un objet JSON de cette forme :
 ${format}
-Les exemples ne sont que des formats. Taux des livrets en % annuel ; prélèvements sociaux en fraction (0,186 = 18,6 %) ; "taxBrackets" = le barème le plus récent (une part), "year" = année d'imposition, "limit" = borne haute (null pour la dernière tranche) ; "donation75Ceiling" = plafond des dons ouvrant droit à 75 %.
+Les exemples ne sont que des formats. Taux des livrets en % annuel ; prélèvements sociaux en fraction (0,186 = 18,6 %) ; "taxBrackets" = le barème le plus récent (une part), "year" = année d'imposition, "limit" = borne haute (null pour la dernière tranche) ; "donation75Ceiling" = plafond des dons ouvrant droit à 75 % pour un don fait aujourd'hui (pas celui d'une période passée) ; "transportExemptUntil" = dernière année de revenus où la prise en charge facultative de l'abonnement de transport (jusqu'à 75 % du prix) est exonérée ; "inflationAnnual" = inflation en moyenne annuelle de la dernière année complète (en %), "year" = cette année-là.
 
 ${docs}`;
 };

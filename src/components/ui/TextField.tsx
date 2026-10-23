@@ -12,7 +12,7 @@ interface TextFieldProps extends Omit<React.InputHTMLAttributes<HTMLInputElement
   render?: (p: { id: string; className: string; describedBy?: string; invalid: boolean }) => React.ReactNode;
 }
 
-export const fieldClass = 'w-full h-14 px-4 rounded-xs bg-transparent border border-outline text-base text-on-surface placeholder:text-on-surface-variant/70 hover:border-on-surface focus:border-indigo-600 dark:focus:border-indigo-300 focus:border-2 focus:px-[15px] outline-none aria-[invalid=true]:border-error aria-[invalid=true]:border-2';
+export const fieldClass = 'w-full h-14 px-4 rounded-xs bg-transparent border border-outline text-base text-on-surface placeholder:text-on-surface-variant/70 hover:border-on-surface focus:border-primary focus:border-2 focus:px-[15px] outline-none aria-[invalid=true]:border-error aria-[invalid=true]:border-2';
 
 export const TextField: React.FC<TextFieldProps> = ({ label, supporting, error, suffix, render, className = '', id: idProp, ...input }) => {
   const auto = useId();

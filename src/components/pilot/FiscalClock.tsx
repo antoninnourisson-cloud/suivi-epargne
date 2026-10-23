@@ -40,7 +40,7 @@ export const FiscalClock: React.FC<{ items: FiscalClockItem[] }> = ({ items }) =
           return (
             <li key={item.id} className="rounded-2xl border border-outline-variant bg-surface-container-lowest dark:bg-surface-container-low p-5 text-on-surface flex flex-col gap-4">
               <div className="flex items-start justify-between gap-3">
-                <span className={`inline-flex items-center gap-1.5 h-7 px-2.5 rounded-sm text-xs font-medium ${item.isAvailable ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-200' : 'bg-secondary-container text-on-secondary-container'}`}>
+                <span className={`inline-flex items-center gap-1.5 h-7 px-2.5 rounded-sm text-xs font-medium ${item.isAvailable ? 'bg-gain-container text-on-gain-container' : 'bg-secondary-container text-on-secondary-container'}`}>
                   <Icon className="w-3.5 h-3.5" aria-hidden="true" />
                   {item.isAvailable ? 'Disponible' : 'Bloqué'}
                 </span>
@@ -55,7 +55,7 @@ export const FiscalClock: React.FC<{ items: FiscalClockItem[] }> = ({ items }) =
                 </div>
                 <div className="text-right">
                   <dt className="text-xs text-on-surface-variant">{item.isAvailable ? 'Statut' : 'Encore'}</dt>
-                  <dd className={`text-xl tabular-nums ${item.isAvailable ? 'text-emerald-700 dark:text-emerald-300' : 'text-indigo-700 dark:text-indigo-200'}`}>{item.timeLeft}</dd>
+                  <dd className={`text-xl tabular-nums ${item.isAvailable ? 'text-gain' : 'text-primary'}`}>{item.timeLeft}</dd>
                 </div>
               </dl>
             </li>

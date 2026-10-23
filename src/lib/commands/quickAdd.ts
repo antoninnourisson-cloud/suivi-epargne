@@ -2,7 +2,7 @@
 // paie, mouvements récurrents).
 import type { AccountMovement } from '../../types';
 import { applyMovement, canWithdrawOwn, restoreBalances, round2, snapshotBalances } from '../accountOps';
-import { formatEUR } from '../format';
+import { formatEUR, formatSignedEUR } from '../format';
 import { CommandResult, CommandState, fail } from './types';
 
 export interface QuickAddInput {
@@ -34,7 +34,8 @@ export const quickAdd = (state: CommandState, input: QuickAddInput): CommandResu
     ok: true,
     movementId: movement.id,
     next: { accounts: state.accounts.map(a => (a.id === account.id ? applyMovement(a, movement, 1, { trackDeposits: true }) : a)) },
-    message: `${input.label} — ${account.name}`,
+    // Le montant figure dans le message : une faute de frappe se voit (et s'annule) tout de suite.
+    message: `${input.label} : ${formatSignedEUR(input.type === 'IN' ? amount : -amount)} sur ${account.name}`,
     undo: current => ({ accounts: restoreBalances(current.accounts, snap, [movement.id]) }),
   };
 };

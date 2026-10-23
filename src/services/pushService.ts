@@ -70,6 +70,22 @@ export const enablePush = async (): Promise<void> => {
   await registerPushSubscription(subscription.toJSON());
 };
 
+/**
+ * Après une nouvelle connexion : l'abonnement de CET appareil, s'il existe, est rattaché à la
+ * nouvelle session. Sans cela, il resterait lié à l'ancienne (fermée, expirée, ou refusée car
+ * d'avant la liaison à l'appareil) et disparaîtrait avec elle : les notifications
+ * s'arrêteraient sans prévenir. Silencieux en cas d'échec.
+ */
+export const refreshPushRegistration = async (): Promise<boolean> => {
+  try {
+    if (!isBackendEnabled() || !isSupported() || Notification.permission !== 'granted') return false;
+    const subscription = await (await getRegistration())?.pushManager.getSubscription();
+    if (!subscription) return false;
+    await registerPushSubscription(subscription.toJSON());
+    return true;
+  } catch { return false; }
+};
+
 export const disablePush = async (): Promise<void> => {
   const reg = await getRegistration();
   const subscription = await reg?.pushManager.getSubscription();

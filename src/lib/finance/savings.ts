@@ -6,7 +6,7 @@ import { signedAmount } from '../money';
 
 // --- RYTHME D'ÉPARGNE RÉEL OBSERVÉ ---
 // Extrait du Dashboard (carte "Projection de trajectoire") pour être réutilisable ailleurs
-// (Objectifs) sans dupliquer la reconstruction ni risquer que les deux écrans divergent.
+// sans dupliquer la reconstruction ni risquer que deux écrans divergent.
 
 /**
  * Reconstruit le total possédé (hors part parentale) à une date passée, en retirant les

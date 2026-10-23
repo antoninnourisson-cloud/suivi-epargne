@@ -11,6 +11,7 @@ import { projectSavings, netAnnualRate } from '../lib/projection';
 import { formatEUR, formatRate } from '../lib/format';
 import { parseFrenchNumber } from '../lib/numbers';
 import { LineChart } from 'lucide-react';
+import { Card, SegmentedButton, TextField } from './ui';
 
 interface Props {
   accounts: SavingsAccount[];
@@ -18,70 +19,80 @@ interface Props {
   monthPlan?: number;
   savingsSplit?: { accountId: string; pct: number }[];
   restitutionInMonths?: number;
+  /** Rendement supposé des placements sans taux saisi (identifiant → % par an) : intérêts seulement. */
+  assumedRates?: Readonly<Record<string, number>>;
 }
 
-export const SplitProjectionCard: React.FC<Props> = ({ accounts, fiscalConfig, monthPlan, savingsSplit, restitutionInMonths }) => {
+type Years = '5' | '10' | '20';
+const DURATIONS: { value: Years; label: string }[] = [
+  { value: '5', label: '5 ans' },
+  { value: '10', label: '10 ans' },
+  { value: '20', label: '20 ans' },
+];
+
+export const SplitProjectionCard: React.FC<Props> = ({ accounts, fiscalConfig, monthPlan, savingsSplit, restitutionInMonths, assumedRates }) => {
   const la = accounts.find(a => a.type === AccountType.LIVRET_A);
   const av = accounts.find(a => a.type === AccountType.ASSURANCE_VIE);
   const [monthlyRaw, setMonthlyRaw] = useState(String(Math.round(monthPlan && monthPlan > 0 ? monthPlan : 1000)));
-  const [years, setYears] = useState(10);
+  const [duration, setDuration] = useState<Years>('10');
+  const years = Number(duration);
   const monthly = parseFrenchNumber(monthlyRaw) ?? 0;
 
   const scenarios = useMemo(() => {
     if (!la || !av || monthly <= 0) return [];
     const custom = savingsSplit && savingsSplit.length > 0;
+    // Espace fine insécable avant « % » : « 100 % » ne se coupe jamais en fin de ligne.
     const list: { label: string; split: { accountId: string; pct: number }[] }[] = [
-      { label: `100 % ${la.name}`, split: [{ accountId: la.id, pct: 100 }] },
-      { label: custom ? 'Votre répartition' : `50 % ${la.name} · 50 % ${av.name}`, split: custom ? savingsSplit! : [{ accountId: la.id, pct: 50 }, { accountId: av.id, pct: 50 }] },
-      { label: `100 % ${av.name}`, split: [{ accountId: av.id, pct: 100 }] },
+      { label: `100 % ${la.name}`, split: [{ accountId: la.id, pct: 100 }] },
+      { label: custom ? 'Votre répartition' : `50 % ${la.name} · 50 % ${av.name}`, split: custom ? savingsSplit! : [{ accountId: la.id, pct: 50 }, { accountId: av.id, pct: 50 }] },
+      { label: `100 % ${av.name}`, split: [{ accountId: av.id, pct: 100 }] },
     ];
-    return list.map(sc => ({ ...sc, result: projectSavings(accounts, fiscalConfig, monthly, years, sc.split, restitutionInMonths) }));
-  }, [accounts, fiscalConfig, la, av, monthly, years, savingsSplit, restitutionInMonths]);
+    return list.map(sc => ({ ...sc, result: projectSavings(accounts, fiscalConfig, monthly, years, sc.split, restitutionInMonths, new Date(), assumedRates) }));
+  }, [accounts, fiscalConfig, la, av, monthly, years, savingsSplit, restitutionInMonths, assumedRates]);
 
   if (!la || !av) return null;
   const best = Math.max(...scenarios.map(s => s.result.total), 0);
 
   return (
-    <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xs space-y-4">
-      <div>
-        <h3 className="font-black text-slate-800 dark:text-slate-100 flex items-center gap-2"><LineChart className="w-5 h-5 text-indigo-600" /> Projection selon la répartition</h3>
-        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-          Taux nets : {la.name} {formatRate(netAnnualRate(la, fiscalConfig))} · {av.name} {formatRate(Math.round(netAnnualRate(av, fiscalConfig) * 100) / 100)} (après impôt et prélèvements sociaux d'un retrait, selon l'ancienneté du contrat).
-          Taux supposés constants, à partir de votre part actuelle{restitutionInMonths !== undefined ? ' ; la restitution du capital de vos parents est prise en compte' : ''}.
-        </p>
+    <Card title="Projection selon la répartition" icon={LineChart}>
+      <p className="-mt-2 text-sm text-on-surface-variant">
+        Taux nets : {la.name} {formatRate(netAnnualRate(la, fiscalConfig))} · {av.name} {formatRate(Math.round(netAnnualRate(assumedRates?.[av.id] !== undefined ? { ...av, interestRate: assumedRates[av.id], managementFee: undefined } : av, fiscalConfig) * 100) / 100)} (après impôt et prélèvements sociaux d'un retrait, selon l'ancienneté du contrat).
+        Taux supposés constants, à partir de votre part actuelle{restitutionInMonths !== undefined ? ' ; la restitution du capital de vos parents est prise en compte' : ''}.
+      </p>
+      <div className="mt-4 flex flex-wrap items-end gap-4">
+        <TextField label="Épargne par mois" suffix="€" inputMode="decimal" value={monthlyRaw} onChange={e => setMonthlyRaw(e.target.value)} className="w-full sm:w-44" />
+        <SegmentedButton
+          label="Durée" options={DURATIONS} value={duration} onChange={setDuration}
+          className="max-sm:w-full [&>button]:whitespace-nowrap max-sm:[&>button]:flex-1 max-sm:[&>button]:h-12 max-sm:[&>button]:px-1 max-sm:[&>button]:gap-1"
+        />
       </div>
-      <div className="flex flex-wrap items-end gap-3">
-        <label className="block">
-          <span className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Épargne par mois (€)</span>
-          <input type="text" inputMode="decimal" value={monthlyRaw} onChange={e => setMonthlyRaw(e.target.value)} className="block w-28 p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold text-slate-800 dark:text-slate-100" />
-        </label>
-        <div className="flex rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700" role="group" aria-label="Durée">
-          {[5, 10, 20].map(y => (
-            <button key={y} type="button" onClick={() => setYears(y)} aria-pressed={years === y} className={`px-3 py-2 text-xs font-black ${years === y ? 'bg-indigo-600 text-white' : 'bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}>{y} ans</button>
-          ))}
-        </div>
-      </div>
-      <div className="space-y-2">
-        {scenarios.map(sc => (
-          <div key={sc.label} className={`p-3 rounded-xl border ${sc.result.total === best ? 'border-emerald-300 bg-emerald-50 dark:bg-emerald-950/30 dark:border-emerald-800' : 'border-slate-200 dark:border-slate-700'}`}>
-            <div className="flex items-baseline justify-between gap-3">
-              <p className="font-bold text-sm text-slate-800 dark:text-slate-100">{sc.label}</p>
-              <p className="font-black text-slate-800 dark:text-slate-100 whitespace-nowrap">{formatEUR(sc.result.total, 0)}</p>
-            </div>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400">
-              dont {formatEUR(sc.result.interest, 0)} d'intérêts nets · {sc.result.byAccount.map(b => `${b.name} ${formatEUR(b.amount, 0)}`).join(' · ')}
-            </p>
-            {sc.result.unplaced >= 1 && (
-              <p className="text-[11px] text-amber-800 dark:text-amber-300">
-                {formatEUR(sc.result.unplaced, 0)} versés ne trouvent pas de place (livrets pleins) : ils restent sur le compte courant, sans intérêts.
+      <ul className="mt-4 space-y-2" aria-label={`Trois répartitions sur ${years} ans`}>
+        {scenarios.map(sc => {
+          const isBest = sc.result.total === best;
+          return (
+            <li key={sc.label} className={`p-3 rounded-xl ${isBest ? 'bg-secondary-container text-on-secondary-container' : 'border border-outline-variant'}`}>
+              <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+                <p className="text-sm font-medium">
+                  {sc.label}
+                  {isBest && <span className="ml-2 whitespace-nowrap text-xs font-normal">(le plus élevé)</span>}
+                </p>
+                <p className="text-base font-medium tabular-nums whitespace-nowrap">{formatEUR(sc.result.total, 0)}</p>
+              </div>
+              <p className={`text-xs ${isBest ? '' : 'text-on-surface-variant'}`}>
+                dont {formatEUR(sc.result.interest, 0)} d'intérêts nets · {sc.result.byAccount.map(b => `${b.name} ${formatEUR(b.amount, 0)}`).join(' · ')}
               </p>
-            )}
-          </div>
-        ))}
-      </div>
-      <p className="text-[11px] text-slate-500 dark:text-slate-400">
+              {sc.result.unplaced >= 1 && (
+                <p className="mt-2 text-xs rounded-lg p-2 bg-tertiary-container text-on-tertiary-container">
+                  {formatEUR(sc.result.unplaced, 0)} versés ne trouvent pas de place (livrets pleins) : ils restent sur le compte courant, sans intérêts.
+                </p>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+      <p className="mt-4 text-xs text-on-surface-variant">
         Le Livret A est disponible à tout moment et sans impôt. L'Assurance Vie l'est aussi, mais un retrait est imposé sur la part de gains (moins après 8 ans) : la différence de rendement se paie en souplesse.
       </p>
-    </div>
+    </Card>
   );
 };

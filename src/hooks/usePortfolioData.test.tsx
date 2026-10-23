@@ -41,6 +41,13 @@ const drive = vi.hoisted(() => ({
   listFail: null as unknown,
 }));
 
+// Nombre de sérialisations canoniques (tri récursif de tout le document) : coût de chaque saisie.
+const schemaCalls = vi.hoisted(() => ({ canonicalize: 0 }));
+vi.mock('../lib/schema', async importOriginal => {
+  const actual = await importOriginal<typeof import('../lib/schema')>();
+  return { ...actual, canonicalize: (data: unknown) => { schemaCalls.canonicalize += 1; return actual.canonicalize(data); } };
+});
+
 const remoteWrite = (data: unknown) => {
   drive.file = JSON.parse(JSON.stringify(data));
   drive.revision += 1;
@@ -190,7 +197,7 @@ describe('synchronisation Drive', () => {
 
   it('écrit après une modification, avec la version du format et sans clé Gemini', async () => {
     const { result } = await load();
-    act(() => { result.current.setGeminiApiKey('secret-key'); result.current.setLeisureBudget(321); });
+    act(() => { result.current.setGeminiApiKey('secret-key'); result.current.patchConfig({ leisureBudget: 321 }); });
     await flushSave();
     await waitFor(() => expect(drive.writes.length).toBe(1));
     const written = drive.writes[0] as { schemaVersion: number; config: Record<string, unknown> };
@@ -204,7 +211,7 @@ describe('synchronisation Drive', () => {
   it('garde les champs inconnus du fichier', async () => {
     drive.file = { ...baseFile(), futureFeature: { x: 1 } };
     const { result } = await load();
-    act(() => result.current.setLeisureBudget(999));
+    act(() => result.current.patchConfig({ leisureBudget: 999 }));
     await flushSave();
     await waitFor(() => expect(drive.writes.length).toBe(1));
     expect((drive.writes[0] as Record<string, unknown>).futureFeature).toEqual({ x: 1 });
@@ -213,7 +220,7 @@ describe('synchronisation Drive', () => {
   it("signale un conflit au lieu d'écraser une écriture d'un autre appareil", async () => {
     const { result } = await load();
     drive.revision = 99; // un autre appareil a écrit
-    act(() => result.current.setLeisureBudget(5));
+    act(() => result.current.patchConfig({ leisureBudget: 5 }));
     await flushSave();
     await waitFor(() => expect(result.current.syncConflict).toBe(true));
     expect(drive.writes).toHaveLength(0);
@@ -221,7 +228,7 @@ describe('synchronisation Drive', () => {
 
   it('chaque écriture porte sa signature (date, appareil), sans effet sur la comparaison', async () => {
     const { result } = await load();
-    act(() => result.current.setLeisureBudget(5));
+    act(() => result.current.patchConfig({ leisureBudget: 5 }));
     await flushSave();
     await waitFor(() => expect(drive.writes.length).toBe(1));
     const stamp = (drive.writes[0] as { lastWrite?: { at: string; device?: string; deviceId?: string } }).lastWrite;
@@ -233,7 +240,7 @@ describe('synchronisation Drive', () => {
 
   it('sans course : une seule écriture, pas de conflit', async () => {
     const { result } = await load();
-    act(() => result.current.setLeisureBudget(5));
+    act(() => result.current.patchConfig({ leisureBudget: 5 }));
     await flushSave();
     await waitFor(() => expect(drive.writes.length).toBe(1));
     await flushSave();
@@ -248,7 +255,7 @@ describe('synchronisation Drive', () => {
     it("lève le conflit sans rien perdre ni réécrire, puis « garder cet appareil » garde la mienne et met la sienne de côté", async () => {
       const { result } = await load();
       drive.beforeWrite = () => remoteWrite(theirs());
-      act(() => result.current.setLeisureBudget(5));
+      act(() => result.current.patchConfig({ leisureBudget: 5 }));
       await flushSave();
       await waitFor(() => expect(result.current.syncConflict).toBe(true));
       // Les deux versions sont récupérables : la mienne à l'écran et en tête de Drive,
@@ -282,7 +289,7 @@ describe('synchronisation Drive', () => {
     it("« garder la version de Drive » applique la sienne, la réécrit en tête (vérifiée) et met la mienne de côté", async () => {
       const { result } = await load();
       drive.beforeWrite = () => remoteWrite(theirs());
-      act(() => result.current.setLeisureBudget(5));
+      act(() => result.current.patchConfig({ leisureBudget: 5 }));
       await flushSave();
       await waitFor(() => expect(result.current.conflict?.remoteStatus).toBe('ready'));
 
@@ -301,7 +308,7 @@ describe('synchronisation Drive', () => {
       const { result } = await load();
       drive.otherUnreadable = true;
       drive.beforeWrite = () => remoteWrite(theirs());
-      act(() => result.current.setLeisureBudget(5));
+      act(() => result.current.patchConfig({ leisureBudget: 5 }));
       await flushSave();
       await waitFor(() => expect(result.current.syncConflict).toBe(true));
       expect(result.current.leisureBudget).toBe(5);
@@ -318,7 +325,7 @@ describe('synchronisation Drive', () => {
       drive.revisionFail = true;
       drive.beforeWrite = () => remoteWrite(theirs());
       const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
-      act(() => result.current.setLeisureBudget(5));
+      act(() => result.current.patchConfig({ leisureBudget: 5 }));
       await flushSave();
       await waitFor(() => expect(result.current.conflict?.remoteStatus).toBe('error'));
       let outcome = '';
@@ -341,7 +348,7 @@ describe('synchronisation Drive', () => {
     it('montre la version de Drive ; « garder cet appareil » réécrit la mienne avec contrôle', async () => {
       const { result } = await load();
       remoteWrite(withBudget(300)); // un autre appareil a écrit
-      act(() => result.current.setLeisureBudget(5));
+      act(() => result.current.patchConfig({ leisureBudget: 5 }));
       await flushSave();
       await waitFor(() => expect(result.current.conflict?.remoteStatus).toBe('ready'));
       expect(drive.writes).toHaveLength(0);
@@ -360,7 +367,7 @@ describe('synchronisation Drive', () => {
     it('« garder la version de Drive » : rien à écrire, la mienne est mise de côté', async () => {
       const { result } = await load();
       remoteWrite(withBudget(300));
-      act(() => result.current.setLeisureBudget(5));
+      act(() => result.current.patchConfig({ leisureBudget: 5 }));
       await flushSave();
       await waitFor(() => expect(result.current.conflict?.remoteStatus).toBe('ready'));
       await act(async () => { await result.current.resolveConflict('remote'); });
@@ -374,7 +381,7 @@ describe('synchronisation Drive', () => {
     it('la même modification faite des deux côtés : pas de choix à demander', async () => {
       const { result } = await load();
       remoteWrite(withBudget(5));
-      act(() => result.current.setLeisureBudget(5));
+      act(() => result.current.patchConfig({ leisureBudget: 5 }));
       await flushSave();
       await act(async () => { await vi.advanceTimersByTimeAsync(50); });
       expect(result.current.syncConflict).toBe(false);
@@ -384,7 +391,7 @@ describe('synchronisation Drive', () => {
     it('si la version écartée ne peut pas être gardée, rien ne change sans accord explicite', async () => {
       const { result } = await load();
       remoteWrite(withBudget(300));
-      act(() => result.current.setLeisureBudget(5));
+      act(() => result.current.patchConfig({ leisureBudget: 5 }));
       await flushSave();
       await waitFor(() => expect(result.current.conflict?.remoteStatus).toBe('ready'));
       localStorage.setItem('suivi_epargne_set_aside', 'enc1:illisible');
@@ -403,7 +410,7 @@ describe('synchronisation Drive', () => {
     it("une version de Drive venant d'une app plus récente ne peut pas être écrasée d'ici", async () => {
       const { result } = await load();
       remoteWrite({ ...withBudget(300), schemaVersion: APP_SCHEMA_VERSION + 1 });
-      act(() => result.current.setLeisureBudget(5));
+      act(() => result.current.patchConfig({ leisureBudget: 5 }));
       await flushSave();
       await waitFor(() => expect(result.current.conflict?.remoteStatus).toBe('ready'));
       expect(result.current.conflict?.remoteFromNewerApp).toBe(true);
@@ -418,7 +425,7 @@ describe('synchronisation Drive', () => {
     drive.file = { ...baseFile(), schemaVersion: APP_SCHEMA_VERSION + 1 };
     const { result } = await load();
     expect(result.current.appOutdated).toBe(true);
-    act(() => result.current.setLeisureBudget(5));
+    act(() => result.current.patchConfig({ leisureBudget: 5 }));
     await flushSave();
     expect(drive.writes).toHaveLength(0);
   });
@@ -450,13 +457,25 @@ describe('synchronisation Drive', () => {
     expect(result.current.leisureBudget).toBe(200);
   });
 
+  it("un fichier importé n'installe jamais sa clé Gemini, ni ne remplace la clé Picker réglée", async () => {
+    const { result } = await load();
+    act(() => result.current.patchConfig({ pickerApiKey: 'ma-cle-picker' }));
+    const trap = new File([JSON.stringify({ ...baseFile(), config: { ...baseFile().config, geminiApiKey: 'cle-d-un-tiers', pickerApiKey: 'autre-picker' } })], 'piege.json');
+    let outcome: { ok: boolean } = { ok: false };
+    await act(async () => { outcome = await result.current.importData(trap); });
+    expect(outcome.ok).toBe(true);
+    expect(result.current.geminiApiKey).toBe('');
+    expect(localStorage.getItem('gemini_api_key')).toBeNull();
+    expect(result.current.config.pickerApiKey).toBe('ma-cle-picker');
+  });
+
   it("lit un ancien fichier (adresse des parents, restitution « emailed ») sans réécrire ni perdre ces champs", async () => {
     const restitution = { done: { date: '2027-01-01', accounts: [], interestsOffered: [], emailed: true } };
     drive.file = { ...baseFile(), parentalRestitution: restitution, config: { ...baseFile().config, parentsEmail: 'parents@exemple.fr' } };
     const { result } = await load();
     await flushSave();
     expect(drive.writes).toHaveLength(0);
-    act(() => result.current.setLeisureBudget(321));
+    act(() => result.current.patchConfig({ leisureBudget: 321 }));
     await flushSave();
     await waitFor(() => expect(drive.writes.length).toBe(1));
     const written = drive.writes[0] as { config: Record<string, unknown>; parentalRestitution: unknown };
@@ -474,6 +493,7 @@ const storedCopy = (key: string) => {
 };
 const PENDING = 'suivi_epargne_pending';
 const BACKUP = 'suivi_epargne_backup';
+const HELD = 'suivi_epargne_held';
 
 describe('chargement raté', () => {
   it("« Réessayer » recharge au lieu d'écraser Drive avec un document vide", async () => {
@@ -526,7 +546,7 @@ describe('déconnexion', () => {
   it('signale les modifications pas encore sur Drive et en garde une copie, proposée à la reconnexion', async () => {
     const first = await load();
     expect(first.result.current.hasUnsyncedChanges()).toBe(false);
-    act(() => first.result.current.setLeisureBudget(321));
+    act(() => first.result.current.patchConfig({ leisureBudget: 321 }));
     expect(first.result.current.hasUnsyncedChanges()).toBe(true);
     act(() => first.result.current.resetData());
     await waitFor(() => expect(storedCopy(BACKUP)).not.toBeNull());
@@ -541,7 +561,7 @@ describe('déconnexion', () => {
 
   it('plus rien à signaler une fois la sauvegarde faite', async () => {
     const { result } = await load();
-    act(() => result.current.setLeisureBudget(321));
+    act(() => result.current.patchConfig({ leisureBudget: 321 }));
     await flushSave();
     await waitFor(() => expect(drive.writes.length).toBe(1));
     expect(result.current.hasUnsyncedChanges()).toBe(false);
@@ -552,7 +572,7 @@ describe('réseau', () => {
   it("un délai dépassé n'arrête pas la synchronisation : nouvel essai sans événement « online »", async () => {
     const { result } = await load();
     drive.writeFail = new TypeError('NETWORK_TIMEOUT');
-    act(() => result.current.setLeisureBudget(5));
+    act(() => result.current.patchConfig({ leisureBudget: 5 }));
     await flushSave();
     await waitFor(() => expect(result.current.isOffline).toBe(true));
     expect(drive.writes).toHaveLength(0);
@@ -566,11 +586,11 @@ describe('réseau', () => {
   it("écriture arrivée sur Drive mais réponse perdue : pas de faux conflit, la saisie suivante part", async () => {
     const { result } = await load();
     drive.loseResponse = true;
-    act(() => result.current.setLeisureBudget(5));
+    act(() => result.current.patchConfig({ leisureBudget: 5 }));
     await flushSave();
     await waitFor(() => expect(result.current.isOffline).toBe(true));
     expect(drive.writes).toHaveLength(1); // Drive l'a reçue, l'app ne le sait pas
-    act(() => result.current.setLeisureBudget(6));
+    act(() => result.current.patchConfig({ leisureBudget: 6 }));
     await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
     await flushSave();
     await waitFor(() => expect(drive.writes.length).toBe(2));
@@ -584,11 +604,11 @@ describe('réseau', () => {
   it("réponse perdue puis écriture d'un autre appareil : le conflit est bien montré", async () => {
     const { result } = await load();
     drive.loseResponse = true;
-    act(() => result.current.setLeisureBudget(5));
+    act(() => result.current.patchConfig({ leisureBudget: 5 }));
     await flushSave();
     await waitFor(() => expect(result.current.isOffline).toBe(true));
     remoteWrite(withBudget(300)); // l'autre appareil, après notre écriture
-    act(() => result.current.setLeisureBudget(6));
+    act(() => result.current.patchConfig({ leisureBudget: 6 }));
     await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
     await flushSave();
     await waitFor(() => expect(result.current.syncConflict).toBe(true));
@@ -599,7 +619,7 @@ describe('réseau', () => {
   it('« Réessayer » et le retour au premier plan relancent tout de suite', async () => {
     const { result } = await load();
     drive.writeFail = new TypeError('Failed to fetch');
-    act(() => result.current.setLeisureBudget(5));
+    act(() => result.current.patchConfig({ leisureBudget: 5 }));
     await flushSave();
     await waitFor(() => expect(result.current.isOffline).toBe(true));
     act(() => { window.dispatchEvent(new Event('focus')); });
@@ -631,7 +651,7 @@ describe('plusieurs onglets', () => {
   it("n'efface pas des modifications non envoyées : la prochaine écriture lève le conflit, la nôtre en quarantaine", async () => {
     const { result } = await load();
     act(() => { window.dispatchEvent(new Event('offline')); });
-    act(() => result.current.setLeisureBudget(150));
+    act(() => result.current.patchConfig({ leisureBudget: 150 }));
     remoteWrite(withBudget(300));
     await announce();
     expect(result.current.leisureBudget).toBe(150);
@@ -649,7 +669,7 @@ describe('plusieurs onglets', () => {
   it("pendant un conflit, la sauvegarde d'un autre onglet n'est pas appliquée", async () => {
     const { result } = await load();
     drive.revision = 99; // un autre appareil a écrit
-    act(() => result.current.setLeisureBudget(5));
+    act(() => result.current.patchConfig({ leisureBudget: 5 }));
     await flushSave();
     await waitFor(() => expect(result.current.syncConflict).toBe(true));
     remoteWrite(withBudget(300));
@@ -662,7 +682,7 @@ describe('plusieurs onglets', () => {
     remoteWrite({ ...withBudget(300), schemaVersion: APP_SCHEMA_VERSION + 1 });
     await announce();
     await waitFor(() => expect(result.current.appOutdated).toBe(true));
-    act(() => result.current.setLeisureBudget(5));
+    act(() => result.current.patchConfig({ leisureBudget: 5 }));
     await flushSave();
     expect(drive.writes).toHaveLength(0);
   });
@@ -673,9 +693,9 @@ describe('copies locales', () => {
     const { result } = await load();
     let release = () => {};
     drive.writeGate = new Promise<void>(r => { release = r; });
-    act(() => result.current.setLeisureBudget(150));
+    act(() => result.current.patchConfig({ leisureBudget: 150 }));
     await flushSave(); // écriture de 150 en cours, bloquée
-    act(() => result.current.setLeisureBudget(175));
+    act(() => result.current.patchConfig({ leisureBudget: 175 }));
     await act(async () => { await vi.advanceTimersByTimeAsync(700); });
     await waitFor(() => expect(storedCopy(BACKUP)).not.toBeNull());
 
@@ -706,36 +726,72 @@ describe('copies locales', () => {
     expect(result.current.localBackup).toBeNull();
     expect(storedCopy(PENDING)).not.toBeNull();
   });
-});
 
-describe('virement interne lié', () => {
-  const twoAccounts = () => ({
-    ...baseFile(),
-    accounts: [
-      { id: 'a', name: 'Livret A', institution: 'B', type: 'Livret A', totalAmount: 1000, ownedAmount: 300, parentalCapital: 700, movements: [] },
-      { id: 'b', name: 'LDDS', institution: 'B', type: 'LDDS', totalAmount: 0, ownedAmount: 0, parentalCapital: 0, movements: [] },
-    ],
+  it('une copie jamais envoyée devenue illisible est signalée, plus ignorée en silence', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    localStorage.setItem(PENDING, '{abîmée');
+    const { result } = await load();
+    await waitFor(() => expect(result.current.unreadableLocalCopy).toBe('lost'));
+    expect(result.current.localBackup).toBeNull();
+    // « Compris » : la copie définitivement illisible est effacée, la bannière disparaît.
+    act(() => { result.current.dismissUnreadableCopy(); });
+    expect(result.current.unreadableLocalCopy).toBeNull();
+    expect(localStorage.getItem(PENDING)).toBeNull();
+    warn.mockRestore();
   });
 
-  it('déplace la part propre et garde les totaux', async () => {
-    drive.file = twoAccounts();
+  it('une copie chiffrée illisible pour l’instant (stockage protégé indisponible) est signalée et gardée', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    localStorage.setItem(BACKUP, 'enc1:AAAA.BBBB');
     const { result } = await load();
-    let ok = false;
-    act(() => { ok = result.current.executeLinkedTransfer('a', 'b', 300, '2026-10-02'); });
-    expect(ok).toBe(true);
-    const [a, b] = result.current.accounts;
-    expect(a.ownedAmount).toBe(0); expect(a.parentalCapital).toBe(700); expect(a.totalAmount).toBe(700);
-    expect(b.ownedAmount).toBe(300); expect(b.totalAmount).toBe(300);
+    await waitFor(() => expect(result.current.unreadableLocalCopy).toBe('unavailable'));
+    // Mise à l'abri, telle quelle, avant que le miroir ne puisse réécrire sa place.
+    expect(localStorage.getItem(BACKUP)).toBeNull();
+    expect(JSON.parse(localStorage.getItem(HELD)!)).toEqual(['enc1:AAAA.BBBB']);
+    act(() => { result.current.dismissUnreadableCopy(); });
+    expect(result.current.unreadableLocalCopy).toBeNull();
+    expect(JSON.parse(localStorage.getItem(HELD)!)).toEqual(['enc1:AAAA.BBBB']);
+    warn.mockRestore();
   });
 
-  it("refuse un virement qui entamerait la part des parents, sans rien modifier", async () => {
-    drive.file = twoAccounts();
+  it('une copie illisible pour l’instant survit aux saisies et aux sauvegardes qui suivent', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    localStorage.setItem(BACKUP, 'enc1:AAAA.BBBB');
+    localStorage.setItem(PENDING, 'enc1:CCCC.DDDD');
     const { result } = await load();
-    let ok = true;
-    act(() => { ok = result.current.executeLinkedTransfer('a', 'b', 301, '2026-10-02'); });
-    expect(ok).toBe(false);
-    expect(result.current.accounts[0].ownedAmount).toBe(300);
-    expect(result.current.accounts[1].ownedAmount).toBe(0);
+    await waitFor(() => expect(result.current.unreadableLocalCopy).toBe('unavailable'));
+    // Saisie : le miroir s'écrit (en clair, faute de clé) ; puis sauvegarde réussie, miroir effacé.
+    act(() => result.current.patchConfig({ leisureBudget: 160 }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(700); });
+    await waitFor(() => expect(storedCopy(BACKUP)).not.toBeNull());
+    await flushSave();
+    await waitFor(() => expect(budgetOfFile(drive.file)).toBe(160));
+    await waitFor(() => expect(localStorage.getItem(BACKUP)).toBeNull());
+    // Les deux copies illisibles sont toujours sur l'appareil, intactes.
+    expect(JSON.parse(localStorage.getItem(HELD)!)).toEqual(['enc1:CCCC.DDDD', 'enc1:AAAA.BBBB']);
+    warn.mockRestore();
+  });
+
+  it('une copie à l’abri redevenue lisible est proposée, puis quitte l’abri', async () => {
+    const copy = JSON.stringify({ savedAt: '2026-10-05T10:00:00.000Z', fileId: 'file-1', data: withBudget(333) });
+    localStorage.setItem(HELD, JSON.stringify([copy]));
+    const { result } = await load();
+    await waitFor(() => expect(result.current.localBackup).not.toBeNull());
+    expect(budgetOfFile(result.current.localBackup!.data)).toBe(333);
+    // En quarantaine (proposée jusqu'au choix), plus à l'abri.
+    expect(budgetOfFile(storedCopy(PENDING)!.data)).toBe(333);
+    await waitFor(() => expect(localStorage.getItem(HELD)).toBeNull());
+    expect(result.current.unreadableLocalCopy).toBeNull();
+  });
+
+  it('« Se déconnecter sans envoyer » efface aussi les copies à l’abri', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    localStorage.setItem(BACKUP, 'enc1:AAAA.BBBB');
+    const { result } = await load();
+    await waitFor(() => expect(localStorage.getItem(HELD)).not.toBeNull());
+    act(() => { result.current.resetData({ discardUnsynced: true }); });
+    expect(localStorage.getItem(HELD)).toBeNull();
+    warn.mockRestore();
   });
 });
 
@@ -764,7 +820,7 @@ describe('retour dans l’app : relecture de Drive', () => {
   it('avec une modification locale, le choix s’ouvre AVANT toute écriture', async () => {
     const { result } = await load();
     act(() => { window.dispatchEvent(new Event('offline')); });
-    act(() => result.current.setLeisureBudget(5));
+    act(() => result.current.patchConfig({ leisureBudget: 5 }));
     remoteWrite(withBudget(300));
     act(() => { window.dispatchEvent(new Event('online')); });
     await act(async () => { await result.current.checkRemote(); });
@@ -786,7 +842,7 @@ describe('retour dans l’app : relecture de Drive', () => {
     const { result } = await load();
     drive.metaFail = null;
     remoteWrite(withBudget(300)); // écrit ailleurs pendant ce temps
-    act(() => result.current.setLeisureBudget(5));
+    act(() => result.current.patchConfig({ leisureBudget: 5 }));
     await flushSave();
     await waitFor(() => expect(result.current.conflict?.remoteStatus).toBe('ready'));
     expect(drive.writes).toHaveLength(0);
@@ -797,7 +853,7 @@ describe('retour dans l’app : relecture de Drive', () => {
     drive.metaFail = new Error('REVISION_UNAVAILABLE');
     const { result } = await load();
     drive.metaFail = null;
-    act(() => result.current.setLeisureBudget(5));
+    act(() => result.current.patchConfig({ leisureBudget: 5 }));
     await flushSave();
     await waitFor(() => expect(drive.writes.length).toBe(1));
     expect(result.current.syncConflict).toBe(false);
@@ -808,12 +864,12 @@ describe('fichier introuvable (404) et fichiers en double', () => {
   it('fichier supprimé et aucun autre : recréé une seule fois avec mes données', async () => {
     const { result } = await load();
     drive.mainMissing = true;
-    act(() => result.current.setLeisureBudget(5));
+    act(() => result.current.patchConfig({ leisureBudget: 5 }));
     await flushSave();
     await waitFor(() => expect(drive.created).toEqual(['file-new-1']));
     expect(budgetOfFile(drive.extra.get('file-new-1')!.content)).toBe(5);
     expect(result.current.syncError).toBe(false);
-    act(() => result.current.setLeisureBudget(6));
+    act(() => result.current.patchConfig({ leisureBudget: 6 }));
     await flushSave();
     await waitFor(() => expect(budgetOfFile(drive.extra.get('file-new-1')!.content)).toBe(6));
     expect(drive.created).toHaveLength(1);
@@ -823,7 +879,7 @@ describe('fichier introuvable (404) et fichiers en double', () => {
     const { result } = await load();
     drive.mainMissing = true;
     drive.extra.set('file-2', { content: withBudget(300), modifiedTime: '2026-10-13T08:00:00.000Z', revision: 1 });
-    act(() => result.current.setLeisureBudget(5));
+    act(() => result.current.patchConfig({ leisureBudget: 5 }));
     await flushSave();
     await waitFor(() => expect(result.current.conflict?.remoteStatus).toBe('ready'));
     expect(drive.created).toHaveLength(0);
@@ -873,7 +929,7 @@ describe('erreurs passagères et durables', () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const { result } = await load();
     drive.writeFail = await apiError(403, 'storageQuotaExceeded');
-    act(() => result.current.setLeisureBudget(5));
+    act(() => result.current.patchConfig({ leisureBudget: 5 }));
     await flushSave();
     await waitFor(() => expect(result.current.syncError).toBe(true));
     expect(result.current.syncErrorInfo).toEqual({ reason: 'quota', transient: false });
@@ -892,7 +948,7 @@ describe('erreurs passagères et durables', () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const { result } = await load();
     drive.writeFail = await apiError(503);
-    act(() => result.current.setLeisureBudget(5));
+    act(() => result.current.patchConfig({ leisureBudget: 5 }));
     await flushSave();
     await waitFor(() => expect(result.current.syncErrorInfo).toEqual({ reason: 'server', transient: true }));
     await act(async () => { await vi.advanceTimersByTimeAsync(5500); });
@@ -931,7 +987,7 @@ describe('restauration et déconnexion', () => {
 
   it('« Envoyer puis se déconnecter » écrit tout de suite', async () => {
     const { result } = await load();
-    act(() => result.current.setLeisureBudget(5));
+    act(() => result.current.patchConfig({ leisureBudget: 5 }));
     let ok = false;
     await act(async () => { ok = await result.current.flushPendingChanges(); });
     expect(ok).toBe(true);
@@ -941,7 +997,7 @@ describe('restauration et déconnexion', () => {
 
   it('« Se déconnecter sans envoyer » efface les modifications de cet appareil', async () => {
     const first = await load();
-    act(() => first.result.current.setLeisureBudget(321));
+    act(() => first.result.current.patchConfig({ leisureBudget: 321 }));
     await act(async () => { await vi.advanceTimersByTimeAsync(700); });
     await waitFor(() => expect(storedCopy(BACKUP)).not.toBeNull());
     act(() => first.result.current.resetData({ discardUnsynced: true }));
@@ -1001,7 +1057,7 @@ describe('restauration et déconnexion', () => {
   it('saisies pas encore sur Drive : la mise à jour de l’app attend', async () => {
     const { result } = await load();
     expect(result.current.hasPendingEdits()).toBe(false);
-    act(() => result.current.setLeisureBudget(5));
+    act(() => result.current.patchConfig({ leisureBudget: 5 }));
     expect(result.current.hasPendingEdits()).toBe(true);
     await flushSave();
     await waitFor(() => expect(drive.writes.length).toBe(1));
@@ -1036,11 +1092,11 @@ describe('démarrage rapide et hors ligne', () => {
     drive.listRevision = true;
     const { result } = await load();
     expect(drive.metaCalls).toBe(0);
-    act(() => result.current.setLeisureBudget(5));
+    act(() => result.current.patchConfig({ leisureBudget: 5 }));
     await flushSave();
     await waitFor(() => expect(drive.writes.length).toBe(1));
     remoteWrite(withBudget(300)); // un autre appareil écrit ensuite : conflit, pas d'écrasement
-    act(() => result.current.setLeisureBudget(6));
+    act(() => result.current.patchConfig({ leisureBudget: 6 }));
     await flushSave();
     await waitFor(() => expect(result.current.syncConflict).toBe(true));
     expect(budgetOfFile(drive.file)).toBe(300);
@@ -1050,7 +1106,7 @@ describe('démarrage rapide et hors ligne', () => {
     const { result } = await load();
     await waitFor(() => expect(storedCopy(OFFLINE)).not.toBeNull());
     expect(budgetOfFile(storedCopy(OFFLINE)!.data)).toBe(200);
-    act(() => result.current.setLeisureBudget(321));
+    act(() => result.current.patchConfig({ leisureBudget: 321 }));
     await flushSave();
     await waitFor(() => expect(budgetOfFile(storedCopy(OFFLINE)?.data)).toBe(321));
     act(() => result.current.resetData());
@@ -1092,7 +1148,7 @@ describe('démarrage rapide et hors ligne', () => {
 
   it('saisie hors ligne, Drive inchangé : elle part au retour du réseau, avec contrôle de révision', async () => {
     const { result } = await startOffline();
-    act(() => result.current.setLeisureBudget(321));
+    act(() => result.current.patchConfig({ leisureBudget: 321 }));
     await flushSave();
     expect(drive.writes).toHaveLength(0);
     expect(result.current.hasUnsyncedChanges()).toBe(true);
@@ -1110,7 +1166,7 @@ describe('démarrage rapide et hors ligne', () => {
 
   it('Drive a changé pendant la coupure : le choix s’ouvre avant toute écriture', async () => {
     const { result } = await startOffline();
-    act(() => result.current.setLeisureBudget(5));
+    act(() => result.current.patchConfig({ leisureBudget: 5 }));
     remoteWrite(withBudget(300));
     await goOnline();
     await waitFor(() => expect(result.current.syncConflict).toBe(true));
@@ -1185,7 +1241,7 @@ describe('démarrage rapide et hors ligne', () => {
 
   it('copie hors ligne d’un autre fichier (autre compte Google) : jamais proposée pour l’écraser', async () => {
     const { result } = await startOffline();
-    act(() => result.current.setLeisureBudget(5)); // saisie sur la copie du fichier file-1
+    act(() => result.current.patchConfig({ leisureBudget: 5 })); // saisie sur la copie du fichier file-1
     // Reconnexion avec un autre compte : son seul fichier est file-b.
     drive.mainMissing = true;
     drive.extra.set('file-b', { content: withBudget(300), modifiedTime: '2026-10-15T08:00:00.000Z', revision: 1 });
@@ -1217,7 +1273,7 @@ describe('démarrage rapide et hors ligne', () => {
   it('ancienne copie en quarantaine, puis conflit après une saisie hors ligne : aucune des deux n’est perdue', async () => {
     const { result } = await reopenOfflineWithPending({ fileId: 'file-1', budget: 111 });
     expect(budgetOfFile(result.current.localBackup?.data)).toBe(111);
-    act(() => result.current.setLeisureBudget(5)); // saisie hors ligne
+    act(() => result.current.patchConfig({ leisureBudget: 5 })); // saisie hors ligne
     remoteWrite(withBudget(300)); // Drive change ailleurs pendant ce temps
     await goOnline();
     await waitFor(() => expect(result.current.syncConflict).toBe(true));
@@ -1242,7 +1298,7 @@ describe('démarrage rapide et hors ligne', () => {
   it('copie hors ligne d’un autre fichier et copie jamais envoyée du fichier ouvert : les deux restent récupérables', async () => {
     const { result } = await reopenOfflineWithPending({ fileId: 'file-b', budget: 111 });
     expect(result.current.localBackup).toBeNull(); // copie d'un autre fichier : pas proposée ici
-    act(() => result.current.setLeisureBudget(5)); // saisie sur la copie hors ligne de file-1
+    act(() => result.current.patchConfig({ leisureBudget: 5 })); // saisie sur la copie hors ligne de file-1
     drive.mainMissing = true;
     drive.extra.set('file-b', { content: withBudget(300), modifiedTime: '2026-10-15T08:00:00.000Z', revision: 1 });
     await goOnline();
@@ -1324,7 +1380,7 @@ describe('filets anti-perte', () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const { result } = await load();
     drive.writeFail = await apiError(404, 'notFound');
-    act(() => result.current.setLeisureBudget(5));
+    act(() => result.current.patchConfig({ leisureBudget: 5 }));
     await flushSave();
     await waitFor(() => expect(result.current.syncError).toBe(true));
     expect(drive.writes).toHaveLength(0);
@@ -1341,7 +1397,7 @@ describe('filets anti-perte', () => {
     const { result } = await load();
     drive.mainMissing = true;
     drive.extra.set('file-2', { content: withBudget(5), modifiedTime: '2026-10-13T08:00:00.000Z', revision: 1 });
-    act(() => result.current.setLeisureBudget(5));
+    act(() => result.current.patchConfig({ leisureBudget: 5 }));
     await flushSave();
     await waitFor(() => expect(drive.lists).toBe(2));
     await waitFor(() => expect(result.current.isSaving).toBe(false));
@@ -1350,7 +1406,7 @@ describe('filets anti-perte', () => {
     expect(drive.writes).toHaveLength(0);
     expect(drive.created).toHaveLength(0);
     // L'app continue sur ce fichier : la saisie suivante y part, avec contrôle.
-    act(() => result.current.setLeisureBudget(6));
+    act(() => result.current.patchConfig({ leisureBudget: 6 }));
     await flushSave();
     await waitFor(() => expect(budgetOfFile(drive.extra.get('file-2')!.content)).toBe(6));
     expect(drive.created).toHaveLength(0);
@@ -1359,10 +1415,10 @@ describe('filets anti-perte', () => {
   it('session perdue pendant une écriture : bannière de reconnexion, plus aucune écriture, saisies gardées', async () => {
     const { result } = await load();
     drive.writeFail = new Error('SESSION_EXPIRED');
-    act(() => result.current.setLeisureBudget(5));
+    act(() => result.current.patchConfig({ leisureBudget: 5 }));
     await flushSave();
     await waitFor(() => expect(result.current.sessionExpired).toBe(true));
-    act(() => result.current.setLeisureBudget(6));
+    act(() => result.current.patchConfig({ leisureBudget: 6 }));
     await flushSave();
     await act(async () => { await vi.advanceTimersByTimeAsync(130_000); });
     expect(drive.writes).toHaveLength(0);
@@ -1374,7 +1430,7 @@ describe('filets anti-perte', () => {
   it('réseau coupé pendant une écriture : « hors ligne », puis l’écriture repart seule', async () => {
     const { result } = await load();
     drive.writeFail = new TypeError('Failed to fetch');
-    act(() => result.current.setLeisureBudget(5));
+    act(() => result.current.patchConfig({ leisureBudget: 5 }));
     await flushSave();
     await waitFor(() => expect(result.current.isOffline).toBe(true));
     expect(drive.writes).toHaveLength(0);
@@ -1390,7 +1446,7 @@ describe('filets anti-perte', () => {
     expect(result.current.sessionExpired).toBe(true);
     expect(result.current.loadFailed).toBe(true);
     expect(result.current.accounts).toHaveLength(0);
-    act(() => result.current.setLeisureBudget(5));
+    act(() => result.current.patchConfig({ leisureBudget: 5 }));
     await flushSave();
     expect(drive.writes).toHaveLength(0);
     spy.mockRestore();
@@ -1400,7 +1456,7 @@ describe('filets anti-perte', () => {
     const { result } = await load();
     let release = () => {};
     drive.writeGate = new Promise<void>(r => { release = r; });
-    act(() => result.current.setLeisureBudget(150));
+    act(() => result.current.patchConfig({ leisureBudget: 150 }));
     await flushSave(); // notre écriture est en cours, bloquée
     await waitFor(() => expect(result.current.isSaving).toBe(true));
     await act(async () => {
@@ -1431,12 +1487,61 @@ describe('filets anti-perte', () => {
     await waitFor(() => expect(localStorage.getItem('pecule_offline_copy')).not.toBeNull());
     localStorage.setItem('last_drive_backup_month', '2026-10');
     quarantine(111);
-    act(() => result.current.setLeisureBudget(5));
+    act(() => result.current.patchConfig({ leisureBudget: 5 }));
     act(() => result.current.resetData({ discardUnsynced: true }));
     for (const key of [PENDING, BACKUP, 'pecule_offline_copy', 'last_drive_backup_month']) expect(localStorage.getItem(key)).toBeNull();
     expect(result.current.accounts).toHaveLength(0);
     await flushSave();
     expect(drive.writes).toHaveLength(0);
     expect(localStorage.getItem(BACKUP)).toBeNull();
+  });
+});
+
+describe('façade : un état de synchronisation, des fonctions stables', () => {
+  it('les fonctions gardent leur identité d’un rendu à l’autre (les écrans mémoïsés ne sont pas re-rendus)', async () => {
+    const { result } = await load();
+    const before = result.current;
+    act(() => result.current.patchConfig({ leisureBudget: 5 }));
+    await flushSave();
+    await waitFor(() => expect(drive.writes.length).toBe(1));
+    expect(result.current.doc).not.toBe(before.doc);
+    for (const k of [
+      'patchConfig', 'setAccounts', 'setExpenses', 'updateWorkBenefits', 'setGeminiApiKey', 'setLastView', 'currentData', 'exportData',
+      'loadDriveData', 'loadDemoData', 'retrySync', 'resolveConflict',
+      'retryConflictLoad', 'compareDuplicate', 'dismissDuplicate', 'flushPendingChanges', 'hasUnsyncedChanges', 'hasPendingEdits',
+      'forgetOfflineCopy', 'restoreLocalBackup', 'dismissLocalBackup', 'resetData', 'importData', 'listDriveBackups',
+      'restoreDriveBackup', 'listSetAsideVersions', 'recoverSetAside',
+    ] as const) expect(result.current[k], k).toBe(before[k]);
+  });
+
+  it('l’état de synchronisation est un seul objet, d’où viennent les indicateurs', async () => {
+    const { result } = await load();
+    const s = result.current.syncStatus;
+    expect(s).toEqual({ loading: false, saving: false, offline: false, loadFailed: false, sessionExpired: false, appOutdated: false, error: null });
+    expect(result.current.isLoadingData).toBe(s.loading);
+    expect(result.current.syncError).toBe(false);
+    drive.revision = 99; // un autre appareil a écrit
+    act(() => result.current.patchConfig({ leisureBudget: 6 }));
+    await waitFor(() => expect(result.current.isSaving).toBe(true));
+    expect(result.current.syncStatus.saving).toBe(true);
+    await flushSave();
+    await waitFor(() => expect(result.current.syncConflict).toBe(true));
+    expect(result.current.syncStatus.saving).toBe(false);
+  });
+});
+
+describe('coût d’une saisie', () => {
+  it('une seule comparaison complète à Drive par modification, faite après l’affichage de la saisie', async () => {
+    const { result } = await load();
+    await flushSave();
+    schemaCalls.canonicalize = 0;
+    act(() => result.current.patchConfig({ leisureBudget: 321 }));
+    // Rendu et effets de la saisie passés : rien n'est encore sérialisé (ce qui retardait l'affichage).
+    expect(schemaCalls.canonicalize).toBe(0);
+    await flushSave();
+    await waitFor(() => expect(drive.writes.length).toBe(1));
+    // Sauvegarde auto, miroir, écriture et fin d'écriture réutilisent la même forme canonique
+    // (avant : 3 à 4 sérialisations par modification).
+    expect(schemaCalls.canonicalize).toBe(1);
   });
 });

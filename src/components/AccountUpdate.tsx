@@ -14,7 +14,7 @@ import {
   DEFAULT_ADJUST, breakdownDraft, clearStoredDrafts, draftToUpdate, loadStoredDrafts, parseDeposits, saveStoredDrafts,
   type Adjust, type Draft, type DraftField,
 } from './update/draft';
-import { Save, Wallet, CheckCircle } from 'lucide-react';
+import { Save, Wallet, CheckCircle, FileText } from 'lucide-react';
 import { useSaveFeedback } from '../hooks/useSaveFeedback';
 import { useToast } from './Toast';
 import { parseFrenchNumber } from '../lib/numbers';
@@ -25,15 +25,12 @@ import { formatEUR, toInputAmount } from '../lib/format';
 
 interface AccountUpdateProps {
   accounts: SavingsAccount[];
-  /** Repli : enregistre les comptes déjà calculés par la commande (sans annulation). */
-  onUpdateAccountsComplex: (updates: { account: SavingsAccount, date: string, cashFlow?: number }[]) => void;
-  /** Applique le résultat d'une commande (comme `commit` dans App) : active « Annuler » après l'enregistrement. */
-  onCommit?: (patch: CommandPatch) => void;
+  /** Applique le résultat d'une commande (`commit` de useAccountActions) : active « Annuler » après l'enregistrement. */
+  onCommit: (patch: CommandPatch) => void;
   onCancel?: () => void; // Ajout prop optionnelle pour cohérence
   onAddAccount?: () => void;
-  // Horodatage de la dernière écriture Drive CONFIRMÉE : sert à n'annoncer le succès que
-  // lorsqu'il est réel (voir useSaveFeedback).
-  lastSavedAt?: Date | null;
+  /** « Lire un relevé » : soldes et opérations proposés d'après le relevé de la banque. */
+  onReadStatement?: () => void;
 }
 
 const FIELDS: readonly DraftField[] = ['owned', 'parental', 'date', 'deposits', 'cashFlow', 'bankTotal', 'interest', 'cash'];
@@ -46,9 +43,10 @@ const mergeDraft = (fresh: Draft, d: Draft | undefined): Draft => {
   return merged;
 };
 
-export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdateAccountsComplex, onCommit, lastSavedAt, onAddAccount }) => {
+export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onCommit, onAddAccount, onReadStatement }) => {
   const today = localTodayISO();
-  const { status: saveStatus, markPending } = useSaveFeedback(lastSavedAt);
+  // Le succès n'est annoncé qu'après une écriture Drive CONFIRMÉE (voir useSaveFeedback).
+  const { status: saveStatus, markPending } = useSaveFeedback();
   const addToast = useToast();
   // État le plus récent pour l'annulation (le toast survit à ce rendu).
   const accountsRef = useRef(accounts);
@@ -195,17 +193,8 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
     if (!r.ok) { setSaveError(r.error); return; }
     setSaveError(null);
     markPending();
-    if (onCommit) {
-      onCommit(r.next);
-      addToast?.({ message: r.message, kind: 'success', action: { label: 'Annuler', onClick: () => onCommit(r.undo({ accounts: accountsRef.current })) } });
-    } else {
-      // Comptes déjà calculés (mouvements compris) : le hook les reprend tels quels.
-      const next = r.next.accounts || [];
-      onUpdateAccountsComplex(r.changedIds.map(id => ({
-        account: next.find(a => a.id === id)!,
-        date: rows.find(x => x.account.id === id)?.draft.date ?? today,
-      })));
-    }
+    onCommit(r.next);
+    addToast?.({ message: r.message, kind: 'success', action: { label: 'Annuler', onClick: () => onCommit(r.undo({ accounts: accountsRef.current })) } });
     // Brouillons remis à zéro : un second « Enregistrer » ne rejoue pas les versements
     // (le flux d'argent `cashFlow` aurait été compté deux fois).
     setUpdatesRaw(prev => Object.fromEntries(Object.entries(prev).map(([id, d]) => [id, { ...d, cashFlow: 0, interest: undefined, cash: undefined, touched: [] }])));
@@ -232,7 +221,7 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
 
   const changedLabel = `${changedCount} compte${changedCount > 1 ? 's' : ''} modifié${changedCount > 1 ? 's' : ''}${restoredIds.length > 0 ? ' (saisie restaurée)' : ''}`;
   const saved = saveStatus === 'saved' && (
-    <span role="status" className="text-sm font-medium text-emerald-700 dark:text-emerald-300 flex items-center gap-1">
+    <span role="status" className="text-sm font-medium text-primary flex items-center gap-1">
       <CheckCircle className="w-4 h-4" aria-hidden="true" /> Enregistré sur Drive
     </span>
   );
@@ -244,7 +233,14 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
         subtitle="Indiquez vos nouveaux soldes et la date du constat. Vos graphiques s'adapteront automatiquement."
         actions={<>
           {saved}
-          <Button onClick={handleSaveAll} isLoading={saveStatus === 'pending'} disabled={changedCount === 0}>
+          {onReadStatement && (
+            <Button variant="tonal" onClick={onReadStatement}>
+              <FileText className="w-4 h-4" aria-hidden="true" /> Lire un relevé
+            </Button>
+          )}
+          {/* Bouton désactivé : on dit pourquoi (Button, état désactivé Material 3). */}
+          {changedCount === 0 && saveStatus === 'idle' && <span id="update-save-why" className="text-sm text-on-surface-variant">Aucun solde modifié</span>}
+          <Button onClick={handleSaveAll} isLoading={saveStatus === 'pending'} disabled={changedCount === 0} aria-describedby={changedCount === 0 && saveStatus === 'idle' ? 'update-save-why' : undefined}>
             <Save className="w-4 h-4" aria-hidden="true" /> Tout enregistrer
           </Button>
         </>}
@@ -285,8 +281,8 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onUpdate
         <div className="fixed left-4 right-4 bottom-20 md:bottom-6 md:left-auto md:right-8 md:w-[28rem] z-30 flex items-center justify-between gap-2 p-3 pl-5 rounded-2xl bg-inverse-surface text-inverse-on-surface shadow-lg">
           <span className="text-sm font-medium">{changedLabel}</span>
           <span className="flex items-center gap-1 shrink-0">
-            <Button variant="text" onClick={resetDrafts} className="text-inverse-primary! px-3">Abandonner</Button>
-            <Button onClick={handleSaveAll} isLoading={saveStatus === 'pending'} className="bg-inverse-primary! text-indigo-900! hover:bg-indigo-200!">
+            <Button variant="text" onClick={resetDrafts} className="text-inverse-primary! enabled:hover:bg-inverse-primary/10!">Abandonner</Button>
+            <Button onClick={handleSaveAll} isLoading={saveStatus === 'pending'} className="bg-inverse-primary! text-inverse-surface!">
               <Save className="w-4 h-4" aria-hidden="true" /> Enregistrer
             </Button>
           </span>

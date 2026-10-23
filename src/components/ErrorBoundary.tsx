@@ -3,6 +3,8 @@
 // blanc.
 import React from 'react';
 import { AlertTriangle, RotateCw } from 'lucide-react';
+import { Button } from './ui';
+import { storageKey } from '../lib/storageKeys';
 
 interface State { error: Error | null }
 
@@ -21,13 +23,13 @@ export class ErrorBoundary extends React.Component<{ children: React.ReactNode; 
   override render() {
     if (!this.state.error) return this.props.children;
     return (
-      <div role="alert" className="max-w-md mx-auto mt-12 bg-white dark:bg-slate-800 border border-amber-200 dark:border-amber-900 rounded-2xl p-6 text-center">
-        <AlertTriangle className="w-8 h-8 text-amber-700 mx-auto mb-3" aria-hidden="true" />
-        <h2 className="font-black text-slate-800 dark:text-slate-100 mb-1">Cet écran n'a pas pu s'afficher</h2>
-        <p className="text-sm text-slate-600 dark:text-slate-300 mb-4">Une nouvelle version de Pécule est peut-être disponible. Vos données ne sont pas touchées.</p>
-        <button onClick={() => window.location.reload()} className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl font-bold text-sm">
+      <div role="alert" className="max-w-md mx-auto mt-12 bg-tertiary-container text-on-tertiary-container rounded-3xl p-6 text-center">
+        <AlertTriangle className="w-8 h-8 mx-auto mb-3" aria-hidden="true" />
+        <h2 className="text-[22px] leading-7 font-normal mb-1">Cet écran n'a pas pu s'afficher</h2>
+        <p className="text-sm mb-4">Une nouvelle version de Pécule est peut-être disponible. Vos données ne sont pas touchées.</p>
+        <Button variant="filled" onClick={() => window.location.reload()}>
           <RotateCw className="w-4 h-4" aria-hidden="true" /> Recharger
-        </button>
+        </Button>
       </div>
     );
   }
@@ -49,7 +51,7 @@ export const lazyWithRetry = <T extends React.ComponentType<any>>(factory: () =>
       try {
         return await factory();
       } catch (e) {
-        const KEY = 'chunk_reload_at';
+        const KEY = storageKey('chunkReloadAt');
         const last = Number(sessionStorage.getItem(KEY) || 0);
         if (Date.now() - last > 60_000) {
           sessionStorage.setItem(KEY, String(Date.now()));

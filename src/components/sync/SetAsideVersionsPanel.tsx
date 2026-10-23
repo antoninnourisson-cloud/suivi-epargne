@@ -42,11 +42,11 @@ export const SetAsideVersionsPanel: React.FC<{
                     </p>
                   </div>
                   <div className="flex gap-1 shrink-0">
-                    <Button variant="text" className="h-8 px-3" onClick={() => downloadJSON(`pecule-version-${e.setAsideAt.slice(0, 10)}.json`, e.data)}
+                    <Button variant="text" size="sm" onClick={() => downloadJSON(`pecule-version-${e.setAsideAt.slice(0, 10)}.json`, e.data)}
                       aria-label={`Exporter : ${e.label}`}>
                       <Download className="w-4 h-4" aria-hidden="true" /> Exporter
                     </Button>
-                    <Button variant="outlined" className="h-8 px-3" disabled={busy}
+                    <Button variant="outlined" size="sm" disabled={busy}
                       onClick={() => confirm(
                         'Récupérer cette version ?',
                         'Vos données actuelles seront remplacées par cette version, puis enregistrées sur Drive. Elles sont d\'abord mises de côté à leur tour : vous pourrez y revenir ici.',

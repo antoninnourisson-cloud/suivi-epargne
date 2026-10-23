@@ -21,8 +21,10 @@ const STATE_SUMMARY: Record<PushState | 'loading', string | null> = {
 };
 
 // `paydayDay` / `onOpenPayday` : raccourci vers le réglage du rappel de paie, qui vit dans
-// le Pilotage (on le cherchait ici).
-export const NotificationSettings: React.FC<{ paydayDay?: number; onOpenPayday?: () => void; prefs?: NotificationPrefs; onChangePrefs?: (p: NotificationPrefs) => void }> = ({ paydayDay, onOpenPayday, prefs = {}, onChangePrefs }) => {
+// le Pilotage (on le cherchait ici). `hasParental` faux (mode solo, après la restitution) :
+// le type « Capital des parents » n'a plus d'objet et n'est plus proposé.
+export const NotificationSettings: React.FC<{ paydayDay?: number; onOpenPayday?: () => void; prefs?: NotificationPrefs; onChangePrefs?: (p: NotificationPrefs) => void; hasParental?: boolean }> = ({ paydayDay, onOpenPayday, prefs = {}, onChangePrefs, hasParental = true }) => {
+  const categories = hasParental ? NOTIFICATION_CATEGORIES : NOTIFICATION_CATEGORIES.filter(c => c.id !== 'parents');
   const [state, setState] = useState<PushState | 'loading'>('loading');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
@@ -30,7 +32,7 @@ export const NotificationSettings: React.FC<{ paydayDay?: number; onOpenPayday?:
   const refresh = () => getPushState().then(setState).catch(() => setState('unsupported'));
   useEffect(() => { void refresh(); }, []);
 
-  const off = onChangePrefs ? NOTIFICATION_CATEGORIES.filter(c => prefs[c.id] === false).length : 0;
+  const off = onChangePrefs ? categories.filter(c => prefs[c.id] === false).length : 0;
   const summary = STATE_SUMMARY[state];
   useCardSummary('push', summary && off > 0 ? `${summary} · ${off} type${off > 1 ? 's' : ''} coupé${off > 1 ? 's' : ''}` : summary);
 
@@ -67,6 +69,7 @@ export const NotificationSettings: React.FC<{ paydayDay?: number; onOpenPayday?:
     <div className="space-y-4">
       <Hint>
         Recevez les rappels même app fermée : jour de paie, abonnements, échéances récurrentes, révision des taux réglementés, bilan du mois, déclaration de revenus (en avril), soldes non actualisés… Vérification une fois par jour ; chaque rappel n’est envoyé qu’une fois. Réglage propre à cet appareil.
+        Les alertes de sécurité (retrait du verrou demandé sur un autre appareil, effacement des copies de secours demandé) arrivent toujours, sans aucun montant.
       </Hint>
 
       {state === 'loading' && <Loader2 className="w-4 h-4 animate-spin text-on-surface-variant" aria-label="Chargement" />}
@@ -115,9 +118,9 @@ export const NotificationSettings: React.FC<{ paydayDay?: number; onOpenPayday?:
         <fieldset className="pt-4 border-t border-outline-variant">
           <legend className="text-sm font-medium text-on-surface mb-2">Types de notifications (tous vos appareils)</legend>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2">
-            {NOTIFICATION_CATEGORIES.map(c => (
+            {categories.map(c => (
               <label key={c.id} className="flex items-start gap-3 text-sm text-on-surface cursor-pointer">
-                <input type="checkbox" className="mt-0.5 w-[18px] h-[18px] shrink-0 accent-indigo-600" checked={prefs[c.id] !== false}
+                <input type="checkbox" className="mt-0.5 w-[18px] h-[18px] shrink-0 accent-primary" checked={prefs[c.id] !== false}
                   onChange={e => onChangePrefs({ ...prefs, [c.id]: e.target.checked })} />
                 {c.label}
               </label>
@@ -127,7 +130,7 @@ export const NotificationSettings: React.FC<{ paydayDay?: number; onOpenPayday?:
       )}
 
       {message && (
-        <p role="status" className={`text-xs font-medium flex items-start gap-2 ${message.kind === 'ok' ? 'text-emerald-700 dark:text-emerald-300' : 'text-error'}`}>
+        <p role="status" className={`text-xs font-medium flex items-start gap-2 ${message.kind === 'ok' ? 'text-gain' : 'text-error'}`}>
           {message.kind === 'ok' ? <CheckCircle className="w-4 h-4 shrink-0" aria-hidden="true" /> : <AlertTriangle className="w-4 h-4 shrink-0" aria-hidden="true" />}
           {message.text}
         </p>

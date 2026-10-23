@@ -42,7 +42,7 @@ const ATTEMPT_TTL_S = 6 * 3600;
 /** Le binding Workers AI (`[ai] binding = "AI"`), réduit à ce qui sert ici. */
 export interface AiRunner { run(model: string, inputs: Record<string, unknown>): Promise<unknown> }
 
-type Unit = 'percent' | 'percentAsFraction' | 'euros' | 'brackets';
+type Unit = 'percent' | 'percentAsFraction' | 'euros' | 'brackets' | 'year';
 interface FieldSpec { key: string; unit: Unit; desc: string }
 
 /**
@@ -80,6 +80,13 @@ export const PAGE_FIELDS: Record<string, FieldSpec[]> = {
   F2329: [
     { key: 'socialChargesGeneral', unit: 'percentAsFraction', desc: 'taux TOTAL des prélèvements sociaux sur les revenus du patrimoine et de placements, cas général, en %' },
     { key: 'socialChargesLifeInsurance', unit: 'percentAsFraction', desc: "taux TOTAL des prélèvements sociaux sur les produits d'assurance vie, en %" },
+  ],
+  F19846: [
+    { key: 'transportExemptUntil', unit: 'year', desc: "DERNIÈRE année pour laquelle la prise en charge de l'abonnement de transport public par l'employeur AU-DELÀ de 50 % est exonérée d'impôt sur le revenu, jusqu'à 75 % du prix (l'année écrite dans la phrase « Pour l'année AAAA, si l'employeur décide d'augmenter… au-delà de 50 % … jusqu'à 75 % »)" },
+  ],
+  '4268033': [
+    { key: 'inflationAnnual', unit: 'percent', desc: "inflation en MOYENNE ANNUELLE (évolution annuelle moyenne de l'indice des prix à la consommation) de la dernière année complète publiée, en % (pas un glissement sur un mois)" },
+    { key: 'inflationYear', unit: 'year', desc: "année à laquelle se rapporte cette inflation en moyenne annuelle (ex. 2025)" },
   ],
 };
 
@@ -240,6 +247,12 @@ export const validatePageValues = (parsed: unknown, source: { url: string; text:
 
     const v = item.value;
     if (typeof v !== 'number' || !Number.isFinite(v) || v <= 0) { rejected.push({ field, reason: 'valeur non numérique' }); continue; }
+    // Année (inflation) : entière, plausible, et écrite dans la page.
+    if (spec.unit === 'year') {
+      if (!Number.isInteger(v) || v < 2000 || v > 2100 || !has(nums.all, v)) { rejected.push({ field, reason: `année ${v} absente de la page` }); continue; }
+      values[field] = { value: v, ...base };
+      continue;
+    }
     // Prélèvements sociaux : demandés en % (18.6), rendus en fraction (0.186) comme dans l'app.
     // Une fraction déjà convertie par le modèle est acceptée aussi.
     const asPercent = spec.unit === 'percentAsFraction' && v < 1 ? v * 100 : v;

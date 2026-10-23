@@ -6,8 +6,8 @@
 // date de restitution). Une fourchette P10–P50–P90 est tirée de vos propres mois passés
 // (bootstrap Monte Carlo à graine). Fonctions pures, testées.
 //
-// Même mécanique que buildSoloPlan / projectSavings : chaque mois, intérêts nets
-// (netAnnualRate / 12) sur le solde réel, puis versement réparti par
+// Même moteur que buildSoloPlan / projectSavings (./projectionEngine) : chaque mois,
+// intérêts nets (netAnnualRate / 12) sur le solde réel, puis versement réparti par
 // computePlacementStrategy (plafonds vérifiés sur le solde réel, part des parents
 // comprise tant qu'elle est là). Les intérêts du capital parental vous reviennent
 // (accord familial) : ils s'ajoutent à votre part, comme dans projectSavings.
@@ -23,11 +23,15 @@
 // variations des marchés (PEA, crypto, unités de compte gardent leur taux net fixe).
 // ================================================
 import { AccountType, FiscalConfig, PayslipRecord, SavingsAccount, AccountMovement } from '../types';
-import { computePlacementStrategy, computeWithdrawalTax, depositsAfterWithdrawal, SavingsSplit } from './finance';
+import { computeWithdrawalTax, cryptoDisposalsOfYear, depositsAfterWithdrawal, SavingsSplit } from './finance';
 import { netAnnualRate, netMonthlyRateSchedule } from './projection';
 import { recentPayWindows, savedBetween } from './motivation';
 import { parseISODate, formatISODay } from './dates';
-import { accruedSinceJanuary, applyMonthlyInterest, creditsInterestYearly, pendingInterest } from './yearlyInterest';
+import { pendingInterest } from './yearlyInterest';
+import { growthView } from './performance';
+import {
+  ProjectionSetup, accrueMonth, idleAccount, placeDeposit, prepareProjection, projectedTotal, restituteParentalCapital, startProjection,
+} from './projectionEngine';
 
 const MIN_HORIZON = 6;
 const MAX_HORIZON = 60;
@@ -129,6 +133,9 @@ export interface SimulatorInput {
   runs?: number;
   /** false : pas de fourchette (courbes seules, calcul instantané). */
   band?: boolean;
+  /** Rendement supposé (en %) des placements sans taux saisi (withAssumedRates de
+   *  ./performance) : leurs intérêts seulement, comme au Rendement. */
+  assumedRates?: Readonly<Record<string, number>>;
 }
 
 export interface SimPoint {
@@ -204,7 +211,7 @@ const BLOCKED_TYPES: readonly AccountType[] = [AccountType.PER, AccountType.PEE]
  * bloqué. Sur un placement imposable (PEA, AV, crypto), l'impôt sur la part de gains
  * (computeWithdrawalTax) s'ajoute : on retire assez pour que `amount` arrive net.
  */
-const withdraw = (sim: SimAccount[], rates: Map<string, number>, amount: number, fiscal: FiscalConfig, at: Date) => {
+const withdraw = (sim: SimAccount[], rates: Map<string, number>, amount: number, fiscal: FiscalConfig, at: Date, cryptoSold: Map<number, number>) => {
   const rank = (a: SimAccount) => {
     const i = LIQUID_ORDER.indexOf(a.type);
     return i >= 0 ? i : LIQUID_ORDER.length;
@@ -219,10 +226,13 @@ const withdraw = (sim: SimAccount[], rates: Map<string, number>, amount: number,
     const own = Math.max(0, a.own);
     if (own <= 0.005) continue;
     const probe = Math.min(left, own);
-    const t = computeWithdrawalTax(a, probe, fiscal, at);
+    // Crypto : l'exonération des 305 € porte sur le total des ventes de l'année civile.
+    const year = at.getFullYear();
+    const t = computeWithdrawalTax(a, probe, fiscal, at, { cryptoDisposalsThisYear: cryptoSold.get(year) ?? 0 });
     const taxRatio = t.known && probe > 0 ? Math.min(0.99, Math.max(0, 1 - t.net / probe)) : 0;
     const gross = Math.min(own, left / (1 - taxRatio));
     const net = gross * (1 - taxRatio);
+    if (a.type === AccountType.CRYPTO) cryptoSold.set(year, (cryptoSold.get(year) ?? 0) + gross);
     if (a.totalDeposits !== undefined) a.totalDeposits = depositsAfterWithdrawal(a.totalDeposits, a.totalAmount, gross);
     a.own -= gross; a.totalAmount -= gross; left -= net; tax += gross - net;
     takenFrom.push({ accountId: a.id, name: a.name, type: a.type, amount: gross });
@@ -238,73 +248,53 @@ interface PathPlan {
 }
 
 interface PathContext {
-  base: SavingsAccount[];
+  /** Comptes, intérêts déjà acquis et taux de chaque mois : moteur partagé (./projectionEngine). */
+  setup: ProjectionSetup;
   fiscal: FiscalConfig;
   split?: SavingsSplit;
   horizon: number;
+  /** Taux net mensuel actuel : ordre des retraits (le moins rémunérateur d'abord). */
   rates: Map<string, number>;
-  /** Taux net mensuel du mois m (0 = premier mois simulé) : PEA et AV passent au taux mûr. */
-  rateAt: Map<string, (m: number) => number>;
   today: string;
-  /** Intérêts des livrets réglementés déjà acquis cette année, crédités au 31 décembre. */
-  accruedThisYear: Map<string, number>;
-  /** Mois civil (0-11) du mois 0. */
-  firstMonth: number;
+  /** Crypto vendue depuis le 1er janvier (retraits notés) : seuil annuel des 305 €. */
+  cryptoSoldThisYear: number;
 }
 
 /** Solde (part propre) au début de chaque mois, et intérêts de livrets pas encore versés à la fin. */
 interface PathResult { series: number[]; pending: number }
 
+/**
+ * Une trajectoire : les étapes du moteur partagé (intérêts du mois, restitution, versement),
+ * plus ce qui est propre au simulateur (retraits, achats). L'étape m couvre le mois qui
+ * mène au point m (1er du mois m). Une restitution datée du mois m a lieu au point m :
+ * APRÈS les intérêts de l'étape (le capital des parents a rapporté jusque-là, et ces
+ * intérêts vous sont offerts), AVANT le versement du mois. Déjà passée ou dans le mois en
+ * cours (≤ 0) : appliquée tout de suite, avant tout intérêt.
+ */
 const runPath = (ctx: PathContext, plan: PathPlan, record?: PurchaseOutcome[]): PathResult => {
-  const sim: SimAccount[] = ctx.base.map(a => ({ ...a, own: a.ownedAmount, accrued: ctx.accruedThisYear.get(a.id) || 0 }));
+  const state = startProjection(ctx.setup);
   // Ce que le plan ne peut placer nulle part (livrets pleins, ni AV ni PEA) reste sur le
   // compte courant : sans compte courant saisi, un compte courant virtuel le garde.
-  let current = sim.find(a => a.type === AccountType.COMPTE_COURANT);
-  if (!current) {
-    current = { id: '__current', name: 'Compte courant', type: AccountType.COMPTE_COURANT, institution: '', totalAmount: 0, ownedAmount: 0, parentalCapital: 0, own: 0, accrued: 0 };
-    sim.push(current);
-  }
-  const idle = current;
-  const byId = new Map(sim.map(a => [a.id, a]));
+  idleAccount(state);
+  const sim: SimAccount[] = state.accounts;
+  const cryptoSold = new Map<number, number>([[parseISODate(ctx.today).getFullYear(), ctx.cryptoSoldThisYear]]);
   const at = (m: number) => parseISODate(monthDate(ctx.today, m));
-  const total = () => sim.reduce((s, a) => s + a.own, 0);
-  const out = [total()];
-  // L'étape m couvre le mois qui mène au point m (1er du mois m). Une restitution datée du
-  // mois m a lieu au point m : APRÈS les intérêts de l'étape (le capital des parents a
-  // rapporté jusque-là, et ces intérêts vous sont offerts), AVANT le versement du mois.
-  // Déjà passée ou dans le mois en cours (≤ 0) : appliquée tout de suite, avant tout intérêt.
-  const restitute = () => { for (const a of sim) a.totalAmount = a.own; };
-  if (plan.restitutionMonth !== undefined && plan.restitutionMonth <= 0) restitute();
+  const out = [projectedTotal(state)];
+  if (plan.restitutionMonth !== undefined && plan.restitutionMonth <= 0) restituteParentalCapital(state);
   for (let m = 1; m <= ctx.horizon; m++) {
-    // L'étape m finit le 31 décembre : les intérêts de l'année des livrets réglementés sont
-    // crédités, tous à vous (ceux du capital des parents vous sont offerts).
-    const december = (ctx.firstMonth + m - 1) % 12 === 11;
-    for (const a of sim) {
-      if (a.type === AccountType.COMPTE_COURANT) continue;
-      const credited = applyMonthlyInterest(a, ctx.rateAt.get(a.id)?.(m - 1) ?? ctx.rates.get(a.id) ?? 0, december);
-      a.own += credited;
-      // Intérêts déjà NETS de l'impôt de sortie (netAnnualRate) : comptés avec les
-      // versements pour qu'un retrait simulé ne les impose pas une seconde fois.
-      if (!creditsInterestYearly(a.type) && a.totalDeposits !== undefined) a.totalDeposits += credited;
-    }
-    if (plan.restitutionMonth === m) restitute();
+    // L'étape qui finit le 31 décembre crédite les intérêts de l'année des livrets réglementés,
+    // tous à vous (ceux du capital des parents vous sont offerts).
+    accrueMonth(state, m);
+    if (plan.restitutionMonth === m) restituteParentalCapital(state);
     const dep = plan.deposit(m);
-    if (dep > 0) {
-      for (const st of computePlacementStrategy(dep, sim, ctx.fiscal, ctx.split)) {
-        if (st.infoOnly) continue;
-        const a = (st.accountId && byId.get(st.accountId)) || idle;
-        a.totalAmount += st.fillAmount; a.own += st.fillAmount;
-        if (a.totalDeposits !== undefined) a.totalDeposits += st.fillAmount;
-      }
-    } else if (dep < 0) {
-      withdraw(sim, ctx.rates, -dep, ctx.fiscal, at(m));
-    }
+    if (dep > 0) placeDeposit(state, dep, ctx.fiscal, ctx.split);
+    else if (dep < 0) withdraw(sim, ctx.rates, -dep, ctx.fiscal, at(m), cryptoSold);
     for (const p of plan.purchases) {
       if (p.month !== m || !(p.amount > 0)) continue;
-      const r = withdraw(sim, ctx.rates, p.amount, ctx.fiscal, at(m));
+      const r = withdraw(sim, ctx.rates, p.amount, ctx.fiscal, at(m), cryptoSold);
       record?.push({ id: p.id, month: m, amount: p.amount, ...r });
     }
-    out.push(total());
+    out.push(projectedTotal(state));
   }
   return { series: out, pending: pendingInterest(sim) };
 };
@@ -323,13 +313,15 @@ const firstReach = (series: number[], target: number): number | null => {
 export const simulate = (input: SimulatorInput): SimulatorResult => {
   const horizon = clampHorizon(input.horizon);
   const scenarios = input.scenarios || [];
-  const base = input.accounts.filter(a => a.type !== AccountType.IMMOBILIER);
+  const start = parseISODate(input.today);
+  // Un placement sans taux saisi pousse à son rendement supposé, comme au Rendement et au plan solo.
+  const grow = (a: SavingsAccount) => growthView(a, input.assumedRates);
+  const setup = prepareProjection(input.accounts, start, a => netMonthlyRateSchedule(grow(a), input.fiscal, start));
+  const base = setup.base;
   const ctx: PathContext = {
-    base, fiscal: input.fiscal, split: input.split, horizon, today: input.today,
-    rates: new Map(base.map(a => [a.id, netAnnualRate(a, input.fiscal, parseISODate(input.today)) / 100 / 12])),
-    rateAt: new Map(base.map(a => [a.id, netMonthlyRateSchedule(a, input.fiscal, parseISODate(input.today))])),
-    accruedThisYear: accruedSinceJanuary(base, parseISODate(input.today)),
-    firstMonth: parseISODate(input.today).getMonth(),
+    setup, fiscal: input.fiscal, split: input.split, horizon, today: input.today,
+    rates: new Map(base.map(a => [a.id, netAnnualRate(grow(a), input.fiscal, start) / 100 / 12])),
+    cryptoSoldThisYear: cryptoDisposalsOfYear(base, start.getFullYear(), input.today),
   };
 
   // Restitution : rien à simuler si elle est faite ou s'il n'y a plus de part parentale.

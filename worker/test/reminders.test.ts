@@ -15,6 +15,7 @@ describe('computeReminders', () => {
     id: 'la', name: 'Livret A', type: AccountType.LIVRET_A, institution: 'B',
     totalAmount: 1000, ownedAmount: 1000, parentalCapital: 0, interestRate: 3,
     movements: [{ id: 'm', date: '2026-09-20', amount: 10, label: 'x', type: 'IN' as const }],
+    balanceCheckedAt: '2026-09-20',
   };
 
   it("n'envoie rien quand rien n'est à signaler", () => {
@@ -45,10 +46,20 @@ describe('computeReminders', () => {
     expect(nov.map(x => x.key)).not.toContain('parental:2026');
   });
 
-  it('rappelle une actualisation après 30 jours sans mouvement, une fois par dernière date', () => {
-    const old = { ...livret, movements: [{ id: 'm', date: '2026-07-01', amount: 10, label: 'x', type: 'IN' as const }] };
+  it('nomme les comptes dont le solde est à revérifier ; un versement prévu ne compte pas comme un constat', () => {
+    // Livret : solde lu il y a plus de 90 jours, puis seulement des versements de la paie.
+    const old = { ...livret, balanceCheckedAt: '2026-06-01', movements: [{ id: 'm', date: '2026-09-27', amount: 10, label: 'Épargne du mois', type: 'IN' as const }] };
     const r = computeReminders(base({ accounts: [old] }), new Date(2026, 8, 28, 9), APP);
-    expect(r.map(x => x.key)).toContain('stale:2026-07-01');
+    const stale = r.find(x => x.key.startsWith('stale:'))!;
+    expect(stale.message.title).toBe('Solde à vérifier');
+    expect(stale.message.body).toBe('Livret A (vérifié il y a 4 mois). Comparez avec votre banque, puis Actualiser.');
+    // Mode discret : ni nom de compte ni montant sur l'écran verrouillé.
+    expect(applyDiscreetMode([stale])[0].message.body).not.toContain('Livret A');
+    // Même liste le lendemain : même clé (un seul envoi) ; un nouveau constat la change.
+    const next = computeReminders(base({ accounts: [old] }), new Date(2026, 8, 29, 9), APP).find(x => x.key.startsWith('stale:'))!;
+    expect(next.key).toBe(stale.key);
+    const fresh = computeReminders(base({ accounts: [{ ...old, balanceCheckedAt: '2026-09-28' }] }), new Date(2026, 8, 29, 9), APP);
+    expect(fresh.some(x => x.key.startsWith('stale:'))).toBe(false);
   });
 
   describe('jour de paie', () => {
@@ -115,7 +126,7 @@ describe('computeReminders', () => {
       });
       const r = computeReminders(data, new Date(2026, 8, 28, 9), APP);
       expect(r[0].message.url).toBe(APP); // échéance → Dashboard
-      const stale = computeReminders(base({ accounts: [{ ...livret, movements: [{ id: 'm', date: '2026-07-01', amount: 1, label: 'x', type: 'IN' as const }] }] }), new Date(2026, 8, 28, 9), APP)
+      const stale = computeReminders(base({ accounts: [{ ...livret, balanceCheckedAt: '2026-05-01' }] }), new Date(2026, 8, 28, 9), APP)
         .find(x => x.key.startsWith('stale:'));
       expect(stale?.message.url).toBe(`${APP}?view=update`);
     });
@@ -214,17 +225,18 @@ describe('computeReminders', () => {
     });
   });
 
-  describe('relevés annuels', () => {
+  describe('relevés annuels (étape de la clôture)', () => {
     const pea = { ...livret, id: 'pea', name: 'PEA', type: AccountType.PEA, totalDeposits: 800 };
-    it('rappelle mi-janvier les placements non actualisés, pas les livrets', () => {
-      const r = computeReminders(base({ accounts: [livret, pea] }), new Date(2027, 0, 15, 9), APP).find(x => x.key === 'annual-statement:2027');
-      expect(r?.message.body).toContain('PEA');
-      expect(r?.message.body).not.toContain('Livret A');
-      expect(r?.message.url).toBe(`${APP}?view=update`);
+    it("n'envoient plus de rappel à part mi-janvier : la clôture nomme les placements à relever", () => {
+      expect(computeReminders(base({ accounts: [livret, pea] }), new Date(2027, 0, 15, 9), APP).some(x => x.key.startsWith('annual-statement'))).toBe(false);
+      const closing = computeReminders(base({ accounts: [livret, pea] }), new Date(2027, 0, 3, 9), APP).find(x => x.key === 'year-closing:2026');
+      expect(closing?.message.body).toContain('relevés de PEA');
+      expect(closing?.message.body).not.toContain('relevés de Livret A');
     });
-    it('se tait si la valeur a déjà été reportée cette année', () => {
-      const updated = { ...pea, movements: [{ id: 'v', date: '2027-01-08', amount: 40, label: 'Valorisation (+)', type: 'IN' as const, kind: 'valuation' as const }] };
-      expect(computeReminders(base({ accounts: [updated] }), new Date(2027, 0, 15, 9), APP).some(x => x.key.startsWith('annual-statement'))).toBe(false);
+    it('ne nomme pas un placement dont la valeur est déjà reportée cette année', () => {
+      const updated = { ...pea, movements: [...pea.movements, { id: 'v', date: '2027-01-02', amount: 40, label: 'Valorisation (+)', type: 'IN' as const, kind: 'valuation' as const }] };
+      const closing = computeReminders(base({ accounts: [updated] }), new Date(2027, 0, 3, 9), APP).find(x => x.key === 'year-closing:2026');
+      expect(closing?.message.body).not.toContain('relevés');
     });
   });
 
@@ -260,6 +272,12 @@ describe('computeReminders', () => {
         .find(x => x.key === 'fiscal-review:2027');
       expect(at()?.message.url).toBe(`${APP}?view=settings&section=fiscal`);
       expect(at(2027)).toBeUndefined();
+    });
+    it("se tait tant que la clôture de l'année écoulée est ouverte (c'en est une étape), revient une fois clôturée", () => {
+      const fiscal = (config?: Record<string, unknown>) => computeReminders(base({ accounts: [livret], ...(config ? { config: { ...base().config, ...config } } : {}) }), new Date(2027, 0, 20, 9), APP)
+        .some(x => x.key === 'fiscal-review:2027');
+      expect(fiscal()).toBe(false);
+      expect(fiscal({ yearClosings: { 2026: { closedOn: '2027-01-12' } } })).toBe(true);
     });
   });
 
@@ -326,12 +344,25 @@ describe('computeReminders', () => {
     });
   });
 
-  describe("bilan de l'année", () => {
-    it('annonce le bilan début janvier, une fois', () => {
-      const r = computeReminders(base({ accounts: [livret] }), new Date(2027, 0, 2, 9), APP).find(x => x.key === 'year-review:2026');
-      expect(r?.message.title).toBe('Votre bilan 2026');
-      expect(r?.message.url).toBe(`${APP}?view=history&year=2026`);
-      expect(computeReminders(base({ accounts: [livret] }), new Date(2027, 0, 10, 9), APP).some(x => x.key.startsWith('year-review'))).toBe(false);
+  describe("clôture de l'année", () => {
+    it('une seule notification début janvier, vers Historique, avec les chiffres du bilan', () => {
+      const r = computeReminders(base({ accounts: [livret] }), new Date(2027, 0, 2, 9), APP).filter(x => x.key.startsWith('year-'));
+      expect(r.map(x => x.key)).toEqual(['year-closing:2026']);
+      expect(r[0].message.title).toBe("Clôture de l'année 2026");
+      expect(r[0].message.body).toMatch(/mis de côté, .*d'intérêts\. Soldes au 31 décembre, intérêts, paramètres fiscaux, bilan et archive : tout est dans Historique, étape par étape\.$/);
+      expect(r[0].message.url).toBe(`${APP}?view=history`);
+      expect(applyDiscreetMode(r)[0].message.body).toBe('La clôture de l’année est prête dans Historique.');
+      // Fenêtre d'une semaine pour un cron manqué, puis plus rien.
+      expect(computeReminders(base({ accounts: [livret] }), new Date(2027, 0, 8, 9), APP).some(x => x.key === 'year-closing:2026')).toBe(true);
+      expect(computeReminders(base({ accounts: [livret] }), new Date(2027, 0, 10, 9), APP).some(x => x.key.startsWith('year-'))).toBe(false);
+    });
+    it("se tait si l'année est déjà clôturée dans l'app, ou sans compte", () => {
+      const closed = base({ accounts: [livret], config: { ...base().config, yearClosings: { 2026: { closedOn: '2027-01-02' } } } });
+      expect(computeReminders(closed, new Date(2027, 0, 3, 9), APP).some(x => x.key.startsWith('year-closing'))).toBe(false);
+      expect(computeReminders(base(), new Date(2027, 0, 3, 9), APP).some(x => x.key.startsWith('year-closing'))).toBe(false);
+      // Tout nouvel utilisateur (compte ajouté en janvier) : rien à clôturer.
+      const added = { ...livret, movements: [{ id: 'i', date: '2027-01-02', amount: 1000, label: 'Solde initial', type: 'IN' as const, tag: 'initial' as const }] };
+      expect(computeReminders(base({ accounts: [added] }), new Date(2027, 0, 3, 9), APP).some(x => x.key.startsWith('year-closing'))).toBe(false);
     });
   });
 });
@@ -379,11 +410,12 @@ describe('fuseau Europe/Paris', () => {
   });
 
   it("compte les jours sans mise à jour en jours civils, à travers le changement d'heure", () => {
-    const acc = { ...livret, movements: [{ id: 'm', date: '2026-09-25', amount: 10, label: 'x', type: 'IN' as const }] };
-    const keys = (day: number) => computeReminders(base({ accounts: [acc] }), { year: 2026, month: 10, day }, APP).map(r => r.key);
-    expect(keys(24)).not.toContain('stale:2026-09-25'); // 29 jours
-    expect(keys(25)).toContain('stale:2026-09-25');     // 30 jours, jour du passage à l'heure d'hiver
-    expect(keys(26)).toContain('stale:2026-09-25');
+    // Compte courant : à revérifier au bout de 30 jours.
+    const acc = { ...livret, type: AccountType.COMPTE_COURANT, name: 'Compte courant', balanceCheckedAt: '2026-09-25', movements: [] };
+    const stale = (day: number) => computeReminders(base({ accounts: [acc] }), { year: 2026, month: 10, day }, APP).some(r => r.key.startsWith('stale:'));
+    expect(stale(24)).toBe(false); // 29 jours
+    expect(stale(25)).toBe(true);  // 30 jours, jour du passage à l'heure d'hiver
+    expect(stale(26)).toBe(true);
   });
 
   it('la fenêtre de paie suit le jour parisien', () => {

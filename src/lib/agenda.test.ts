@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { buildAgenda, computeYearReview } from './agenda';
 import { AccountType, GlobalAppData, SavingsAccount } from '../types';
+import { DEFAULT_FISCAL_CONFIG } from '../constants';
 
 const acc = (over: Partial<SavingsAccount>): SavingsAccount => ({
   id: 'x', name: 'x', type: AccountType.LIVRET_A, institution: 'B',
@@ -27,14 +28,38 @@ describe('buildAgenda', () => {
     const { events } = buildAgenda(data, NOW);
     const has = (kind: string, date: string) => events.some(e => e.kind === kind && e.date === date);
     expect(has('payday', '2026-10-27')).toBe(true);
+    // Le montant de la ligne de paie est ce qu'il faut placer, et la ligne le dit.
+    expect(events.find(e => e.kind === 'payday')).toMatchObject({ title: 'Jour de paie', detail: expect.stringMatching(/^Montant à placer/) });
     expect(has('subscription', '2026-10-01')).toBe(true);
     expect(events.filter(e => e.title === 'Navigo').length).toBe(3); // 1er oct, nov, déc : deux mois seulement
     expect(has('subscription', '2027-08-06')).toBe(true);              // annuel : tout l'horizon
     expect(has('restitution', '2027-01-01')).toBe(true);
     expect(has('rates', '2027-02-01')).toBe(true);
     expect(has('review', '2027-01-02')).toBe(true);
-    expect(has('fiscal', '2027-01-20')).toBe(true);
+    // Paramètres fiscaux : une étape de la clôture de janvier, pas un rendez-vous à part.
+    expect(has('fiscal', '2027-01-20')).toBe(false);
     expect(events.map(e => e.date)).toEqual([...events.map(e => e.date)].sort());
+  });
+
+  it("un seul rendez-vous de clôture en janvier (plus de relevés à part), absent une fois l'année clôturée", () => {
+    const av = acc({ id: 'av', name: 'AV', type: AccountType.ASSURANCE_VIE, totalAmount: 5000, ownedAmount: 5000 });
+    const { events } = buildAgenda(base({ accounts: [av] }), NOW);
+    const january = events.filter(e => e.date.startsWith('2027-01'));
+    expect(january.find(e => e.kind === 'review')).toMatchObject({
+      date: '2027-01-02', title: "Clôture de l'année 2026", view: 'history',
+      detail: 'Soldes au 31 décembre, intérêts, relevés des placements et taux servi, paramètres fiscaux, bilan et archive, dans Historique',
+    });
+    expect(january.some(e => e.kind === 'statement')).toBe(false);
+    expect(buildAgenda(base({ accounts: [acc({})] }), NOW).events.find(e => e.kind === 'review')?.detail).toBe('Soldes au 31 décembre, intérêts, paramètres fiscaux, bilan et archive, dans Historique');
+    const fiscalOn20 = (d: GlobalAppData) => buildAgenda(d, NOW).events.some(e => e.kind === 'fiscal' && e.date === '2027-01-20');
+    // Rien à clôturer (aucun compte) : pas de clôture, les paramètres fiscaux restent à part.
+    expect(buildAgenda(base(), NOW).events.some(e => e.kind === 'review')).toBe(false);
+    expect(fiscalOn20(base())).toBe(true);
+    // Année clôturée : plus de clôture ; les paramètres fiscaux reviennent le 20 janvier s'ils restent à vérifier.
+    const closed = base({ accounts: [av], config: { ...base().config, yearClosings: { 2026: { closedOn: '2026-12-31' } } } });
+    expect(buildAgenda(closed, NOW).events.some(e => e.kind === 'review')).toBe(false);
+    expect(fiscalOn20(closed)).toBe(true);
+    expect(fiscalOn20({ ...closed, fiscalConfig: { ...DEFAULT_FISCAL_CONFIG, paramsReviewedYear: 2027 } })).toBe(false);
   });
 
   it("jour de paie : la ligne reprend l'objectif de la paie en cours (somme en plus comprise), pas les suivantes", () => {

@@ -58,7 +58,9 @@ const readAccounts = async (page: Page, isMobile: boolean): Promise<Figures> => 
       const tag = row.getByText(/^Parents : /);
       parental = (await tag.count()) ? euros(await tag.textContent()) : 0;
     } else {
-      parental = euros(await row.locator('td').nth(2).textContent());
+      // Mode solo : plus de colonne « Parents » (textes et colonnes selon les données).
+      const column = await page.locator('thead th').filter({ hasText: /^Parents$/ }).count();
+      parental = column ? euros(await row.locator('td').nth(2).textContent()) : 0;
     }
     out[name] = { owned, parental };
   }
@@ -141,11 +143,14 @@ test.describe('Répétition générale de la restitution', () => {
       page.getByRole('button', { name: 'Exporter le relevé (CSV)' }).click(),
     ]);
     expect(download.suggestedFilename()).toBe('restitution-parents-2027-01-01.csv');
+    // Format d'Excel en français (lib/csv) : BOM UTF-8, « ; », virgule décimale.
     const csv = await readFile((await download.path())!, 'utf-8');
-    expect(csv).toContain('Relevé de restitution du capital parental,2027-01-01');
-    for (const name of WITH_PARENTS) expect(csv).toContain(`"${name}",${before[name].parental.toFixed(2)}`);
-    expect(csv).toContain(`Total,${totalParents.toFixed(2)}`);
-    expect(csv).toMatch(/\n2026,\d+\.\d\d\n/);
+    const csvEuros = (n: number) => n.toFixed(2).replace('.', ',');
+    expect(csv.charCodeAt(0)).toBe(0xfeff);
+    expect(csv).toContain('Relevé de restitution du capital parental;2027-01-01');
+    for (const name of WITH_PARENTS) expect(csv).toContain(`${name};${csvEuros(before[name].parental)}`);
+    expect(csv).toContain(`Total;${csvEuros(totalParents)}`);
+    expect(csv).toMatch(/\r\n2026;\d+,\d\d\r\n/);
 
     // Soldes : part des parents à 0 partout, part propre inchangée.
     const after = await readAccounts(page, isMobile);

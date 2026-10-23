@@ -16,10 +16,10 @@ export interface Survival {
 
 const level = (totalMonths: number) =>
   totalMonths < 3
-    ? { text: 'Réserve courte', tone: 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-200' }
+    ? { text: 'Réserve courte', tone: 'bg-error-container text-on-error-container' }
     : totalMonths < 6
       ? { text: 'Réserve moyenne', tone: 'bg-tertiary-container text-on-tertiary-container' }
-      : { text: 'Réserve confortable', tone: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-200' };
+      : { text: 'Réserve confortable', tone: 'bg-gain-container text-on-gain-container' };
 
 export const SurvivalCard: React.FC<{ survival: Survival }> = ({ survival: s }) => {
   const value = s.infinite ? <><span aria-hidden="true">∞</span><span className="sr-only">illimitée</span></> : (

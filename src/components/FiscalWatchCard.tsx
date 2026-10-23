@@ -9,7 +9,8 @@ import type { ServerWatchReport, WatchSource } from '../hooks/useFiscalWatch';
 import { Button } from './ui';
 import { useCardSummary, useInSettingsCard } from './settings/SettingsCard';
 
-interface Props {
+/** État de la veille (useFiscalWatch) : la carte le reçoit tel quel. */
+export interface FiscalWatchView {
   proposals: FiscalProposal[];
   running: boolean;
   checkedAt?: string;
@@ -22,9 +23,13 @@ interface Props {
   runningVia?: WatchSource;
   /** Détail du relevé du serveur (contrôle de qualité). */
   serverReport?: ServerWatchReport;
+  dismiss: (p: FiscalProposal) => void;
+  run: () => void;
+}
+
+interface Props {
+  watch: FiscalWatchView;
   onApply: (p: FiscalProposal) => void;
-  onDismiss: (p: FiscalProposal) => void;
-  onRun: () => void;
   /** Version compacte (accueil) : n'affiche rien s'il n'y a rien à proposer. */
   compact?: boolean;
 }
@@ -49,7 +54,8 @@ const SOURCE_LABEL: Record<WatchSource, string> = {
   gemini: 'Gemini (votre clé)',
 };
 
-export const FiscalWatchCard: React.FC<Props> = ({ proposals, running, checkedAt, lastError, hasKey, canRun = hasKey, source, runningVia, serverReport, onApply, onDismiss, onRun, compact }) => {
+export const FiscalWatchCard: React.FC<Props> = ({ watch, onApply, compact }) => {
+  const { proposals, running, checkedAt, lastError, hasKey, canRun = hasKey, source, runningVia, serverReport, dismiss: onDismiss, run: onRun } = watch;
   // Dans une carte de Paramètres : ni bordure ni titre (la carte les porte), et un résumé.
   const embedded = useInSettingsCard();
   useCardSummary('watch', proposals.length > 0
@@ -66,7 +72,7 @@ export const FiscalWatchCard: React.FC<Props> = ({ proposals, running, checkedAt
       className={embedded ? '' : 'rounded-2xl border border-outline-variant bg-surface-container-lowest dark:bg-surface-container-low text-on-surface p-5 sm:p-6'}>
       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
         <div className="min-w-0">
-          {!embedded && <h3 id="fiscal-watch-title" className="text-base font-medium text-on-surface flex items-center gap-2"><Radar className="w-5 h-5 text-indigo-600 dark:text-indigo-300" aria-hidden="true" /> Veille fiscale</h3>}
+          {!embedded && <h3 id="fiscal-watch-title" className="text-base font-medium text-on-surface flex items-center gap-2"><Radar className="w-5 h-5 text-primary" aria-hidden="true" /> Veille fiscale</h3>}
           <p className={`text-sm text-on-surface-variant ${embedded ? '' : 'mt-1'}`}>
             {proposals.length > 0
               ? `${proposals.length} valeur${proposals.length > 1 ? 's' : ''} officielle${proposals.length > 1 ? 's ont' : ' a'} peut-être changé. Vérifiez la source avant d'appliquer.`
@@ -101,7 +107,7 @@ export const FiscalWatchCard: React.FC<Props> = ({ proposals, running, checkedAt
                   <span className="line-through decoration-error/60">{p.current}</span> → <span className="font-medium text-on-surface">{p.proposed}</span>
                 </p>
                 {p.source && (
-                  <a href={p.source} target="_blank" rel="noopener noreferrer" className="text-xs font-medium text-indigo-700 dark:text-indigo-300 inline-flex items-center gap-1 hover:underline">
+                  <a href={p.source} target="_blank" rel="noopener noreferrer" className="text-xs font-medium text-primary inline-flex items-center gap-1 hover:underline">
                     Source : {hostOf(p.source)} <ExternalLink className="w-3 h-3" aria-hidden="true" />
                   </a>
                 )}
@@ -124,13 +130,13 @@ export const FiscalWatchCard: React.FC<Props> = ({ proposals, running, checkedAt
             {serverReport.rows.map(r => (
               <li key={r.key}>
                 <span className="font-medium text-on-surface">{r.label}</span> : {r.value}{' '}
-                <span className={r.sameAsApp ? 'text-emerald-700 dark:text-emerald-300' : 'font-medium text-amber-700 dark:text-amber-300'}>{r.sameAsApp ? "(= app)" : "(≠ app)"}</span>
+                <span className={r.sameAsApp ? 'text-gain' : 'font-medium text-tertiary'}>{r.sameAsApp ? "(= app)" : "(≠ app)"}</span>
                 {r.quote && <span className="block italic wrap-break-word">« {r.quote} »{r.source && <> — {hostOf(r.source)}</>}</span>}
               </li>
             ))}
           </ul>
           {serverReport.issues.length > 0 && (
-            <ul className="mt-3 list-disc pl-4 text-amber-700 dark:text-amber-300">
+            <ul className="mt-3 list-disc pl-4 text-tertiary">
               {serverReport.issues.map((x, i) => <li key={i}>{x}</li>)}
             </ul>
           )}

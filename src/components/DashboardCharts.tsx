@@ -19,8 +19,10 @@ import { DataTable, type Column } from './ui/DataTable';
 import { ChartFrame } from './charts/ChartFrame';
 import { ChartLegend, ChartTooltipCard } from './charts/ChartParts';
 
-// Un point du graphique empilé : la date, puis le solde de chaque compte (clé = id du compte).
-export type StackedPoint = { date: string; displayDate: string; total?: number; [accountId: string]: string | number | undefined };
+// Un point du graphique empilé : la date, puis le solde de chaque compte (clé = id du compte),
+// calculé par lib/home (buildStackedSeries).
+import type { StackedPoint } from '../lib/home';
+export type { StackedPoint };
 
 interface StackedProps {
   stackedData: StackedPoint[];
@@ -143,7 +145,7 @@ export const StackedSavingsChart: React.FC<StackedProps> = ({ stackedData, accou
  * parents), comme la carte « Mon épargne nette » : le graphique le dit explicitement, il
  * n'est donc plus comparé aux soldes complets des comptes.
  */
-export const InstitutionChart: React.FC<{ data: { name: string; value: number }[] }> = ({ data: dataByInstitution }) => {
+export const InstitutionChart: React.FC<{ data: { name: string; value: number }[]; withParents?: boolean }> = ({ data: dataByInstitution, withParents = true }) => {
   const dark = useIsDark();
   const t = chartTheme(dark);
   const reduced = usePrefersReducedMotion();
@@ -155,11 +157,11 @@ export const InstitutionChart: React.FC<{ data: { name: string; value: number }[
 
   const summary = data.length === 0
     ? 'Aucun compte pour l’instant.'
-    : <>Votre part, hors capital de vos parents : <b className="font-medium text-on-surface tabular-nums">{fmt0(total)}</b>.</>;
+    : <>{withParents ? 'Votre part, hors capital de vos parents' : 'Le total de vos comptes'} : <b className="font-medium text-on-surface tabular-nums">{fmt0(total)}</b>.</>;
 
   const columns: Column<{ name: string; value: number }>[] = [
     { key: 'name', header: 'Établissement', cell: d => d.name },
-    { key: 'value', header: 'Votre part', numeric: true, cell: d => fmt0(d.value) },
+    { key: 'value', header: withParents ? 'Votre part' : 'Montant', numeric: true, cell: d => fmt0(d.value) },
     { key: 'share', header: 'Part du total', numeric: true, cell: d => share(d.value) },
   ];
 
@@ -168,7 +170,7 @@ export const InstitutionChart: React.FC<{ data: { name: string; value: number }[
       fill
       compact
       summary={summary}
-      table={<DataTable caption="Votre part par établissement, hors capital de vos parents" columns={columns} rows={data} rowKey={d => d.name} />}
+      table={<DataTable caption={withParents ? 'Votre part par établissement, hors capital de vos parents' : 'Vos comptes par établissement'} columns={columns} rows={data} rowKey={d => d.name} />}
     >
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={data} layout="vertical" margin={{ top: 0, right: 76, left: 0, bottom: 0 }} barCategoryGap="22%" accessibilityLayer={false}>

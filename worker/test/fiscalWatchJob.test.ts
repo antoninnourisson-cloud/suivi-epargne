@@ -24,6 +24,8 @@ const PAGES: Record<string, string> = {
   F34328: "Vous êtes célibataire\n Vous bénéficiez d'une décote si le montant brut de votre impôt sur le revenu ne dépasse pas 1 982 € .\nVous êtes en couple soumis à imposition commune\n Vous bénéficiez d'une décote si le montant brut de votre impôt sur le revenu ne dépasse pas 3 277 € .\n La décote est égale à la différence entre 897 € et 45,25 % du montant de votre impôt.",
   F1989: "La déduction forfaitaire est au moins de 509 € pour chaque membre du foyer fiscal.\n Son maximum est de 14 555 € pour chaque membre du foyer.",
   F426: "Dons effectués avant le 14 octobre 2025\nDons jusqu'à 1 000 €\n Pour les dons effectués jusqu'à 1 000 € , la réduction d'impôt est de 75 % du montant donné.\nDons effectués à partir du 14 octobre 2025\nDons jusqu'à 2 000 €\n Pour les dons effectués jusqu'à 2 000 € , la réduction d'impôt est de 75 % du montant donné.",
+  F19846: "Le remboursement est exonéré dans la limite de 50 % du prix.\n Pour l'année 2026, si l'employeur décide d'augmenter le volume de la prise en charge au-delà de 50 %, l'exonération fiscale s'applique au maximum jusqu'à 75 % du coût du titre d'abonnement.",
+  '4268033': "L'inflation annuelle s'établit ainsi à +0,9 % après +2,0 % en 2024, +4,9 % en 2023 et +5,2 % en 2022.\n Lecture : en 2025, les prix à la consommation ont en moyenne augmenté de 0,9 %.",
   F2329: "Cas général\n Contribution sociale généralisée (CSG)\n 10,6 %\n Contribution au remboursement de la dette sociale (CRDS)\n 0,5 %\n Prélèvement de solidarité\n 7,5 %\n TOTAL\n 18,6 %\nAssurance vie\n CSG\n 9,2 %\n CRDS\n 0,5 %\n Prélèvement de solidarité\n 7,5 %\n TOTAL\n 17,2 %",
 };
 
@@ -41,6 +43,8 @@ const ANSWERS: Record<string, unknown> = {
   F1989: { values: [{ field: 'allowanceMin', value: 509, quote: 'x' }, { field: 'allowanceCap', value: 14555, quote: 'x' }] },
   F426: { values: [{ field: 'donation75Ceiling', value: 2000, quote: 'x' }] },
   F2329: { values: [{ field: 'socialChargesGeneral', value: 18.6, quote: 'x' }, { field: 'socialChargesLifeInsurance', value: 0.172, quote: 'x' }] },
+  F19846: { values: [{ field: 'transportExemptUntil', value: 2026, quote: "Pour l'année 2026" }] },
+  '4268033': { values: [{ field: 'inflationAnnual', value: 0.9, quote: 'x' }, { field: 'inflationYear', value: 2025, quote: 'x' }] },
 };
 
 const sources = (over: Partial<Record<string, string>> = {}): FiscalSource[] =>
@@ -48,7 +52,7 @@ const sources = (over: Partial<Record<string, string>> = {}): FiscalSource[] =>
 
 const pageOf = (inputs: Record<string, unknown>) => {
   const sys = (inputs.messages as { content: string }[])[0].content;
-  return /vosdroits\/(F\d+)/.exec(sys)![1];
+  return /(?:vosdroits|statistiques)\/(F?\d+)/.exec(sys)![1];
 };
 
 /** Workers AI simulé : `answer(page, withSchema)` rend la réponse, ou lève une erreur. */
@@ -100,6 +104,29 @@ describe('validation page par page', () => {
     expect(validatePageValues({ values: [{ field: 'taxBrackets', limits: [11600, 29579], rates: [0, 11], year: 2026 }] }, s, PAGE_FIELDS.F1419)!.rejected[0].reason).toMatch(/mal formé/);
     expect(validatePageValues({ values: [{ field: 'taxBrackets', limits: [11700, 29579, 84577, 181917], rates: [0, 11, 30, 41, 45] }] }, s, PAGE_FIELDS.F1419)!.rejected[0].reason).toMatch(/11700/);
   });
+  it("inflation INSEE : le taux et l'année doivent être écrits dans la page", () => {
+    const s = { url: 'https://www.insee.fr/fr/statistiques/4268033', text: PAGES['4268033'] };
+    const r = validatePageValues({ values: [
+      { field: 'inflationAnnual', value: 0.9, quote: 'x' }, { field: 'inflationYear', value: 2025, quote: 'x' },
+    ] }, s, PAGE_FIELDS['4268033'])!;
+    expect(r.values).toMatchObject({ inflationAnnual: { value: 0.9 }, inflationYear: { value: 2025 } });
+    const bad = validatePageValues({ values: [
+      { field: 'inflationAnnual', value: 1.3, quote: 'x' }, { field: 'inflationYear', value: 2026, quote: 'x' },
+    ] }, s, PAGE_FIELDS['4268033'])!;
+    expect(bad.values).toEqual({});
+    expect(bad.rejected.map(x => x.reason)).toEqual(['1.3 % absent de la page', 'année 2026 absente de la page']);
+  });
+  it('transport : une prorogation écrite dans la page devient une proposition, une année inventée est écartée', () => {
+    const url = 'https://www.service-public.gouv.fr/particuliers/vosdroits/F19846';
+    const extended = { url, text: PAGES.F19846.replace("Pour l'année 2026", "Pour les années 2026 et 2027") };
+    const ok = validatePageValues({ values: [{ field: 'transportExemptUntil', value: 2027, quote: 'x' }] }, extended, PAGE_FIELDS.F19846)!;
+    expect(ok.values.transportExemptUntil).toMatchObject({ value: 2027, source: url });
+    expect(diffFiscalWatch(ok.values as FiscalWatchResult, DEFAULT_FISCAL_CONFIG, []).map(p => p.key)).toEqual(['transportExemptUntil']);
+    // Page actuelle (« Pour l'année 2026 ») : 2027 n'y figure pas.
+    const invented = validatePageValues({ values: [{ field: 'transportExemptUntil', value: 2027, quote: 'x' }] }, { url, text: PAGES.F19846 }, PAGE_FIELDS.F19846)!;
+    expect(invented.values).toEqual({});
+    expect(invented.rejected[0].reason).toBe('année 2027 absente de la page');
+  });
   it('rend null quand la forme est inutilisable', () => {
     expect(validatePageValues({ foo: 1 }, src, PAGE_FIELDS.F2365)).toBeNull();
     expect(validatePageValues(null, src, PAGE_FIELDS.F2365)).toBeNull();
@@ -118,9 +145,10 @@ describe('exécution de la veille', () => {
       lepRate: { value: 2.5 }, lepCeiling: { value: 10000 }, lepIncomeCeilingOnePart: { value: 23028 }, lepPerHalfPart: { value: 6149 },
       decoteSingle: { value: 897 }, decoteThreshold: { value: 1982 }, allowanceMin: { value: 509 }, allowanceCap: { value: 14555 },
       donation75Ceiling: { value: 2000 }, socialChargesGeneral: { value: 0.186 }, socialChargesLifeInsurance: { value: 0.172 },
+      inflationAnnual: { value: 0.9 }, inflationYear: { value: 2025 }, transportExemptUntil: { value: 2026 },
       taxBrackets: { year: 2026, value: [{ limit: 11600, rate: 0 }, { limit: 29579, rate: 0.11 }, { limit: 84577, rate: 0.3 }, { limit: 181917, rate: 0.41 }, { limit: null, rate: 0.45 }] },
     });
-    expect(Object.keys(run.values)).toHaveLength(15);
+    expect(Object.keys(run.values)).toHaveLength(18);
 
     // Un appel par page, déterministe, en mode JSON, sans aucune donnée d'utilisateur.
     expect(calls).toHaveLength(FISCAL_SOURCE_URLS.length);
@@ -239,7 +267,7 @@ describe('routes /fiscal-watch et cron', () => {
     env = {
       STORE: kv.asKV(), GOOGLE_CLIENT_ID: 'c', GOOGLE_CLIENT_SECRET: 's', ENCRYPTION_KEY: 'k',
       VAPID_PUBLIC_KEY: 'p', VAPID_PRIVATE_KEY: 'q', VAPID_SUBJECT: 'https://pecule-app.com/', APP_URL: 'https://pecule-app.com/',
-      AI: fakeAi().ai,
+      AI: fakeAi().ai, ALLOWED_EMAILS: 'me@example.com',
     } as Env;
     token = (await createSession(kv.asKV(), 'g-1', 'me@example.com')).token;
   });
@@ -262,7 +290,7 @@ describe('routes /fiscal-watch et cron', () => {
     const run = await call('/fiscal-watch/run', 'POST');
     expect(run.status).toBe(200);
     const body = await run.json() as { values: Record<string, unknown>; model: string };
-    expect(Object.keys(body.values)).toHaveLength(15);
+    expect(Object.keys(body.values)).toHaveLength(18);
 
     const after = await call('/fiscal-watch');
     expect(after.status).toBe(200);

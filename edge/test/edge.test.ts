@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import edge, { SECURITY_HEADERS } from '../src/index';
+import edge, { SECURITY_HEADERS, IMMUTABLE, REVALIDATE, cacheControlFor } from '../src/index';
 
 const origin = (init: ResponseInit = {}, body: BodyInit | null = '<!doctype html><title>Pécule</title>') =>
   vi.fn(async (_req: Request) => new Response(body, {
@@ -28,7 +28,7 @@ describe('en-têtes de sécurité', () => {
     expect(res.headers.get('Cross-Origin-Opener-Policy')).toBe('same-origin-allow-popups');
   });
 
-  it("ne touche ni au corps, ni au statut, ni au cache de l'origine", async () => {
+  it("ne touche ni au corps, ni au statut, ni au cache de l'origine (hors 200/304)", async () => {
     vi.stubGlobal('fetch', origin({ status: 404, statusText: 'Not Found' }, 'introuvable'));
     const res = await call('https://pecule-app.com/absent');
     expect(res.status).toBe(404);
@@ -65,6 +65,42 @@ describe('en-têtes de sécurité', () => {
     const res = await call('https://pecule-app.com/', { method: 'POST', body: 'x' });
     expect(res).toBe(upstream);
     expect(res.headers.get('Strict-Transport-Security')).toBeNull();
+  });
+});
+
+describe('en-têtes de cache', () => {
+  const served = async (path: string, contentType = 'application/javascript', status = 200) => {
+    vi.stubGlobal('fetch', origin({ status, headers: { 'Content-Type': contentType, 'Cache-Control': 'max-age=14400', Expires: 'Tue, 20 Oct 2026 14:00:00 GMT' } }, status === 304 ? null : 'x'));
+    return call(`https://pecule-app.com${path}`);
+  };
+
+  it('fichiers hachés par Vite : un an, immutable', async () => {
+    for (const path of ['/assets/index-RQF3CMlT.js', '/assets/AreaSeriesChart-BRS7Y0-C.js', '/assets/index-Dx_9aZ1q.css', '/workbox-9c191d2f.js']) {
+      const res = await served(path);
+      expect(res.headers.get('Cache-Control'), path).toBe(IMMUTABLE);
+      expect(res.headers.get('Expires')).toBeNull();
+    }
+    expect((await served('/assets/index-RQF3CMlT.js', 'application/javascript', 304)).headers.get('Cache-Control')).toBe(IMMUTABLE);
+  });
+
+  it('pages, service worker, extension push, enregistrement et manifeste : revalidés à chaque fois', async () => {
+    for (const path of ['/', '/index.html', '/confidentialite.html', '/sw.js', '/push-sw.js', '/registerSW.js', '/manifest.webmanifest']) {
+      expect((await served(path)).headers.get('Cache-Control'), path).toBe(REVALIDATE);
+    }
+    expect((await served('/presentation', 'text/html; charset=utf-8')).headers.get('Cache-Control')).toBe(REVALIDATE);
+  });
+
+  it('les autres fichiers (icônes, polices, noms non hachés) gardent le cache de l’origine', async () => {
+    for (const path of ['/pwa-192x192.png', '/fonts/google-sans-flex-latin-wght.woff2', '/assets/logo.svg']) {
+      expect((await served(path, 'image/png')).headers.get('Cache-Control'), path).toBe('max-age=14400');
+    }
+  });
+
+  it('cacheControlFor (fonction pure)', () => {
+    expect(cacheControlFor('/assets/x-12345678.js', null)).toBe(IMMUTABLE);
+    expect(cacheControlFor('/assets/x-1234567.js', null)).toBeNull();
+    expect(cacheControlFor('/docs/', null)).toBe(REVALIDATE);
+    expect(cacheControlFor('/robots.txt', 'text/plain')).toBeNull();
   });
 });
 

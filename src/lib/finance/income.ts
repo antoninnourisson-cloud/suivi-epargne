@@ -5,6 +5,13 @@ import { DEFAULT_STANDARD_ALLOWANCE_CAP, DEFAULT_STANDARD_ALLOWANCE_MIN, DEFAULT
 
 export interface IncomeInput {
   grossAnnual: number;
+  /**
+   * Autre SALAIRE (second employeur), net par mois. Traité comme un salaire : il entre dans les
+   * salaires imposables (case 1AJ) et dans l'abattement forfaitaire de 10 %, qui ne vaut que pour
+   * les salaires, une fois par personne avec un minimum et un plafond
+   * (https://www.service-public.gouv.fr/particuliers/vosdroits/F1989). Ce n'est donc pas la place
+   * des revenus d'indépendant ni des loyers, qui ont leurs propres règles : le Pilotage le dit.
+   */
   extraMonthlyIncome: number;
   /** @deprecated Ignoré : `workBenefits.navigo` est la seule source (inactif ⇒ 0 €). Lu seulement par migrate(). */
   navigoBase?: number;
@@ -19,6 +26,8 @@ export interface IncomeBreakdown {
   socialCharges: number;
   netSalaryOnly: number;
   navigoGain: number;
+  /** Part du remboursement transport au-delà du plafond d'exonération de l'année : imposable. */
+  navigoTaxable: number;
   mutuelleCost: number;
   swileCost: number;
   netBeforeTax: number;
@@ -29,7 +38,7 @@ export interface IncomeBreakdown {
   autoRate: number;           // taux du barème équivalent au prélèvement à la source (%, sur le net imposable avant abattement)
   effectiveMonthlyTax: number; // tient compte du taux forcé éventuel
   superNetRaw: number;        // net avant impôt, après mutuelle/tickets
-  superNet: number;           // reste à vivre réel (après impôt effectif)
+  superNet: number;           // paie nette après impôt (impôt effectif déduit)
 }
 
 /**
@@ -76,22 +85,113 @@ export const applyDecote = (grossTax: number, cfg: Pick<FiscalConfig, 'decote'>)
   return Math.max(0, grossTax - Math.max(0, d.single - d.rate * grossTax));
 };
 
-/** Prélèvements sociaux applicables aux gains d'un compte (l'assurance vie a son propre taux). */
+/**
+ * Prélèvements sociaux applicables aux gains d'un compte. En 2026, l'assurance vie, le PEL et
+ * le CEL restent à 17,2 % (`socialChargesLifeInsurance`) ; le reste passe à 18,6 % (livrets
+ * bancaires, comptes à terme, PEA, compte-titres…). Vérifié le 2026-10-21 :
+ * https://www.service-public.gouv.fr/particuliers/vosdroits/F2329
+ */
 export const socialChargesRateFor = (type: AccountType, cfg: FiscalConfig): number =>
-  type === AccountType.ASSURANCE_VIE ? (cfg.socialChargesLifeInsurance ?? SOCIAL_CHARGES_LIFE_INSURANCE) : cfg.socialChargesCapital;
+  type === AccountType.ASSURANCE_VIE || type === AccountType.PEL || type === AccountType.CEL
+    ? (cfg.socialChargesLifeInsurance ?? SOCIAL_CHARGES_LIFE_INSURANCE) : cfg.socialChargesCapital;
 
 // Part de la CSG/CRDS non déductible (2,4 % + 0,5 % sur 98,25 % du brut) : retenue sur le
 // salaire, mais imposable. L'oublier sous-estime le net imposable d'environ 2,85 % du brut.
+// CSG 9,2 % dont 6,8 % déductibles, CRDS 0,5 %, assiette 98,25 % du brut (jusqu'à 4 plafonds
+// de la Sécurité sociale) : https://www.service-public.gouv.fr/particuliers/vosdroits/F2971 ;
+// les 2,4 points restants et la CRDS ne sont pas déductibles (brochure IR, traitements et
+// salaires : https://www.impots.gouv.fr/www2/fichiers/documentation/brochure/ir_2025/pdf_som/06-traitements_salaires_83a112.pdf).
 const NON_DEDUCTIBLE_CSG_RATE = 0.9825 * 0.029;
 
 /**
+ * CSG/CRDS non déductible mensuelle d'un salaire connu par son NET avant impôt (l'autre
+ * salaire du Pilotage) : le brut est retrouvé avec le même taux de charges que le salaire
+ * principal, faute de mieux. Taux de charges ≥ 100 % (saisie erronée) : le net sert de brut.
+ */
+export const nonDeductibleCsgFromNet = (netMonthly: number, salaryChargesRate: number): number => {
+  if (!(netMonthly > 0)) return 0;
+  const netShare = 1 - salaryChargesRate;
+  const grossMonthly = netShare > 0 ? netMonthly / netShare : netMonthly;
+  return grossMonthly * NON_DEDUCTIBLE_CSG_RATE;
+};
+
+// --- Remboursement de l'abonnement de transport (Navigo) ---
+// Vérifié le 2026-10-21, BOFiP BOI-RSA-CHAMP-20-30-10-20-20260407 § 50 et 200-220
+// (https://bofip.impots.gouv.fr/bofip/5601-PGP.html/identifiant=BOI-RSA-CHAMP-20-30-10-20-20260407) :
+// - la prise en charge OBLIGATOIRE (50 % du prix de l'abonnement) est exonérée d'impôt
+//   (CGI art. 81, 19° ter a) ;
+// - pour les revenus 2022 à 2026, la prise en charge facultative au-delà est aussi exonérée
+//   dans la limite de 25 % du prix (soit 75 % au total) : loi n° 2022-1157 du 16 août 2022,
+//   art. 2 III, prorogée par l'art. 68 de la loi n° 2026-103 du 19 février 2026 ;
+// - au-delà (ou après cette période), l'avantage est imposable.
+// Confirmé le 2026-10-22 par service-public (« Pour l'année 2026 […] l'exonération fiscale
+// s'applique au maximum jusqu'à 75 % du coût du titre d'abonnement »), rien d'annoncé après :
+// https://www.service-public.gouv.fr/particuliers/vosdroits/F19846
+// Une nouvelle prorogation se règle par `fiscalConfig.transportExemptUntil` (veille fiscale).
+/** Part de l'abonnement exonérée en tout temps (prise en charge obligatoire), en %. */
+export const TRANSPORT_MANDATORY_SHARE = 50;
+/** Part exonérée pendant le régime temporaire (obligatoire + facultative), en %. */
+export const TRANSPORT_TEMPORARY_EXEMPT_SHARE = 75;
+/** Premières et dernières années de revenus du régime temporaire, connues à ce jour. */
+export const TRANSPORT_TEMPORARY_FIRST_YEAR = 2022;
+export const TRANSPORT_TEMPORARY_LAST_YEAR = 2026;
+
+/** Dernière année du régime temporaire : celle des paramètres si la veille l'a prolongé. */
+export const transportExemptUntil = (cfg: Pick<FiscalConfig, 'transportExemptUntil'>): number =>
+  typeof cfg.transportExemptUntil === 'number' && Number.isInteger(cfg.transportExemptUntil) && cfg.transportExemptUntil > TRANSPORT_TEMPORARY_LAST_YEAR
+    ? cfg.transportExemptUntil : TRANSPORT_TEMPORARY_LAST_YEAR;
+
+/** Part du prix de l'abonnement exonérée d'impôt pour les revenus de `year`, en %. */
+export const transportExemptShare = (year: number, cfg: Pick<FiscalConfig, 'transportExemptUntil'> = {}): number =>
+  year >= TRANSPORT_TEMPORARY_FIRST_YEAR && year <= transportExemptUntil(cfg) ? TRANSPORT_TEMPORARY_EXEMPT_SHARE : TRANSPORT_MANDATORY_SHARE;
+
+/**
+ * Remboursement transport mensuel, découpé en part exonérée et part imposable (celle qui
+ * dépasse le plafond d'exonération de l'année). Avantage inactif : 0 et 0.
+ */
+export const splitTransportRefund = (
+  navigo: WorkBenefits['navigo'], year: number, cfg: Pick<FiscalConfig, 'transportExemptUntil'> = {},
+): { refund: number; taxable: number } => {
+  if (!navigo.active) return { refund: 0, taxable: 0 };
+  const rate = Math.max(0, navigo.refundRate);
+  const refund = navigo.basePrice * (rate / 100);
+  const taxable = navigo.basePrice * (Math.max(0, rate - transportExemptShare(year, cfg)) / 100);
+  return { refund, taxable: Math.max(0, taxable) };
+};
+
+/** Impôt estimé des salaires d'une année de revenus (dons, aide à la déclaration). */
+export interface SalaryTaxEstimate {
+  /** Impôt annuel après décote. */
+  taxDue: number;
+  /** Revenu imposable des salaires, après l'abattement de 10 %. */
+  taxableIncome: number;
+  /** Salaires imposables avant l'abattement (case 1AJ). */
+  beforeAllowance: number;
+}
+
+/**
+ * Même calcul que computeIncome, pour l'année de revenus `year` : la part du remboursement
+ * transport exonérée dépend de l'année (75 % pour les revenus 2026, 50 % ensuite sauf
+ * prorogation). Les revenus de l'an passé se déclarent au printemps : leur estimation suit
+ * donc la règle de cette année-là, pas celle de l'année en cours.
+ */
+export const salaryTaxEstimate = (
+  input: IncomeInput, fiscalConfig: FiscalConfig, workBenefits: WorkBenefits, year: number,
+): SalaryTaxEstimate => {
+  const b = computeIncome(input, fiscalConfig, workBenefits, year);
+  return { taxDue: b.taxAmount, taxableIncome: b.netTaxableYear, beforeAllowance: b.netTaxableBeforeAllowance };
+};
+
+/**
  * Décompose le revenu en net avant impôt, coûts (mutuelle/tickets), impôt
- * et "super net" (reste à vivre réel).
+ * et "super net" (paie nette après impôt). `year` : année des revenus (exonération du
+ * remboursement transport, voir plus haut).
  */
 export const computeIncome = (
   input: IncomeInput,
   fiscalConfig: FiscalConfig,
-  workBenefits: WorkBenefits
+  workBenefits: WorkBenefits,
+  year: number = new Date().getFullYear(),
 ): IncomeBreakdown => {
   const grossMonth = input.grossAnnual / 12;
   const socialCharges = grossMonth * fiscalConfig.salaryChargesRate;
@@ -99,9 +199,8 @@ export const computeIncome = (
 
   // Seule source : l'avantage Navigo. Désactivé ⇒ aucun remboursement (les anciens champs
   // config.navigoBase / navigoRate ne servent plus qu'à migrate()).
-  const navigoGain = workBenefits.navigo.active
-    ? workBenefits.navigo.basePrice * (workBenefits.navigo.refundRate / 100)
-    : 0;
+  const transport = splitTransportRefund(workBenefits.navigo, year, fiscalConfig);
+  const navigoGain = transport.refund;
 
   const mutuelleCost = workBenefits.mutuelle.active
     ? workBenefits.mutuelle.totalCost * (1 - workBenefits.mutuelle.employerRate / 100)
@@ -115,17 +214,21 @@ export const computeIncome = (
 
   const netBeforeTax = netSalaryOnly + navigoGain + input.extraMonthlyIncome;
 
-  // Le remboursement transport est exonéré : il est volontairement absent de l'assiette.
+  // Le remboursement transport est exonéré dans la limite de l'année (75 % du prix en 2026,
+  // 50 % ensuite sauf prorogation) : seule la part au-delà entre dans l'assiette.
   // En revanche la CSG/CRDS non déductible et la part patronale de la mutuelle sont imposables.
-  const nonDeductibleCsg = grossMonth * NON_DEDUCTIBLE_CSG_RATE;
+  // L'autre salaire est saisi net : sa CSG/CRDS non déductible est ajoutée de la même façon
+  // (la part patronale de sa mutuelle, inconnue, ne l'est pas).
+  const nonDeductibleCsg = grossMonth * NON_DEDUCTIBLE_CSG_RATE
+    + nonDeductibleCsgFromNet(input.extraMonthlyIncome, fiscalConfig.salaryChargesRate);
   const mutuelleEmployerPart = workBenefits.mutuelle.active
     ? workBenefits.mutuelle.totalCost * (workBenefits.mutuelle.employerRate / 100)
     : 0;
-  const netAnnualBeforeAllowance = (netSalaryOnly + nonDeductibleCsg + mutuelleEmployerPart + input.extraMonthlyIncome) * 12;
+  const netAnnualBeforeAllowance = (netSalaryOnly + nonDeductibleCsg + mutuelleEmployerPart + transport.taxable + input.extraMonthlyIncome) * 12;
   // L'abattement de 10 % est plafonné par la loi ; sans plafond l'impôt des hauts revenus est
   // fortement sous-estimé. Le champ étant récent, on retombe sur le plafond par défaut si les
   // données de l'utilisateur ne le contiennent pas (ou contiennent une valeur inexploitable),
-  // afin de ne jamais propager un NaN dans tout le calcul du reste à vivre.
+  // afin de ne jamais propager un NaN dans tout le calcul de la paie nette après impôt.
   const allowanceCap = Number.isFinite(fiscalConfig.standardAllowanceCap as number)
     ? (fiscalConfig.standardAllowanceCap as number)
     : DEFAULT_STANDARD_ALLOWANCE_CAP;
@@ -147,7 +250,7 @@ export const computeIncome = (
   const autoRate = netAnnualBeforeAllowance > 0 && taxAmount > 0 ? (taxAmount / netAnnualBeforeAllowance) * 100 : 0;
 
   // Taux forcé (celui de la fiche de paie / de l'avis) : appliqué comme le vrai prélèvement
-  // à la source, au net imposable avant abattement, hors remboursement Navigo (exonéré).
+  // à la source, au net imposable avant abattement, hors part exonérée du remboursement transport.
   // L'appliquer après l'abattement sous-estimait la retenue d'environ 10 %.
   const effectiveMonthlyTax =
     input.taxRateManual > 0
@@ -162,6 +265,7 @@ export const computeIncome = (
     socialCharges,
     netSalaryOnly,
     navigoGain,
+    navigoTaxable: transport.taxable,
     mutuelleCost,
     swileCost,
     netBeforeTax,

@@ -1,5 +1,6 @@
 // Bouton segmenté Material 3 : choix exclusif parmi 2 à 5 options, coche sur l'option
-// choisie. Chaque segment est un bouton aria-pressed dans un groupe nommé.
+// choisie. Chaque segment est un bouton aria-pressed dans un groupe nommé. 40 px à la souris,
+// 48 px au doigt (le groupe rogne les coins : la zone de toucher ne peut pas déborder).
 import React from 'react';
 import { Check } from 'lucide-react';
 
@@ -24,7 +25,7 @@ export const SegmentedButton = <T extends string>({ label, options, value, onCha
           type="button"
           aria-pressed={selected}
           onClick={() => onChange(o.value)}
-          className={`h-10 px-4 flex items-center justify-center gap-2 text-sm font-medium transition-colors ${i > 0 ? 'border-l border-outline' : ''} ${selected ? 'bg-secondary-container text-on-secondary-container' : 'text-on-surface hover:bg-on-surface/8'}`}
+          className={`h-10 pointer-coarse:h-12 px-4 flex items-center justify-center gap-2 text-sm font-medium transition-colors ${i > 0 ? 'border-l border-outline' : ''} ${selected ? 'bg-secondary-container text-on-secondary-container' : 'text-on-surface hover:bg-on-surface/8'}`}
         >
           {Icon && <Icon className="w-4 h-4" aria-hidden="true" />}
           {o.label}

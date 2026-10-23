@@ -23,7 +23,7 @@
 Fait : corrections immédiates, accessibilité urgente, filet de sécurité (tests, lint strict, contrôles), retrait des e-mails, marque Google validée, domaine pecule-app.com, passage visuel Material 3 Expressive.
 
 ### Phase 1 : interface (faite)
-1. Bibliothèque de composants Material (`src/components/ui/`) : Card, StatTile, MoneyText, DeltaBadge, DataTable, TextField, SegmentedButton, Tabs, Chip, EmptyState, PageHeader, Sparkline. Conversion progressive des boutons et cartes faits main.
+1. Bibliothèque de composants Material (`src/components/ui/`) : Card, StatTile, MoneyText, DeltaBadge, DataTable, TextField, SegmentedButton, Tabs, Chip, EmptyState, PageHeader, Sparkline, IconButton (bouton-icône de 48 px), ListItem (ligne de liste dont les actions passent sous le titre sur téléphone). Journal, Virements, Agenda, Abonnements, Historique, recherche de mouvements, ajout rapide et projection selon la répartition sont convertis (aucune palette brute, aucun texte sous 12 px : garde-fou `src/components/materialScreens.palette.test.ts`). Dons et impôts, Part parentale, Restitution, Fiches de paie et « Où le placer » le sont aussi (garde-fou `src/components/materialMoneyScreens.palette.test.ts`), ainsi que la boîte de confirmation (titre, actions texte, bouton destructeur au rôle « error », focus sur « Annuler ») et le bouton désactivé (état Material 3, raison écrite à côté) ; les anciens noms de variantes de bouton (primary, secondary, ghost) n'existent plus. Après une suppression au clavier, le focus passe à l'élément voisin (`focusAfterRemoval`). Migration terminée : plus aucune classe de palette brute dans l'app, le thème ne rebranche plus les échelles indigo, slate, gray, emerald, rose ou amber, et le lint refuse leur retour (`eslint.config.js`, garde-fou `src/components/paletteGuard.test.ts`, aucun fichier exempté). Boutons-icônes, puces et boutons texte passent par le kit (`IconButton`, `Chip`, `Button`, taille `sm`).
 2. Accueil : un chiffre principal (variation + petite courbe SVG), deux tâches au plus, le reste replié.
 3. Pilotage : « À placer ce mois » d'abord, puis « D'où vient ce chiffre ».
 4. Actualiser : une ligne repliable par compte.
@@ -64,7 +64,22 @@ Grand ménage et remise à plat de tout ce qui entoure le code :
 - règles GitHub : ✅ modèles d'issues et de PR, ✅ Dependabot (dont `edge/`), ✅ permissions minimales des workflows ; à régler dans GitHub : protection de la branche principale, étiquettes ;
 - règles de l'app et pages publiques : ✅ confidentialité et présentation (octobre 2026), mentions dans l'app ;
 - ✅ vérification finale (octobre 2026) : lint, typage, tests et couverture, build, tests de bout en bout (deux passages sans échec), audit complet des dépendances (app, serveur, edge : aucune faille ; `sharp`, tiré par wrangler, forcé en 0.35.5 par `overrides` dans `worker/` et `edge/`, à retirer dès que wrangler l'embarque) ; tests rendus plus robustes sur machine lente (délais d'attente, démontage des hooks entre tests).
-- Après la restitution de janvier 2027 : enregistrer la restitution et passer en mode solo ; retirer l'ancienne adresse github.io (`LEGACY_APP_URL` dans `worker/wrangler.toml` et `worker/src/security.ts`, avis de déménagement `src/components/MovedNotice.tsx`, origine dans le client OAuth et la clé du Picker) ; mettre à jour les textes liés aux parents (app, pages publiques, wiki).
+- Après la restitution de janvier 2027 : enregistrer la restitution et passer en mode solo ; retirer l'ancienne adresse github.io (`LEGACY_APP_URL` dans `worker/wrangler.toml` et `worker/src/security.ts`, avis de déménagement `src/components/MovedNotice.tsx`, origine dans le client OAuth et la clé du Picker) ; mettre à jour les textes liés aux parents des pages publiques et du wiki (dans l'app, ils suivent les données et passent d'eux-mêmes en solo : lib/parentalMode).
+
+### Audit complet d'octobre 2026 (lots 1, 2 et 3 faits)
+- ✅ **Lot 1** : données protégées, « Actualiser » fiable, calculs justes, surveillance fiable, déploiements derrière la CI.
+- ✅ **Lot 2** : plusieurs appareils (écran de choix, version écartée mise de côté), hors ligne, déclaration complète, verrou renforcé (« Code oublié » avec délai de 24 h).
+- ✅ **Lot 3** (23 octobre 2026) : `App.tsx` et les données découpés (`src/app`, `src/hooks/portfolio`, état de synchronisation unique) ; session serveur liée à l'appareil, « Appareils connectés », alerte « Code oublié » aux autres appareils, effacement des copies de secours différé de 7 jours et conservation échelonnée ; nouveaux types de compte (livret bancaire, CEL, PEL, compte à terme, compte-titres), performance réelle des placements, fraîcheur des soldes compte par compte, rendement après inflation (INSEE), PER ; « Lire un relevé » (Gemini) ; clôture de l'année ; corrections de calcul (argent qui dort, dons 2025, remboursement transport, quinzaines, crypto 305 €) ; tous les écrans en Material 3 (aucune palette brute, cibles de 48 px, thème Automatique / Clair / Sombre) ; seuils de couverture relevés (toute l'app 81 / 74 / 73 / 85).
+- Reste à faire :
+  - plan de placement automatique : il ne remplit pas encore un livret bancaire ni un CEL (seulement par la répartition personnalisée) ;
+  - performance d'un placement comparée au taux actuel du Livret A, pas à son taux sur la même période ;
+  - aide à la déclaration : pas de ligne pour l'IFU d'un compte-titres (dividendes, plus-values), cases à vérifier sur une source officielle avant de coder ;
+  - plafond PER estimé : seule l'année 2026 est connue (`PER_CEILING_RULES`) ; ajouter 2027 une fois vérifié ;
+  - import d'un relevé en CSV ou OFX (seule la lecture d'un PDF ou d'une capture par Gemini existe) ;
+  - option au barème (case 2OP) : estimation approchée (un seul taux marginal) ;
+  - en janvier, la tâche « Clôture de l'année » de l'Accueil suit l'ordre habituel des tâches et peut passer après des alertes chiffrées ;
+  - technique : `SavingsAccount.movements` encore facultatif (type normalisé à ajouter, puis retirer les `|| []`) ; script principal à 522 kB (avertissement de Vite au-delà de 500 kB) ;
+  - risques résiduels connus de la sécurité : voir [SECURITY.md](SECURITY.md) (*Limites connues*).
 
 ### Abandonné
 - **Ouverture à d'autres utilisateurs sur invitation** (octobre 2026) : liée au Play Store, abandonnée avec lui. Pécule reste une app personnelle.

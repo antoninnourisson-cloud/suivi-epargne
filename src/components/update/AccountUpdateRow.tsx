@@ -98,14 +98,14 @@ export const AccountUpdateRow: React.FC<AccountUpdateRowProps> = ({
           aria-expanded={expanded}
           aria-controls={panelId}
           onClick={onToggle}
-          className="w-full flex items-center gap-3 sm:gap-4 px-4 sm:px-6 py-3.5 min-h-[72px] text-left hover:bg-on-surface/5 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-indigo-600 dark:focus-visible:outline-indigo-300"
+          className="w-full flex items-center gap-3 sm:gap-4 px-4 sm:px-6 py-3.5 min-h-[72px] text-left hover:bg-on-surface/5 focus-visible:outline-2 focus-visible:-outline-offset-2"
         >
           <span className="flex-1 min-w-0">
             <span className="block text-base font-medium text-on-surface truncate">{account.name}</span>
             <span className="block text-sm text-on-surface-variant truncate">
               {account.institution}
               {isChanged && (
-                <span className="inline-flex items-center gap-1 ml-2 text-indigo-700 dark:text-indigo-300 font-medium">
+                <span className="inline-flex items-center gap-1 ml-2 text-primary font-medium">
                   <Pencil className="w-3.5 h-3.5" aria-hidden="true" /> Modifié
                 </span>
               )}
@@ -222,7 +222,7 @@ export const AccountUpdateRow: React.FC<AccountUpdateRowProps> = ({
             </div>
             {tracked && typeof depositsDraft === 'number' && a.target === 'owned' && (
               <label className="flex items-center gap-2 text-sm text-on-surface">
-                <input type="checkbox" className="w-4 h-4 accent-indigo-600" checked={a.isCash} onChange={e => onPatchAdjust({ isCash: e.target.checked })} />
+                <input type="checkbox" className="w-4 h-4 accent-primary" checked={a.isCash} onChange={e => onPatchAdjust({ isCash: e.target.checked })} />
                 {a.sign > 0 ? 'Versement' : 'Retrait'} d'argent (et non une variation de valeur)
               </label>
             )}
@@ -283,7 +283,7 @@ export const AccountUpdateRow: React.FC<AccountUpdateRowProps> = ({
 
         {tip && (
           <p className="flex items-start gap-2 text-sm text-on-surface rounded-xl bg-secondary-container/60 p-3">
-            <Lightbulb className="w-4 h-4 shrink-0 mt-0.5 text-indigo-700 dark:text-indigo-300" aria-hidden="true" />
+            <Lightbulb className="w-4 h-4 shrink-0 mt-0.5 text-primary" aria-hidden="true" />
             <span>Retiré le {frenchDay(when)}, ce montant ne rapporte déjà plus rien depuis le {since}. En attendant le {frenchDay(parseISODate(tip.waitUntil))}, vous gardez ~{formatEUR(tip.gain, 0)} d'intérêts.</span>
           </p>
         )}

@@ -9,6 +9,7 @@
 // (storeBeforeSetAside).
 import { sealJSON, openJSON } from './localVault';
 import { lsGet, lsDel } from '../lib/storage';
+import { storageKey } from '../lib/storageKeys';
 
 export type SetAsideReason = 'conflict' | 'restore' | 'import' | 'recover' | 'unsent';
 
@@ -25,7 +26,7 @@ export interface SetAsideVersion {
   data: unknown;
 }
 
-const KEY = 'suivi_epargne_set_aside';
+const KEY = storageKey('setAside');
 export const SET_ASIDE_DAYS = 30;
 export const SET_ASIDE_MAX = 6;
 const DAY_MS = 86_400_000;

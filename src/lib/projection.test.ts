@@ -96,6 +96,36 @@ describe('projectSavings', () => {
   });
 });
 
+describe('projectSavings : rendement supposé (performance observée)', () => {
+  const AT = new Date(2026, 9, 1);
+  const full = acc({ id: 'la', name: 'Livret A', interestRate: 0, totalAmount: 22950, ownedAmount: 22950 });
+  const pea = acc({ id: 'pea', name: 'PEA', type: AccountType.PEA, totalAmount: 5000, ownedAmount: 5000, openingDate: '2018-01-01' });
+  const av = acc({ id: 'av', name: 'AV', type: AccountType.ASSURANCE_VIE, interestRate: 2.6 });
+
+  it('change les intérêts du placement, jamais la répartition du vrai plan', () => {
+    const real = projectSavings([full, pea, av], CFG, 500, 1, undefined, undefined, AT);
+    const assumed = projectSavings([full, pea, av], CFG, 500, 1, undefined, undefined, AT, { pea: 8 });
+    const own = (r: typeof real, id: string) => r.byAccount.find(b => b.accountId === id)?.amount ?? 0;
+    // Même destination des versements que le plan du Pilotage (taux saisis : le PEA sans taux
+    // ne passe pas devant l'assurance vie à 2,6 %).
+    expect(own(real, 'av')).toBeGreaterThan(6000);
+    expect(own(assumed, 'av')).toBeCloseTo(own(real, 'av'), 6);
+    // L'ancienne façon (taux du compte remplacé) envoyait l'excédent au PEA.
+    const mutated = projectSavings([full, { ...pea, interestRate: 8 }, av], CFG, 500, 1, undefined, undefined, AT);
+    expect(own(mutated, 'av')).toBeLessThan(own(real, 'av'));
+    expect(own(real, 'pea')).toBe(5000);
+    // PEA de plus de 5 ans : 8 % moins 18,6 % de prélèvements sociaux, sur un an.
+    expect(own(assumed, 'pea')).toBeCloseTo(5000 * Math.pow(1 + 0.08 * 0.814 / 12, 12), 2);
+  });
+
+  it('frais de gestion non retirés une seconde fois (la performance observée en est déjà nette)', () => {
+    const withFee = { ...pea, managementFee: 0.5 };
+    const a = projectSavings([full, withFee, av], CFG, 0, 1, undefined, undefined, AT, { pea: 8 });
+    const b = projectSavings([full, pea, av], CFG, 0, 1, undefined, undefined, AT, { pea: 8 });
+    expect(a.total).toBeCloseTo(b.total, 6);
+  });
+});
+
 describe('detectPayRaise', () => {
   const slip = (id: string, period: string, netPaid: number): PayslipRecord =>
     ({ id, fileId: id, fileName: id, period, extracted: { period, netPaid } } as unknown as PayslipRecord);

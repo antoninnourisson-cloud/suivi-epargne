@@ -8,6 +8,8 @@ export interface Column<R> {
   header: React.ReactNode;
   cell: (row: R) => React.ReactNode;
   numeric?: boolean;
+  /** Classes ajoutées à l'en-tête et aux cellules (ex. `max-sm:hidden` : colonne masquée sur téléphone). */
+  className?: string;
 }
 
 interface DataTableProps<R> {
@@ -26,7 +28,7 @@ export const DataTable = <R,>({ caption, columns, rows, rowKey, showCaption = fa
       <thead>
         <tr className="border-b border-outline-variant">
           {columns.map(c => (
-            <th key={c.key} scope="col" className={`py-2 px-3 first:pl-0 last:pr-0 text-xs font-medium text-on-surface-variant ${c.numeric ? 'text-right' : 'text-left'}`}>{c.header}</th>
+            <th key={c.key} scope="col" className={`py-2 px-3 first:pl-0 last:pr-0 text-xs font-medium text-on-surface-variant ${c.numeric ? 'text-right' : 'text-left'} ${c.className ?? ''}`}>{c.header}</th>
           ))}
         </tr>
       </thead>
@@ -36,7 +38,7 @@ export const DataTable = <R,>({ caption, columns, rows, rowKey, showCaption = fa
             {columns.map((c, i) => {
               const Cell = i === 0 ? 'th' : 'td';
               return (
-                <Cell key={c.key} scope={i === 0 ? 'row' : undefined} className={`py-2.5 px-3 first:pl-0 last:pr-0 ${i === 0 ? 'font-medium text-on-surface text-left' : 'text-on-surface'} ${c.numeric ? 'text-right whitespace-nowrap' : ''}`}>
+                <Cell key={c.key} scope={i === 0 ? 'row' : undefined} className={`py-2.5 px-3 first:pl-0 last:pr-0 ${i === 0 ? 'font-medium text-on-surface text-left' : 'text-on-surface'} ${c.numeric ? 'text-right whitespace-nowrap' : ''} ${c.className ?? ''}`}>
                   {c.cell(r)}
                 </Cell>
               );

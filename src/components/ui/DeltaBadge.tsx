@@ -20,8 +20,8 @@ export const DeltaBadge: React.FC<DeltaBadgeProps> = ({ value, unit = 'eur', per
   const Icon = up ? TrendingUp : down ? TrendingDown : Minus;
   const text = unit === 'pct' ? pct(value) : formatEUR(Math.abs(value), 0);
   const tone = up
-    ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-200'
-    : down ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-200'
+    ? 'bg-gain-container text-on-gain-container'
+    : down ? 'bg-loss-container text-on-loss-container'
       : 'bg-surface-container-high text-on-surface-variant';
   const spoken = `${up ? 'en hausse de' : down ? 'en baisse de' : 'stable'}${up || down ? ` ${text}` : ''}${period ? ` ${period}` : ''}`;
   return (

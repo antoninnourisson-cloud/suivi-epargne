@@ -65,7 +65,7 @@ export const SettingsCard: React.FC<SettingsCardProps> = ({ id, title, icon: Ico
           aria-labelledby={`${base}-title`}
           aria-describedby={line ? `${base}-summary` : undefined}
           onClick={onToggle}
-          className={`w-full min-h-16 px-4 sm:px-5 py-3 flex items-center gap-4 text-left hover:bg-on-surface/5 transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-indigo-600 dark:focus-visible:outline-indigo-300 ${open ? 'rounded-t-2xl' : 'rounded-2xl'}`}
+          className={`w-full min-h-16 px-4 sm:px-5 py-3 flex items-center gap-4 text-left hover:bg-on-surface/5 transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary ${open ? 'rounded-t-2xl' : 'rounded-2xl'}`}
         >
           <span className="w-10 h-10 shrink-0 rounded-full bg-secondary-container text-on-secondary-container flex items-center justify-center" aria-hidden="true">
             <Icon className="w-5 h-5" />

@@ -8,6 +8,7 @@ import { round2 } from '../accountOps';
 import {
   applyPatch, CommandOk, CommandResult, CommandState,
   quickAdd, deleteMovement, cancelDeposit, saveAccount, deleteAccount, recordRestitution, undoRestitution, updateBalances,
+  linkedTransfer,
 } from './index';
 
 /** mulberry32 : petit générateur pseudo-aléatoire à graine, sans dépendance. */
@@ -83,6 +84,20 @@ const runSequence = (seed: number, steps: number) => {
       if (r.ok && acc) {
         const after = applyPatch(s, r.next).accounts.find(a => a.id === acc.id)!;
         expect(after.parentalCapital, where).toBe(acc.parentalCapital);
+      }
+    } else if (roll < 0.52) {
+      // Virement entre deux comptes : refusé si et seulement s'il entamerait la part des parents.
+      const src = pick(accounts);
+      const dst = pick(accounts);
+      const amount = cents(9000);
+      name = `linkedTransfer ${src.id}→${dst.id} ${amount}`;
+      r = linkedTransfer(s, { sourceId: src.id, destId: dst.id, amount, date: '2026-10-02', ids: { linkId: `l${id}`, out: `m${id++}`, in: `m${id++}` } });
+      if (amount > 0) expect(r.ok, `${where} ${name} (part propre ${src.ownedAmount})`).toBe(src.id !== dst.id && amount <= src.ownedAmount + 0.005);
+      if (r.ok) {
+        const after = applyPatch(s, r.next);
+        for (const acc of [src, dst]) expect(after.accounts.find(a => a.id === acc.id)!.parentalCapital, where).toBe(acc.parentalCapital);
+        const own = (st: CommandState) => round2(st.accounts.filter(a => a.id === src.id || a.id === dst.id).reduce((t, a) => t + a.ownedAmount, 0));
+        expect(own(after), where).toBe(own(s));
       }
     } else if (roll < 0.6) {
       const withMoves = accounts.filter(a => (a.movements || []).length > 0);

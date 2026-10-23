@@ -7,15 +7,22 @@ import { AlertTriangle, Plus, Trash2 } from 'lucide-react';
 import type { FiscalConfig, PayslipRecord, TaxBracket, WorkBenefits } from '../../types';
 import { benefitsFromPayslips } from '../../lib/planning';
 import { formatEUR } from '../../lib/format';
-import { identifyTaxScale, sameTaxBrackets, applyTaxScale } from '../../lib/finance';
+import { identifyTaxScale, sameTaxBrackets, applyTaxScale, splitTransportRefund, transportExemptShare, transportExemptUntil, TRANSPORT_MANDATORY_SHARE } from '../../lib/finance';
 import { LATEST_TAX_SCALE } from '../../constants';
 import { parseISODate } from '../../lib/dates';
-import { Button } from '../ui';
+import { Button, IconButton } from '../ui';
+import { fractionToPercent } from '../../lib/numbers';
 import { CardSubheading, Hint, Notice } from './SettingsCard';
 import { NumberField, SwitchRow } from './fields';
 
 /** Modification fonctionnelle : ne touche que les champs voulus de l'état le plus récent. */
 type SetState<T> = (update: (prev: T) => T) => void;
+
+/** Limite d'une tranche « sans limite » : Infinity, null une fois passé par le JSON du fichier
+ * Drive, ou l'ancien nombre sentinelle (999 999 999) qu'on demandait de saisir. */
+const isUnlimited = (limit: number | null | undefined) => limit === null || limit === undefined || limit === Infinity || limit >= 999_999_999;
+const pctText = (rate: number) => `${fractionToPercent(rate).toLocaleString('fr-FR', { maximumFractionDigits: 4 })} %`;
+type Unit = '%' | '€';
 
 // Champs numériques de la configuration fiscale (ceux de la grille de saisie générique).
 type NumericFiscalField = { [K in keyof FiscalConfig]-?: FiscalConfig[K] extends number | undefined ? K : never }[keyof FiscalConfig];
@@ -36,10 +43,25 @@ export const fiscalSummary = (f: FiscalConfig) => {
 };
 
 const Gain: React.FC<{ children: React.ReactNode; tone: 'gain' | 'cost' }> = ({ children, tone }) => (
-  <p className={`text-sm font-medium tabular-nums sm:col-span-full ${tone === 'gain' ? 'text-emerald-700 dark:text-emerald-300' : 'text-on-surface-variant'}`}>{children}</p>
+  <p className={`text-sm font-medium tabular-nums sm:col-span-full ${tone === 'gain' ? 'text-gain' : 'text-on-surface-variant'}`}>{children}</p>
 );
 
-export const BenefitsFields: React.FC<{ payslips: PayslipRecord[]; benefits: WorkBenefits; setBenefits: SetState<WorkBenefits> }> = ({ payslips, benefits, setBenefits }) => {
+/** Remboursement transport au-delà de la part exonérée (lib/finance/income) : dit ce qui devient imposable. */
+const TransportTaxHint: React.FC<{ navigo: WorkBenefits['navigo']; fiscal?: Pick<FiscalConfig, 'transportExemptUntil'> }> = ({ navigo, fiscal = {} }) => {
+  const year = new Date().getFullYear();
+  if (!(navigo.refundRate > TRANSPORT_MANDATORY_SHARE)) return null;
+  const share = transportExemptShare(year, fiscal);
+  const { taxable } = splitTransportRefund(navigo, year, fiscal);
+  return (
+    <p className="text-xs text-on-surface-variant sm:col-span-full">
+      {taxable > 0.005
+        ? `Au-delà de ${share} % du prix de l'abonnement, le remboursement est imposable : Pécule ajoute ${formatEUR(taxable, 2)} par mois à votre revenu imposable.`
+        : `La part au-delà de ${TRANSPORT_MANDATORY_SHARE} % n'est exonérée d'impôt que jusqu'à fin ${transportExemptUntil(fiscal)} (mesure temporaire) : ensuite, elle deviendra imposable, sauf prolongation.`}
+    </p>
+  );
+};
+
+export const BenefitsFields: React.FC<{ payslips: PayslipRecord[]; benefits: WorkBenefits; setBenefits: SetState<WorkBenefits>; fiscal?: Pick<FiscalConfig, 'transportExemptUntil'> }> = ({ payslips, benefits, setBenefits, fiscal }) => {
   const [msg, setMsg] = useState<string | null>(null);
   const update = <C extends keyof WorkBenefits, F extends keyof WorkBenefits[C]>(category: C, field: F, value: WorkBenefits[C][F]) => {
     setBenefits(prev => ({ ...prev, [category]: { ...prev[category], [field]: value } }));
@@ -74,6 +96,7 @@ export const BenefitsFields: React.FC<{ payslips: PayslipRecord[]; benefits: Wor
             <NumberField label="Prix de base mensuel" suffix="€" value={navigo.basePrice} onChange={v => update('navigo', 'basePrice', v)} />
             <NumberField label="Remboursement" suffix="%" value={navigo.refundRate} onChange={v => update('navigo', 'refundRate', v)} />
             <Gain tone="gain">+{formatEUR(navigo.basePrice * navigo.refundRate / 100, 2)} par mois remboursés</Gain>
+            <TransportTaxHint navigo={navigo} fiscal={fiscal} />
           </div>
         )}
       </SwitchRow>
@@ -112,22 +135,36 @@ export const FiscalFields: React.FC<{ fiscal: FiscalConfig; setFiscal: SetState<
   const updateBracket = (index: number, field: keyof TaxBracket, value: number) => setFiscal(prev => ({
     ...prev, taxBrackets: prev.taxBrackets.map((b, i) => (i === index ? { ...b, [field]: value } : b)),
   }));
-  const addBracket = () => setFiscal(prev => ({ ...prev, taxBrackets: [...prev.taxBrackets, { limit: 0, rate: 0 }] }));
+  // Nouvelle tranche : avant la dernière si celle-ci est « et au-delà » (l'ordre reste juste).
+  // Sans tranche « et au-delà » (supprimée), la nouvelle la recrée : sinon le revenu au-dessus
+  // de la dernière limite ne serait plus imposé.
+  const addBracket = () => setFiscal(prev => {
+    const list = prev.taxBrackets;
+    const last = list[list.length - 1];
+    if (last && isUnlimited(last.limit)) return { ...prev, taxBrackets: [...list.slice(0, -1), { limit: 0, rate: 0 }, last] };
+    return { ...prev, taxBrackets: [...list, { limit: Infinity, rate: last?.rate ?? 0 }] };
+  });
   const removeBracket = (index: number) => setFiscal(prev => ({ ...prev, taxBrackets: prev.taxBrackets.filter((_, i) => i !== index) }));
   const changeDecote = (field: 'single' | 'threshold', value: number) => setFiscal(prev => ({
     ...prev, decote: { single: 897, rate: 0.4525, threshold: 1982, ...prev.decote, [field]: value },
   }));
 
-  const numeric: [NumericFiscalField, string, number, string?][] = [
-    ['salaryChargesRate', 'Charges salariales', fiscal.salaryChargesRate, 'Taux, ex. 0,2232'],
-    ['standardAllowance', 'Abattement forfaitaire', fiscal.standardAllowance, 'Taux, ex. 0,10'],
-    ['standardAllowanceCap', 'Abattement : plafond', fiscal.standardAllowanceCap ?? 0, 'En euros'],
-    ['standardAllowanceMin', 'Abattement : minimum', fiscal.standardAllowanceMin ?? 0, 'En euros'],
+  // Unités : les taux en % (comme les avantages salariaux), les montants en euros. La valeur
+  // exacte est affichée (18,6 %, 22,32 %), plus arrondie à deux décimales de fraction.
+  const numeric: [NumericFiscalField, string, number, Unit, string?][] = [
+    ['salaryChargesRate', 'Charges salariales', fiscal.salaryChargesRate, '%', 'Part du brut retenue sur la paie'],
+    ['standardAllowance', 'Abattement forfaitaire', fiscal.standardAllowance, '%', 'Frais professionnels, sur le salaire imposable'],
+    ['standardAllowanceCap', 'Abattement : plafond', fiscal.standardAllowanceCap ?? 0, '€'],
+    ['standardAllowanceMin', 'Abattement : minimum', fiscal.standardAllowanceMin ?? 0, '€'],
   ];
-  const social: [NumericFiscalField, string, number, string?][] = [
-    ['socialChargesCapital', 'Prélèvements sociaux', fiscal.socialChargesCapital, 'Revenus du capital, ex. 0,186'],
-    ['socialChargesLifeInsurance', 'Prélèvements sociaux (assurance vie)', fiscal.socialChargesLifeInsurance ?? 0.172, 'Ex. 0,172'],
+  const social: [NumericFiscalField, string, number, Unit, string?][] = [
+    ['socialChargesCapital', 'Prélèvements sociaux', fiscal.socialChargesCapital, '%', 'Revenus du capital'],
+    ['socialChargesLifeInsurance', 'Prélèvements sociaux (assurance vie, PEL, CEL)', fiscal.socialChargesLifeInsurance ?? 0.172, '%'],
   ];
+  const field = ([field, label, value, unit, help]: [NumericFiscalField, string, number, Unit, string?]) => (
+    <NumberField key={field} label={label} supporting={help} value={value} percent={unit === '%'} suffix={unit === '€' ? '€' : undefined}
+      onChange={v => change(field, v)} />
+  );
   const scaleLabel = identifyTaxScale(fiscal.taxBrackets)?.label ?? 'Barème personnalisé';
   const history = fiscal.taxBracketsHistory ?? [];
 
@@ -136,16 +173,12 @@ export const FiscalFields: React.FC<{ fiscal: FiscalConfig; setFiscal: SetState<
       <div>
         <CardSubheading>Salaire et impôt</CardSubheading>
         <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {numeric.map(([field, label, value, help]) => (
-            <NumberField key={field} label={label} supporting={help} value={value} onChange={v => change(field, v)} />
-          ))}
+          {numeric.map(field)}
           <NumberField label="Décote : montant" suffix="€" value={fiscal.decote?.single ?? 897}
             onChange={v => changeDecote('single', v)} />
           <NumberField label="Décote : seuil d'impôt" suffix="€" value={fiscal.decote?.threshold ?? 1982}
             onChange={v => changeDecote('threshold', v)} />
-          {social.map(([field, label, value, help]) => (
-            <NumberField key={field} label={label} supporting={help} value={value} onChange={v => change(field, v)} />
-          ))}
+          {social.map(field)}
         </div>
       </div>
 
@@ -184,27 +217,38 @@ export const FiscalFields: React.FC<{ fiscal: FiscalConfig; setFiscal: SetState<
               {[...history].reverse().map((h, i) => (
                 <li key={i} className="text-xs text-on-surface-variant">
                   <span className="font-medium text-on-surface">{h.year ? `Barème ${h.year}` : 'Barème personnalisé'}</span>, remplacé le {parseISODate(h.replacedOn).toLocaleDateString('fr-FR')} :{' '}
-                  {h.brackets.map(b => `${Math.round(b.rate * 100)} % jusqu'à ${b.limit === null || b.limit === Infinity || b.limit >= 999999999 ? '∞' : formatEUR(b.limit)}`).join(' · ')}
+                  {h.brackets.map(b => `${pctText(b.rate)} ${isUnlimited(b.limit) ? 'au-delà' : `jusqu'à ${formatEUR(b.limit)}`}`).join(' · ')}
                 </li>
               ))}
             </ul>
           </details>
         )}
         <ol className="mt-4 space-y-3">
-          {fiscal.taxBrackets.map((bracket, index) => (
-            <li key={index} className="flex items-start gap-3">
-              <NumberField className="flex-1 min-w-0" label={`Tranche ${index + 1} : jusqu'à`} suffix="€"
-                value={bracket.limit === Infinity ? 999999999 : bracket.limit} onChange={v => updateBracket(index, 'limit', v)} />
-              <NumberField className="w-28 sm:w-36 shrink-0" label="Taux" value={bracket.rate} onChange={v => updateBracket(index, 'rate', v)} />
-              <button type="button" onClick={() => removeBracket(index)} aria-label={`Supprimer la tranche ${index + 1}`}
-                className="mt-7 w-10 h-10 shrink-0 rounded-full flex items-center justify-center text-on-surface-variant hover:text-error hover:bg-error/8">
-                <Trash2 className="w-4 h-4" aria-hidden="true" />
-              </button>
-            </li>
-          ))}
+          {fiscal.taxBrackets.map((bracket, index) => {
+            const last = index === fiscal.taxBrackets.length - 1;
+            const previous = index > 0 ? fiscal.taxBrackets[index - 1].limit : null;
+            return (
+              <li key={index} className="flex items-start gap-3">
+                {last && isUnlimited(bracket.limit) ? (
+                  // Dernière tranche, sans limite : on l'écrit en mots, plus de nombre sentinelle.
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-on-surface-variant mb-1.5">Tranche {index + 1}</p>
+                    <p className="h-14 px-4 flex items-center rounded-xs border border-outline-variant text-base text-on-surface">
+                      {previous !== null && !isUnlimited(previous) ? `Au-delà de ${formatEUR(previous)}` : 'Et au-delà'}
+                    </p>
+                  </div>
+                ) : (
+                  <NumberField className="flex-1 min-w-0" label={`Tranche ${index + 1} : jusqu'à`} suffix="€"
+                    value={isUnlimited(bracket.limit) ? 0 : bracket.limit} onChange={v => updateBracket(index, 'limit', v)} />
+                )}
+                <NumberField className="w-28 sm:w-36 shrink-0" label="Taux" percent value={bracket.rate} onChange={v => updateBracket(index, 'rate', v)} />
+                <IconButton label={`Supprimer la tranche ${index + 1}`} icon={Trash2} tone="danger" onClick={() => removeBracket(index)} className="mt-[30px]" />
+              </li>
+            );
+          })}
         </ol>
         <Notice tone="warning" icon={AlertTriangle} className="mt-4">
-          Les tranches doivent être ordonnées ; le taux s'écrit 0,11 pour 11 %. Mettez 999999999 pour l'infini.
+          Les tranches doivent être ordonnées, de la plus basse à la plus haute. Le taux s'écrit en % (11 pour 11 %). La dernière tranche n'a pas de limite.
         </Notice>
       </div>
     </div>

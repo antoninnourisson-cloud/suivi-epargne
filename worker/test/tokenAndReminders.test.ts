@@ -135,6 +135,7 @@ describe('tournée quotidienne des rappels', () => {
     id: 'la', name: 'Livret A', type: AccountType.LIVRET_A, institution: 'B',
     totalAmount: 1000, ownedAmount: 1000, parentalCapital: 0, interestRate: 3,
     movements: [{ id: 'm', date: '2026-09-20', amount: 10, label: 'x', type: 'IN' as const }],
+    balanceCheckedAt: '2026-09-20',
   };
   const dataFile = (config: Record<string, unknown> = {}) => ({
     accounts: [livret], expenses: [], history: [],

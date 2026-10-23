@@ -7,17 +7,25 @@ configure({ asyncUtilTimeout: 5000 });
 import { emptyData } from '../lib/schema';
 import { generateRecoveryCode as realGenerate, CloudBackupError } from '../lib/cloudBackupCrypto';
 
-const svc = vi.hoisted(() => ({
-  isCloudBackupAvailable: vi.fn(() => true),
-  getDeviceEnrollment: vi.fn(async () => null as { enabledAt: string } | null),
-  listServerBackups: vi.fn(async () => [] as string[]),
-  readStatus: vi.fn(() => ({})),
-  enableWithNewCode: vi.fn(async (_code: string) => undefined),
-  enableWithExistingCode: vi.fn(async (_code: string) => undefined),
-  uploadNow: vi.fn(async (_data: unknown) => undefined),
-  decryptServerBackup: vi.fn(async (_date: string, _code: string) => ''),
-  disableAndDeleteServerCopies: vi.fn(async () => 3),
-}));
+const svc = vi.hoisted(() => {
+  const s = {
+    isCloudBackupAvailable: vi.fn(() => true),
+    getDeviceEnrollment: vi.fn(async () => null as { enabledAt: string; codeCheckedAt?: string } | null),
+    verifyRecoveryCode: vi.fn(async (_code: string) => true),
+    listServerBackups: vi.fn(async () => [] as string[]),
+    readStatus: vi.fn(() => ({})),
+    enableWithNewCode: vi.fn(async (_code: string) => undefined),
+    enableWithExistingCode: vi.fn(async (_code: string) => undefined),
+    uploadNow: vi.fn(async (_data: unknown) => undefined),
+    decryptServerBackup: vi.fn(async (_date: string, _code: string) => ''),
+    disableAndScheduleDeletion: vi.fn(async () => ({ copies: 3, purgeAt: '2026-10-27T10:00:00.000Z' as string | null })),
+    cancelServerDeletion: vi.fn(async () => true),
+    deletion: null as { requestedAt: string; purgeAt: string } | null,
+    getServerBackups: vi.fn(async () => ({ dates: [] as string[], deletion: null as { requestedAt: string; purgeAt: string } | null })),
+  };
+  s.getServerBackups.mockImplementation(async () => ({ dates: await s.listServerBackups(), deletion: s.deletion }));
+  return s;
+});
 
 vi.mock('../services/cloudBackup', async () => {
   const crypto = await import('../lib/cloudBackupCrypto');
@@ -49,6 +57,7 @@ beforeEach(() => {
   svc.isCloudBackupAvailable.mockReturnValue(true);
   svc.getDeviceEnrollment.mockResolvedValue(null);
   svc.listServerBackups.mockResolvedValue([]);
+  svc.deletion = null;
 });
 afterEach(cleanup);
 
@@ -59,16 +68,64 @@ describe('Sauvegarde de secours chiffrée (Réglages)', () => {
     expect(screen.queryByText(/Sauvegarde de secours chiffrée/)).toBeNull();
   });
 
-  it('activation : montre le code une fois, puis active et envoie après « Je l’ai mis en lieu sûr »', async () => {
+  /** Remplit les deux groupes demandés avec ceux du code (ou les valeurs données). */
+  const fillGroups = (code: string, values?: [string, string]) => {
+    const fields = screen.getAllByLabelText(/^Groupe n° \d$/) as HTMLInputElement[];
+    expect(fields).toHaveLength(2);
+    fields.forEach((field, i) => {
+      const n = Number(/\d/.exec(field.labels![0].textContent!)![0]);
+      fireEvent.change(field, { target: { value: values ? values[i] : code.split('-')[n - 1].toLowerCase() } });
+    });
+  };
+
+  it('activation : montre le code, fait recopier deux groupes, puis active et envoie', async () => {
     setup();
     fireEvent.click(await screen.findByRole('button', { name: /Activer/ }));
     const code = screen.getByTestId('recovery-code').textContent!;
     expect(code).toMatch(/^([0-9A-Z]{4}-){6}[0-9A-Z]{4}$/);
-    expect(svc.enableWithNewCode).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: /Télécharger \(fichier texte\)/ })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /Je l'ai mis en lieu sûr/ }));
+    // Le code n'est plus à l'écran pendant la vérification ; rien n'est encore activé.
+    expect(screen.queryByTestId('recovery-code')).toBeNull();
+    expect(svc.enableWithNewCode).not.toHaveBeenCalled();
+    fillGroups(code);
+    fireEvent.click(screen.getByRole('button', { name: /Vérifier et activer/ }));
     await waitFor(() => expect(svc.uploadNow).toHaveBeenCalledWith(data));
     expect(svc.enableWithNewCode).toHaveBeenCalledWith(code);
-    await waitFor(() => expect(screen.queryByTestId('recovery-code')).toBeNull());
+    await waitFor(() => expect(screen.queryByRole('button', { name: /Vérifier et activer/ })).toBeNull());
+  });
+
+  it('activation : groupes mal recopiés = rien d’activé, message ; « Revoir le code » le réaffiche', async () => {
+    setup();
+    fireEvent.click(await screen.findByRole('button', { name: /Activer/ }));
+    const code = screen.getByTestId('recovery-code').textContent!;
+    fireEvent.click(screen.getByRole('button', { name: /Je l'ai mis en lieu sûr/ }));
+    fillGroups(code, ['ZZZZ', 'ZZZZ']);
+    fireEvent.click(screen.getByRole('button', { name: /Vérifier et activer/ }));
+    expect((await screen.findByRole('alert')).textContent).toMatch(/Ce n'est pas ce qui était affiché/);
+    expect(svc.enableWithNewCode).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Revoir le code' }));
+    expect(screen.getByTestId('recovery-code').textContent).toBe(code);
+  });
+
+  it('activation : le code peut être téléchargé en fichier texte', async () => {
+    const createObjectURL = vi.fn((_b: Blob) => 'blob:code');
+    const revokeObjectURL = vi.fn();
+    vi.stubGlobal('URL', Object.assign(URL, { createObjectURL, revokeObjectURL }));
+    let attached = false;
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) { attached = this.isConnected; });
+    setup();
+    fireEvent.click(await screen.findByRole('button', { name: /Activer/ }));
+    const code = screen.getByTestId('recovery-code').textContent!;
+    fireEvent.click(screen.getByRole('button', { name: /Télécharger \(fichier texte\)/ }));
+    expect(click).toHaveBeenCalled();
+    // Lien attaché à la page au moment du clic, puis retiré ; adresse gardée un moment.
+    expect(attached).toBe(true);
+    expect(document.querySelector('a[download]')).toBeNull();
+    expect(revokeObjectURL).not.toHaveBeenCalled();
+    expect(await createObjectURL.mock.calls[0][0].text()).toContain(code);
+    click.mockRestore();
+    vi.unstubAllGlobals();
   });
 
   it("annuler l'activation n'enregistre rien", async () => {
@@ -154,12 +211,39 @@ describe('Sauvegarde de secours chiffrée (Réglages)', () => {
     await waitFor(() => expect(toast).toHaveBeenLastCalledWith({ message: 'Restauration annulée', kind: 'success' }));
   });
 
-  it('désactivation : confirmation, puis copies serveur effacées', async () => {
+  it('désactivation : confirmation qui annonce le délai de 7 jours, puis effacement programmé', async () => {
     svc.getDeviceEnrollment.mockResolvedValue({ enabledAt: '2026-09-01T00:00:00Z' });
-    const { confirm } = setup();
+    const { confirm, toast } = setup();
     fireEvent.click(await screen.findByRole('button', { name: /Désactiver/ }));
     expect(confirm.mock.calls[0][0]).toMatch(/Désactiver la sauvegarde de secours/);
-    await waitFor(() => expect(svc.disableAndDeleteServerCopies).toHaveBeenCalled());
+    expect(confirm.mock.calls[0][1]).toMatch(/effacées dans 7 jours/);
+    await waitFor(() => expect(svc.disableAndScheduleDeletion).toHaveBeenCalled());
+    await waitFor(() => expect((toast.mock.calls[0][0] as { message: string }).message).toMatch(/3 copies effacées d.ici le/));
+  });
+
+  it('effacement programmé : affiché, avec « Annuler l’effacement »', async () => {
+    svc.listServerBackups.mockResolvedValue(['2026-10-07']);
+    svc.deletion = { requestedAt: '2026-10-20T10:00:00.000Z', purgeAt: '2026-10-27T10:00:00.000Z' };
+    const { toast } = setup();
+    expect(await screen.findByText('Effacement des copies programmé')).toBeTruthy();
+    svc.deletion = null;
+    fireEvent.click(screen.getByRole('button', { name: /Annuler l'effacement/ }));
+    await waitFor(() => expect(svc.cancelServerDeletion).toHaveBeenCalled());
+    await waitFor(() => expect(toast).toHaveBeenCalledWith({ message: 'Effacement des copies de secours annulé', kind: 'success' }));
+    await waitFor(() => expect(screen.queryByText('Effacement des copies programmé')).toBeNull());
+  });
+
+  it('effacement programmé : annoncé dans le résumé de la carte, visible carte fermée', async () => {
+    const { SettingsCard } = await import('./settings/SettingsCard');
+    const { Cloud } = await import('lucide-react');
+    svc.getDeviceEnrollment.mockResolvedValue({ enabledAt: '2026-09-01T00:00:00Z' });
+    svc.deletion = { requestedAt: '2026-10-20T10:00:00.000Z', purgeAt: '2026-10-27T10:00:00.000Z' };
+    render(
+      <SettingsCard id="data" title="Données" icon={Cloud} open={false} onToggle={() => undefined}>
+        <CloudBackupPanel getData={() => data} onImport={vi.fn()} confirm={vi.fn()} />
+      </SettingsCard>,
+    );
+    expect(await screen.findByText('Effacement des copies prévu le 27 octobre')).toBeTruthy();
   });
 
   it('envoyer maintenant : une erreur reste discrète (message dans le panneau)', async () => {
@@ -168,5 +252,31 @@ describe('Sauvegarde de secours chiffrée (Réglages)', () => {
     setup();
     fireEvent.click(await screen.findByRole('button', { name: /Envoyer maintenant/ }));
     expect(await screen.findByRole('alert')).toHaveProperty('textContent', 'Serveur injoignable (hors ligne ?).');
+  });
+
+  it('vérification annuelle : rappelée après un an, code retapé juste = noté, faux = message clair', async () => {
+    svc.getDeviceEnrollment.mockResolvedValue({ enabledAt: '2024-09-01T00:00:00Z' });
+    const { toast } = setup();
+    expect(await screen.findByText(/n'a pas été retapé depuis un an/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /Vérifier mon code/ }));
+    const field = screen.getByLabelText('Code de secours');
+    const check = screen.getByRole('button', { name: 'Vérifier ce code' });
+    expect(check).toHaveProperty('disabled', true);
+
+    svc.verifyRecoveryCode.mockResolvedValueOnce(false);
+    fireEvent.change(field, { target: { value: realGenerate().code } });
+    fireEvent.click(check);
+    expect(await screen.findByText(/ne correspond pas à la sauvegarde de cet appareil/)).toBeTruthy();
+    expect(toast).not.toHaveBeenCalled();
+
+    const code = realGenerate().code;
+    svc.getDeviceEnrollment.mockResolvedValue({ enabledAt: '2024-09-01T00:00:00Z', codeCheckedAt: new Date().toISOString() });
+    fireEvent.change(field, { target: { value: code } });
+    fireEvent.click(screen.getByRole('button', { name: 'Vérifier ce code' }));
+    await waitFor(() => expect(toast).toHaveBeenCalledWith(expect.objectContaining({ kind: 'success', message: expect.stringMatching(/Code de secours vérifié/) })));
+    expect(svc.verifyRecoveryCode).toHaveBeenLastCalledWith(code);
+    // Relu après la vérification : le rappel laisse place à la date du contrôle.
+    expect(await screen.findByText(/Code de secours vérifié le/)).toBeTruthy();
+    expect(screen.queryByText(/n'a pas été retapé depuis un an/)).toBeNull();
   });
 });

@@ -41,8 +41,9 @@ export const ToastContainer: React.FC<{ toasts: ToastItem[]; onDismiss: (id: str
   );
 };
 
-/** Un toast : 3 s, ou 10 s s'il porte une action (« Annuler »), en pause tant que la souris
- *  est dessus ou que le focus est dedans. */
+/** Un toast : 3 s, ou 10 s s'il porte une action (« Annuler »), sauf durée fournie (30 s pour
+ *  une suppression faite au clavier), en pause tant que la souris est dessus ou que le focus
+ *  est dedans. */
 const ToastView: React.FC<{ t: ToastItem; onDismiss: (id: string) => void }> = ({ t, onDismiss }) => {
   const [paused, setPaused] = useState(false);
   const remaining = useRef(t.durationMs ?? (t.action ? 10_000 : 3000));
@@ -60,7 +61,7 @@ const ToastView: React.FC<{ t: ToastItem; onDismiss: (id: string) => void }> = (
       // Snackbar Material 3 : surface inversée, coins de 4 px, action dans la couleur inverse.
       className="pointer-events-auto min-h-12 flex items-center gap-3 pl-4 pr-2 py-2 rounded-xs shadow-md text-sm bg-inverse-surface text-inverse-on-surface animate-fade-in"
     >
-      {t.kind === 'error' ? <AlertCircle className="w-5 h-5 shrink-0 text-rose-300 dark:text-rose-700" aria-hidden="true" /> : <CheckCircle2 className="w-5 h-5 shrink-0 text-inverse-primary" aria-hidden="true" />}
+      {t.kind === 'error' ? <AlertCircle className="w-5 h-5 shrink-0 text-inverse-error" aria-hidden="true" /> : <CheckCircle2 className="w-5 h-5 shrink-0 text-inverse-primary" aria-hidden="true" />}
       <span className="flex-1">{t.message}</span>
       {t.action && (
         <button
@@ -82,19 +83,40 @@ export const useToast = () => useContext(ToastContext);
 
 type ListSetter<T> = React.Dispatch<React.SetStateAction<T[]>>;
 
+/** Durée du toast « Annuler » : 10 s à la souris ou au doigt, 30 s au clavier. Au clavier, le
+ *  focus part sur la ligne voisine et le bouton « Annuler » est à plusieurs tabulations :
+ *  il faut le temps d'y aller (le toast se met ensuite en pause tant que le focus est dedans). */
+export const UNDO_TOAST_MS = 10_000;
+export const UNDO_TOAST_KEYBOARD_MS = 30_000;
+
+// Dernière interaction connue : clavier (touche) ou pointeur (souris, doigt, stylet). Suivie
+// au niveau de la fenêtre, une seule fois, pour couvrir aussi une suppression confirmée dans
+// une boîte de dialogue.
+let lastInputWasKeyboard = false;
+let trackingInput = false;
+const trackInputModality = () => {
+  if (trackingInput || typeof window === 'undefined') return;
+  trackingInput = true;
+  window.addEventListener('keydown', () => { lastInputWasKeyboard = true; }, true);
+  window.addEventListener('pointerdown', () => { lastInputWasKeyboard = false; }, true);
+};
+
 /**
  * Suppression annulable : l'élément disparaît tout de suite, un toast « Annuler » le remet
- * à sa place pendant 6 s. La restauration part de l'état COURANT (mise à jour
- * fonctionnelle) : une autre modification faite entre-temps n'est pas écrasée.
+ * à sa place (10 s, ou 30 s si la suppression vient du clavier). La restauration part de
+ * l'état COURANT (mise à jour fonctionnelle) : une autre modification faite entre-temps
+ * n'est pas écrasée.
  */
 export const useUndoableRemove = () => {
   const addToast = useContext(ToastContext);
+  useEffect(() => trackInputModality(), []);
   return useCallback(<T extends { id: string }>(list: T[], item: T, set: ListSetter<T>, message: string) => {
     const index = list.findIndex(x => x.id === item.id);
     set(prev => prev.filter(x => x.id !== item.id));
     addToast?.({
       message,
       kind: 'success',
+      durationMs: lastInputWasKeyboard ? UNDO_TOAST_KEYBOARD_MS : UNDO_TOAST_MS,
       action: {
         label: 'Annuler',
         onClick: () => set(prev => prev.some(x => x.id === item.id)

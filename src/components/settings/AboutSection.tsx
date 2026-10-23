@@ -30,18 +30,18 @@ export const AboutSection: React.FC = () => {
         {buildSha && <span className="text-on-surface-variant"> ({buildSha})</span>}
       </p>
 
-      <ul className="flex flex-wrap gap-2" aria-label="Liens utiles">
+      <ul className="flex flex-wrap gap-3" aria-label="Liens utiles">
         {LINKS.map(l => (
           <li key={l.href}>
             <a href={l.href} {...(l.external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
-              className="h-8 px-3 inline-flex items-center gap-1.5 rounded-sm border border-outline text-sm font-medium text-on-surface-variant hover:bg-on-surface/8">
+              className="touch-target h-10 px-3 inline-flex items-center gap-1.5 rounded-sm border border-outline text-sm font-medium text-on-surface-variant hover:bg-on-surface/8">
               {l.label}{l.external && <ExternalLink className="w-3.5 h-3.5" aria-hidden="true" />}
             </a>
           </li>
         ))}
         <li>
           <a href="mailto:contact@pecule-app.com"
-            className="h-8 px-3 inline-flex items-center gap-1.5 rounded-sm border border-outline text-sm font-medium text-on-surface-variant hover:bg-on-surface/8">
+            className="touch-target h-10 px-3 inline-flex items-center gap-1.5 rounded-sm border border-outline text-sm font-medium text-on-surface-variant hover:bg-on-surface/8">
             <Mail className="w-3.5 h-3.5" aria-hidden="true" /> contact@pecule-app.com
           </a>
         </li>

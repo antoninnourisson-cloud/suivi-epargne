@@ -14,11 +14,16 @@ interface ModalProps {
   className?: string;
   /** Élément à focaliser à l'ouverture (sinon le premier champ ou bouton). */
   initialFocusRef?: React.RefObject<HTMLElement | null>;
+  /**
+   * `false` : un clic sur le voile ne ferme pas (formulaire déjà commencé, qu'un toucher
+   * maladroit effacerait). Échap et le bouton Fermer restent disponibles.
+   */
+  closeOnScrim?: boolean;
 }
 
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
-export const Modal: React.FC<ModalProps> = ({ open, onClose, label, children, variant = 'center', className = '', initialFocusRef }) => {
+export const Modal: React.FC<ModalProps> = ({ open, onClose, label, children, variant = 'center', className = '', initialFocusRef, closeOnScrim = true }) => {
   const panelRef = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
@@ -54,7 +59,7 @@ export const Modal: React.FC<ModalProps> = ({ open, onClose, label, children, va
   return (
     <div
       className={`fixed inset-0 z-70 flex ${sheet ? 'items-end sm:items-center' : 'items-center p-4'} justify-center bg-scrim/40 animate-fade-in`}
-      onClick={onClose}
+      onClick={closeOnScrim ? onClose : undefined}
     >
       <div
         ref={panelRef}

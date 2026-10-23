@@ -1,8 +1,9 @@
 // Fiscalité du capital : PFU, maturités, retraits, coût de déblocage.
 // Partie de src/lib/finance.ts (qui réexporte tout) : importez depuis '../finance'.
-import { FiscalConfig, RateChange, AccountType, SavingsAccount } from '../../types';
+import { FiscalConfig, RateChange, AccountType, SavingsAccount, AccountMovement } from '../../types';
 import { MS_PER_DAY, formatISODay, parseISODate } from '../dates';
 import { socialChargesRateFor } from './income';
+import { isSavingsFlow } from './savings';
 
 // --- FISCALITÉ DU CAPITAL (PFU / prélèvements sociaux) ---
 // `socialChargesCapital` (17,2 %) existait dans FiscalConfig depuis le début mais n'était
@@ -58,8 +59,53 @@ export const accountAgeYears = (openingISO: string, asOfDate: Date = new Date())
   return full + (today.getTime() - last.getTime()) / (next.getTime() - last.getTime());
 };
 
+/** Épargne logement ouverte avant cette date : ancien régime (exonération d'impôt sur le revenu). */
+const HOUSING_SAVINGS_REFORM = '2018-01-01';
+/** PEL ouvert avant 2018 : intérêts des 12 premières années sans impôt sur le revenu. */
+const OLD_PEL_EXEMPT_YEARS = 12;
+
+/**
+ * Intérêts d'un PEL ou d'un CEL exonérés d'impôt sur le revenu à `asOfDate` (prélèvements
+ * sociaux toujours dus). Vérifié le 2026-10-21 :
+ * - PEL ouvert depuis le 1er janvier 2018 : imposé chaque année (PFU) ; ouvert avant : intérêts
+ *   des 12 premières années exonérés, https://www.service-public.gouv.fr/particuliers/vosdroits/F16140
+ * - CEL ouvert depuis 2018 : imposé (PFU) ; ouvert avant : exonéré,
+ *   https://www.service-public.gouv.fr/particuliers/vosdroits/F16136
+ * Date d'ouverture inconnue : jamais d'exonération non prouvée (imposé, par prudence).
+ */
+export const isHousingSavingsIncomeTaxExempt = (account: { type: AccountType; openingDate?: string }, asOfDate: Date = new Date()): boolean => {
+  if (!account.openingDate || account.openingDate >= HOUSING_SAVINGS_REFORM) return false;
+  if (account.type === AccountType.CEL) return true;
+  if (account.type === AccountType.PEL) return accountAgeYears(account.openingDate, asOfDate) < OLD_PEL_EXEMPT_YEARS;
+  return false;
+};
+
+/**
+ * Comptes dont les intérêts sont imposés CHAQUE ANNÉE (et non au retrait) : livret bancaire,
+ * compte à terme, épargne logement, compte courant rémunéré, « Autre ». La banque retient
+ * l'acompte de 12,8 % au versement des intérêts.
+ */
+export const YEARLY_TAXED_INTEREST_TYPES: readonly AccountType[] = [
+  AccountType.LIVRET_BANCAIRE, AccountType.COMPTE_A_TERME, AccountType.PEL, AccountType.CEL, AccountType.COMPTE_COURANT, AccountType.AUTRE,
+];
+
+/** Intérêts de l'année soumis à l'impôt sur le revenu (PFU) : type imposé chaque année, hors exonération d'épargne logement. */
+export const hasTaxableYearlyInterest = (account: { type: AccountType; openingDate?: string }, asOfDate: Date = new Date()): boolean =>
+  YEARLY_TAXED_INTEREST_TYPES.includes(account.type) && !isHousingSavingsIncomeTaxExempt(account, asOfDate);
+
+/**
+ * Part des gains d'une assurance vie encore soumise aux prélèvements sociaux au retrait :
+ * ceux du fonds euros sont prélevés chaque année par l'assureur, à l'inscription des
+ * intérêts au contrat ; ceux des unités de compte, au retrait. Vérifié le 2026-10-21 :
+ * https://www.service-public.gouv.fr/particuliers/vosdroits/F15274
+ * Répartition inconnue : tout est compté (prudent). Autres comptes : 1.
+ */
+export const socialChargesShareAtWithdrawal = (account: { type: AccountType; euroFundPct?: number }): number =>
+  account.type === AccountType.ASSURANCE_VIE && account.euroFundPct !== undefined && Number.isFinite(account.euroFundPct)
+    ? Math.max(0, Math.min(1, 1 - account.euroFundPct / 100)) : 1;
+
 export const computeCapitalGainsTax = (
-  account: { type: AccountType; openingDate?: string },
+  account: { type: AccountType; openingDate?: string; euroFundPct?: number },
   grossInterest: number,
   fiscalConfig: FiscalConfig,
   asOfDate: Date = new Date()
@@ -75,7 +121,8 @@ export const computeCapitalGainsTax = (
     ? accountAgeYears(account.openingDate, asOfDate)
     : 0;
 
-  const socialCharges = grossInterest * socialChargesRateFor(account.type, fiscalConfig);
+  // Assurance vie : les prélèvements sociaux du fonds euros sont déjà payés chaque année.
+  const socialCharges = grossInterest * socialChargesShareAtWithdrawal(account) * socialChargesRateFor(account.type, fiscalConfig);
 
   const withMaturity = (maturityYears: number, reducedRate: number, regimeIfMature: CapitalTaxRegime): CapitalTaxBreakdown => {
     const mature = ageYears >= maturityYears;
@@ -98,10 +145,23 @@ export const computeCapitalGainsTax = (
       return { grossInterest, socialCharges, incomeTax: 0, netInterest: grossInterest - socialCharges, regime: 'EXONERE_IR' };
     case AccountType.ASSURANCE_VIE:
       return withMaturity(fiscalConfig.legalMaturity.assuranceVie, AV_REDUCED_INCOME_TAX_RATE, 'AV_REDUIT');
-    // Crypto : flat tax 30 % quelle que soit la durée de détention, pas de notion de maturité.
-    case AccountType.CRYPTO: {
+    // Crypto et compte-titres : PFU quelle que soit la durée de détention, pas de maturité.
+    // Livret bancaire, compte à terme, compte courant, « Autre » : intérêts au PFU chaque année.
+    case AccountType.CRYPTO:
+    case AccountType.CTO:
+    case AccountType.LIVRET_BANCAIRE:
+    case AccountType.COMPTE_A_TERME:
+    case AccountType.COMPTE_COURANT:
+    case AccountType.AUTRE: {
       const incomeTax = grossInterest * PFU_INCOME_TAX_RATE;
       return { grossInterest, socialCharges, incomeTax, netInterest: grossInterest - socialCharges - incomeTax, regime: 'PFU' };
+    }
+    // PEL, CEL : PFU, sauf ancien régime (ouverts avant 2018) exonéré d'impôt sur le revenu.
+    case AccountType.PEL:
+    case AccountType.CEL: {
+      const exempt = isHousingSavingsIncomeTaxExempt(account, asOfDate);
+      const incomeTax = exempt ? 0 : grossInterest * PFU_INCOME_TAX_RATE;
+      return { grossInterest, socialCharges, incomeTax, netInterest: grossInterest - socialCharges - incomeTax, regime: exempt ? 'EXONERE_IR' : 'PFU' };
     }
     default:
       // Immobilier (paliers d'abattement par durée de détention, distinction résidence
@@ -279,7 +339,7 @@ export const computeWeightedAnnualRate = (
 // ---------------------------------------------------------------------------
 
 /** Comptes dont la valeur bouge avec les marchés : on y suit les versements cumulés. */
-const DEPOSIT_TRACKED_TYPES = [AccountType.PEA, AccountType.ASSURANCE_VIE, AccountType.PEE, AccountType.PER, AccountType.CRYPTO];
+const DEPOSIT_TRACKED_TYPES = [AccountType.PEA, AccountType.CTO, AccountType.ASSURANCE_VIE, AccountType.PEE, AccountType.PER, AccountType.CRYPTO];
 export const tracksDeposits = (type: AccountType) => DEPOSIT_TRACKED_TYPES.includes(type);
 
 /** Plafond légal des VERSEMENTS sur un PEA (la valorisation peut le dépasser). */
@@ -300,16 +360,55 @@ const AV_REDUCED_RATE_PREMIUM_CAP = 150_000;
 export const depositsAfterWithdrawal = (totalDeposits: number, value: number, amount: number): number =>
   value <= 0 ? totalDeposits : Math.max(0, totalDeposits * (1 - Math.min(1, amount / value)));
 
-// Cessions de crypto-actifs exonérées si leur total annuel ne dépasse pas 305 € (art. 150 VH bis).
-const CRYPTO_EXEMPT_DISPOSALS = 305;
+/**
+ * Cessions de crypto-actifs exonérées si le TOTAL des prix de cession de l'année du foyer ne
+ * dépasse pas 305 € (art. 150 VH bis du CGI). Au-delà, toute la plus-value de l'année est
+ * imposable. Vérifié le 2026-10-21 : brochure pratique IR 2026, plus-values, p. 137-156
+ * (« la somme des prix n'excède pas 305 € au cours d'une année d'imposition »),
+ * https://www.impots.gouv.fr/www2/fichiers/documentation/brochure/ir_2026/pdf_som/09-plus_values_137a156.pdf
+ * et (2026-10-22) https://www.impots.gouv.fr/particulier/questions/comment-declarer-les-plus-ou-moins-values-sur-cessions-dactifs-numeriques
+ * (somme des prix de cession de l'année, pas des gains, appréciée pour tout le foyer).
+ */
+export const CRYPTO_EXEMPT_DISPOSALS = 305;
+
+/**
+ * Retraits de crypto de l'année civile `year` (votre part : ni capital des parents, ni
+ * correction, ni valorisation, ni solde initial), avant `beforeISO` si donné. Un retrait
+ * vers votre compte en banque suppose une vente : c'est l'indice de cession dont dispose l'app.
+ */
+export const cryptoDisposalsOfYear = (
+  accounts: { type: AccountType; movements?: AccountMovement[] }[],
+  year: number,
+  beforeISO?: string,
+): number => accounts
+  .filter(a => a.type === AccountType.CRYPTO)
+  .reduce((s, a) => s + (a.movements || [])
+    .filter(m => m.type === 'OUT' && isSavingsFlow(m) && m.date.startsWith(`${year}-`) && (!beforeISO || m.date < beforeISO))
+    .reduce((t, m) => t + m.amount, 0), 0);
+
+/** Seuil des 305 € de ventes de crypto de l'année : déjà dépassé, ou dépassé avec ce retrait. */
+export type CryptoThreshold = 'already-past' | 'with-this-sale';
 
 export interface WithdrawalTax {
   known: boolean;        // false : versements cumulés inconnus, ou fiscalité non modélisée
   gainPart: number;      // part de gains contenue dans le montant retiré
+  /**
+   * Part des gains soumise à l'impôt sur le revenu (après l'abattement de l'assurance vie de
+   * plus de 8 ans ; 0 si exonérée) : la base qu'imposerait le barème en cas d'option.
+   */
+  taxableGain: number;
   socialCharges: number;
   incomeTax: number;
   net: number;           // ce qui vous reste du retrait, impôt de l'année réglé
   closesPea: boolean;    // retrait d'un PEA de moins de 5 ans : le plan est clôturé
+  /**
+   * Crypto, quand des ventes ont déjà eu lieu cette année : 'already-past', elles dépassent
+   * déjà 305 € à elles seules ; 'with-this-sale', c'est ce retrait qui ferait passer le total
+   * au-delà. Dans les deux cas l'exonération est perdue pour toute l'année (la plus-value des
+   * ventes précédentes devient imposable aussi, ce que ce calcul ne chiffre pas). Absent sans
+   * vente antérieure : le retrait seul est alors exonéré ou imposé, sans surprise.
+   */
+  cryptoThreshold?: CryptoThreshold;
 }
 
 /**
@@ -324,38 +423,47 @@ export interface WithdrawalTax {
  *   ceux de ce contrat. L'assureur retient 7,5 % le jour du retrait et l'abattement est rendu
  *   avec la déclaration : `incomeTax` est l'impôt final de l'année. Prélèvements sociaux :
  *   17,2 %. Sur un fonds euros, ils sont déjà retenus chaque année (`euroFundPct`) ;
- * - Crypto : PFU (31,4 % en 2026) sur la part de plus-value ;
+ * - Crypto, compte-titres : PFU (31,4 % en 2026) sur la part de plus-value ; crypto
+ *   exonérée tant que les ventes de l'année, celle-ci comprise, ne dépassent pas 305 € au
+ *   total (`opts.cryptoDisposalsThisYear` : ventes déjà faites dans l'année civile) ;
  * - autres (PER, immobilier…) : non modélisé.
  */
 export const computeWithdrawalTax = (
   account: { type: AccountType; openingDate?: string; totalAmount: number; totalDeposits?: number; euroFundPct?: number },
   amount: number,
   fiscalConfig: FiscalConfig,
-  asOfDate: Date = new Date()
+  asOfDate: Date = new Date(),
+  opts: { cryptoDisposalsThisYear?: number } = {},
 ): WithdrawalTax => {
   const ageYears = account.openingDate
     ? accountAgeYears(account.openingDate, asOfDate)
     : 0;
   const closesPea = account.type === AccountType.PEA && ageYears < fiscalConfig.legalMaturity.pea;
-  const unknown: WithdrawalTax = { known: false, gainPart: 0, socialCharges: 0, incomeTax: 0, net: amount, closesPea };
-  const modeled = [AccountType.PEA, AccountType.PEE, AccountType.ASSURANCE_VIE, AccountType.CRYPTO].includes(account.type);
+  const unknown: WithdrawalTax = { known: false, gainPart: 0, taxableGain: 0, socialCharges: 0, incomeTax: 0, net: amount, closesPea };
+  const modeled = [AccountType.PEA, AccountType.PEE, AccountType.ASSURANCE_VIE, AccountType.CRYPTO, AccountType.CTO].includes(account.type);
   if (!modeled || account.totalDeposits === undefined || account.totalAmount <= 0) return unknown;
 
   const gainRatio = Math.max(0, (account.totalAmount - account.totalDeposits) / account.totalAmount);
   const gainPart = Math.min(amount, account.totalAmount) * gainRatio;
   // Fonds euros d'une assurance vie : prélèvements sociaux déjà payés chaque année.
-  const psShare = account.type === AccountType.ASSURANCE_VIE && account.euroFundPct !== undefined
-    ? Math.max(0, Math.min(1, 1 - account.euroFundPct / 100)) : 1;
-  // Crypto : cessions de l'année jusqu'à 305 € exonérées (on suppose que ce retrait est la seule).
-  if (account.type === AccountType.CRYPTO && amount <= CRYPTO_EXEMPT_DISPOSALS) {
-    return { known: true, gainPart, socialCharges: 0, incomeTax: 0, net: amount, closesPea };
+  const psShare = socialChargesShareAtWithdrawal(account);
+  // Crypto : exonération si le total des ventes de l'année, celle-ci comprise, reste sous 305 €.
+  const earlierCrypto = account.type === AccountType.CRYPTO ? Math.max(0, opts.cryptoDisposalsThisYear ?? 0) : 0;
+  if (account.type === AccountType.CRYPTO && earlierCrypto + amount <= CRYPTO_EXEMPT_DISPOSALS) {
+    return { known: true, gainPart, taxableGain: 0, socialCharges: 0, incomeTax: 0, net: amount, closesPea };
   }
+  const threshold: { cryptoThreshold?: CryptoThreshold } = earlierCrypto > CRYPTO_EXEMPT_DISPOSALS
+    ? { cryptoThreshold: 'already-past' }
+    : earlierCrypto > 0 ? { cryptoThreshold: 'with-this-sale' } : {};
   const socialCharges = gainPart * psShare * socialChargesRateFor(account.type, fiscalConfig);
   let incomeTax: number;
+  let taxableGain = gainPart;
   switch (account.type) {
     case AccountType.PEA:
-      incomeTax = closesPea ? gainPart * PFU_INCOME_TAX_RATE : 0; break;
+      taxableGain = closesPea ? gainPart : 0;
+      incomeTax = taxableGain * PFU_INCOME_TAX_RATE; break;
     case AccountType.PEE:
+      taxableGain = 0;
       incomeTax = 0; break;
     case AccountType.ASSURANCE_VIE: {
       if (ageYears < fiscalConfig.legalMaturity.assuranceVie) { incomeTax = gainPart * PFU_INCOME_TAX_RATE; break; }
@@ -366,13 +474,109 @@ export const computeWithdrawalTax = (
       // L'abattement s'impute d'abord sur la part à 7,5 %, le reliquat sur la part à 12,8 %.
       const onReduced = Math.min(reducedPart, AV_ANNUAL_ALLOWANCE);
       const onFull = Math.min(fullPart, AV_ANNUAL_ALLOWANCE - onReduced);
+      taxableGain = gainPart - onReduced - onFull;
       incomeTax = (reducedPart - onReduced) * AV_REDUCED_INCOME_TAX_RATE + (fullPart - onFull) * PFU_INCOME_TAX_RATE;
       break;
     }
     default:
       incomeTax = gainPart * PFU_INCOME_TAX_RATE;
   }
-  return { known: true, gainPart, socialCharges, incomeTax, net: amount - socialCharges - incomeTax, closesPea };
+  return { known: true, gainPart, taxableGain, socialCharges, incomeTax, net: amount - socialCharges - incomeTax, closesPea, ...threshold };
+};
+
+/** Ce que l'écran Rendement affiche pour « retirer les gains de l'année ». */
+export interface GainsWithdrawal extends CapitalTaxBreakdown {
+  /** Part soumise à l'impôt sur le revenu (base du barème en cas d'option). */
+  taxableGain: number;
+  /** true : vrai retrait au prorata (versements cumulés connus) ; false : estimation simplifiée. */
+  proRata: boolean;
+  cryptoThreshold?: CryptoThreshold;
+}
+
+/**
+ * Net d'un retrait égal aux gains `grossInterest` de l'année. Quand les versements cumulés
+ * d'un placement (PEA, assurance vie, PEE, compte-titres, crypto) sont connus, c'est un vrai
+ * retrait de ce montant : seule sa part de gains est imposée, au prorata de la valeur du
+ * contrat (BOFiP BOI-RPPM-RCM-20-10-20-50, voir depositsAfterWithdrawal), avec l'abattement
+ * de l'assurance vie de plus de 8 ans et les prélèvements sociaux du fonds euros déjà payés.
+ * Sinon (livrets fiscalisés, versements inconnus) : tout le montant est compté comme un gain
+ * (computeCapitalGainsTax).
+ */
+export const computeGainsWithdrawal = (
+  account: { type: AccountType; openingDate?: string; totalAmount: number; totalDeposits?: number; euroFundPct?: number },
+  grossInterest: number,
+  fiscalConfig: FiscalConfig,
+  asOfDate: Date = new Date(),
+  opts: { cryptoDisposalsThisYear?: number } = {},
+): GainsWithdrawal => {
+  const simple = computeCapitalGainsTax(account, grossInterest, fiscalConfig, asOfDate);
+  const simpleTaxable = simple.incomeTax > 0 ? grossInterest : 0;
+  if (grossInterest <= 0 || simple.regime === 'NON_MODELISE') return { ...simple, taxableGain: simpleTaxable, proRata: false };
+  const w = computeWithdrawalTax(account, grossInterest, fiscalConfig, asOfDate, opts);
+  if (!w.known) return { ...simple, taxableGain: simpleTaxable, proRata: false };
+  return {
+    grossInterest, socialCharges: w.socialCharges, incomeTax: w.incomeTax, netInterest: w.net,
+    regime: simple.regime, taxableGain: w.taxableGain, proRata: true,
+    ...(w.cryptoThreshold ? { cryptoThreshold: w.cryptoThreshold } : {}),
+  };
+};
+
+// ---------------------------------------------------------------------------
+// Option pour le barème (au lieu du taux forfaitaire de 12,8 %)
+// ---------------------------------------------------------------------------
+
+/**
+ * Impôt sur le revenu au barème, si le foyer choisit l'option : chaque euro imposable l'est
+ * à la tranche du foyer au lieu du taux forfaitaire (12,8 %, 7,5 % pour une assurance vie de
+ * plus de 8 ans). Approximation : un gros gain peut faire passer une partie du revenu dans la
+ * tranche suivante, et l'option rend 6,8 points de CSG déductibles l'année suivante.
+ * Vérifié le 2026-10-21 et le 2026-10-22 :
+ * - l'option est expresse, irrévocable et GLOBALE : elle vaut pour tous les revenus et
+ *   plus-values de placement de l'année (case 2OP), BOFiP BOI-RPPM-RCM-20-15-20191220,
+ *   https://bofip.impots.gouv.fr/bofip/11224-PGP.html/identifiant=BOI-RPPM-RCM-20-15-20191220 ;
+ *   aide officielle de la déclaration 2026 (« l'option est globale : elle porte sur l'ensemble
+ *   des revenus de capitaux mobiliers, des plus-values… »),
+ *   https://simulateur-ir-ifi.impots.gouv.fr/calcul_impot/2026/aides/capitaux_mobiliers.htm ;
+ * - CSG déductible seulement en cas d'option pour le barème :
+ *   https://www.service-public.gouv.fr/particuliers/vosdroits/F2329 ;
+ * - plus-values de crypto : option distincte, globale pour toutes ces plus-values (case 3CN),
+ *   brochure IR 2026, p. 137-156 (lien de CRYPTO_EXEMPT_DISPOSALS).
+ * `null` si l'option ne peut pas coûter moins : tranche au-dessus du taux forfaitaire.
+ */
+export const compareProgressiveOption = (
+  items: { incomeTax: number; taxableGain: number }[],
+  marginalRate: number,
+): { flat: number; progressive: number; saving: number } | null => {
+  if (!(marginalRate >= 0) || marginalRate >= PFU_INCOME_TAX_RATE) return null;
+  const flat = items.reduce((s, i) => s + Math.max(0, i.incomeTax), 0);
+  const progressive = items.reduce((s, i) => s + Math.max(0, i.taxableGain) * marginalRate, 0);
+  const saving = flat - progressive;
+  return saving >= 0.5 ? { flat, progressive, saving } : null;
+};
+
+export interface ProgressiveOptionAdvice {
+  /** Tranche du foyer (fraction : 0 ou 0,11), sous le taux forfaitaire de 12,8 %. */
+  marginalRate: number;
+  /** Placements (intérêts, assurance vie, PEA, compte-titres) : option de la case 2OP. */
+  securities: { flat: number; progressive: number; saving: number } | null;
+  /** Plus-values de crypto : leur propre option (case 3CN), indépendante de la 2OP. */
+  crypto: { flat: number; progressive: number; saving: number } | null;
+}
+
+/**
+ * L'option pour le barème coûterait-elle moins que le taux forfaitaire pour ces retraits ?
+ * `marginalRate` : tranche estimée du foyer (lib/retirement, marginalTaxRate). Crypto à part :
+ * son option (case 3CN) est indépendante de la case 2OP (aide officielle de la déclaration,
+ * lien plus haut). `null` : tranche inconnue, trop haute, ou aucun gain à y gagner.
+ */
+export const adviseProgressiveOption = (
+  items: { type: AccountType; incomeTax: number; taxableGain: number }[],
+  marginalRate: number | undefined,
+): ProgressiveOptionAdvice | null => {
+  if (marginalRate === undefined) return null;
+  const securities = compareProgressiveOption(items.filter(i => i.type !== AccountType.CRYPTO), marginalRate);
+  const crypto = compareProgressiveOption(items.filter(i => i.type === AccountType.CRYPTO), marginalRate);
+  return securities || crypto ? { marginalRate, securities, crypto } : null;
 };
 
 // ---------------------------------------------------------------------------

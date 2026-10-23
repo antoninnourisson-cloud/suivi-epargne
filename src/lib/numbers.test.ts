@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseFrenchNumber, safeNumber } from './numbers';
+import { fractionToPercent, parseFrenchNumber, percentToFraction, safeNumber } from './numbers';
 
 describe('parseFrenchNumber', () => {
   it('accepte la virgule décimale française', () => {
@@ -65,5 +65,17 @@ describe('safeNumber', () => {
   it('parse normalement une valeur valide', () => {
     expect(safeNumber('0,2232')).toBe(0.2232);
     expect(safeNumber('12')).toBe(12);
+  });
+});
+
+describe('taux en pourcentage', () => {
+  it('affiche une fraction en % sans bruit et la rend exacte', () => {
+    expect(fractionToPercent(0.186)).toBe(18.6);
+    expect(fractionToPercent(0.2232)).toBe(22.32);
+    expect(fractionToPercent(0.4525)).toBe(45.25);
+    expect(percentToFraction(18.6)).toBe(0.186);
+    expect(percentToFraction(17.2)).toBe(0.172);
+    expect(percentToFraction(22.32)).toBe(0.2232);
+    for (const f of [0, 0.11, 0.3, 0.41, 0.45, 0.1, 0.0975]) expect(percentToFraction(fractionToPercent(f))).toBe(f);
   });
 });

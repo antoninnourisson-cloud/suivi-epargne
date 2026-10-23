@@ -2,12 +2,23 @@
 // FILE: src/types.ts
 // ================================================
 
+// Valeurs enregistrées telles quelles dans le fichier : ne jamais en renommer une. L'ordre
+// est celui de la liste « Type » de la fiche d'un compte.
 export enum AccountType {
   LIVRET_A = 'Livret A',
   LDDS = 'LDDS',
   LEP = 'LEP',
+  // Livret d'une banque (souvent à taux promotionnel) : intérêts imposés chaque année.
+  LIVRET_BANCAIRE = 'Livret bancaire',
+  // Épargne logement : régime fiscal selon la date d'ouverture (voir lib/finance/capitalTax).
+  CEL = 'CEL',
+  PEL = 'PEL',
+  // Argent placé jusqu'à une échéance (`contractEndDate`), intérêts imposés.
+  COMPTE_A_TERME = 'Compte à terme',
   COMPTE_COURANT = 'Compte Courant',
   PEA = 'PEA',
+  // Compte-titres ordinaire : plus-values imposées à la vente, versements suivis.
+  CTO = 'Compte-titres',
   PER = 'PER',
   ASSURANCE_VIE = 'Assurance Vie',
   PEE = 'PEE',
@@ -73,6 +84,12 @@ export interface SavingsAccount {
   // Compte tenu par un établissement à l'étranger (néobanque, courtier, plateforme crypto) :
   // à déclarer chaque année (case 8UU, formulaire 3916 ou 3916-bis). Absent = non précisé.
   heldAbroad?: boolean;
+  // Dernier solde constaté ('YYYY-MM-DD') : posé par « Actualiser » et par la fiche du compte,
+  // jamais par un versement prévu (liste de paie, mouvement régulier). Absent = d'après les
+  // mouvements (voir lib/freshness).
+  balanceCheckedAt?: string;
+  // « Autre » : argent bloqué (retrait impossible avant une date). Absent = disponible.
+  blocked?: boolean;
 }
 
 export interface PortfolioSnapshot {
@@ -91,14 +108,6 @@ export interface Expense {
   name: string;
   amount: number;
   paymentMethod?: string;
-}
-
-export interface SavingsGoal {
-  id: string;
-  name: string;
-  targetAmount: number;
-  savedAmount: number;
-  deadline?: string; // date ISO optionnelle
 }
 
 // Champs extraits d'une fiche de paie par l'IA. Tous optionnels : une extraction
@@ -205,6 +214,13 @@ export interface ParentalRestitution {
   };
 }
 
+// Clôture d'une année (voir lib/yearClosing). Les étapes que l'app constate d'après les
+// données (soldes, intérêts, relevés, restitution) n'y sont pas : seules les coches à la main.
+export interface YearClosingRecord {
+  closedOn?: string;   // 'YYYY-MM-DD' : année marquée comme clôturée
+  checked?: string[];  // coches à la main (« review », « tax-return », « archive-json »…)
+}
+
 export interface PayslipRecord {
   id: string;
   // Fichier resté à sa place sur le Drive de l'utilisateur (sélectionné via Google
@@ -238,8 +254,13 @@ export interface FiscalConfig {
   standardAllowanceMin?: number;
   // Plafond LEP : ajout par demi-part au-delà de la 1re part (6 149 € en 2026).
   lepCeilingPerHalfPart?: number;
-  // Dons : plafond des dons à 75 % (1 000 €) et part maximale du revenu imposable (20 %).
+  // Dons : plafond des dons à 75 % (2 000 € depuis le 14 octobre 2025 ; 2025 garde 1 000 €
+  // pour les dons d'avant, voir lib/finance/donations).
   donation75Ceiling?: number;
+  // Remboursement transport : dernière année de revenus où la prise en charge facultative
+  // (jusqu'à 75 % du prix) est exonérée. Absent = 2026, la date connue (lib/finance/income) ;
+  // une prorogation votée la repousse (veille fiscale).
+  transportExemptUntil?: number;
   standardAllowance: number;
   // Plafond légal de l'abattement forfaitaire. Optionnel : les fichiers de données
   // enregistrés avant son introduction n'ont pas ce champ, le calcul retombe alors
@@ -269,6 +290,10 @@ export interface FiscalConfig {
   taxBracketsHistory?: { year?: number; replacedOn: string; brackets: TaxBracket[] }[];
   // Dernière année pour laquelle les paramètres fiscaux ont été vérifiés (rappel de janvier).
   paramsReviewedYear?: number;
+  // Inflation annuelle moyenne publiée par l'INSEE (indice des prix à la consommation), en %,
+  // pour l'année `year`. Mise à jour par la veille fiscale ; absent = valeur livrée avec l'app
+  // (DEFAULT_INFLATION de lib/inflation, datée et sourcée).
+  inflation?: { rate: number; year: number; source?: string };
 }
 
 // --- NOUVELLE INTERFACE ---
@@ -346,8 +371,15 @@ export interface GlobalAppData {
     payReviewsDone?: string[];
     // Capacité d'épargne et somme en plus de la paie en cours (Pilotage, Accueil, relance).
     payAdjustment?: PayAdjustment;
+    // « Plafond épargne retraite » imprimé sur l'avis d'impôt : versements PER déductibles
+    // l'année `year` (l'avis 2026, sur les revenus 2025, donne le plafond des versements 2026).
+    retirementCeiling?: { year: number; amount: number };
+    // Clôture de l'année (lib/yearClosing), par année (« 2026 ») : étapes cochées à la main et
+    // date de clôture. Une année clôturée n'a plus de rappel de clôture (Accueil, agenda, serveur).
+    yearClosings?: Record<string, YearClosingRecord>;
   };
-  goals?: SavingsGoal[];
+  // L'ancien champ `goals` (écran « Objectifs », retiré) n'est plus lu : migrate() le garde
+  // tel quel dans le fichier, comme tout champ inconnu.
   lastView?: string;
   payslips?: PayslipRecord[];
   recurringMovements?: RecurringMovement[];
@@ -361,3 +393,11 @@ export interface GlobalAppData {
   // salaires hypothétiques).
   activePayslipId?: string;
 }
+
+/**
+ * Données une fois passées par migrate() (src/lib/schema.ts), seule conversion depuis un
+ * fichier, un import ou une copie locale : ces listes et réglages y sont toujours présents.
+ * `GlobalAppData`, lui, décrit le fichier tel qu'il peut arriver (champs facultatifs).
+ */
+export type AppDoc = GlobalAppData & Required<Pick<GlobalAppData,
+  'expensesHistory' | 'fiscalConfig' | 'workBenefits' | 'payslips' | 'recurringMovements' | 'subscriptions' | 'donations'>>;

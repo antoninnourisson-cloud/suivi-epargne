@@ -62,7 +62,8 @@ describe('diffVersions', () => {
     const d = diffVersions(local, remote);
     expect(d.changedMovements).toBe(1);
     expect(d.accounts).toEqual([{ id: 'a', name: 'Livret A', local: { total: 100, own: 100 }, remote: { total: 100, own: 100 }, kind: 'details' }]);
-    expect(d.sections).toEqual(['Réglages', 'Objectifs']);
+    // L'ancien champ « goals » n'est plus lu : il compte parmi les « Autres données ».
+    expect(d.sections).toEqual(['Réglages', 'Autres données']);
   });
 
   it('les points mensuels de l’historique ne comptent pas, un champ inconnu si', () => {

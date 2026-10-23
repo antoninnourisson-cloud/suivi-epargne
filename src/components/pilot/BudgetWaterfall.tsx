@@ -6,7 +6,7 @@ import { MoneyText } from '../ui';
 
 const rowAmount = (r: WaterfallRow) => {
   switch (r.kind) {
-    case 'minus': return <MoneyText value={-r.amount} signed className={r.amount !== 0 ? 'text-rose-700 dark:text-rose-300' : ''} />;
+    case 'minus': return <MoneyText value={-r.amount} signed className={r.amount !== 0 ? 'text-loss' : ''} />;
     case 'adjust': return <MoneyText value={r.amount} signed tone="auto" />;
     default: return <MoneyText value={r.amount} />;
   }
@@ -29,7 +29,7 @@ export const BudgetWaterfall: React.FC<{ rows: WaterfallRow[] }> = ({ rows }) =>
               {r.label}
               {r.note && <span className="block text-xs font-normal text-on-surface-variant">{r.note}</span>}
             </th>
-            <td className={`py-2 text-right align-top whitespace-nowrap ${strong ? 'font-medium text-on-surface' : ''} ${r.kind === 'total' ? 'text-base text-indigo-700 dark:text-indigo-200' : ''} ${r.kind === 'replace' ? 'text-on-surface' : ''}`}>
+            <td className={`py-2 text-right align-top whitespace-nowrap ${strong ? 'font-medium text-on-surface' : ''} ${r.kind === 'total' ? 'text-base text-primary' : ''} ${r.kind === 'replace' ? 'text-on-surface' : ''}`}>
               {rowAmount(r)}
             </td>
           </tr>

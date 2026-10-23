@@ -7,15 +7,24 @@
 import React, { useMemo, useState } from 'react';
 import { SavingsAccount } from '../types';
 import { Search, X } from 'lucide-react';
-import { formatEUR, formatSignedEUR } from '../lib/format';
+import { formatSignedEUR } from '../lib/format';
 import { parseFrenchNumber } from '../lib/numbers';
 import { parseISODate } from '../lib/dates';
+import { Card, IconButton, ListItem, MoneyText, SegmentedButton } from './ui';
 
 interface MovementSearchProps {
   accounts: SavingsAccount[];
 }
 
+type Direction = 'all' | 'IN' | 'OUT';
+const DIRECTIONS: { value: Direction; label: string }[] = [
+  { value: 'all', label: 'Tous' },
+  { value: 'IN', label: 'Entrées' },
+  { value: 'OUT', label: 'Sorties' },
+];
+
 const MAX_RESULTS = 100;
+const DAY = new Intl.DateTimeFormat('fr-FR');
 const normalize = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
 /** « 15/09/2026 » → « 2026-09-15 », « 09/2026 » → « 2026-09 » ; sinon tel quel. */
@@ -30,7 +39,7 @@ const toIsoFragment = (q: string): string | null => {
 
 export const MovementSearch: React.FC<MovementSearchProps> = ({ accounts }) => {
   const [query, setQuery] = useState('');
-  const [direction, setDirection] = useState<'all' | 'IN' | 'OUT'>('all');
+  const [direction, setDirection] = useState<Direction>('all');
 
   const results = useMemo(() => {
     const q = query.trim();
@@ -51,53 +60,53 @@ export const MovementSearch: React.FC<MovementSearchProps> = ({ accounts }) => {
 
   // Solde net de VOTRE part : les mouvements de la part des parents n'y entrent pas.
   const net = results.filter(r => r.m.kind !== 'parental').reduce((sum, r) => sum + (r.m.type === 'IN' ? r.m.amount : -r.m.amount), 0);
-  const seg = (active: boolean) => `px-3 py-2 text-xs font-bold ${active ? 'bg-indigo-600 text-white' : 'bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`;
 
   return (
-    <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-xs border border-slate-200 dark:border-slate-700 space-y-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <label className="flex-1 min-w-48 flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700">
-          <Search className="w-4 h-4 text-slate-500 dark:text-slate-400 shrink-0" />
+    <Card padding="sm" className="space-y-3">
+      <div className="flex flex-wrap items-center gap-3">
+        {/* Barre de recherche Material 3 : pilule teintée, loupe à gauche, effacement à droite. */}
+        <label className="flex-1 min-w-0 basis-56 h-14 flex items-center gap-2 pl-4 pr-1 rounded-full bg-surface-container-high focus-within:outline-2 focus-within:outline-primary">
+          <Search className="w-5 h-5 text-on-surface-variant shrink-0" aria-hidden="true" />
           <span className="sr-only">Rechercher un mouvement</span>
           <input
             type="search"
             value={query}
             onChange={e => setQuery(e.target.value)}
-            placeholder="Rechercher un mouvement : libellé, montant, 09/2026…"
-            className="flex-1 min-w-0 bg-transparent outline-hidden text-sm font-bold text-slate-800 dark:text-slate-100"
+            placeholder="Libellé, montant, 09/2026…"
+            // Contour de focus porté par la pilule (focus-within), pas un second cadre sur le champ :
+            // le « ! » l'emporte sur la règle globale `html :focus-visible` (index.css), hors couche.
+            className="flex-1 min-w-0 h-full bg-transparent outline-hidden focus-visible:outline-none! text-base text-on-surface placeholder:text-on-surface-variant [&::-webkit-search-cancel-button]:hidden"
           />
-          {query && <button type="button" onClick={() => setQuery('')} aria-label="Effacer la recherche" className="p-1 text-slate-500 dark:text-slate-400"><X className="w-4 h-4" /></button>}
+          {query && <IconButton icon={X} label="Effacer la recherche" onClick={() => setQuery('')} />}
         </label>
-        <div className="flex rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700" role="group" aria-label="Sens">
-          <button type="button" onClick={() => setDirection('all')} aria-pressed={direction === 'all'} className={seg(direction === 'all')}>Tous</button>
-          <button type="button" onClick={() => setDirection('IN')} aria-pressed={direction === 'IN'} className={seg(direction === 'IN')}>Entrées</button>
-          <button type="button" onClick={() => setDirection('OUT')} aria-pressed={direction === 'OUT'} className={seg(direction === 'OUT')}>Sorties</button>
-        </div>
+        <SegmentedButton
+          label="Sens du mouvement" options={DIRECTIONS} value={direction} onChange={setDirection}
+          className="w-full sm:w-auto [&>button]:whitespace-nowrap max-sm:[&>button]:flex-1 max-sm:[&>button]:h-12 max-sm:[&>button]:px-1 max-sm:[&>button]:gap-1"
+        />
       </div>
 
       {query.trim() && (
         results.length === 0 ? (
-          <p className="text-sm text-slate-500 dark:text-slate-400 italic">Aucun mouvement ne correspond.</p>
+          <p role="status" className="text-sm text-on-surface-variant">Aucun mouvement ne correspond.</p>
         ) : (
           <>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              {results.length} mouvement{results.length > 1 ? 's' : ''} · solde net <b className="text-slate-700 dark:text-slate-200">{formatSignedEUR(net)}</b>
+            <p role="status" className="text-sm text-on-surface-variant">
+              {results.length} mouvement{results.length > 1 ? 's' : ''} · solde net <b className="font-medium text-on-surface whitespace-nowrap">{formatSignedEUR(net)}</b>
               {results.length > MAX_RESULTS && ` · ${MAX_RESULTS} premiers affichés`}
             </p>
-            <ul className="divide-y divide-slate-100 dark:divide-slate-700 max-h-96 overflow-y-auto">
+            <ul className="divide-y divide-outline-variant max-h-96 overflow-y-auto" aria-label="Mouvements trouvés">
               {results.slice(0, MAX_RESULTS).map(({ account, m }) => (
-                <li key={`${account.id}-${m.id}`} className="flex items-center justify-between gap-3 py-2 text-sm">
-                  <div className="min-w-0">
-                    <p className="font-bold text-slate-800 dark:text-slate-100 truncate">{m.label}{m.kind === 'valuation' && <span className="ml-1 text-[11px] font-bold text-slate-500 dark:text-slate-400">(valorisation)</span>}</p>
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400">{parseISODate(m.date).toLocaleDateString('fr-FR')} · {account.name}</p>
-                  </div>
-                  <span className={`font-mono font-bold shrink-0 ${m.type === 'IN' ? 'text-emerald-700' : 'text-rose-700'}`}>{m.type === 'IN' ? '+' : '−'}{formatEUR(m.amount)}</span>
-                </li>
+                <ListItem
+                  key={`${account.id}-${m.id}`}
+                  headline={<>{m.label}{m.kind === 'valuation' && <span className="ml-1 text-xs font-normal text-on-surface-variant">(valorisation)</span>}</>}
+                  supporting={<><time dateTime={m.date}>{DAY.format(parseISODate(m.date))}</time> · {account.name}</>}
+                  trailing={<MoneyText value={m.type === 'IN' ? m.amount : -m.amount} signed tone="auto" />}
+                />
               ))}
             </ul>
           </>
         )
       )}
-    </div>
+    </Card>
   );
 };

@@ -1,7 +1,12 @@
+// Boîte de dialogue Material 3 (confirmation ou saisie d'un texte) : titre « headline
+// small », texte d'explication, actions en bas à droite. Pas de croix : « Annuler », Échap
+// ou un clic à côté ferment. Action destructrice : bouton au rôle « error », et le focus part
+// sur « Annuler », jamais sur le bouton qui détruit.
 import React, { useEffect, useRef, useState } from 'react';
 import { Modal } from './Modal';
-import { X, AlertTriangle } from 'lucide-react';
+import { AlertTriangle } from 'lucide-react';
 import { Button } from './Button';
+import { TextField } from './ui/TextField';
 
 export interface DialogState {
   open: boolean;
@@ -9,6 +14,8 @@ export interface DialogState {
   title: string;
   message?: string;
   defaultValue?: string;
+  /** Saisie : libellé visible du champ (défaut « Nouveau libellé »). */
+  inputLabel?: string;
   confirmLabel?: string;
   // Libellé du bouton qui ferme sans rien faire (défaut « Annuler »), quand « Annuler »
   // prêterait à confusion (ex. « Annuler la restitution »).
@@ -32,30 +39,23 @@ export const Dialog: React.FC<{ state: DialogState; onClose: () => void }> = ({ 
   };
 
   return (
-    // Action dangereuse : le focus part sur « Annuler », jamais sur le bouton qui détruit.
-    <Modal open={state.open} onClose={onClose} label={state.title} className="max-w-sm p-6" initialFocusRef={state.danger && state.kind === 'confirm' ? cancelRef : undefined}>
-        <div className="flex items-start justify-between mb-3">
-          <h2 className="text-lg font-black text-slate-800 dark:text-slate-100 flex items-center gap-2">
-            {state.danger && <AlertTriangle className="w-5 h-5 text-rose-500" />}
-            {state.title}
-          </h2>
-          <button onClick={onClose} aria-label="Fermer" className="p-2.5 -m-1.5 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"><X className="w-5 h-5" /></button>
-        </div>
-        {state.message && <p className="text-sm text-on-surface-variant mb-4">{state.message}</p>}
-        {state.kind === 'prompt' && (
-          <input
-            autoFocus
-            value={value}
-            onChange={e => setValue(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && confirm()}
-            className="w-full p-3 mb-4 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl font-bold text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-indigo-500 outline-hidden"
-          />
-        )}
-        {/* Boutons du kit Material 3 : même forme (pilule) pour les deux actions. */}
-        <div className="flex flex-wrap gap-2 justify-end">
-          <Button ref={cancelRef} variant="text" onClick={onClose}>{state.cancelLabel || 'Annuler'}</Button>
-          <Button variant={state.danger ? 'danger' : 'filled'} onClick={confirm}>{state.confirmLabel || 'Confirmer'}</Button>
-        </div>
+    <Modal open={state.open} onClose={onClose} label={state.title} className="max-w-sm sm:max-w-md p-6" initialFocusRef={state.danger && state.kind === 'confirm' ? cancelRef : undefined}>
+      {state.danger && <AlertTriangle className="w-6 h-6 mx-auto mb-4 text-error" aria-hidden="true" />}
+      <h2 className={`text-2xl leading-8 font-normal text-on-surface mb-4 ${state.danger ? 'text-center' : ''}`}>{state.title}</h2>
+      {state.message && <p className="text-sm text-on-surface-variant mb-6">{state.message}</p>}
+      {state.kind === 'prompt' && (
+        <TextField
+          className="mb-6"
+          label={state.inputLabel || 'Nouveau libellé'}
+          value={value}
+          onChange={e => setValue(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); confirm(); } }}
+        />
+      )}
+      <div className="flex flex-wrap gap-2 justify-end">
+        <Button ref={cancelRef} variant="text" onClick={onClose}>{state.cancelLabel || 'Annuler'}</Button>
+        <Button variant={state.danger ? 'danger' : 'filled'} onClick={confirm}>{state.confirmLabel || 'Confirmer'}</Button>
+      </div>
     </Modal>
   );
 };

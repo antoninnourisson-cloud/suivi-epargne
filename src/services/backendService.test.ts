@@ -78,7 +78,8 @@ describe('serveur : session et jetons', () => {
     });
     expect(await api.consumeLoginCode()).toEqual({ session: 's', access_token: 'ya29', expires_in: 3599 });
     expect(window.location.search).toBe('?view=pilot');
-    expect(JSON.parse(String(lastCall()[1].body))).toEqual({ code: 'abc-123' });
+    // Sans IndexedDB (jsdom) : pas de clé d'appareil, session non liée comme avant.
+    expect(JSON.parse(String(lastCall()[1].body))).toEqual({ code: 'abc-123', device: 'appareil' });
     // La session n'est pas encore enregistrée : l'appelant range d'abord le jeton.
     expect(api.hasBackendSession()).toBe(false);
   });

@@ -27,7 +27,7 @@ export const Sparkline: React.FC<SparklineProps> = ({ values, width = 160, heigh
   const { line, area } = sparkPath(values, width, height);
   if (!line) return null;
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} width={width} height={height} className={`text-indigo-600 dark:text-indigo-300 ${className}`} aria-hidden="true" focusable="false">
+    <svg viewBox={`0 0 ${width} ${height}`} width={width} height={height} className={`text-primary ${className}`} aria-hidden="true" focusable="false">
       <defs>
         <linearGradient id={gradient} x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor="currentColor" stopOpacity="0.28" />

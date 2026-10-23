@@ -6,7 +6,7 @@ import {
   enablePin, verifyPin, disablePin, isPinEnabled, isLockEnabled, isBiometricEnabled, getPinCooldownSeconds,
   resetAllLocks, enableLock, verifyBiometric, disableBiometric, isLockActive, isLockResetPending,
   markLockResetPending, cancelLockReset, completeLockReset, getLastLockReset,
-  requestLockReset, getLockResetRequest, cancelLockResetRequest, LOCK_RESET_DELAY_MS,
+  requestLockReset, getLockResetRequest, cancelLockResetRequest, LOCK_RESET_DELAY_MS, markLockResetAlertSent,
 } from './appLockService';
 
 const HASH = 'app_lock_pin_hash';
@@ -229,9 +229,11 @@ describe('« Code oublié » : demande, délai, puis réinitialisation en deux t
   it('suspendre ne retire rien : le code reste, il redevient actif si on annule', async () => {
     expect(isLockActive()).toBe(true);
     readyRequest();
+    markLockResetAlertSent(getLockResetRequest()!);
     markLockResetPending();
     expect(isLockResetPending()).toBe(true);
     expect(getLockResetRequest()).toBeNull(); // demande consommée
+    expect(localStorage.getItem('app_lock_reset_alerted')).toBeNull(); // trace de l'alerte avec elle
     expect(isLockActive()).toBe(false);
     expect(isLockEnabled()).toBe(true);
     cancelLockReset();

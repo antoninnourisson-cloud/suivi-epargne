@@ -4,6 +4,7 @@ import React, { useId } from 'react';
 import { Check } from 'lucide-react';
 import { NumberInput } from '../NumberInput';
 import { TextField } from '../ui';
+import { fractionToPercent, percentToFraction } from '../../lib/numbers';
 
 interface SwitchRowProps {
   label: React.ReactNode;
@@ -45,7 +46,7 @@ const Switch: React.FC<{ id?: string; checked: boolean; onChange: (next: boolean
     aria-describedby={describedBy}
     disabled={disabled}
     onClick={() => onChange(!checked)}
-    className={`relative shrink-0 w-[52px] h-8 rounded-full transition-colors disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 dark:focus-visible:outline-indigo-300 ${checked ? 'bg-primary' : 'bg-surface-container-highest border-2 border-outline'}`}
+    className={`relative shrink-0 w-[52px] h-8 rounded-full transition-colors disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${checked ? 'bg-primary' : 'bg-surface-container-highest border-2 border-outline'}`}
   >
     <span className={`absolute top-1/2 -translate-y-1/2 rounded-full flex items-center justify-center transition-all motion-reduce:transition-none ${checked ? 'left-[24px] w-6 h-6 bg-on-primary text-primary' : 'left-[6px] w-4 h-4 bg-outline'}`}>
       {checked && <Check className="w-4 h-4" aria-hidden="true" />}
@@ -61,11 +62,17 @@ interface NumberFieldProps {
   suffix?: string;
   min?: number;
   className?: string;
+  /**
+   * Taux stocké en fraction (0,186) : affiché et saisi en % (18,6 %), jusqu'à 4 décimales,
+   * comme les autres pourcentages de l'écran.
+   */
+  percent?: boolean;
 }
 
-/** Champ numérique Material 3 : libellé relié, aide annoncée, saisie « 0,2232 » ou « 1 250 ». */
-export const NumberField: React.FC<NumberFieldProps> = ({ label, value, onChange, supporting, suffix, min, className }) => (
+/** Champ numérique Material 3 : libellé relié, aide annoncée, saisie « 22,32 » ou « 1 250 ». */
+export const NumberField: React.FC<NumberFieldProps> = ({ label, value, onChange, supporting, suffix, min, className, percent }) => (
   <TextField label={label} supporting={supporting} className={className}
-    render={p => <NumberInput id={p.id} value={value} onChange={onChange} suffix={suffix} min={min} describedBy={p.describedBy} invalid={p.invalid}
+    render={p => <NumberInput id={p.id} value={percent ? fractionToPercent(value) : value} onChange={v => onChange(percent ? percentToFraction(v) : v)}
+      suffix={percent ? '%' : suffix} decimals={percent ? 4 : undefined} min={min} describedBy={p.describedBy} invalid={p.invalid}
       className={`${p.className} tabular-nums`} />} />
 );

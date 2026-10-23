@@ -23,12 +23,32 @@
   unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF;
 }
 
+/* Palettes numérotées de Tailwind (slate, gray, indigo…) retirées du thème : une classe brute
+   comme bg-slate-800 ne produit plus aucun style. Les couleurs passent par les rôles de
+   src/theme/m3.css ; le lint (eslint.config.js) signale la classe brute dès l'écriture.
+   black, white et transparent restent. Liste vérifiée par src/components/paletteGuard.test.ts
+   contre la version installée de Tailwind. */
+@theme {
+  --color-slate-*: initial; --color-gray-*: initial; --color-zinc-*: initial;
+  --color-neutral-*: initial; --color-stone-*: initial; --color-mauve-*: initial;
+  --color-mist-*: initial; --color-olive-*: initial; --color-taupe-*: initial;
+  --color-red-*: initial; --color-orange-*: initial; --color-amber-*: initial;
+  --color-yellow-*: initial; --color-lime-*: initial; --color-green-*: initial;
+  --color-emerald-*: initial; --color-teal-*: initial; --color-cyan-*: initial;
+  --color-sky-*: initial; --color-blue-*: initial; --color-indigo-*: initial;
+  --color-violet-*: initial; --color-purple-*: initial; --color-fuchsia-*: initial;
+  --color-pink-*: initial; --color-rose-*: initial;
+}
+
 /* Material 3 Expressive. Les couleurs viennent de src/theme/m3.css (généré) ; ici, la
    typographie, les formes, l'élévation et le mouvement. */
 @theme {
   --font-sans: 'Google Sans Flex', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
-
-  --color-creme: var(--md-tertiary-container);
+  /* Les montants restent dans la police de Pécule, à chiffres de largeur fixe (tabular-nums,
+     voir body) : `font-mono` n'est plus une chasse fixe (Consolas mêlé à Google Sans Flex dans
+     une même ligne). Un code à recopier lettre par lettre (code de secours) prend `font-code`. */
+  --font-mono: var(--font-sans);
+  --font-code: ui-monospace, 'Cascadia Mono', 'Segoe UI Mono', Menlo, Consolas, monospace;
 
   /* Graisses : Material emploie 400 à 700. Les anciens « black » deviennent du gras franc. */
   --font-weight-black: 700;
@@ -73,40 +93,61 @@
   }
 }
 
-/*
-  The default border color has changed to `currentcolor` in Tailwind CSS v4,
-  so we've added these compatibility styles to make sure everything still
-  looks the same as it did with Tailwind CSS v3.
-
-  If we ever want to remove these styles, we need to add an explicit border
-  color utility to any element that depends on these defaults.
-*/
+/* Bordure sans couleur précisée (`border` seul) : le contour discret de Material, adapté au
+   thème (Tailwind 4 prendrait sinon la couleur du texte). */
 @layer base {
   *,
   ::after,
   ::before,
   ::backdrop,
   ::file-selector-button {
-    border-color: var(--color-gray-200, currentcolor);
+    border-color: var(--md-outline-variant, currentcolor);
   }
 }
-
-/* Pécule : le vert sapin des petits textes d'accent est trop sombre sur fond sombre. Si un
-   élément n'a pas sa propre teinte de mode sombre, on l'éclaircit ici. */
-.dark .text-indigo-500:not([class*="dark:text-"]),
-.dark .text-indigo-600:not([class*="dark:text-"]) { color: var(--color-indigo-300); }
-.dark .text-indigo-700:not([class*="dark:text-"]),
-.dark .text-indigo-800:not([class*="dark:text-"]) { color: var(--color-indigo-200); }
 
 /* Focus clavier toujours visible, y compris sur les champs qui retirent le contour
    natif (`outline-none`) : sélecteur plus précis que la classe utilitaire. */
 html :focus-visible { outline: 3px solid var(--md-primary); outline-offset: 2px; }
 
-/* Gains, pertes et alertes : teintes foncées (contraste AA sur fond clair). En mode sombre,
-   sans teinte dédiée, on les éclaircit. */
-.dark .text-emerald-700:not([class*="dark:text-"]) { color: #34d399; }
-.dark .text-rose-700:not([class*="dark:text-"]) { color: #fda4af; }
-.dark .text-amber-700:not([class*="dark:text-"]) { color: #fcd34d; }
+/* Titre d'écran : il reçoit le focus à chaque changement d'écran (pour les lecteurs d'écran),
+   mais ce n'est pas un contrôle. Pas d'anneau, qui ressemblait à un bug et cachait le
+   sous-titre (ouverture depuis une notification, navigation au clavier). */
+:is(h1, h2)[tabindex="-1"]:focus-visible { outline: none; }
+
+/* Cible tactile Material : 48 px au moins, même quand le contrôle paraît plus petit (puce de
+   32 px, bouton-icône de 40 px). La zone sensible déborde sans changer la mise en page. */
+@utility touch-target {
+  position: relative;
+  &::before {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: max(100%, 48px);
+    height: max(100%, 48px);
+    transform: translate(-50%, -50%);
+  }
+}
+
+/* Écrans tactiles : la même zone de 48 px pour TOUS les contrôles (boutons de 40 px, puces de
+   32 px, segments, onglets, interrupteurs, boutons-icônes), sans toucher à leur aspect ni à la
+   mise en page. Couche « components » et :where() : une position donnée par une classe
+   (absolute, fixed, sticky) reste prioritaire. Une case à cocher native n'a pas de ::before :
+   l'entourer d'un <label> qui couvre toute la ligne. */
+@layer components {
+  @media (pointer: coarse) {
+    :where(button, [role="button"], [role="switch"], [role="tab"], [role="checkbox"], [role="radio"], summary) { position: relative; }
+    :where(button, [role="button"], [role="switch"], [role="tab"], [role="checkbox"], [role="radio"], summary)::before {
+      content: '';
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: max(100%, 48px);
+      height: max(100%, 48px);
+      transform: translate(-50%, -50%);
+    }
+  }
+}
 
 /* Contrôles natifs (barres de défilement, champs date…) accordés au thème. */
 :root { color-scheme: light; }
@@ -133,23 +174,3 @@ body { background: var(--md-surface); color: var(--md-on-surface); }
 
 /* Libellés : Material les écrit en minuscules (casse de phrase), pas en capitales. */
 .uppercase { text-transform: none; letter-spacing: 0.01em; }
-
-/* Boutons d'action en pilule, comme les boutons Material (plein, tonal, danger). Les
-   onglets, interrupteurs et segments (role, aria-pressed) gardent leur forme. */
-:is(button, a, label):not([role]):not([aria-pressed]):is(
-  [class~="bg-indigo-600"], [class~="bg-indigo-700"], [class~="bg-rose-600"], [class~="bg-rose-700"],
-  [class~="bg-amber-600"], [class~="bg-amber-700"], [class~="bg-orange-700"], [class~="bg-emerald-600"],
-  [class~="bg-slate-100"], [class~="bg-slate-200"], [class~="bg-indigo-50"], [class~="bg-indigo-100"]
-) { border-radius: 9999px; }
-
-/* Mode sombre : boutons pleins en couleur « primary » claire, texte foncé (Material 3).
-   Ne pas forcer un autre fond sur un <Button> plein (ex. `bg-emerald-600!`) : le texte
-   foncé ci-dessous resterait, illisible sur ce fond. Ajouter plutôt une variante fondée sur
-   un rôle de couleur (voir Button.tsx). */
-html.dark :is(button, a, label):not([role]):not([aria-pressed]):is([class~="bg-indigo-600"], [class~="bg-indigo-700"]) {
-  background-color: var(--md-primary);
-  color: var(--md-on-primary);
-}
-html.dark :is(button, a, label):not([role]):not([aria-pressed]):is([class~="bg-indigo-600"], [class~="bg-indigo-700"]):hover {
-  background-color: color-mix(in srgb, var(--md-primary) 92%, var(--md-on-primary));
-}

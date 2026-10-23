@@ -4,22 +4,35 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <!--
-      CSP : seule défense possible sur GitHub Pages (pas d'en-têtes serveur configurables).
-      L'app stocke un token OAuth Drive en localStorage : limiter les origines de
-      scripts/connexions réduit drastiquement ce qu'un script injecté pourrait exfiltrer.
-      Aucun script intégré n'est autorisé (la page n'en contient pas) ; 'unsafe-inline'
-      (style) reste nécessaire à GIS, au Picker et aux styles en ligne de React.
-      frame-src couvre la popup GIS et l'iframe du Google Picker.
+      CSP (la seule partie qui peut vivre dans une balise <meta> ; frame-ancestors est ajouté
+      par le Worker edge/). Son rôle : empêcher qu'un script étranger S'EXÉCUTE dans la page.
+      - Aucun script intégré (la page n'en contient pas). Scripts Google limités aux fichiers
+        exacts chargés à la demande (src/services/googleDriveService.ts) : la connexion sans
+        serveur (gsi/client, chemin recommandé par Google :
+        https://developers.google.com/identity/gsi/web/guides/get-google-api-clientid) et le
+        Google Picker (js/api.js, qui charge ses modules depuis /_/scs/abc-static/). Plus de
+        domaines entiers : accounts.google.com héberge un point JSONP connu
+        (/o/oauth2/revoke, liste du CSP Evaluator de Google), qui contournerait la liste.
+      - Elle ne suffit PAS à empêcher l'exfiltration si un script s'exécutait quand même :
+        connect-src doit autoriser www.googleapis.com (Drive), où l'on peut écrire sur le
+        Drive de n'importe qui avec son propre jeton, et une navigation vers un autre site
+        reste possible. D'où la session serveur liée à l'appareil (clé non exportable,
+        preuves sur un nonce du serveur valable 10 min au plus) : un jeton copié seul ne sert
+        à rien ailleurs ; un script dans la page peut toutefois faire signer des requêtes
+        tant qu'il y est (SECURITY.md).
+      'unsafe-inline' (style) reste nécessaire au Picker et aux styles en ligne de React.
+      frame-src couvre la connexion Google sans serveur et l'iframe du Google Picker.
     -->
     <meta http-equiv="Content-Security-Policy" content="
       default-src 'self';
-      script-src 'self' https://accounts.google.com https://apis.google.com;
+      script-src 'self' https://accounts.google.com/gsi/client https://apis.google.com/js/api.js https://apis.google.com/_/scs/abc-static/;
       connect-src 'self' __BACKEND_ORIGIN__ ws://localhost:5173 ws://127.0.0.1:5173 https://www.googleapis.com https://content.googleapis.com https://accounts.google.com https://oauth2.googleapis.com https://generativelanguage.googleapis.com;
       img-src 'self' data: https://*.googleusercontent.com https://ssl.gstatic.com https://www.gstatic.com;
-      style-src 'self' 'unsafe-inline' https://accounts.google.com;
+      style-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/style;
       font-src 'self';
       frame-src https://accounts.google.com https://content.googleapis.com https://docs.google.com;
       worker-src 'self';
+      object-src 'none';
       base-uri 'self';
       form-action 'self' https://accounts.google.com;
     ">
@@ -28,6 +41,10 @@
     <meta name="theme-color" content="#ecefe9" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#1d201d" media="(prefers-color-scheme: dark)" />
     <title>Pécule</title>
+    <!-- Thème sombre posé avant le premier affichage (pas d'éclair clair) : fichier à part, la
+         CSP ci-dessus interdisant tout script intégré. Minuscule et sans attente réseau une
+         fois l'app installée (mis en cache par le service worker). -->
+    <script src="theme-boot.js"></script>
     <link rel="icon" type="image/png" href="pwa-192x192.png" />
     <link rel="apple-touch-icon" href="apple-touch-icon.png" />
     <meta name="apple-mobile-web-app-title" content="Pécule" />

@@ -9,10 +9,12 @@ import React, { useMemo, useState } from 'react';
 import { SavingsAccount, ParentalRestitution } from '../types';
 import { formatEUR, formatRate } from '../lib/format';
 import { parseISODate, formatISODay as formatISODayLocal } from '../lib/dates';
-import { History, Trash2, Undo2 } from 'lucide-react';
+import { ChevronDown, History, Trash2, Undo2 } from 'lucide-react';
 import { isRestitutionMovement, findCancellingGroups, CancellingGroup } from '../lib/accountOps';
 import { isInitialBalance } from '../lib/finance';
 import { signedAmount } from '../lib/money';
+import { hasParentalHistory } from '../lib/parentalMode';
+import { Button, Card, Chip, EmptyState, IconButton, ListItem, MoneyText, PageHeader, TextField } from './ui';
 
 type Filter = 'all' | 'own' | 'parental' | 'valuation' | 'rates';
 
@@ -39,23 +41,47 @@ interface Props {
   onToggleAdjustment: (accountId: string, movementId: string) => void;
 }
 
+// Pastilles de nature : parents en « tertiary » (ocre), comme sur l'Accueil et le Pilotage.
 const BADGE: Record<Entry['kind'], { label: string; cls: string }> = {
-  own: { label: 'Votre part', cls: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300' },
-  parental: { label: 'Parents', cls: 'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300' },
-  valuation: { label: 'Valorisation', cls: 'bg-teal-100 text-teal-700 dark:bg-teal-950/60 dark:text-teal-300' },
-  adjustment: { label: "Correction (pas de l'épargne)", cls: 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300' },
-  initial: { label: 'Solde initial', cls: 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300' },
-  rate: { label: 'Taux', cls: 'bg-violet-100 text-violet-700 dark:bg-violet-950/60 dark:text-violet-300' },
-  restitution: { label: 'Restitution', cls: 'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300' },
+  own: { label: 'Votre part', cls: 'bg-secondary-container text-on-secondary-container' },
+  parental: { label: 'Parents', cls: 'bg-tertiary-container text-on-tertiary-container' },
+  valuation: { label: 'Valorisation', cls: 'border border-outline-variant text-on-surface-variant' },
+  adjustment: { label: "Correction (pas de l'épargne)", cls: 'bg-surface-container-highest text-on-surface-variant' },
+  initial: { label: 'Solde initial', cls: 'bg-surface-container-highest text-on-surface-variant' },
+  rate: { label: 'Taux', cls: 'border border-outline-variant text-on-surface-variant' },
+  restitution: { label: 'Restitution', cls: 'bg-tertiary-container text-on-tertiary-container' },
 };
+
+const FILTERS: { value: Filter; label: string }[] = [
+  { value: 'all', label: 'Tout' },
+  { value: 'own', label: 'Votre part' },
+  { value: 'parental', label: 'Parents' },
+  { value: 'valuation', label: 'Valorisation' },
+  { value: 'rates', label: 'Taux' },
+];
+
+/** Puces de 32 px, mais zone tactile de 48 px (Material 3) ; rangées espacées d'autant. */
+const CHIP_TARGET = 'relative after:absolute after:inset-x-0 after:-inset-y-2';
+
+const DAY = new Intl.DateTimeFormat('fr-FR');
+const day = (iso: string) => DAY.format(parseISODate(iso));
 
 const PAGE = 150;
 
 export const Journal: React.FC<Props> = ({ accounts, restitution, onDeleteMovement, onRevertRate, onRemoveCancelling, trackingStartDate, onSetTrackingStart, onToggleAdjustment }) => {
+  // Les parents n'apparaissent (filtre, sous-titre) que s'ils ont compté : capital, mouvements ou restitution.
+  const withParents = useMemo(() => hasParentalHistory(accounts, restitution), [accounts, restitution]);
   const [filter, setFilter] = useState<Filter>('all');
   const [accountId, setAccountId] = useState<string>('');
   const [limit, setLimit] = useState(PAGE);
   const [showCleanup, setShowCleanup] = useState(false);
+  const [trackingDraft, setTrackingDraft] = useState(() => trackingStartDate || formatISODayLocal(new Date()));
+  // Date changée ailleurs (« Annuler » du message, autre appareil) : le champ la reprend.
+  const [shownStart, setShownStart] = useState(trackingStartDate);
+  if (shownStart !== trackingStartDate) {
+    setShownStart(trackingStartDate);
+    setTrackingDraft(trackingStartDate || formatISODayLocal(new Date()));
+  }
   const cancelling = useMemo(() => findCancellingGroups(accounts), [accounts]);
   const cancellingCount = cancelling.reduce((n, g) => n + g.movements.length, 0);
 
@@ -95,102 +121,113 @@ export const Journal: React.FC<Props> = ({ accounts, restitution, onDeleteMoveme
       || (filter === 'valuation' && e.kind === 'valuation')
       || (filter === 'rates' && e.kind === 'rate')));
 
-  const seg = (f: Filter, label: string) => (
-    <button type="button" onClick={() => { setFilter(f); setLimit(PAGE); }} aria-pressed={filter === f}
-      className={`px-3 py-2 text-xs font-bold ${filter === f ? 'bg-indigo-600 text-white' : 'bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}>{label}</button>
-  );
-
   return (
     <div className="space-y-6 animate-fade-in pb-20">
-      <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xs">
-        <h2 className="text-2xl font-black text-slate-800 dark:text-slate-100 flex items-center gap-2 mb-1"><History className="w-6 h-6 text-indigo-600" /> Journal des modifications</h2>
-        <p className="text-sm text-slate-500 dark:text-slate-400">Tout ce qui a changé sur vos comptes : versements et retraits, part des parents, variations de valeur, taux. Chaque mouvement peut être supprimé (avec annulation possible).</p>
-      </div>
+      <PageHeader
+        title="Journal"
+        subtitle={`Tout ce qui a changé sur vos comptes : versements et retraits, ${withParents ? 'part des parents, ' : ''}variations de valeur, taux. Chaque mouvement peut être supprimé, avec annulation possible.`}
+      />
 
-      <details className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xs group" open={!!trackingStartDate}>
-        <summary className="list-none cursor-pointer p-4 text-sm font-bold text-slate-800 dark:text-slate-100 flex items-center justify-between">
-          {trackingStartDate ? `Suivi de l'épargne reparti du ${parseISODate(trackingStartDate).toLocaleDateString('fr-FR')}` : "Repartir de zéro pour le suivi de l'épargne"}
-          <span className="text-xs text-slate-500 dark:text-slate-400 group-open:hidden">Afficher</span>
+      <details className="group rounded-2xl border border-outline-variant bg-surface-container-lowest dark:bg-surface-container-low" open={!!trackingStartDate}>
+        <summary className="list-none cursor-pointer min-h-12 px-4 py-3 flex items-center justify-between gap-3 text-sm font-medium text-on-surface [&::-webkit-details-marker]:hidden">
+          {trackingStartDate ? `Suivi de l'épargne reparti du ${day(trackingStartDate)}` : "Repartir de zéro pour le suivi de l'épargne"}
+          <ChevronDown className="w-5 h-5 shrink-0 text-on-surface-variant transition-transform group-open:rotate-180" aria-hidden="true" />
         </summary>
-        <div className="px-4 pb-4 space-y-2 text-sm text-slate-600 dark:text-slate-300">
+        <div className="px-4 pb-4 space-y-3 text-sm text-on-surface-variant">
           <p>Seuls les mouvements à partir de cette date comptent dans « Placé depuis la paie », le taux d'épargne et les bilans. Vos soldes, leur historique et les intérêts ne changent pas, et rien n'est effacé.</p>
-          <div className="flex flex-wrap items-center gap-2">
-            <input type="date" defaultValue={trackingStartDate || formatISODayLocal(new Date())} id="tracking-start" aria-label="Point de départ du suivi" className="p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" />
-            <button type="button" onClick={() => { const v = (document.getElementById('tracking-start') as HTMLInputElement | null)?.value; if (v) onSetTrackingStart(v); }} className="px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black">{trackingStartDate ? 'Changer la date' : 'Repartir de cette date'}</button>
-            {trackingStartDate && <button type="button" onClick={() => onSetTrackingStart(undefined)} className="text-xs font-bold underline">Retirer le point de départ</button>}
+          <div className="flex flex-wrap items-end gap-3">
+            <TextField label="Point de départ du suivi" type="date" value={trackingDraft} onChange={e => setTrackingDraft(e.target.value)} className="w-full sm:w-60" />
+            <Button variant="tonal" className="max-sm:h-12" onClick={() => { if (trackingDraft) onSetTrackingStart(trackingDraft); }}>
+              {trackingStartDate ? 'Changer la date' : 'Repartir de cette date'}
+            </Button>
+            {trackingStartDate && <Button variant="text" className="max-sm:h-12" onClick={() => onSetTrackingStart(undefined)}>Retirer le point de départ</Button>}
           </div>
-          <p className="text-xs text-slate-500 dark:text-slate-400">Pour un seul mouvement qui n'était pas de l'épargne (correction, intérêts, argent en transit), utilisez plutôt « Pas de l'épargne » sur sa ligne.</p>
+          <p className="text-xs">Pour un seul mouvement qui n'était pas de l'épargne (correction, intérêts, argent en transit), utilisez plutôt « Pas de l'épargne » sur sa ligne.</p>
         </div>
       </details>
 
       {cancellingCount > 0 && (
-        <div className="p-4 rounded-2xl border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/30 space-y-2">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-sm font-bold text-amber-900 dark:text-amber-200">
-              {cancellingCount} mouvements s'annulent entre eux (même compte, même jour) : sans effet sur vos soldes, sans doute des tests.
-            </p>
-            <div className="flex gap-2">
-              <button type="button" onClick={() => setShowCleanup(v => !v)} className="text-xs font-bold underline text-amber-900 dark:text-amber-200">{showCleanup ? 'Masquer' : 'Voir'}</button>
-              <button type="button" onClick={() => onRemoveCancelling(cancelling)} className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-black">Les supprimer</button>
-            </div>
+        <section className="p-4 rounded-2xl bg-tertiary-container text-on-tertiary-container space-y-3">
+          <p className="text-sm font-medium">
+            {cancellingCount} mouvements s'annulent entre eux (même compte, même jour) : sans effet sur vos soldes, sans doute des tests.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outlined" className="max-sm:h-12" aria-expanded={showCleanup} onClick={() => setShowCleanup(v => !v)}>{showCleanup ? 'Masquer' : 'Voir'}</Button>
+            <Button variant="filled" className="max-sm:h-12" onClick={() => onRemoveCancelling(cancelling)}>Les supprimer</Button>
           </div>
           {showCleanup && (
-            <ul className="text-xs text-amber-900 dark:text-amber-200 space-y-1">
+            <ul className="text-sm space-y-1">
               {cancelling.map(g => (
                 <li key={g.accountId + g.date}>
-                  <b>{parseISODate(g.date).toLocaleDateString('fr-FR')} · {g.accountName}</b> : {g.movements.map(m => `${m.label} (${m.type === 'IN' ? '+' : '−'}${formatEUR(m.amount)})`).join(', ')}
+                  <b className="font-medium">{day(g.date)} · {g.accountName}</b> : {g.movements.map(m => `${m.label} (${m.type === 'IN' ? '+' : '−'}${formatEUR(m.amount)})`).join(', ')}
                 </li>
               ))}
             </ul>
           )}
-        </div>
+        </section>
       )}
 
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="flex flex-wrap rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700" role="group" aria-label="Type">
-          {seg('all', 'Tout')}{seg('own', 'Votre part')}{seg('parental', 'Parents')}{seg('valuation', 'Valorisation')}{seg('rates', 'Taux')}
+      <div className="flex flex-wrap items-end gap-x-6 gap-y-4">
+        <div role="group" aria-label="Filtrer par type" className="flex flex-wrap gap-x-2 gap-y-4 py-2">
+          {FILTERS.filter(f => withParents || f.value !== 'parental').map(f => (
+            <Chip key={f.value} selected={filter === f.value} className={CHIP_TARGET} onClick={() => { setFilter(f.value); setLimit(PAGE); }}>{f.label}</Chip>
+          ))}
         </div>
-        <select value={accountId} onChange={e => { setAccountId(e.target.value); setLimit(PAGE); }} aria-label="Compte"
-          className="p-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-bold text-slate-700 dark:text-slate-200">
-          <option value="">Tous les comptes</option>
-          {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-        </select>
-        <span className="text-xs text-slate-500 dark:text-slate-400">{shown.length} entrée{shown.length > 1 ? 's' : ''}</span>
+        <TextField
+          label="Compte" className="w-full sm:w-64"
+          render={p => (
+            <select id={p.id} className={p.className} value={accountId} onChange={e => { setAccountId(e.target.value); setLimit(PAGE); }}>
+              <option value="">Tous les comptes</option>
+              {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+            </select>
+          )}
+        />
       </div>
+      <p className="text-sm text-on-surface-variant" aria-live="polite">{shown.length} entrée{shown.length > 1 ? 's' : ''}</p>
 
-      <ul className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xs divide-y divide-slate-100 dark:divide-slate-700">
-        {shown.length === 0 && <li className="p-6 text-sm text-slate-500 dark:text-slate-400 italic">Rien à afficher.</li>}
-        {shown.slice(0, limit).map(e => (
-          <li key={e.key} className="flex items-center gap-3 px-4 py-3">
-            <span className="w-20 shrink-0 text-xs font-bold text-slate-500 dark:text-slate-400">{parseISODate(e.date).toLocaleDateString('fr-FR')}</span>
-            <span className="flex-1 min-w-0">
-              <span className="block text-sm font-bold text-slate-800 dark:text-slate-100 truncate">{e.title}</span>
-              <span className="flex flex-wrap items-center gap-1.5 mt-0.5">
-                <span className={`text-[11px] font-black px-1.5 py-0.5 rounded-sm ${BADGE[e.kind].cls}`}>{BADGE[e.kind].label}</span>
-                {e.account && <span className="text-[11px] text-slate-500 dark:text-slate-400 truncate">{e.account.name}</span>}
-              </span>
-            </span>
-            {e.amount !== undefined && (
-              <span className={`font-mono font-bold text-sm shrink-0 ${e.amount >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>{e.amount >= 0 ? '+' : '−'}{formatEUR(Math.abs(e.amount))}</span>
-            )}
-            {e.movementId && e.account && (e.kind === 'own' || e.kind === 'adjustment') && (
-              <button type="button" onClick={() => onToggleAdjustment(e.account!.id, e.movementId!)}
-                title={e.kind === 'adjustment' ? "Compter de nouveau comme de l'épargne" : "Ce n'est pas de l'épargne (correction) : reste dans les soldes, sort de « Placé » et des bilans"}
-                className={`px-2 py-1 rounded-md text-[11px] font-bold shrink-0 ${e.kind === 'adjustment' ? 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'}`}>
-                {e.kind === 'adjustment' ? 'Compter comme épargne' : "Pas de l'épargne"}
-              </button>
-            )}
-            {e.movementId && e.account && (
-              <button type="button" onClick={() => onDeleteMovement(e.account!.id, e.movementId!)} aria-label={`Supprimer « ${e.title} »`} className="p-2 text-on-surface-variant hover:text-rose-600 dark:hover:text-rose-300 shrink-0"><Trash2 className="w-4 h-4" /></button>
-            )}
-            {e.kind === 'rate' && e.canRevertRate && e.account && (
-              <button type="button" onClick={() => onRevertRate(e.account!.id, e.rateEntryDate!)} title="Revenir au taux précédent" aria-label="Annuler ce changement de taux" className="p-2 text-on-surface-variant hover:text-indigo-600 dark:hover:text-indigo-300 shrink-0"><Undo2 className="w-4 h-4" /></button>
-            )}
-          </li>
-        ))}
-      </ul>
+      <Card padding="none">
+        {shown.length === 0 ? (
+          <EmptyState icon={History} title="Rien à afficher">
+            {entries.length === 0 ? 'Vos mouvements apparaîtront ici dès le premier dépôt.' : 'Aucune entrée ne correspond à ces filtres.'}
+          </EmptyState>
+        ) : (
+          <ul className="divide-y divide-outline-variant">
+            {shown.slice(0, limit).map(e => {
+              const acc = e.account;
+              const canToggle = !!(e.movementId && acc && (e.kind === 'own' || e.kind === 'adjustment'));
+              const canDelete = !!(e.movementId && acc);
+              const canRevert = e.kind === 'rate' && !!e.canRevertRate && !!acc;
+              return (
+                <ListItem
+                  key={e.key}
+                  className="px-4 sm:px-6"
+                  headline={e.title}
+                  supporting={
+                    <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                      <time dateTime={e.date}>{day(e.date)}</time>
+                      <span className={`inline-flex items-center h-6 px-2 rounded-sm text-xs font-medium ${BADGE[e.kind].cls}`}>{BADGE[e.kind].label}</span>
+                      {acc && <span>{acc.name}</span>}
+                    </span>
+                  }
+                  trailing={e.amount !== undefined ? <MoneyText value={e.amount} signed tone="auto" /> : undefined}
+                  actions={(canToggle || canDelete || canRevert) ? <>
+                    {canToggle && (
+                      <Button variant="text" className="max-sm:h-12 px-3! text-on-surface-variant!" onClick={() => onToggleAdjustment(acc!.id, e.movementId!)}
+                        title={e.kind === 'adjustment' ? "Compter de nouveau comme de l'épargne" : "Ce n'est pas de l'épargne (correction) : reste dans les soldes, sort de « Placé » et des bilans"}>
+                        {e.kind === 'adjustment' ? 'Compter comme épargne' : "Pas de l'épargne"}
+                      </Button>
+                    )}
+                    {canDelete && <IconButton icon={Trash2} tone="danger" label={`Supprimer « ${e.title} »`} onClick={() => onDeleteMovement(acc!.id, e.movementId!)} />}
+                    {canRevert && <IconButton icon={Undo2} label="Annuler ce changement de taux" title="Revenir au taux précédent" onClick={() => onRevertRate(acc!.id, e.rateEntryDate!)} />}
+                  </> : undefined}
+                />
+              );
+            })}
+          </ul>
+        )}
+      </Card>
       {shown.length > limit && (
-        <button type="button" onClick={() => setLimit(l => l + PAGE)} className="w-full py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-600 dark:text-slate-300">Afficher plus ({shown.length - limit} restantes)</button>
+        <Button variant="outlined" className="w-full max-sm:h-12" onClick={() => setLimit(l => l + PAGE)}>Afficher plus ({shown.length - limit} restantes)</Button>
       )}
     </div>
   );

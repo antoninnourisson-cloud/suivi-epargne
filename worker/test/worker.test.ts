@@ -22,7 +22,7 @@ const makeEnv = async (over: Partial<Env> = {}): Promise<Env> => {
     STORE: kv.asKV(), GOOGLE_CLIENT_ID: CLIENT, GOOGLE_CLIENT_SECRET: 'secret',
     ENCRYPTION_KEY: b64urlEncode(crypto.getRandomValues(new Uint8Array(32))),
     VAPID_PUBLIC_KEY: b64urlEncode(pub), VAPID_PRIVATE_KEY: (await crypto.subtle.exportKey('jwk', vapid.privateKey)).d!,
-    VAPID_SUBJECT: APP, APP_URL: APP, ALLOWED_EMAILS: 'me@example.com',
+    VAPID_SUBJECT: APP, APP_URL: APP, ALLOWED_EMAILS: 'me@example.com, x@example.com',
     ...over,
   };
 };

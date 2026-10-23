@@ -4,24 +4,26 @@
 // original n'est jamais copié, on ne stocke que sa référence) et extraction des montants
 // via l'API Gemini, à la demande explicite (chaque clic consomme le quota de l'utilisateur).
 // ================================================
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { PayslipRecord, PayslipExtractedData } from '../types';
 import { openDrivePicker, downloadFileAsBase64 } from '../services/googleDriveService';
 import { extractPayslipData, GeminiError } from '../services/geminiService';
 import { parseFrenchNumber } from '../lib/numbers';
-import { FileText, Upload, Sparkles, Trash2, ExternalLink, AlertTriangle, Check, X, Loader2, KeyRound, TrendingUp, Wand2 } from 'lucide-react';
-import { formatEUR, formatPeriod } from '../lib/format';
+import { FileText, Upload, Sparkles, Trash2, ExternalLink, AlertTriangle, Check, X, Loader2, KeyRound, TrendingUp, Wand2, PenLine } from 'lucide-react';
+import { formatEUR, formatPeriod, toInputAmount } from '../lib/format';
 import { useIsDark, chartTheme } from '../lib/chartTheme';
 import { describeEvolution } from '../lib/chartData';
 import { AreaSeriesChart, type AreaRow } from './charts/AreaSeriesChart';
 import { ChartFrame } from './charts/ChartFrame';
-import { DataTable, type Column } from './ui/DataTable';
+import { Button, Card, DataTable, EmptyState, IconButton, ListItem, MoneyText, PageHeader, TextField, type Column } from './ui';
 import { detectPayslipAnomalies } from '../lib/motivation';
 import { describeAnomaly } from './motivation/text';
+import { useUndoableRemove } from './Toast';
+import { focusAfterRemoval } from './focusAfterRemoval';
 
 interface PayslipsProps {
   payslips: PayslipRecord[];
-  onUpdatePayslips: (payslips: PayslipRecord[]) => void;
+  onUpdatePayslips: React.Dispatch<React.SetStateAction<PayslipRecord[]>>;
   geminiApiKey: string;
   pickerApiKey: string;
   // Bascule le Pilotage budgétaire sur les chiffres exacts de cette fiche (brut, charges,
@@ -33,6 +35,8 @@ interface PayslipsProps {
   // estimation), pour la mettre en évidence dans la liste et permettre de désactiver.
   activePayslipId?: string;
   onClearActivePayslip: () => void;
+  /** Clé manquante : ouvre Paramètres, rubrique « Clés et services ». */
+  onOpenKeys?: () => void;
 }
 
 const fmt = (n: number | undefined) =>
@@ -54,6 +58,32 @@ interface DraftPayslip {
 }
 
 const emptyFields: PayslipExtractedData = {};
+
+type AmountField = Exclude<keyof PayslipExtractedData, 'employer' | 'period'>;
+// Montants relus avant d'enregistrer : un seul style de champ (TextField), libellés reliés.
+const AMOUNT_FIELDS: { key: AmountField; label: string; supporting?: string }[] = [
+  { key: 'grossAmount', label: 'Brut' },
+  { key: 'socialCharges', label: 'Charges salariales' },
+  { key: 'netAmount', label: 'Net à payer avant impôt' },
+  { key: 'netTaxable', label: 'Net imposable' },
+  { key: 'navigoRefund', label: 'Remboursement Navigo' },
+  { key: 'mutuelleCost', label: 'Mutuelle (votre part)' },
+  { key: 'mealVouchers', label: 'Tickets restaurant' },
+  { key: 'incomeTaxWithheld', label: 'Impôt prélevé à la source', supporting: 'Le prélèvement réellement appliqué ce mois-ci.' },
+  { key: 'netPaid', label: 'Net payé', supporting: 'Le montant viré sur votre compte.' },
+];
+
+const KEYS_NOTE_ID = 'payslips-keys-note';
+const keysNote = (picker: boolean, gemini: boolean) =>
+  !picker && !gemini ? 'Ajoutez une clé Google Picker et une clé Gemini dans Paramètres, rubrique « Clés et services », pour importer vos fiches et en lire les montants.'
+    : !picker ? 'Ajoutez une clé Google Picker dans Paramètres, rubrique « Clés et services », pour choisir une fiche sur votre Drive.'
+      : 'Ajoutez une clé Gemini dans Paramètres, rubrique « Clés et services », pour que l\'IA lise vos fiches. Sans elle, vous pouvez saisir les montants à la main.';
+
+const driveUrl = (id: string) => `https://drive.google.com/file/d/${encodeURIComponent(id)}/view`;
+// Lien fait d'une seule icône, à l'image de ui/IconButton : 48 px de côté, libellé dans aria-label.
+const iconLink = 'w-12 h-12 shrink-0 rounded-full inline-flex items-center justify-center text-on-surface-variant transition-colors hover:text-on-surface hover:bg-on-surface/8';
+
+const periodName = (p: PayslipRecord) => (p.extracted.period ? formatPeriod(p.extracted.period) : p.fileName || 'sans date');
 
 const monthLabel = (period: string) => {
   // period attendu au format "AAAA-MM" ; si l'IA a renvoyé autre chose, on l'affiche tel quel
@@ -95,10 +125,15 @@ const describeError = (e: unknown, blocked: string[]): string => {
   return parts.join(' — ');
 };
 
-export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, geminiApiKey, pickerApiKey, onApplyToPilotage, activePayslipId, onClearActivePayslip }) => {
+export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, geminiApiKey, pickerApiKey, onApplyToPilotage, activePayslipId, onClearActivePayslip, onOpenKeys }) => {
   const t = chartTheme(useIsDark());
   const [draft, setDraft] = useState<DraftPayslip | null>(null);
   const [pickerBusy, setPickerBusy] = useState(false);
+  // Montants saisis mais illisibles (« 12a ») : signalés sous le champ, valeur précédente gardée.
+  const [badFields, setBadFields] = useState<Partial<Record<AmountField, boolean>>>({});
+  const listRef = useRef<HTMLUListElement>(null);
+  const importRef = useRef<HTMLButtonElement>(null);
+  const removeWithUndo = useUndoableRemove();
 
   const keysMissing = !geminiApiKey || !pickerApiKey;
 
@@ -143,6 +178,7 @@ export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, 
   const handleExtract = async () => {
     if (!draft || !geminiApiKey) return;
     setDraft({ ...draft, status: 'extracting', error: undefined, errorDetail: undefined, retryable: false });
+    setBadFields({});
 
     // Étape 1 : téléchargement depuis Drive. Étape 2 : analyse Gemini. Chacune est
     // diagnostiquée séparément, avec la cause technique exacte affichée à l'écran.
@@ -167,17 +203,19 @@ export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, 
     setDraft(d => d && ({ ...d, status: 'reviewing', fields: analysis.result! }));
   };
 
-  const patchDraftField = (field: keyof PayslipExtractedData, value: string) => {
-    if (!draft) return;
-    const isNumeric = field !== 'employer' && field !== 'period';
-    // parseFrenchNumber : parseFloat stockait NaN dans le record (propagé jusqu'à
-    // "NaN €" dans le Pilotage) et perdait les virgules décimales.
-    const parsed = isNumeric ? (value === '' ? undefined : parseFrenchNumber(value) ?? undefined) : value;
-    setDraft({
-      ...draft,
-      fields: { ...draft.fields, [field]: parsed },
-    });
+  const patchDraftField = (field: 'employer' | 'period', value: string) => {
+    setDraft(d => d && ({ ...d, fields: { ...d.fields, [field]: value } }));
   };
+  // parseFrenchNumber : parseFloat stockait NaN dans le record (propagé jusqu'à « NaN € »
+  // dans le Pilotage) et perdait les virgules décimales. Champ vidé : montant retiré.
+  const patchAmount = (field: AmountField, value: string) => {
+    const raw = value.trim();
+    const parsed = raw === '' ? undefined : parseFrenchNumber(raw);
+    if (parsed === null) { setBadFields(b => ({ ...b, [field]: true })); return; }
+    setBadFields(b => ({ ...b, [field]: false }));
+    setDraft(d => d && ({ ...d, fields: { ...d.fields, [field]: parsed } }));
+  };
+  const closeDraft = () => { setDraft(null); setBadFields({}); };
 
   // Doublon de période : deux fiches du même mois mettent deux points sur le même X du
   // graphique et rendent ambigu "Utiliser pour le Pilotage". On prévient, sans bloquer
@@ -194,212 +232,217 @@ export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, 
       extracted: draft.fields,
       reviewed: true, // l'utilisateur vient de relire/valider l'écran ci-dessous
     };
-    onUpdatePayslips([record, ...payslips]);
-    setDraft(null);
+    onUpdatePayslips(prev => [record, ...prev]);
+    closeDraft();
   };
 
-  const removePayslip = (id: string) => onUpdatePayslips(payslips.filter(p => p.id !== id));
+  const sorted = useMemo(
+    () => [...payslips].sort((a, b) => (b.extracted.period || '').localeCompare(a.extracted.period || '')),
+    [payslips]
+  );
+  // Retrait annulable (le fichier reste sur le Drive) ; le focus va sur la fiche voisine,
+  // sinon sur « Importer depuis Drive », sinon (bouton absent ou désactivé) sur le titre.
+  const removePayslip = (p: PayslipRecord) => {
+    removeWithUndo(payslips, p, onUpdatePayslips, `Fiche de ${periodName(p)} retirée de la liste (le fichier reste sur votre Drive)`);
+    focusAfterRemoval(() => listRef.current, sorted.findIndex(x => x.id === p.id), () => importRef.current);
+  };
+
 
   return (
     <div className="space-y-6 animate-fade-in pb-20">
-      <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xs flex flex-col sm:flex-row justify-between gap-4 sm:items-center">
-        <div>
-          <h2 className="text-2xl font-black text-slate-800 dark:text-slate-100 flex items-center gap-2"><FileText className="w-6 h-6 text-indigo-600" /> Fiches de paie</h2>
-          <p className="text-sm text-slate-500 dark:text-slate-400">Importez une fiche déjà présente sur votre Drive ; l'IA en extrait les montants clés.</p>
-        </div>
-        {!draft && (
-          <button
-            onClick={handlePick}
-            disabled={!pickerApiKey || pickerBusy}
-            className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed text-white px-5 py-2.5 rounded-xl font-bold flex gap-2 items-center shadow-lg shadow-indigo-200 shrink-0"
-          >
-            {pickerBusy ? <Loader2 className="w-5 h-5 animate-spin" /> : <Upload className="w-5 h-5" />}
+      <PageHeader
+        title="Fiches de paie"
+        subtitle="Importez une fiche déjà rangée sur votre Drive : l'IA en lit les montants, vous les vérifiez avant d'enregistrer."
+        actions={!draft && (
+          // Désactivé sans clé Picker : la raison est écrite juste en dessous (aria-describedby).
+          <Button ref={importRef} onClick={handlePick} disabled={!pickerApiKey || pickerBusy} aria-describedby={!pickerApiKey ? KEYS_NOTE_ID : undefined} className="max-sm:h-12">
+            {pickerBusy ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> : <Upload className="w-4 h-4" aria-hidden="true" />}
             Importer depuis Drive
-          </button>
+          </Button>
         )}
-      </div>
+      />
 
       {keysMissing && (
-        <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-2xl p-5 flex items-start gap-3">
-          <KeyRound className="w-5 h-5 text-amber-700 dark:text-amber-400 shrink-0 mt-0.5" />
-          <div className="text-sm text-amber-800 dark:text-amber-300">
-            <p className="font-black mb-1">Configuration requise</p>
-            <p>
-              {!pickerApiKey && !geminiApiKey && "Renseignez une clé API Picker et une clé API Gemini dans "}
-              {!pickerApiKey && geminiApiKey && "Renseignez une clé API Google Picker dans "}
-              {pickerApiKey && !geminiApiKey && "Renseignez une clé API Gemini dans "}
-              <span className="font-bold">Paramètres → Clés et services</span> pour importer et analyser vos fiches.
-            </p>
+        <div className="rounded-2xl bg-tertiary-container text-on-tertiary-container p-4 text-sm flex items-start gap-3">
+          <KeyRound className="w-5 h-5 shrink-0" aria-hidden="true" />
+          <div className="min-w-0">
+            <p id={KEYS_NOTE_ID}>{keysNote(!!pickerApiKey, !!geminiApiKey)}</p>
+            {onOpenKeys && (
+              <Button variant="text" onClick={onOpenKeys} className="mt-1 -ml-3 px-3! max-sm:h-12 text-on-tertiary-container! enabled:hover:bg-on-tertiary-container/8!">
+                Ouvrir « Clés et services »
+              </Button>
+            )}
           </div>
         </div>
       )}
 
       {/* --- IMPORT EN COURS --- */}
       {draft && (
-        <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-indigo-200 dark:border-indigo-800 shadow-xs space-y-4">
-          {draft.fileName && (
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2 min-w-0">
-                <FileText className="w-4 h-4 text-indigo-600 shrink-0" />
-                <span className="font-bold text-slate-800 dark:text-slate-100 truncate">{draft.fileName}</span>
+        <Card
+          title={<span className="break-all">{draft.fileName || 'Import impossible'}</span>}
+          icon={draft.status === 'error' ? AlertTriangle : FileText}
+          action={<IconButton icon={X} label={draft.status === 'reviewing' ? 'Abandonner cette fiche' : "Fermer l'import"} onClick={closeDraft} className="-my-3 -mr-3" />}
+        >
+          <div className="space-y-4">
+            {draft.status === 'error' && (
+              <div role="alert" className="text-sm text-error flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />
+                <div className="min-w-0">
+                  <p className="font-medium">{draft.error}</p>
+                  {draft.errorDetail && <p className="mt-1 text-xs text-on-surface-variant break-all">Détail technique : {draft.errorDetail}</p>}
+                </div>
               </div>
-              <button onClick={() => setDraft(null)} className="p-1.5 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-lg shrink-0"><X className="w-4 h-4" /></button>
-            </div>
-          )}
+            )}
 
-          {draft.status === 'error' && (
-            <div className="text-sm text-rose-700 dark:text-rose-400 flex items-start gap-2">
-              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-              <div>
-                {draft.error}
-                {draft.errorDetail && <p className="mt-1 text-[11px] font-mono break-all opacity-80">Détail : {draft.errorDetail}</p>}
-              </div>
-            </div>
-          )}
+            {draft.status === 'picked' && (
+              <>
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="tonal" onClick={handleExtract} disabled={!geminiApiKey} aria-describedby={!geminiApiKey ? KEYS_NOTE_ID : undefined} className="flex-1 max-sm:h-12">
+                    <Sparkles className="w-4 h-4" aria-hidden="true" /> Analyser avec l'IA
+                  </Button>
+                  <Button variant="text" onClick={() => setDraft(d => d && ({ ...d, status: 'reviewing' }))} className="max-sm:h-12">
+                    <PenLine className="w-4 h-4" aria-hidden="true" /> Saisir à la main
+                  </Button>
+                </div>
+                <p className="text-xs text-on-surface-variant">L'analyse utilise votre quota Gemini, à chaque clic.</p>
+              </>
+            )}
 
-          {draft.status === 'picked' && (
-            <button
-              onClick={handleExtract}
-              disabled={!geminiApiKey}
-              className="w-full flex items-center justify-center gap-2 bg-indigo-50 dark:bg-indigo-950/40 hover:bg-indigo-100 dark:hover:bg-indigo-900 disabled:opacity-40 disabled:cursor-not-allowed text-indigo-700 dark:text-indigo-300 py-3 rounded-xl font-bold text-sm"
-            >
-              <Sparkles className="w-4 h-4" /> Analyser avec l'IA (utilise votre quota Gemini)
-            </button>
-          )}
+            {draft.status === 'extracting' && (
+              <p role="status" className="flex items-center justify-center gap-2 py-6 text-sm text-on-surface-variant">
+                <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> Analyse en cours…
+              </p>
+            )}
 
-          {draft.status === 'extracting' && (
-            <div className="flex items-center justify-center gap-2 text-slate-500 dark:text-slate-400 py-6 text-sm font-bold">
-              <Loader2 className="w-4 h-4 animate-spin" /> Analyse en cours…
-            </div>
-          )}
-
-          {draft.status === 'reviewing' && (
-            <>
-              {draft.error && (
-                <p className="text-xs text-amber-700 dark:text-amber-300 flex items-start gap-2 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-lg p-3">
-                  <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-                  <span>
-                    {draft.error}
-                    {draft.errorDetail && <span className="block mt-1 text-[11px] font-mono break-all opacity-80">Détail : {draft.errorDetail}</span>}
-                    {draft.retryable && (
-                      <button type="button" onClick={handleExtract} className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold">
-                        <Sparkles className="w-3.5 h-3.5" /> Réessayer l'extraction
-                      </button>
-                    )}
-                  </span>
-                </p>
-              )}
-              <p className="text-[11px] text-slate-500 dark:text-slate-400 -mt-1">Vérifiez et corrigez les valeurs avant d'enregistrer — l'extraction automatique peut se tromper.</p>
-              {/* key={status} : les champs numériques sont non contrôlés (defaultValue, parsés au
-                  blur pour accepter la virgule française) — le remontage à l'arrivée des données
-                  extraites recharge leurs valeurs initiales. */}
-              <div key={draft.status} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div><label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Employeur</label><input value={draft.fields.employer ?? ''} onChange={e => patchDraftField('employer', e.target.value)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
-                <div><label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Période (AAAA-MM)</label><input value={draft.fields.period ?? ''} onChange={e => patchDraftField('period', e.target.value)} placeholder="2026-08" className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
-                <div><label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Brut (€)</label><input type="text" inputMode="decimal" defaultValue={draft.fields.grossAmount ?? ''} onBlur={e => patchDraftField('grossAmount', e.target.value)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
-                <div><label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Charges salariales (€)</label><input type="text" inputMode="decimal" defaultValue={draft.fields.socialCharges ?? ''} onBlur={e => patchDraftField('socialCharges', e.target.value)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
-                <div><label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Net à payer avant impôt (€)</label><input type="text" inputMode="decimal" defaultValue={draft.fields.netAmount ?? ''} onBlur={e => patchDraftField('netAmount', e.target.value)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
-                <div><label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Net imposable (€)</label><input type="text" inputMode="decimal" defaultValue={draft.fields.netTaxable ?? ''} onBlur={e => patchDraftField('netTaxable', e.target.value)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
-                <div><label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Remb. Navigo (€)</label><input type="text" inputMode="decimal" defaultValue={draft.fields.navigoRefund ?? ''} onBlur={e => patchDraftField('navigoRefund', e.target.value)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
-                <div><label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Mutuelle (part salarié, €)</label><input type="text" inputMode="decimal" defaultValue={draft.fields.mutuelleCost ?? ''} onBlur={e => patchDraftField('mutuelleCost', e.target.value)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
-                <div><label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Tickets restaurant (€)</label><input type="text" inputMode="decimal" defaultValue={draft.fields.mealVouchers ?? ''} onBlur={e => patchDraftField('mealVouchers', e.target.value)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-bold" /></div>
-                <div><label className="text-[11px] font-black text-amber-700 dark:text-amber-400 uppercase">Impôt prélevé à la source (€)</label><input type="text" inputMode="decimal" defaultValue={draft.fields.incomeTaxWithheld ?? ''} onBlur={e => patchDraftField('incomeTaxWithheld', e.target.value)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-amber-200 dark:border-amber-800 rounded-lg font-bold" /></div>
-                <div><label className="text-[11px] font-black text-emerald-700 dark:text-emerald-400 uppercase">Net payé (viré en banque, €)</label><input type="text" inputMode="decimal" defaultValue={draft.fields.netPaid ?? ''} onBlur={e => patchDraftField('netPaid', e.target.value)} className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-emerald-200 dark:border-emerald-800 rounded-lg font-bold" /></div>
-              </div>
-              <div className="flex gap-2 justify-end pt-2">
-                <button onClick={() => setDraft(null)} className="px-4 py-2 rounded-xl font-bold text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-1"><X className="w-4 h-4" /> Annuler</button>
-                <button onClick={saveDraft} className="px-4 py-2 rounded-xl font-bold text-sm bg-indigo-600 text-white hover:bg-indigo-700 flex items-center gap-1"><Check className="w-4 h-4" /> Enregistrer</button>
-              </div>
-              {duplicatePeriod && (
-                <p className="mt-2 flex items-start justify-end gap-1.5 text-[11px] font-bold text-amber-700 dark:text-amber-300">
-                  <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-px" />
-                  Une fiche existe déjà pour la période {draft?.fields.period} : les deux apparaîtront sur le graphique.
-                </p>
-              )}
-            </>
-          )}
-        </div>
+            {draft.status === 'reviewing' && (
+              <>
+                {draft.error && (
+                  <div role="alert" className="rounded-xl bg-tertiary-container text-on-tertiary-container p-3 text-sm flex items-start gap-2">
+                    <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />
+                    <div className="min-w-0">
+                      <p>{draft.error}</p>
+                      {draft.errorDetail && <p className="mt-1 text-xs break-all">Détail technique : {draft.errorDetail}</p>}
+                      {draft.retryable && (
+                        <Button variant="tonal" onClick={handleExtract} className="mt-3 max-sm:h-12">
+                          <Sparkles className="w-4 h-4" aria-hidden="true" /> Réessayer l'analyse
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                )}
+                <p className="text-sm text-on-surface-variant">Vérifiez et corrigez les montants avant d'enregistrer : la lecture automatique peut se tromper.</p>
+                {/* key={status} : les montants sont non contrôlés (defaultValue, lus en quittant le
+                    champ pour accepter la virgule) ; le remontage à l'arrivée des données
+                    extraites recharge leurs valeurs initiales. */}
+                <div key={draft.status} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <TextField label="Employeur" value={draft.fields.employer ?? ''} onChange={e => patchDraftField('employer', e.target.value)} />
+                  <TextField label="Mois de la paie (AAAA-MM)" value={draft.fields.period ?? ''} onChange={e => patchDraftField('period', e.target.value)} placeholder="ex. 2026-08" />
+                  {AMOUNT_FIELDS.map(f => {
+                    const v = draft.fields[f.key];
+                    return (
+                      <TextField
+                        key={f.key}
+                        label={f.label}
+                        suffix="€"
+                        inputMode="decimal"
+                        defaultValue={v === undefined ? '' : toInputAmount(v)}
+                        onBlur={e => patchAmount(f.key, e.target.value)}
+                        supporting={f.supporting}
+                        error={badFields[f.key] ? 'Montant non reconnu (exemple : 1 234,56) : la valeur précédente est gardée.' : undefined}
+                      />
+                    );
+                  })}
+                </div>
+                {duplicatePeriod && (
+                  <p role="status" className="text-sm text-on-surface-variant flex items-start gap-2">
+                    <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-tertiary" aria-hidden="true" />
+                    Une fiche existe déjà pour {formatPeriod(draft.fields.period ?? '')} : les deux apparaîtront sur le graphique.
+                  </p>
+                )}
+                <div className="flex flex-wrap justify-end gap-2 pt-2">
+                  <Button variant="text" onClick={closeDraft} className="max-sm:h-12">Annuler</Button>
+                  <Button onClick={saveDraft} className="max-sm:h-12"><Check className="w-4 h-4" aria-hidden="true" /> Enregistrer la fiche</Button>
+                </div>
+              </>
+            )}
+          </div>
+        </Card>
       )}
 
       {/* --- ÉVOLUTION DU NET --- */}
       {chartData.length >= 2 && !draft && (
-        <section aria-labelledby="payslips-net-title" className="bg-surface-container-lowest dark:bg-surface-container-low p-5 sm:p-6 rounded-2xl border border-outline-variant">
-          <h3 id="payslips-net-title" className="text-base font-medium text-on-surface flex items-center gap-2 mb-2"><TrendingUp className="w-5 h-5 text-indigo-600 dark:text-indigo-300" aria-hidden="true" /> Évolution du net</h3>
+        <Card title="Évolution du net" icon={TrendingUp}>
           <ChartFrame
             summary={describeEvolution('Votre salaire net', chartData[0].net, chartData[chartData.length - 1].net, chartData[0].period, chartData[chartData.length - 1].period, 'm')}
             table={<DataTable caption="Salaire net et brut, fiche par fiche" columns={netColumns} rows={chartData} rowKey={p => p.period} />}
           >
             <AreaSeriesChart data={netRows} series={[{ key: 'net', label: 'Net', color: t.brand }]} />
           </ChartFrame>
-        </section>
+        </Card>
       )}
 
       {/* --- HISTORIQUE --- */}
       {payslips.length === 0 && !draft && (
-        <div className="text-center py-16 text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700">
-          <FileText className="w-10 h-10 mx-auto mb-3 opacity-40" />
-          Aucune fiche de paie importée pour l'instant.
-        </div>
+        <Card variant="filled" padding="none">
+          <EmptyState icon={FileText} title="Aucune fiche de paie pour l'instant">
+            Importez une fiche rangée sur votre Drive avec « Importer depuis Drive ». Une fois vérifiée, le Pilotage peut s'en servir à la place de son estimation.
+          </EmptyState>
+        </Card>
       )}
 
-      {payslips.length > 0 && (
-        <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xs overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm sm:min-w-136">
-              <thead className="bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700">
-                <tr>
-                  <th className="px-3 sm:px-6 py-3 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase">Période</th>
-                  <th className="hidden sm:table-cell px-6 py-3 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase text-right">Brut</th>
-                  <th className="px-3 sm:px-6 py-3 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase text-right">Net payé</th>
-                  <th className="px-3 sm:px-6 py-3 text-right"></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {[...payslips].sort((a, b) => (b.extracted.period || '').localeCompare(a.extracted.period || '')).map(p => {
-                  const isActive = p.id === activePayslipId;
-                  const anomaly = anomalies.get(p.id);
-                  return (
-                  <React.Fragment key={p.id}>
-                  <tr className={`hover:bg-slate-50 dark:hover:bg-slate-800 ${isActive ? 'bg-amber-50/60 dark:bg-amber-950/20' : ''}`}>
-                    <td className="px-3 sm:px-6 py-3">
-                      <div className="font-bold text-slate-800 dark:text-slate-100 flex flex-wrap items-center gap-x-2 gap-y-1">
-                        {p.extracted.period ? formatPeriod(p.extracted.period) : '—'}
-                        {isActive && <span className="text-[11px] font-black uppercase bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300 px-1.5 py-0.5 rounded-sm">Référence du Pilotage</span>}
-                        {anomaly && <span className="text-[11px] font-medium bg-tertiary-container text-on-tertiary-container px-1.5 py-0.5 rounded-sm inline-flex items-center gap-1 whitespace-nowrap"><AlertTriangle className="w-3 h-3" aria-hidden="true" /> À vérifier</span>}
-                      </div>
-                      <div className="text-[11px] uppercase text-slate-500 dark:text-slate-400 font-bold">{p.extracted.employer || p.fileName}</div>
-                    </td>
-                    <td className="hidden sm:table-cell px-6 py-3 text-right font-mono text-slate-600 dark:text-slate-300">{fmt(p.extracted.grossAmount)}</td>
-                    <td className="px-3 sm:px-6 py-3 text-right font-black text-emerald-700 dark:text-emerald-400">{fmt(p.extracted.netPaid ?? p.extracted.netAmount)}</td>
-                    <td className="px-3 sm:px-6 py-3 text-right">
-                      <div className="flex justify-end gap-1">
-                        {isActive ? (
-                          <button onClick={onClearActivePayslip} className="p-2 text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900 rounded-lg" title="Revenir à l'estimation théorique"><Wand2 className="w-4 h-4" /></button>
-                        ) : p.extracted.grossAmount !== undefined && (
-                          <button onClick={() => onApplyToPilotage(p)} className="p-2 text-amber-700 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/40 rounded-lg" title="Utiliser pour mon Pilotage budgétaire (chiffres exacts)"><Wand2 className="w-4 h-4" /></button>
-                        )}
-                        <a href={`https://drive.google.com/file/d/${p.fileId}/view`} target="_blank" rel="noopener noreferrer" className="p-2 text-indigo-600 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 rounded-lg" title="Ouvrir sur Drive"><ExternalLink className="w-4 h-4" /></a>
-                        <button onClick={() => removePayslip(p.id)} className="p-2 text-on-surface-variant hover:text-rose-600 dark:hover:text-rose-300 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg" title="Retirer de la liste" aria-label="Retirer de la liste"><Trash2 className="w-4 h-4" /></button>
-                      </div>
-                    </td>
-                  </tr>
-                  {anomaly && (
-                    <tr className={isActive ? 'bg-amber-50/60 dark:bg-amber-950/20' : ''}>
-                      <td colSpan={4} className="px-3 sm:px-6 pb-3 pt-0">
-                        <p className="text-xs text-on-surface-variant flex items-start gap-1.5 bg-surface-container rounded-lg p-2.5">
-                          <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-px text-on-tertiary-container" aria-hidden="true" />
-                          <span><span className="sr-only">Fiche de {p.extracted.period ? formatPeriod(p.extracted.period) : ''} à vérifier : </span>{describeAnomaly(anomaly)}</span>
-                        </p>
-                      </td>
-                    </tr>
-                  )}
-                  </React.Fragment>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
+      {sorted.length > 0 && (
+        <Card title="Vos fiches" icon={FileText} padding="none" className="pb-1">
+          <ul ref={listRef} className="divide-y divide-outline-variant border-t border-outline-variant">
+            {sorted.map(p => {
+              const isActive = p.id === activePayslipId;
+              const anomaly = anomalies.get(p.id);
+              const name = periodName(p);
+              const net = p.extracted.netPaid ?? p.extracted.netAmount;
+              return (
+                <ListItem
+                  key={p.id}
+                  className={`px-4 sm:px-6 ${isActive ? 'bg-secondary-container/50' : ''}`}
+                  headline={<>
+                    {name}
+                    {isActive && <span className="ml-2 inline-flex items-center h-6 px-2 rounded-sm text-xs font-medium bg-secondary-container text-on-secondary-container align-middle">Référence du Pilotage</span>}
+                    {anomaly && <span className="ml-2 inline-flex items-center gap-1 h-6 px-2 rounded-sm text-xs font-medium bg-tertiary-container text-on-tertiary-container align-middle whitespace-nowrap"><AlertTriangle className="w-3 h-3" aria-hidden="true" /> À vérifier</span>}
+                  </>}
+                  supporting={<>
+                    {p.extracted.employer || p.fileName}
+                    {p.extracted.grossAmount !== undefined && <> · brut {fmt(p.extracted.grossAmount)}</>}
+                    {anomaly && <span className="block mt-1">{describeAnomaly(anomaly)}</span>}
+                  </>}
+                  trailing={net !== undefined
+                    ? <><MoneyText value={net} className="text-on-surface" /><span className="block text-xs font-normal text-on-surface-variant">net payé</span></>
+                    : <span className="text-on-surface-variant">—<span className="sr-only">net payé inconnu</span></span>}
+                  actions={<>
+                    {isActive ? (
+                      <Button variant="tonal" onClick={onClearActivePayslip} className="max-sm:h-12">
+                        <Wand2 className="w-4 h-4" aria-hidden="true" /> Revenir à l'estimation
+                      </Button>
+                    ) : p.extracted.grossAmount !== undefined && (
+                      <Button variant="text" onClick={() => onApplyToPilotage(p)} className="max-sm:h-12">
+                        <Wand2 className="w-4 h-4" aria-hidden="true" /> Utiliser pour le Pilotage{' '}<span className="sr-only">(fiche de {name})</span>
+                      </Button>
+                    )}
+                    <a
+                      href={driveUrl(p.fileId)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label={`Ouvrir la fiche de ${name} sur Drive (nouvel onglet)`}
+                      title="Ouvrir sur Drive"
+                      className={iconLink}
+                      data-focus-after-removal
+                    >
+                      <ExternalLink className="w-5 h-5" aria-hidden="true" />
+                    </a>
+                    <IconButton icon={Trash2} tone="danger" label={`Retirer la fiche de ${name} de la liste`} onClick={() => removePayslip(p)} />
+                  </>}
+                />
+              );
+            })}
+          </ul>
+        </Card>
       )}
     </div>
   );

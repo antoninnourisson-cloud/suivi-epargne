@@ -5,7 +5,7 @@ import React, { useId } from 'react';
 import { Sparkles, X } from 'lucide-react';
 import type { YearInReview, YearPage } from '../../lib/yearReview';
 import { Modal } from '../Modal';
-import { Button } from '../ui';
+import { Button, IconButton } from '../ui';
 
 interface YearInReviewSheetProps {
   open: boolean;
@@ -47,15 +47,13 @@ export const YearInReviewSheet: React.FC<YearInReviewSheetProps> = ({ open, onCl
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="text-[22px] leading-7 font-normal text-on-surface flex items-center gap-2">
-            <Sparkles className="w-5 h-5 text-indigo-600 dark:text-indigo-300" aria-hidden="true" /> {title}
+            <Sparkles className="w-5 h-5 text-primary" aria-hidden="true" /> {title}
           </h2>
           <p className="mt-1 text-sm text-on-surface-variant">
             {story.complete ? `L'année ${story.year} en quelques chiffres.` : `Année en cours : chiffres arrêtés au ${today}.`}
           </p>
         </div>
-        <button type="button" onClick={onClose} aria-label="Fermer" className="w-11 h-11 -m-3 shrink-0 inline-flex items-center justify-center rounded-full text-on-surface-variant hover:bg-on-surface/8">
-          <X className="w-5 h-5" aria-hidden="true" />
-        </button>
+        <IconButton icon={X} label="Fermer" onClick={onClose} className="-m-3" />
       </div>
 
       {story.empty ? (

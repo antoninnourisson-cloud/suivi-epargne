@@ -8,10 +8,11 @@ import {
   computePlacementStrategy, activeSavingsSplit, SavingsSplit, payslipSuperNet, payPeriodOf,
   buildPayLines, computePayTransfers, computeMonthlySavingsCapacity, findDueRecurring,
   findStaleRegulatedRates, findFiscalReview, findAvRateUpdatesDue, socialChargesRateFor,
-  accountAgeYears, computeMaturityCountdown, PFU_INCOME_TAX_RATE,
+  accountAgeYears, computeMaturityCountdown, PFU_INCOME_TAX_RATE, isHousingSavingsIncomeTaxExempt,
 } from './finance';
 import { parseISODate } from './dates';
-import { accruedSinceJanuary, applyMonthlyInterest } from './yearlyInterest';
+import { prepareProjection, projectedTotal, runProjection } from './projectionEngine';
+import { growthView } from './performance';
 import { DEFAULT_FISCAL_CONFIG } from '../constants';
 
 // ---------------------------------------------------------------------------
@@ -28,13 +29,20 @@ const incomeTaxShare = (account: { type: AccountType; openingDate?: string }, fi
     case AccountType.PEA: return age >= fiscalConfig.legalMaturity.pea ? 0 : PFU_INCOME_TAX_RATE;
     // Après 8 ans : gains annuels supposés sous l'abattement de 4 600 €.
     case AccountType.ASSURANCE_VIE: return age >= fiscalConfig.legalMaturity.assuranceVie ? 0 : PFU_INCOME_TAX_RATE;
-    // Plus-values de crypto : PFU quelle que soit la durée de détention (art. 150 VH bis du
-    // CGI). Livret bancaire, compte à terme, compte rémunéré (« Autre », compte courant) :
-    // intérêts imposés chaque année au PFU.
+    // Plus-values de crypto et de compte-titres : PFU quelle que soit la durée de détention
+    // (art. 150 VH bis du CGI pour la crypto). Livret bancaire, compte à terme, compte
+    // rémunéré (« Autre », compte courant) : intérêts imposés chaque année au PFU.
     case AccountType.CRYPTO:
+    case AccountType.CTO:
+    case AccountType.LIVRET_BANCAIRE:
+    case AccountType.COMPTE_A_TERME:
     case AccountType.AUTRE:
     case AccountType.COMPTE_COURANT:
       return PFU_INCOME_TAX_RATE;
+    // PEL, CEL : PFU, sauf ancien régime exonéré (ouverts avant 2018, voir capitalTax).
+    case AccountType.PEL:
+    case AccountType.CEL:
+      return isHousingSavingsIncomeTaxExempt(account, asOfDate) ? 0 : PFU_INCOME_TAX_RATE;
     // PEE : toujours exonéré d'impôt sur le revenu. PER et immobilier : régime de sortie trop
     // particulier, seuls les prélèvements sociaux sont retenus.
     default: return 0;
@@ -47,8 +55,9 @@ const incomeTaxShare = (account: { type: AccountType; openingDate?: string }, fi
  * - Autres : taux − frais de gestion éventuels (le taux servi d'un fonds euros est publié
  *   NET de frais : les frais ne concernent que les unités de compte), puis − prélèvements
  *   sociaux (17,2 % sur l'assurance vie, 18,6 % ailleurs en 2026) − impôt sur le revenu
- *   de 12,8 % (PFU) quand il est dû : crypto, « Autre » et compte courant toujours, PEA de
- *   moins de 5 ans, assurance vie de moins de 8 ans. Une assurance vie plus ancienne est
+ *   de 12,8 % (PFU) quand il est dû : crypto, compte-titres, livret bancaire, compte à terme,
+ *   « Autre » et compte courant toujours, PEL et CEL ouverts depuis 2018 (ou PEL ancien de
+ *   plus de 12 ans), PEA de moins de 5 ans, assurance vie de moins de 8 ans. Une assurance vie plus ancienne est
  *   supposée sous l'abattement annuel ; PEE exonéré ; PER et immobilier non modélisés.
  *   Sources (vérifiées le 2026-10-14) : https://www.service-public.gouv.fr/particuliers/vosdroits/F2329
  *   et https://www.impots.gouv.fr/particulier/questions/jai-realise-une-plus-value-mobiliere-comment-est-elle-imposee
@@ -95,8 +104,7 @@ export interface ProjectionResult {
   unplaced: number;
 }
 
-/** Identifiant du compte courant « virtuel » qui garde l'argent sans destination. */
-export const IDLE_ACCOUNT_ID = '__current';
+export { IDLE_ACCOUNT_ID } from './projectionEngine';
 
 /**
  * Projection mois par mois : versement mensuel réparti selon `split` (plafonds des livrets
@@ -106,6 +114,12 @@ export const IDLE_ACCOUNT_ID = '__current';
  * année pas encore versés ne sont pas comptés). Part de vos soldes propres actuels
  * (la part des parents est ignorée), compte courant compris. Ce que le plan ne peut placer
  * nulle part reste sur le compte courant (sans intérêt) : compté, jamais perdu.
+ * Même moteur que le simulateur et le plan solo (./projectionEngine) : `years` ans de
+ * projection donnent, à taux égaux, le solde de la courbe « plan actuel » du simulateur au
+ * même mois.
+ * `assumedRates` (identifiant → taux annuel en %, voir withAssumedRates de ./performance) :
+ * rendement supposé d'un placement sans taux saisi. Il ne change que ses intérêts, jamais la
+ * répartition des versements, qui reste celle du vrai plan (taux saisis).
  */
 export const projectSavings = (
   accounts: SavingsAccount[],
@@ -116,50 +130,23 @@ export const projectSavings = (
   // Mois (à partir de maintenant) où les parents reprennent leur capital : les livrets
   // retrouvent de la place sous leurs plafonds et ce capital cesse de produire des intérêts.
   restitutionInMonths?: number,
-  asOfDate: Date = new Date()
+  asOfDate: Date = new Date(),
+  assumedRates?: Readonly<Record<string, number>>
 ): ProjectionResult => {
   // Les plafonds se vérifient sur le solde RÉEL (part des parents comprise) ; le résultat
   // ne compte que votre part. Les intérêts du capital parental vous reviennent (accord
   // familial) : ils s'ajoutent à votre part.
-  // Livret A, LDDS, LEP : intérêts versés au 31 décembre, y compris ceux déjà acquis depuis
-  // le 1er janvier (voir ./yearlyInterest, même règle que le simulateur et le plan solo).
-  const accrued = accruedSinceJanuary(accounts, asOfDate);
-  const sim = accounts
-    .filter(a => a.type !== AccountType.IMMOBILIER)
-    .map(a => ({ ...a, own: a.ownedAmount, accrued: accrued.get(a.id) ?? 0 }));
-  const start = sim.reduce((s, a) => s + a.own, 0);
-  const rates = new Map(sim.map(a => [a.id, netMonthlyRateSchedule(a, fiscalConfig, asOfDate)]));
-  let unplaced = 0;
-  const idle = () => {
-    let cc = sim.find(a => a.type === AccountType.COMPTE_COURANT);
-    if (!cc) {
-      cc = { id: IDLE_ACCOUNT_ID, name: 'Compte courant', type: AccountType.COMPTE_COURANT, institution: '', totalAmount: 0, ownedAmount: 0, parentalCapital: 0, own: 0, accrued: 0 };
-      sim.push(cc);
-    }
-    return cc;
-  };
-  for (let m = 0; m < years * 12; m++) {
-    if (restitutionInMonths !== undefined && m === Math.max(0, restitutionInMonths)) {
-      for (const a of sim) a.totalAmount = a.own;
-    }
-    const december = (asOfDate.getMonth() + m) % 12 === 11;
-    for (const a of sim) {
-      if (a.type === AccountType.COMPTE_COURANT) continue;
-      a.own += applyMonthlyInterest(a, rates.get(a.id)?.(m) || 0, december);
-    }
-    for (const st of computePlacementStrategy(monthly, sim, fiscalConfig, split)) {
-      if (st.infoOnly) continue;
-      const target = st.accountId ? sim.find(x => x.id === st.accountId) : undefined;
-      const a = target || idle();
-      if (!target) unplaced += st.fillAmount;
-      a.totalAmount += st.fillAmount; a.own += st.fillAmount;
-    }
-  }
-  const total = sim.reduce((s, a) => s + a.own, 0);
-  const deposited = monthly * years * 12;
+  // Rendement observé : déjà net des frais du contrat (ils ne sont pas retirés une seconde fois).
+  const setup = prepareProjection(accounts, asOfDate, a => netMonthlyRateSchedule(growthView(a, assumedRates), fiscalConfig, asOfDate));
+  const start = setup.base.reduce((s, a) => s + a.ownedAmount, 0);
+  const months = years * 12;
+  // Restitution au mois R (0 : ce mois-ci, avant tout intérêt), comme dans le simulateur.
+  const state = runProjection(setup, fiscalConfig, { months, deposit: () => monthly, split, restitutionMonth: restitutionInMonths });
+  const total = projectedTotal(state);
+  const deposited = Math.max(0, monthly) * months;
   return {
-    total, deposited, interest: total - start - deposited, unplaced,
-    byAccount: sim.filter(a => a.own >= 0.5).map(a => ({ accountId: a.id, name: a.name, amount: a.own })),
+    total, deposited, interest: total - start - deposited, unplaced: state.unplaced,
+    byAccount: state.accounts.filter(a => a.own >= 0.5).map(a => ({ accountId: a.id, name: a.name, amount: a.own })),
   };
 };
 

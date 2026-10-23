@@ -7,7 +7,13 @@ import {
   isBackendEnabled, hasBackendSession, fetchAccessToken, startBackendLogin, backendLogout, consumeLoginCode,
   saveBackendSession, type LoginOptions,
 } from './backendService';
-import { verifyWriteChain, RevisionEntry } from '../lib/driveWriteCheck';
+import { verifyWriteChain, type RevisionEntry, type WriteVerdict } from '../lib/driveWriteCheck';
+import { storageKey } from '../lib/storageKeys';
+
+// Jeton Google de cette session (mode sans serveur) : clés du registre lib/storageKeys.
+const TOKEN_KEY = storageKey('googleToken');
+const TOKEN_EXPIRY_KEY = storageKey('googleTokenExpiry');
+const AUTH_PERSISTENCE_KEY = storageKey('googleAuthPersistence');
 
 const CLIENT_ID = '763862877733-hl1an9vcn0ibnoq2iq035927528mimd5.apps.googleusercontent.com';
 const SCOPES = 'https://www.googleapis.com/auth/drive.file';
@@ -140,15 +146,15 @@ export const initGoogleApi = async (): Promise<void> => {
 
 // --- GESTION DU TOKEN ---
 const storeToken = (resp: TokenResponse) => {
-  localStorage.setItem('google_token', JSON.stringify(resp));
+  localStorage.setItem(TOKEN_KEY, JSON.stringify(resp));
   // Les expires_in de GIS valent ~3600s ; on garde une marge.
   const ttl = (resp.expires_in ? resp.expires_in : 3500) * 1000;
-  localStorage.setItem('token_expiry', (Date.now() + ttl - 60_000).toString());
-  localStorage.setItem('auth_persistence', 'true');
+  localStorage.setItem(TOKEN_EXPIRY_KEY, (Date.now() + ttl - 60_000).toString());
+  localStorage.setItem(AUTH_PERSISTENCE_KEY, 'true');
 };
 
 export const isTokenValid = (): boolean => {
-  const expiry = localStorage.getItem('token_expiry');
+  const expiry = localStorage.getItem(TOKEN_EXPIRY_KEY);
   return expiry ? parseInt(expiry) > Date.now() : false;
 };
 
@@ -210,7 +216,7 @@ export const handleAuthClick = async (silent: boolean = false, opts: LoginOption
 
 /** Cet appareil garde-t-il de quoi accéder à Drive (jeton Google ou session serveur) ? */
 export const hasStoredSession = (): boolean => {
-  try { if (localStorage.getItem('google_token')) return true; } catch { /* stockage bloqué */ }
+  try { if (localStorage.getItem(TOKEN_KEY)) return true; } catch { /* stockage bloqué */ }
   return isBackendEnabled() && hasBackendSession();
 };
 
@@ -224,6 +230,9 @@ export const completeBackendLoginIfPresent = async (): Promise<boolean> => {
   if (!result) return false;
   storeToken({ access_token: result.access_token, expires_in: result.expires_in });
   saveBackendSession(result.session);
+  // Notifications déjà activées sur cet appareil : rattachées à la nouvelle session (sinon
+  // elles s'arrêteraient avec l'ancienne). En arrière-plan, sans bloquer la connexion.
+  void import('./pushService').then(m => m.refreshPushRegistration()).catch(() => undefined);
   return true;
 };
 
@@ -265,7 +274,7 @@ export const resumeSession = async (opts: { onNewLogin?: () => void } = {}): Pro
     if (!hasBackendSession()) return 'signed-out';
   } else {
     let persisted = false;
-    try { persisted = !!localStorage.getItem('google_token') && localStorage.getItem('auth_persistence') === 'true'; } catch { /* stockage bloqué */ }
+    try { persisted = !!localStorage.getItem(TOKEN_KEY) && localStorage.getItem(AUTH_PERSISTENCE_KEY) === 'true'; } catch { /* stockage bloqué */ }
     if (!persisted) return 'signed-out';
   }
   if (isTokenValid()) return 'ready';
@@ -282,7 +291,7 @@ export const resumeSession = async (opts: { onNewLogin?: () => void } = {}): Pro
 // Exporté pour le Google Picker (voir openDrivePicker), qui a besoin du token courant
 // pour n'afficher/autoriser que ce à quoi le compte connecté a accès.
 const getAccessToken = async (): Promise<string> => {
-  const stored = localStorage.getItem('google_token');
+  const stored = localStorage.getItem(TOKEN_KEY);
   if (!stored && !(isBackendEnabled() && hasBackendSession())) throw new Error('NO_TOKEN');
   if (!stored || !isTokenValid()) {
     // Tente un refresh silencieux avant d'échouer.
@@ -292,15 +301,15 @@ const getAccessToken = async (): Promise<string> => {
   // l'intervalle, JSON.parse(null) jetait un TypeError — que le chemin de sauvegarde
   // classait à tort comme "hors ligne" (il réserve TypeError aux échecs réseau de fetch),
   // gelant l'autosave sans aucune bannière. On lève une erreur explicitement typée.
-  const fresh = localStorage.getItem('google_token');
+  const fresh = localStorage.getItem(TOKEN_KEY);
   if (!fresh) throw new Error('SESSION_EXPIRED');
   return JSON.parse(fresh).access_token;
 };
 
 const handleAuthLost = () => {
-  localStorage.removeItem('google_token');
-  localStorage.removeItem('token_expiry');
-  localStorage.removeItem('auth_persistence');
+  localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(TOKEN_EXPIRY_KEY);
+  localStorage.removeItem(AUTH_PERSISTENCE_KEY);
   if (onAuthLost) onAuthLost();
 };
 
@@ -374,10 +383,10 @@ const authedFetch = async (url: string, options: RequestInit = {}): Promise<Resp
 
 // --- DÉCONNEXION ---
 export const handleSignOut = async () => {
-  const stored = localStorage.getItem('google_token');
-  localStorage.removeItem('google_token');
-  localStorage.removeItem('token_expiry');
-  localStorage.removeItem('auth_persistence');
+  const stored = localStorage.getItem(TOKEN_KEY);
+  localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(TOKEN_EXPIRY_KEY);
+  localStorage.removeItem(AUTH_PERSISTENCE_KEY);
   if (isBackendEnabled()) {
     // Surtout PAS de révocation Google ici : révoquer un jeton d'accès révoque tout
     // l'accord, refresh token du serveur compris — ce qui déconnecterait aussi les AUTRES
@@ -576,12 +585,28 @@ const VERIFY_RETRY_MS = 1500;
  *
  * Historique non concluant même après une relecture : on accepte l'écriture (avec un
  * avertissement en console) plutôt que d'inventer un conflit sans version à proposer.
+ *
+ * Historique illisible (réseau coupé, Drive saturé, session expirée juste après le PATCH) :
+ * l'écriture, elle, a RÉUSSI. Ce n'est donc pas un échec d'écriture : on la garde, avec un
+ * verdict « inconnu » (avertissement en console), comme un historique non concluant. Avant,
+ * l'erreur remontait comme un échec de sauvegarde : l'app gardait l'ancienne révision et
+ * ouvrait ensuite un faux conflit contre sa propre écriture (ou se croyait hors ligne).
  */
 const verifyWrite = async (fileId: string, expectedRevision: string, ourRevision: string): Promise<void> => {
-  let verdict = verifyWriteChain(await listRevisions(fileId), expectedRevision, ourRevision);
+  const check = async (): Promise<WriteVerdict | null> => {
+    try {
+      return verifyWriteChain(await listRevisions(fileId), expectedRevision, ourRevision);
+    } catch (e) {
+      console.warn('Écriture Drive faite, mais son historique est illisible pour l\'instant : vérification abandonnée', { expectedRevision, ourRevision }, e);
+      return null;
+    }
+  };
+  let verdict = await check();
+  if (!verdict) return;
   if (verdict.kind === 'unknown') {
     await new Promise(r => setTimeout(r, VERIFY_RETRY_MS));
-    verdict = verifyWriteChain(await listRevisions(fileId), expectedRevision, ourRevision);
+    verdict = await check();
+    if (!verdict) return;
   }
   if (verdict.kind === 'clean') return;
   if (verdict.kind === 'unknown') {
