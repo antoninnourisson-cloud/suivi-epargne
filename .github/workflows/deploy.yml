@@ -1,10 +1,15 @@
-name: Déploiement GitHub Pages
+name: Déploiement
 
-# checks (ci.yml) → build → deploy → release.
-# Le déploiement ne part que si les vérifications passent, et il publie le dossier `dist`
-# construit ET testé par ci.yml dans cette même exécution (artefact site-dist) : rien n'est
-# reconstruit entre le test et la mise en ligne. Après un déploiement réussi,
-# la version en tête de src/changelog.ts est publiée comme tag + GitHub Release (une fois).
+# checks (ci.yml) → [site : build → deploy] + [serveur] + [en-têtes edge] → release.
+# Une seule vérification par push, puis les TROIS parties partent ensemble à chaque push sur
+# main : l'app et le serveur ne peuvent plus rester désaccordés. (Jusqu'au 26/10/2026, le
+# serveur et edge/ avaient leurs propres workflows filtrés par chemins : un déploiement raté
+# n'était jamais refait tant qu'aucun de leurs fichiers ne changeait, et l'app du lot 3 a
+# tourné trois jours face à l'ancien serveur.) Redéployer un Worker inchangé est sans effet.
+# Le site publie le dossier `dist` construit ET testé par ci.yml dans cette même exécution
+# (artefact site-dist) : rien n'est reconstruit entre le test et la mise en ligne. Après un
+# déploiement réussi, la version en tête de src/changelog.ts est publiée comme tag + GitHub
+# Release (une fois).
 on:
   push:
     branches: [main]
@@ -23,6 +28,93 @@ jobs:
   checks:
     name: Vérifications
     uses: ./.github/workflows/ci.yml
+
+  cloudflare:
+    name: Secrets Cloudflare
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      ok: ${{ steps.secrets.outputs.ok }}
+    steps:
+      - name: Secrets Cloudflare présents ?
+        id: secrets
+        # `secrets` est interdit dans le `if` d'un job : on passe par une variable
+        # d'environnement d'étape, exposée en sortie du job.
+        env:
+          HAS_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN != '' && secrets.CLOUDFLARE_ACCOUNT_ID != '' }}
+        run: |
+          echo "ok=${HAS_TOKEN}" >> "$GITHUB_OUTPUT"
+          if [ "$HAS_TOKEN" != "true" ]; then
+            echo "::notice::Secrets CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID absents : déploiement des Workers sauté (npm run deploy dans worker/ et edge/)."
+          fi
+
+  worker:
+    name: Déploiement du serveur
+    needs: [checks, cloudflare]
+    if: ${{ needs.cloudflare.outputs.ok == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: worker
+      cancel-in-progress: false
+    steps:
+      - name: Checkout du code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Installation de Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: worker/package-lock.json
+
+      - name: Installation de wrangler (version du lockfile)
+        run: npm ci --prefix worker
+
+      - name: Déploiement
+        uses: cloudflare/wrangler-action@953926a2e2182532811c01a25e53647d93bf07c0 # v4
+        with:
+          workingDirectory: worker
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: deploy --message "${{ github.sha }}"
+
+  edge:
+    name: Déploiement des en-têtes de sécurité
+    needs: [checks, cloudflare]
+    if: ${{ needs.cloudflare.outputs.ok == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: edge
+      cancel-in-progress: false
+    steps:
+      - name: Checkout du code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Installation de Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: edge/package-lock.json
+
+      - name: Installation de wrangler (version du lockfile)
+        run: npm ci --prefix edge
+
+      - name: Déploiement
+        # Le jeton doit avoir, en plus des droits du Worker serveur :
+        # Zone → Workers Routes → Edit (et Zone → Zone → Read) sur pecule-app.com.
+        uses: cloudflare/wrangler-action@953926a2e2182532811c01a25e53647d93bf07c0 # v4
+        with:
+          workingDirectory: edge
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: deploy --message "${{ github.sha }}"
 
   build:
     name: Build vérifié
@@ -61,7 +153,9 @@ jobs:
 
   release:
     name: Release
-    needs: deploy
+    # Après le site ET les deux Workers (sautés sans secrets Cloudflare : la Release part quand même).
+    needs: [deploy, worker, edge]
+    if: ${{ always() && needs.deploy.result == 'success' && contains(fromJSON('["success", "skipped"]'), needs.worker.result) && contains(fromJSON('["success", "skipped"]'), needs.edge.result) }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:

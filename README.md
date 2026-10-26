@@ -10,9 +10,7 @@ Tableau de bord d'épargne personnel, calibré pour la fiscalité française.
 Sans base de données : vos données restent dans **un seul fichier, sur votre propre Google Drive**.
 
 [![Vérifications](https://github.com/antoninnourisson-cloud/suivi-epargne/actions/workflows/ci.yml/badge.svg)](https://github.com/antoninnourisson-cloud/suivi-epargne/actions/workflows/ci.yml)
-[![Déploiement GitHub Pages](https://github.com/antoninnourisson-cloud/suivi-epargne/actions/workflows/deploy.yml/badge.svg)](https://github.com/antoninnourisson-cloud/suivi-epargne/actions/workflows/deploy.yml)
-[![Déploiement du serveur](https://github.com/antoninnourisson-cloud/suivi-epargne/actions/workflows/worker.yml/badge.svg)](https://github.com/antoninnourisson-cloud/suivi-epargne/actions/workflows/worker.yml)
-[![En-têtes de sécurité](https://github.com/antoninnourisson-cloud/suivi-epargne/actions/workflows/edge.yml/badge.svg)](https://github.com/antoninnourisson-cloud/suivi-epargne/actions/workflows/edge.yml)
+[![Déploiement](https://github.com/antoninnourisson-cloud/suivi-epargne/actions/workflows/deploy.yml/badge.svg)](https://github.com/antoninnourisson-cloud/suivi-epargne/actions/workflows/deploy.yml)
 [![Surveillance](https://github.com/antoninnourisson-cloud/suivi-epargne/actions/workflows/monitor.yml/badge.svg)](https://github.com/antoninnourisson-cloud/suivi-epargne/actions/workflows/monitor.yml)
 [![Licence : AGPL v3](https://img.shields.io/badge/licence-AGPL%20v3-blue)](LICENSE)
 [![PWA](https://img.shields.io/badge/PWA-installable-14532d?logo=pwa)](https://pecule-app.com/)
@@ -280,9 +278,7 @@ Avant chaque mise à jour visible, ajoute une entrée **en tête** de [`src/chan
 | Workflow | Déclencheur | Rôle |
 |---|---|---|
 | [`ci.yml`](.github/workflows/ci.yml) · *Vérifications* | PR, push sur `main`, chaque lundi à 6 h UTC, appel par `deploy.yml` | lint, types, tests avec seuils de couverture (toute l'app, cœur métier, filets anti-perte), tests de bout en bout Playwright sur le build de production, build publié (tailles dans le résumé) testé tel quel par `e2e/production.spec.ts` puis gardé en artefact `site-dist`, audit des dépendances (informatif) |
-| [`deploy.yml`](.github/workflows/deploy.yml) · *GitHub Pages* | push sur `main` | `ci.yml` → reprise de son build testé (`site-dist`, sans reconstruire) → GitHub Pages → tag `v<version>` et Release avec les puces du changelog (une fois par version) |
-| [`worker.yml`](.github/workflows/worker.yml) · *Serveur* | push sur `main` touchant `worker/`, `src/lib/`, `src/types.ts` ou `src/constants.ts`, ou lancement manuel | types, tests, puis `wrangler deploy` |
-| [`edge.yml`](.github/workflows/edge.yml) · *En-têtes de sécurité* | push sur `main` touchant `edge/`, ou lancement manuel | types, tests, puis `wrangler deploy` du Worker `pecule-edge` (HSTS, anti-iframe… devant GitHub Pages ; actif une fois le DNS Cloudflare en « Proxied », voir [MAINTENANCE.md](MAINTENANCE.md#8-nom-de-domaine)) |
+| [`deploy.yml`](.github/workflows/deploy.yml) · *Déploiement* | push sur `main`, ou lancement manuel | `ci.yml` une fois, puis ensemble : GitHub Pages (build testé `site-dist` repris sans reconstruire), `wrangler deploy` du serveur (`worker/`) et du Worker d'en-têtes `pecule-edge` (`edge/` : HSTS, anti-iframe, cache… devant GitHub Pages), à chaque push : app et serveur toujours accordés. Puis tag `v<version>` et Release avec les puces du changelog (une fois par version) |
 | [`monitor.yml`](.github/workflows/monitor.yml) · *Surveillance* | chaque jour à 6 h 30 UTC, ou lancement manuel | site (script principal compris : un écran blanc est détecté), pages publiques, serveur (`/status`), certificat TLS, HSTS ; ouvre/ferme une issue `panne` |
 
 - **App** : l'URL du serveur est dans [`.env.production`](.env.production). Le commit déployé est injecté au build (`__BUILD_SHA__`).
@@ -295,7 +291,7 @@ Avant chaque mise à jour visible, ajoute une entrée **en tête** de [`src/chan
 ```
 .
 ├── .github/
-│   ├── workflows/          ci.yml · deploy.yml · worker.yml · edge.yml · monitor.yml
+│   ├── workflows/          ci.yml · deploy.yml · monitor.yml
 │   ├── ISSUE_TEMPLATE/     bug · idée · liens (sécurité, contact, code de conduite)
 │   ├── pull_request_template.md
 │   └── dependabot.yml      app, worker/, edge/, Actions
