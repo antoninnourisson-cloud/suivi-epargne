@@ -22,6 +22,7 @@
     "workerd@1.20261006.1": true
   },
   "overrides": {
-    "sharp": "^0.35.5"
+    "sharp": "^0.35.5",
+    "undici": "7.30.1"
   }
 }
