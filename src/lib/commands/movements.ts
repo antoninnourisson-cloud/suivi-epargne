@@ -15,11 +15,11 @@ export type MovementLeg = { accountId: string; movement: AccountMovement };
  * n'existe plus.
  */
 const collectMovementLegs = (accounts: SavingsAccount[], accountId: string, movementId: string): MovementLeg[] => {
-  const movement = accounts.find(a => a.id === accountId)?.movements?.find(m => m.id === movementId);
+  const movement = accounts.find(a => a.id === accountId)?.movements.find(m => m.id === movementId);
   if (!movement) return [];
   if (!movement.linkId) return [{ accountId, movement }];
   const legs: MovementLeg[] = [];
-  accounts.forEach(acc => (acc.movements || []).forEach(m => {
+  accounts.forEach(acc => acc.movements.forEach(m => {
     if (m.linkId === movement.linkId) legs.push({ accountId: acc.id, movement: m });
   }));
   return legs;
@@ -50,7 +50,7 @@ const removeLegs = (state: CommandState, legs: MovementLeg[]) => {
  */
 export const planMovementDeletion = (accounts: SavingsAccount[], accountId: string, movementId: string):
   { ok: true; movement: AccountMovement; legs: MovementLeg[]; isTransfer: boolean } | { ok: false; code: 'not-found' | 'forbidden'; error: string } => {
-  const movement = accounts.find(a => a.id === accountId)?.movements?.find(m => m.id === movementId);
+  const movement = accounts.find(a => a.id === accountId)?.movements.find(m => m.id === movementId);
   if (!movement) return { ok: false, code: 'not-found', error: 'Mouvement introuvable.' };
   const legs = collectMovementLegs(accounts, accountId, movementId);
   if (legs.some(l => isRestitutionMovement(l.movement))) return { ok: false, code: 'forbidden', error: RESTITUTION_DELETE_ERROR };
@@ -78,7 +78,7 @@ export const deleteMovement = (state: CommandState, input: { accountId: string; 
  * mouvement et rétablit solde ET versements cumulés.
  */
 export const cancelDeposit = (state: CommandState, input: { accountId: string; movementId: string }): CommandResult => {
-  const movement = state.accounts.find(a => a.id === input.accountId)?.movements?.find(m => m.id === input.movementId);
+  const movement = state.accounts.find(a => a.id === input.accountId)?.movements.find(m => m.id === input.movementId);
   if (!movement) return fail('not-found', 'Versement introuvable.');
   if (isRestitutionMovement(movement)) return fail('forbidden', RESTITUTION_DELETE_ERROR);
   const { accounts, undo } = removeLegs(state, [{ accountId: input.accountId, movement }]);
@@ -97,7 +97,7 @@ export const removeCancellingMovements = (state: CommandState, groups: Cancellin
   // Garde-fou : on ne retire sans recalcul que ce qui, compte par compte, s'annule vraiment
   // (et uniquement sur la part propre).
   for (const a of state.accounts) {
-    const removed = (a.movements || []).filter(m => ids.has(m.id));
+    const removed = a.movements.filter(m => ids.has(m.id));
     if (removed.some(m => m.kind === 'parental' || isRestitutionMovement(m))) return fail('forbidden', 'Ces mouvements touchent la part des parents.');
     if (Math.abs(removed.reduce((s, m) => s + signedAmount(m), 0)) >= EPS) return fail('invalid', 'Ces mouvements ne s\'annulent pas : les soldes changeraient.');
   }
@@ -105,7 +105,7 @@ export const removeCancellingMovements = (state: CommandState, groups: Cancellin
   return {
     ok: true,
     removed: ids.size,
-    next: { accounts: state.accounts.map(a => ({ ...a, movements: (a.movements || []).filter(m => !ids.has(m.id)) })) },
+    next: { accounts: state.accounts.map(a => ({ ...a, movements: a.movements.filter(m => !ids.has(m.id)) })) },
     message: `${ids.size} mouvements supprimés (soldes inchangés)`,
     undo: current => ({ accounts: restoreBalances(current.accounts, snap) }),
   };

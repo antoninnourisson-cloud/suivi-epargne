@@ -12,7 +12,7 @@ import type { View } from '../navigation';
  * Écrans sans bouton flottant (téléphone) : leur action principale est déjà un ajout ou un
  * enregistrement (Actualiser, Virements, Abonnements, Dons, Fiches de paie), ou un mouvement
  * n'a rien à y faire (Part parentale, Paramètres). Deux boutons « Ajouter » côte à côte
- * laissaient deviner lequel ajoutait quoi.
+ * laisseraient deviner lequel ajoute quoi.
  */
 const HIDDEN_ON: ReadonlySet<View> = new Set<View>(['update', 'transfers', 'subscriptions', 'donations', 'payslips', 'parental', 'settings']);
 

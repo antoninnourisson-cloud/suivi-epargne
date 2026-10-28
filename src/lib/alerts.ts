@@ -74,11 +74,15 @@ const ceilingOf = (a: SavingsAccount, fiscal: FiscalConfig): number => {
 /** Valeur annuelle d'un gain, pour classer les alertes entre elles. */
 export const yearlyValue = (g?: AlertGain): number => (!g ? 0 : g.per === 'mois' ? g.amount * 12 : g.amount);
 
-/** Actions d'abord, puis informations ; dans chaque groupe, la plus grosse somme d'abord. */
-export const sortAlerts = <T extends { tone: 'action' | 'info'; gain?: AlertGain }>(alerts: T[]): T[] =>
+/**
+ * Épinglées d'abord (clôture de l'année en janvier-février), puis actions, puis
+ * informations ; dans chaque groupe, la plus grosse somme d'abord.
+ */
+export const sortAlerts = <T extends { tone: 'action' | 'info'; gain?: AlertGain; pinned?: boolean }>(alerts: T[]): T[] =>
   alerts
     .map((a, i) => ({ a, i }))
     .sort((x, y) => {
+      if (!!x.a.pinned !== !!y.a.pinned) return x.a.pinned ? -1 : 1;
       if (x.a.tone !== y.a.tone) return x.a.tone === 'action' ? -1 : 1;
       return yearlyValue(y.a.gain) - yearlyValue(x.a.gain) || x.i - y.i;
     })

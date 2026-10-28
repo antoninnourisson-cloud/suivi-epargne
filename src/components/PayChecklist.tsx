@@ -25,7 +25,6 @@ interface PayChecklistProps {
   // Enregistre un versement réel sur un compte de l'app ; renvoie l'id du mouvement créé.
   onRecordDeposit: (accountId: string, amount: number) => string | undefined;
   onCancelDeposit: (accountId: string, movementId: string) => void;
-  children?: React.ReactNode; // contenu ajouté en bas de la carte
   customSplit?: boolean;       // répartition personnalisée : change le « pourquoi » de chaque compte
   paydayDay?: number;          // la liste suit la paie, pas le mois calendaire
 }
@@ -33,7 +32,7 @@ interface PayChecklistProps {
 const MONTHS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
 
 export const PayChecklist: React.FC<PayChecklistProps> = ({
-  superNet, transfers, steps, totalToInvest, shortfall, checklist, onChange, onRecordDeposit, onCancelDeposit, children, paydayDay, customSplit = false,
+  superNet, transfers, steps, totalToInvest, shortfall, checklist, onChange, onRecordDeposit, onCancelDeposit, paydayDay, customSplit = false,
 }) => {
   const now = new Date();
   const period = payPeriodOf(paydayDay, now);
@@ -221,8 +220,6 @@ export const PayChecklist: React.FC<PayChecklistProps> = ({
       {frozen && doneCount > 0 && (
         <p className="mt-4 text-xs text-on-surface-variant">Plan figé pour la paie de {periodLabel} depuis le premier virement coché. Il repartira des soldes du moment à la prochaine paie.</p>
       )}
-
-      {children}
     </Card>
   );
 };

@@ -14,7 +14,6 @@ import { applyDecote, migrateFiscalConfig, computeDonationSummary as _cds,
   computeAccruedInterest,
   lastRateRevision,
   findStaleRegulatedRates,
-  computeLepEligibility,
   findDueRecurring,
 } from './finance';
 import { DEFAULT_FISCAL_CONFIG, DEFAULT_WORK_BENEFITS, TAX_SCALES, LATEST_TAX_SCALE } from '../constants';
@@ -116,8 +115,6 @@ describe('computeIncome (super net)', () => {
   const baseInput = {
     grossAnnual: 45000,
     extraMonthlyIncome: 0,
-    navigoBase: 0,
-    navigoRate: 0,
     taxRateManual: 0,
   };
 
@@ -248,8 +245,9 @@ describe('computeIncome (super net)', () => {
   });
 
   it('Navigo inactif ⇒ 0 €, même si les anciens champs navigoBase/navigoRate traînent dans la config', () => {
+    const legacyConfig = { ...baseInput, navigoBase: 90.8, navigoRate: 67.24 };
     const r = computeIncome(
-      { ...baseInput, navigoBase: 90.8, navigoRate: 67.24 },
+      legacyConfig,
       LEGACY_CFG,
       NO_BENEFITS
     );
@@ -292,17 +290,30 @@ describe('applyDecote', () => {
 
 describe('migrateFiscalConfig', () => {
   it('passe les anciens 17,2 % à 18,6 % et garde 17,2 % pour l\'assurance vie', () => {
-    const old = { ...DEFAULT_FISCAL_CONFIG, socialChargesCapital: 0.172, socialChargesLifeInsurance: undefined, decote: undefined, standardAllowanceCap: 14171, lepIncomeCeiling: 22419, lepCeilingPerHalfPart: undefined };
+    const old = { ...DEFAULT_FISCAL_CONFIG, socialChargesCapital: 0.172, socialChargesLifeInsurance: undefined, decote: undefined };
     const m = migrateFiscalConfig(old as FiscalConfig);
     expect(m.socialChargesCapital).toBeCloseTo(0.186);
     expect(m.socialChargesLifeInsurance).toBeCloseTo(0.172);
-    expect(m.standardAllowanceCap).toBe(14555);
-    expect(m.lepIncomeCeiling).toBe(23028);
     expect(m.decote?.single).toBe(897);
+    // Une seule fois : le champ ajouté marque le fichier comme déjà mis à niveau.
+    expect(migrateFiscalConfig({ ...m, socialChargesCapital: 0.172 }).socialChargesCapital).toBe(0.172);
   });
   it('ne touche pas un réglage personnalisé', () => {
     const custom = { ...DEFAULT_FISCAL_CONFIG, socialChargesCapital: 0.2, socialChargesLifeInsurance: undefined };
     expect(migrateFiscalConfig(custom as FiscalConfig).socialChargesCapital).toBe(0.2);
+  });
+  it('garde une valeur égale au chiffre légal d\'une année passée : la veille propose, l\'utilisateur valide', () => {
+    // Valeurs par défaut d'anciennes versions de l'app : gardées telles quelles.
+    for (const [standardAllowanceCap, lepIncomeCeiling] of [[14171, 22419], [14426, 22823]]) {
+      const m = migrateFiscalConfig({ ...DEFAULT_FISCAL_CONFIG, standardAllowanceCap, lepIncomeCeiling, donation75Ceiling: 1000 });
+      expect(m).toMatchObject({ standardAllowanceCap, lepIncomeCeiling, donation75Ceiling: 1000 });
+    }
+  });
+  it('complète seulement les champs absents (l\'alerte LEP reste désactivée sans plafond)', () => {
+    const { standardAllowanceCap: _c, standardAllowanceMin: _m, donation75Ceiling: _d, lepCeilingPerHalfPart: _h, lepIncomeCeiling: _l, ...old } = DEFAULT_FISCAL_CONFIG;
+    const m = migrateFiscalConfig(old);
+    expect(m).toMatchObject({ standardAllowanceCap: 14555, standardAllowanceMin: 509, donation75Ceiling: 2000, lepCeilingPerHalfPart: 6149 });
+    expect(m.lepIncomeCeiling).toBeUndefined();
   });
 });
 
@@ -352,7 +363,7 @@ describe('computeWeightedAnnualRate', () => {
   it('compte 365 jours sur une année pleine (31/12 inclus)', () => {
     // Changement daté du 31/12/2025 : 364 j à 2% puis 1 j à 4%.
     // (364*2 + 1*4) / 365 = 732 / 365 = 2.005479452...
-    // Avant correction, le 31/12 était exclu : ce changement avait un poids nul.
+    // Le 31/12 compte : sans lui, ce changement aurait un poids nul.
     const rate = computeWeightedAnnualRate(4, [{ date: '2025-12-31', rate: 2 }], 2025);
     expect(rate).toBeCloseTo(732 / 365, 10);
   });
@@ -766,29 +777,6 @@ describe('lastRateRevision / findStaleRegulatedRates', () => {
   it('ignore les comptes non réglementés', () => {
     const av = { id: 'b', name: 'AV', type: AccountType.ASSURANCE_VIE, interestRate: 2 };
     expect(findStaleRegulatedRates([av], new Date(2026, 1, 10))).toBeNull();
-  });
-});
-
-describe('computeLepEligibility', () => {
-  const cfg = { ...LEGACY_CFG, lepIncomeCeiling: 22000, lepHouseholdParts: 1 };
-  const withLep = [{ type: AccountType.LEP }];
-
-  it("renvoie null sans LEP ou sans plafond configuré", () => {
-    expect(computeLepEligibility([{ type: AccountType.LIVRET_A }], 30000, cfg)).toBeNull();
-    expect(computeLepEligibility(withLep, 30000, { ...cfg, lepIncomeCeiling: undefined })).toBeNull();
-  });
-
-  it('classe ok / proche / dépassé', () => {
-    expect(computeLepEligibility(withLep, 15000, cfg)?.status).toBe('ok');
-    expect(computeLepEligibility(withLep, 21000, cfg)?.status).toBe('approaching'); // < 10 % de marge
-    expect(computeLepEligibility(withLep, 23000, cfg)?.status).toBe('exceeded');
-  });
-
-  it('ajuste le plafond au nombre de parts', () => {
-    const r = computeLepEligibility(withLep, 30000, { ...cfg, lepHouseholdParts: 2 });
-    // Grille officielle : + 6 149 € par demi-part au-delà de la 1re part.
-    expect(r?.ceiling).toBe((cfg.lepIncomeCeiling as number) + 2 * 6149);
-    expect(r?.status).toBe('ok');
   });
 });
 

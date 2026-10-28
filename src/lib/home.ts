@@ -19,6 +19,7 @@ import type { TaxReturnAlert } from './taxReturn';
 import type { EmergencyFund } from './planning';
 import { describeStaleBalances, type StaleBalance } from './freshness';
 import type { YearClosingStatus } from './yearClosing';
+import type { AgendaEvent } from './agenda';
 import {
   computeAccountBalanceAtDate, computeAccruedParentalInterest, computeRecentSavingsRate, effectivePayday, nextSubscriptionDate,
   ownedAmountAt,
@@ -76,7 +77,7 @@ export const findCeilingAlerts = (accounts: SavingsAccount[], fiscalConfig: Pick
 export const findInactiveEmptyAccounts = (accounts: SavingsAccount[], now: Date): SavingsAccount[] =>
   accounts.filter(a => {
     if (a.totalAmount !== 0) return false;
-    const last = (a.movements || []).reduce<string | null>((max, m) => (!max || m.date > max ? m.date : max), null);
+    const last = a.movements.reduce<string | null>((max, m) => (!max || m.date > max ? m.date : max), null);
     const ref = last ?? a.openingDate;
     if (!ref) return true; // aucune date connue, jamais alimenté
     return (now.getTime() - parseISODate(ref).getTime()) / MS_PER_DAY >= 60;
@@ -89,7 +90,7 @@ export const findInactiveEmptyAccounts = (accounts: SavingsAccount[], now: Date)
 export const daysSinceLastMovement = (accounts: SavingsAccount[], now: Date): number | null => {
   const today = formatISODay(now);
   let latest: string | null = null;
-  for (const a of accounts) for (const m of a.movements || []) {
+  for (const a of accounts) for (const m of a.movements) {
     if (m.date <= today && (!latest || m.date > latest)) latest = m.date;
   }
   return latest ? Math.floor((now.getTime() - parseISODate(latest).getTime()) / MS_PER_DAY) : null;
@@ -105,6 +106,16 @@ export const upcomingDebits = (subscriptions: Subscription[], now: Date, days = 
     .map(s => { const date = nextSubscriptionDate(s, today); return { s, date, inDays: daysBetween(today, date) }; })
     .filter(x => x.inDays <= days)
     .sort((a, b) => a.date.getTime() - b.date.getTime());
+};
+
+/**
+ * « Prochaines échéances » de l'Accueil : les `count` premiers événements de l'agenda, sans
+ * les prélèvements déjà listés dans « Prélèvements des 7 prochains jours » (même abonnement,
+ * même jour). Une échéance n'apparaît qu'une fois sur l'écran.
+ */
+export const homeAgenda = (events: AgendaEvent[], debits: UpcomingDebit[], count = 3): AgendaEvent[] => {
+  const listed = new Set(debits.map(d => `${d.s.name}|${formatISODay(d.date)}`));
+  return events.filter(e => !(e.kind === 'subscription' && listed.has(`${e.title}|${e.date}`))).slice(0, count);
 };
 
 /**
@@ -181,7 +192,7 @@ export const buildStackedSeries = (accounts: SavingsAccount[], range: DateRange,
   for (const acc of accounts) {
     let atEnd = acc.ownedAmount;
     const byDate = new Map<string, number>();
-    for (const m of acc.movements || []) {
+    for (const m of acc.movements) {
       if (m.kind === 'parental') continue; // part des parents : hors de « mon épargne »
       const flow = signedAmount(m);
       if (m.date > range.end) atEnd -= flow;
@@ -253,8 +264,8 @@ export const averageFullMonthRate = (history: MonthSavingsRate[]): number | null
  * Le chiffre « ce mois-ci » de l'Accueil, sur UNE seule fenêtre : la paie en cours (jour de
  * paie, ou date d'enregistrement de la fiche de paie), sinon le mois civil. La jauge, le taux
  * d'épargne et la carte « Bons mois » lisent tous cette même fenêtre (lib/motivation,
- * recentPayWindows) : plus de « 0 % ce mois-ci » le 2 octobre alors que 320 € ont été placés
- * depuis la paie du 27 septembre.
+ * recentPayWindows) : pas de « 0 % ce mois-ci » le 2 octobre quand 320 € ont été placés depuis
+ * la paie du 27 septembre.
  */
 export interface PayPeriodSavings {
   /** Premier jour de la fenêtre en cours (AAAA-MM-JJ). */
@@ -278,7 +289,7 @@ export interface PayPeriodSavings {
 }
 
 export const payPeriodSavings = (opts: {
-  accounts: { type: AccountType; movements?: SavingsAccount['movements'] }[];
+  accounts: { type: AccountType; movements: SavingsAccount['movements'] }[];
   today: string;
   paydayDay?: number;
   payslips?: Pick<PayslipRecord, 'addedAt' | 'extracted'>[];
@@ -474,6 +485,8 @@ export interface HomeTodo {
   detail?: string;
   gain?: AlertGain;
   snoozable?: boolean;
+  /** En tête de la liste, avant le tri par montant (clôture de l'année en janvier-février). */
+  pinned?: boolean;
   primary?: { label: string; action: HomeAction };
   secondary?: { label: string; action: HomeAction };
 }
@@ -550,7 +563,7 @@ export const buildHomeTodos = (i: HomeTodoInput): HomeTodo[] => {
   const closing = i.yearClosing ?? null;
   const closingOpen = !!closing && closing.inSeason && !closing.closed;
   if (closing && closingOpen) out.push({
-    key: `year-closing-${closing.year}`, icon: 'calendar-check', tone: 'action', snoozable: true,
+    key: `year-closing-${closing.year}`, icon: 'calendar-check', tone: 'action', snoozable: true, pinned: true,
     text: `Clôture de l'année ${closing.year} : ${closing.done} étape${closing.done > 1 ? 's' : ''} sur ${closing.total} faite${closing.done > 1 ? 's' : ''}.`,
     detail: 'Soldes au 31 décembre, intérêts, relevés, bilan et archive : tout au même endroit, dans l\'ordre.',
     primary: i.can.navigate ? { label: 'Ouvrir la clôture', action: { type: 'open-year-closing' } } : undefined,

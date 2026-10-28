@@ -5,19 +5,12 @@
 import { describe, it, expect } from 'vitest';
 import { AccountType, SavingsAccount } from '../../types';
 import { round2 } from '../accountOps';
+import { mulberry32 } from '../simulator';
 import {
   applyPatch, CommandOk, CommandResult, CommandState,
   quickAdd, deleteMovement, cancelDeposit, saveAccount, deleteAccount, recordRestitution, undoRestitution, updateBalances,
   linkedTransfer,
 } from './index';
-
-/** mulberry32 : petit générateur pseudo-aléatoire à graine, sans dépendance. */
-const prng = (seed: number) => () => {
-  seed = (seed + 0x6D2B79F5) | 0;
-  let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
-  t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-};
 
 const initial = (): CommandState => ({
   accounts: [
@@ -44,7 +37,7 @@ const checkInvariants = (s: CommandState, where: string) => {
 type Entry = { name: string; result: CommandOk; before: CommandState; exact: boolean };
 
 const runSequence = (seed: number, steps: number) => {
-  const rnd = prng(seed);
+  const rnd = mulberry32(seed);
   const pick = <T,>(xs: T[]): T => xs[Math.floor(rnd() * xs.length)];
   const cents = (max: number) => Math.round(rnd() * max * 100) / 100;
   let s = initial();
@@ -122,7 +115,7 @@ const runSequence = (seed: number, steps: number) => {
       const acc = pick(accounts);
       const isNew = rnd() < 0.2;
       const edited: SavingsAccount = isNew
-        ? { id: `n${id++}`, name: 'Nouveau', institution: 'X', type: AccountType.LDDS, totalAmount: 0, ownedAmount: rnd() * 2000, parentalCapital: 0 }
+        ? { id: `n${id++}`, name: 'Nouveau', institution: 'X', type: AccountType.LDDS, totalAmount: 0, ownedAmount: rnd() * 2000, parentalCapital: 0, movements: [] }
         : { ...acc, ownedAmount: rnd() * 10000, parentalCapital: rnd() < 0.5 ? acc.parentalCapital : rnd() * 5000, totalAmount: -1 };
       name = `saveAccount ${edited.id}`;
       r = saveAccount(s, { account: edited, today: '2026-10-07' });

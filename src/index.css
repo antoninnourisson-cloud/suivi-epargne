@@ -45,8 +45,8 @@
 @theme {
   --font-sans: 'Google Sans Flex', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
   /* Les montants restent dans la police de Pécule, à chiffres de largeur fixe (tabular-nums,
-     voir body) : `font-mono` n'est plus une chasse fixe (Consolas mêlé à Google Sans Flex dans
-     une même ligne). Un code à recopier lettre par lettre (code de secours) prend `font-code`. */
+     voir body) : `font-mono` n'est donc pas une chasse fixe (pas de Consolas mêlé à Google Sans Flex
+     dans une même ligne). Un code à recopier lettre par lettre (code de secours) prend `font-code`. */
   --font-mono: var(--font-sans);
   --font-code: ui-monospace, 'Cascadia Mono', 'Segoe UI Mono', Menlo, Consolas, monospace;
 

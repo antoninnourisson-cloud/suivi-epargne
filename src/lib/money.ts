@@ -5,8 +5,8 @@ import type { AccountMovement } from '../types';
 /**
  * Arrondi au centime, au plus proche, les demi-centimes s'éloignant de zéro (comme à la
  * main) : 1,005 → 1,01 et −1,005 → −1,01.
- * `Math.round(n * 100) / 100` se trompait sur les demi-centimes, que le binaire ne sait pas
- * représenter exactement (1,005 × 100 = 100,49999… → 1,00), et n'était pas symétrique
+ * `Math.round(n * 100) / 100` se trompe sur les demi-centimes, que le binaire ne sait pas
+ * représenter exactement (1,005 × 100 = 100,49999… → 1,00), et n'est pas symétrique
  * (Math.round(−100,5) = −100). Le produit par 100 est donc ramené à 15 chiffres significatifs
  * (la précision d'un double) avant l'arrondi, ce qui efface ce bruit sans changer les autres
  * montants. Jamais de « −0 » (affiché « −0,00 € »).

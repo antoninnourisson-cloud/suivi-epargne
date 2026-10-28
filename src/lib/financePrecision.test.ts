@@ -1,4 +1,4 @@
-// Précision des calculs financiers (audit, lot 3) : intérêts acquis par quinzaine terminée,
+// Précision des calculs financiers : intérêts acquis par quinzaine terminée,
 // retraits d'assurance vie au prorata des gains, dons 2025 (deux plafonds), remboursement
 // transport (régime temporaire), crypto (seuil annuel de 305 €), option pour le barème,
 // argent qui dort et projections partagées. Valeurs attendues écrites en dur.
@@ -10,7 +10,8 @@ import {
   monthsUntilRestitution, salaryTaxEstimate,
 } from './finance';
 import { buildTaxReturnChecklist } from './taxReturn';
-import { FISCAL_WATCH_PROMPT, buildSourcesPrompt, diffFiscalWatch, isOfficialSource } from './fiscalWatch';
+import { diffFiscalWatch, isOfficialSource } from './fiscalWatch';
+import { FISCAL_WATCH_PROMPT, buildSourcesPrompt } from '../services/fiscalWatchGemini';
 import { computeIdleCash, currentAccountBuffer, describeIdleDestinations, idleDestinations, lepStillEligible } from './idleCash';
 import { computeEmergencyFund, emergencySavingsOf, buildSoloPlan } from './planning';
 import { projectSavings } from './projection';
@@ -24,7 +25,7 @@ const acc = (over: Partial<SavingsAccount>): SavingsAccount => ({
 const mv = (over: Partial<AccountMovement>): AccountMovement => ({ id: Math.random().toString(36).slice(2), date: '2026-01-01', amount: 0, label: 'Retrait', type: 'OUT', ...over });
 
 // ---------------------------------------------------------------------------
-// #96 : une quinzaine n'est acquise qu'une fois terminée
+// Une quinzaine n'est acquise qu'une fois terminée
 // ---------------------------------------------------------------------------
 describe('intérêts acquis : quinzaines terminées seulement', () => {
   // 10 000 € sur un Livret A à 1,7 %, sans mouvement en 2026 : 10 000 × 1,7 % / 24 = 7,083 € par quinzaine.
@@ -46,7 +47,7 @@ describe('intérêts acquis : quinzaines terminées seulement', () => {
 });
 
 // ---------------------------------------------------------------------------
-// #93 : assurance vie, prélèvements sociaux du fonds euros et part de gains
+// Assurance vie, prélèvements sociaux du fonds euros et part de gains
 // ---------------------------------------------------------------------------
 describe('assurance vie : « Si vous retiriez vos gains »', () => {
   const av = (over: Partial<SavingsAccount> = {}) => acc({
@@ -99,7 +100,7 @@ describe('assurance vie : « Si vous retiriez vos gains »', () => {
 });
 
 // ---------------------------------------------------------------------------
-// #94 : dons 2025, 1 000 € jusqu'au 13 octobre, 2 000 € au total sur l'année
+// Dons 2025, 1 000 € jusqu'au 13 octobre, 2 000 € au total sur l'année
 // ---------------------------------------------------------------------------
 describe('dons à 75 % : plafond selon la date du don', () => {
   const don = (date: string, amount: number, rate: 66 | 75 = 75): Donation => ({ id: `${date}-${amount}`, date, amount, organization: 'Restos', rate, receiptReceived: true });
@@ -145,7 +146,7 @@ describe('dons à 75 % : plafond selon la date du don', () => {
 });
 
 // ---------------------------------------------------------------------------
-// #99 : remboursement transport, exonéré jusqu'à 75 % en 2026, 50 % ensuite
+// Remboursement transport, exonéré jusqu'à 75 % en 2026, 50 % ensuite
 // ---------------------------------------------------------------------------
 describe('remboursement transport : régime temporaire', () => {
   const navigo = { active: true, basePrice: 90.8, refundRate: 67.24 };
@@ -193,7 +194,7 @@ describe('remboursement transport : régime temporaire', () => {
 });
 
 // ---------------------------------------------------------------------------
-// #100 : veille fiscale, exemple à jour et pas de baisse de plafond sans source officielle
+// Veille fiscale, exemple à jour et pas de baisse de plafond sans source officielle
 // ---------------------------------------------------------------------------
 describe('veille fiscale : plafonds légaux', () => {
   it('l’exemple du plafond des dons à 75 % est la valeur en vigueur (2 000 €)', () => {
@@ -249,7 +250,7 @@ describe('veille fiscale : plafonds légaux', () => {
 });
 
 // ---------------------------------------------------------------------------
-// #101 : crypto, seuil de 305 € sur le total des ventes de l'année
+// Crypto, seuil de 305 € sur le total des ventes de l'année
 // ---------------------------------------------------------------------------
 describe('crypto : exonération sur le total annuel des ventes', () => {
   const wallet = (movements: AccountMovement[] = []) => acc({ type: AccountType.CRYPTO, totalAmount: 900, ownedAmount: 900, totalDeposits: 300, movements });
@@ -277,7 +278,7 @@ describe('crypto : exonération sur le total annuel des ventes', () => {
     // Plus-value : 2/3 du retrait (200 €), 12,8 % d'impôt.
     expect(after.gainPart).toBeCloseTo(200, 6);
     expect(after.incomeTax).toBeCloseTo(25.6, 6);
-    // Ce retrait ferait passer le total au-delà : rien n'était encore dépassé avant lui.
+    // Ce retrait fait passer le total au-delà : rien n'est encore dépassé avant lui.
     expect(after.cryptoThreshold).toBe('with-this-sale');
     // 205 € déjà vendus + 100 € : 305 € pile, encore exonéré.
     expect(computeWithdrawalTax(wallet(), 100, CFG, asOf, { cryptoDisposalsThisYear: 205 }).incomeTax).toBe(0);
@@ -288,7 +289,8 @@ describe('crypto : exonération sur le total annuel des ventes', () => {
     // 305 € pile déjà vendus : pas encore dépassé, c'est ce retrait qui le fait.
     expect(computeWithdrawalTax(wallet(), 50, CFG, asOf, { cryptoDisposalsThisYear: 305 }).cryptoThreshold).toBe('with-this-sale');
     const alone = computeWithdrawalTax(wallet(), 600, CFG, asOf);
-    expect(alone.incomeTax).toBeGreaterThan(0);
+    // 600 € cédés sur 900 € (300 € versés) : 400 € de plus-value, impôt à 12,8 %.
+    expect(alone.incomeTax).toBeCloseTo(51.2, 6);
     expect(alone.cryptoThreshold).toBeUndefined();
   });
 
@@ -301,7 +303,7 @@ describe('crypto : exonération sur le total annuel des ventes', () => {
 });
 
 // ---------------------------------------------------------------------------
-// #102 : option pour le barème quand la tranche est à 0 ou 11 %
+// Option pour le barème quand la tranche est à 0 ou 11 %
 // ---------------------------------------------------------------------------
 describe('option pour le barème', () => {
   it('tranche à 11 % : 1 000 € de gains coûtent 110 € au lieu de 128 €', () => {
@@ -330,7 +332,7 @@ describe('option pour le barème', () => {
 });
 
 // ---------------------------------------------------------------------------
-// #19 et #98 : argent qui dort et épargne de précaution, une seule règle
+// Argent qui dort et épargne de précaution, une seule règle
 // ---------------------------------------------------------------------------
 describe('argent qui dort : même calcul pour l’Accueil et Rendement', () => {
   const today = new Date(2026, 9, 7);
@@ -355,6 +357,12 @@ describe('argent qui dort : même calcul pour l’Accueil et Rendement', () => {
     expect(idle.placed).toBe(7500);
     expect(describeIdleDestinations(idle)).toBe('le Livret A et un LDDS à ouvrir');
     expect(describeIdleDestinations({ steps: [] })).toBe('');
+  });
+
+  it('un CEL ou un livret bancaire avec de la place ne remplace pas le LDDS à ouvrir (intérêts imposés)', () => {
+    const cel = acc({ id: 'cel', name: 'CEL', type: AccountType.CEL, totalAmount: 1000, ownedAmount: 1000, interestRate: 1 });
+    const idle = computeIdleCash({ accounts: [cc(9000), la(22000), cel], fiscalConfig: CFG, today, monthlySpending: 1000 })!;
+    expect(idle.steps.map(s => [s.accountId, s.fillAmount])).toEqual([['la', 950], [undefined, 6550]]);
   });
 
   it('rien sans dépenses connues, avec un solde ancien, ou sous 300 €', () => {

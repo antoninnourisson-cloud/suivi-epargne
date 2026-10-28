@@ -61,7 +61,7 @@ Grand ménage et remise à plat de tout ce qui entoure le code :
 - ✅ code (octobre 2026) : exports inutilisés retirés (analyse knip), commentaires périmés corrigés (rôles du serveur, veille fiscale), formatage des montants et accès au stockage local regroupés (`src/lib/format.ts`, `src/lib/storage.ts`) ; Paramètres rangés en cartes repliables ;
 - ✅ accessibilité (octobre 2026) : résultat du simulateur annoncé en une phrase après la saisie, raisons des choix indisponibles, date de restitution vidée signalée, jauge « Bons mois » en euros, annonce des nouveaux jalons, boutons de fermeture de 44 px, niveaux de titres, noms de boutons explicites ;
 - ✅ documentation : README, MAINTENANCE, CONTRIBUTING, SECURITY, ROADMAP, worker/README, wiki (octobre 2026) ;
-- règles GitHub : ✅ modèles d'issues et de PR, ✅ Dependabot (dont `edge/`), ✅ permissions minimales des workflows ; à régler dans GitHub : protection de la branche principale, étiquettes ;
+- règles GitHub : ✅ modèles d'issues et de PR, ✅ Dependabot (dont `edge/`), ✅ permissions minimales des workflows, ✅ protection de la branche principale (règle « Protection de main » : ni suppression ni réécriture, contrôle « Types, tests, build » exigé), ✅ étiquettes (dont `panne`) ; ✅ une seule vérification par push et retour arrière depuis l'interface web (Actions → Déploiement → Run workflow, octobre 2026) ;
 - règles de l'app et pages publiques : ✅ confidentialité et présentation (octobre 2026), mentions dans l'app ;
 - ✅ vérification finale (octobre 2026) : lint, typage, tests et couverture, build, tests de bout en bout (deux passages sans échec), audit complet des dépendances (app, serveur, edge : aucune faille ; `sharp`, tiré par wrangler, forcé en 0.35.5 par `overrides` dans `worker/` et `edge/`, à retirer dès que wrangler l'embarque) ; tests rendus plus robustes sur machine lente (délais d'attente, démontage des hooks entre tests).
 - Après la restitution de janvier 2027 : enregistrer la restitution et passer en mode solo ; retirer l'ancienne adresse github.io (`LEGACY_APP_URL` dans `worker/wrangler.toml` et `worker/src/security.ts`, avis de déménagement `src/components/MovedNotice.tsx`, origine dans le client OAuth et la clé du Picker) ; mettre à jour les textes liés aux parents des pages publiques et du wiki (dans l'app, ils suivent les données et passent d'eux-mêmes en solo : lib/parentalMode).
@@ -70,15 +70,19 @@ Grand ménage et remise à plat de tout ce qui entoure le code :
 - ✅ **Lot 1** : données protégées, « Actualiser » fiable, calculs justes, surveillance fiable, déploiements derrière la CI.
 - ✅ **Lot 2** : plusieurs appareils (écran de choix, version écartée mise de côté), hors ligne, déclaration complète, verrou renforcé (« Code oublié » avec délai de 24 h).
 - ✅ **Lot 3** (23 octobre 2026) : `App.tsx` et les données découpés (`src/app`, `src/hooks/portfolio`, état de synchronisation unique) ; session serveur liée à l'appareil, « Appareils connectés », alerte « Code oublié » aux autres appareils, effacement des copies de secours différé de 7 jours et conservation échelonnée ; nouveaux types de compte (livret bancaire, CEL, PEL, compte à terme, compte-titres), performance réelle des placements, fraîcheur des soldes compte par compte, rendement après inflation (INSEE), PER ; « Lire un relevé » (Gemini) ; clôture de l'année ; corrections de calcul (argent qui dort, dons 2025, remboursement transport, quinzaines, crypto 305 €) ; tous les écrans en Material 3 (aucune palette brute, cibles de 48 px, thème Automatique / Clair / Sombre) ; seuils de couverture relevés (toute l'app 81 / 74 / 73 / 85).
-- Reste à faire :
-  - plan de placement automatique : il ne remplit pas encore un livret bancaire ni un CEL (seulement par la répartition personnalisée) ;
-  - performance d'un placement comparée au taux actuel du Livret A, pas à son taux sur la même période ;
+- ✅ **Reliquats** (octobre 2026) : le plan de placement automatique remplit aussi le CEL (plafond légal de 15 300 € ou celui du compte) et les livrets bancaires plafonnés, après les livrets réglementés ; un livret bancaire sans plafond ne reçoit le reste que s'il n'y a ni assurance vie ni PEA ; la répartition personnalisée respecte aussi le plafond du CEL. Performance d'un placement comparée au Livret A sur la même période (taux datés notés sur le Livret A). Tâche « Clôture de l'année » en tête de l'Accueil en janvier-février. `SavingsAccount.movements` obligatoire (migrate() le crée) et protections inutiles retirées. Option au barème (case 2OP) présentée clairement comme une approximation.
+- Reste à faire (plus tard) :
   - aide à la déclaration : pas de ligne pour l'IFU d'un compte-titres (dividendes, plus-values), cases à vérifier sur une source officielle avant de coder ;
-  - plafond PER estimé : seule l'année 2026 est connue (`PER_CEILING_RULES`) ; ajouter 2027 une fois vérifié ;
+  - plafond PER estimé : seule l'année 2026 est connue (`PER_CEILING_RULES`) ; ajouter 2027 et les suivantes une fois vérifiées sur une source officielle ;
   - import d'un relevé en CSV ou OFX (seule la lecture d'un PDF ou d'une capture par Gemini existe) ;
-  - option au barème (case 2OP) : estimation approchée (un seul taux marginal) ;
-  - en janvier, la tâche « Clôture de l'année » de l'Accueil suit l'ordre habituel des tâches et peut passer après des alertes chiffrées ;
-  - technique : `SavingsAccount.movements` encore facultatif (type normalisé à ajouter, puis retirer les `|| []`) ; script principal à 522 kB (avertissement de Vite au-delà de 500 kB) ;
+  - option au barème (case 2OP) : calcul exact par le barème complet (aujourd'hui un seul taux marginal, signalé comme approximation à l'écran) ;
+  - comparaison au Livret A : avant le plus ancien changement de taux noté sur le compte Livret A, Pécule prend ce plus ancien taux ; une table officielle des taux passés rendrait la comparaison exacte sur de longues périodes ;
+  - exploitation (à faire plus tard, une chose à la fois, sur une branche) :
+    - **Node 24** avant mars 2027 (`.nvmrc` et `engines` de l'app, de `worker/` et d'`edge/`) : Node 22 n'est plus maintenu après le 30 avril 2027 ; évaluer Node 26 en 2027 une fois wrangler et Playwright validés ;
+    - **Vite 8** avec `@vitejs/plugin-react` 6 et `vite-plugin-pwa` 2 (les trois sont liés), puis ESLint 10 ; Vite 6.4 ne reçoit plus que des correctifs de sécurité. Vérifier avec les tests de bout en bout et le test du build publié. Laisser ensuite Dependabot proposer les majeures sans risque (`@types/*`, `globals`) ;
+    - `compatibility_date` des deux Workers (2025-06-01) à monter ;
+    - API du serveur sur un sous-domaine de `pecule-app.com` (au lieu de workers.dev), avec une règle gratuite de limitation de débit de Cloudflare appliquée **avant** le Worker : aujourd'hui, une seule adresse insistante peut épuiser le quota quotidien du compte (MAINTENANCE.md § 6). Demande de changer `VITE_BACKEND_URL`, l'URI de redirection Google et `APP_URL`/CORS ;
+    - `/status` : exposer une catégorie d'erreur non personnelle (lecture Drive, envoi de notification, jeton) et un court historique des derniers passages du cron, recopiés dans l'issue `panne` : les journaux Cloudflare ne sont gardés que 3 jours ;
   - risques résiduels connus de la sécurité : voir [SECURITY.md](SECURITY.md) (*Limites connues*).
 
 ### Abandonné
@@ -87,13 +91,13 @@ Grand ménage et remise à plat de tout ce qui entoure le code :
 
 ### En continu
 - Architecture : montants en centimes, store et moteur de synchronisation, paquet `domain/` partagé avec le serveur.
-- Maintenance : versions majeures (Vite 8, Node 24), TypeScript 7 dès que typescript-eslint le prend en charge.
+- Maintenance : versions majeures (voir *exploitation* ci-dessus et le calendrier de MAINTENANCE.md § 4), TypeScript 7 dès que typescript-eslint le prend en charge.
 - Pistes : « Demander à Pécule » (assistant).
 
 ## Notes techniques à ne pas perdre
 
 - **Google Picker avec `drive.file`** : le Picker doit recevoir `.setAppId()` (le préfixe numérique du `CLIENT_ID`). Sans ça, le fichier semble sélectionnable, mais l'accès n'est jamais accordé : la lecture renvoie un 404 silencieux.
-- **Modèles Gemini** : Google les déprécie régulièrement. Le modèle principal et les modèles de repli sont des constantes en tête de `src/services/geminiService.ts`. Un modèle retiré (404) est sauté automatiquement.
+- **Modèles Gemini** : Google les déprécie régulièrement. Le modèle principal est `DEFAULT_GEMINI_MODEL` (`src/services/geminiModel.ts`), les modèles de repli sont en tête de `src/services/geminiService.ts`. Un modèle retiré (404) est sauté automatiquement.
 - **Onglets PWA restés ouverts** : un onglet qui exécute une ancienne version peut effacer des champs récents du fichier Drive. L'app se recharge donc dès qu'un nouveau service worker prend le contrôle de la page (`src/index.tsx`).
 - **Session du serveur** : l'écran de consentement OAuth doit rester « En production ». En mode test, Google fait expirer les refresh tokens au bout de 7 jours.
 - **Mouvements `kind`** : `valuation` (variation de valeur), `parental` (part des parents), `adjustment` (correction, pas de l'épargne). Seuls les mouvements sans `kind`, hors solde initial et après `config.trackingStartDate`, comptent comme épargne (`isSavingsFlow` dans `src/lib/finance/savings.ts`). Tout changement de solde passe par `src/lib/accountOps.ts`.

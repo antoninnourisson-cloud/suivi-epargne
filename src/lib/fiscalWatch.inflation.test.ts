@@ -1,7 +1,8 @@
 // Veille fiscale : l'inflation annuelle de l'INSEE est une valeur datée que la veille propose
 // de mettre à jour (jamais appliquée sans clic), comme les taux et les plafonds.
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { diffFiscalWatch, FISCAL_WATCH_PROMPT, buildSourcesPrompt } from './fiscalWatch';
+import { diffFiscalWatch } from './fiscalWatch';
+import { FISCAL_WATCH_PROMPT, buildSourcesPrompt } from '../services/fiscalWatchGemini';
 import { DEFAULT_FISCAL_CONFIG } from '../constants';
 import { inflationOf } from './inflation';
 

@@ -46,10 +46,14 @@ export const applyTaxScale = (cfg: FiscalConfig, scale: TaxScale, asOfDate: Date
 });
 
 /**
- * Mise à niveau des paramètres fiscaux d'un ancien fichier : champs ajoutés depuis, et
- * prélèvements sociaux 2026 (17,2 % → 18,6 %, l'assurance vie restant à 17,2 %). Ne touche
- * à une valeur que si elle vaut exactement l'ancienne valeur légale, jamais à un réglage
- * personnalisé.
+ * Mise à niveau des paramètres fiscaux d'un ancien fichier : seuls les champs ABSENTS sont
+ * complétés. Une valeur présente n'est jamais réécrite, même égale au chiffre légal d'une
+ * année passée (elle peut être voulue, pour une simulation par exemple) : la veille fiscale
+ * propose le nouveau chiffre avec sa source et le rappel de janvier fait vérifier les
+ * paramètres, l'utilisateur valide.
+ * Seule exception, marquée par l'absence de `socialChargesLifeInsurance` (fichier antérieur
+ * aux prélèvements sociaux 2026) : 17,2 % devient 18,6 %, l'assurance vie restant à 17,2 %.
+ * Le champ ajouté au passage fait que cette mise à niveau ne joue qu'une fois.
  */
 export const migrateFiscalConfig = (cfg: FiscalConfig): FiscalConfig => {
   const out: FiscalConfig = { ...cfg };
@@ -59,10 +63,9 @@ export const migrateFiscalConfig = (cfg: FiscalConfig): FiscalConfig => {
   }
   if (!out.decote) out.decote = { ...DEFAULT_DECOTE };
   if (out.standardAllowanceMin === undefined) out.standardAllowanceMin = DEFAULT_STANDARD_ALLOWANCE_MIN;
-  if (out.standardAllowanceCap === undefined || out.standardAllowanceCap === 14171 || out.standardAllowanceCap === 14426) out.standardAllowanceCap = DEFAULT_STANDARD_ALLOWANCE_CAP;
-  if (out.lepIncomeCeiling === 22419 || out.lepIncomeCeiling === 22823) out.lepIncomeCeiling = DEFAULT_FISCAL_CONFIG.lepIncomeCeiling;
+  if (out.standardAllowanceCap === undefined) out.standardAllowanceCap = DEFAULT_STANDARD_ALLOWANCE_CAP;
   if (out.lepCeilingPerHalfPart === undefined) out.lepCeilingPerHalfPart = DEFAULT_FISCAL_CONFIG.lepCeilingPerHalfPart;
-  if (out.donation75Ceiling === undefined || out.donation75Ceiling === 1000) out.donation75Ceiling = DEFAULT_FISCAL_CONFIG.donation75Ceiling;
+  if (out.donation75Ceiling === undefined) out.donation75Ceiling = DEFAULT_FISCAL_CONFIG.donation75Ceiling;
   return out;
 };
 
@@ -72,7 +75,7 @@ export const migrateFiscalConfig = (cfg: FiscalConfig): FiscalConfig => {
 
 const cleanLabel = (s: string | undefined) => (s || '').trim().replace(/\s+/g, ' ');
 
-/** Noms et établissements sans espaces superflus (« BPVF » et « BPVF  » faisaient deux banques). */
+/** Noms et établissements sans espaces superflus (« BPVF » et « BPVF  » feraient deux banques). */
 export const normalizeAccounts = <T extends { name: string; institution: string; movements?: AccountMovement[] }>(accounts: T[]): T[] =>
   accounts.map(a => ({ ...a, name: cleanLabel(a.name), institution: cleanLabel(a.institution), movements: a.movements || [] }));
 

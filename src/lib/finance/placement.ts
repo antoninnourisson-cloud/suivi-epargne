@@ -54,6 +54,22 @@ const formatEUR2 = (n: number) => formatEUR(n, 0);
 /** Comptes qui peuvent recevoir automatiquement le surplus une fois les livrets pleins. */
 const SURPLUS_TYPES: readonly AccountType[] = [AccountType.ASSURANCE_VIE, AccountType.PEA];
 
+/**
+ * Plafonds légaux des versements de l'épargne logement (les intérêts peuvent les dépasser).
+ * Vérifiés le 2026-10-21 : PEL 61 200 € (https://www.service-public.gouv.fr/particuliers/vosdroits/F16140),
+ * CEL 15 300 € (https://www.service-public.gouv.fr/particuliers/vosdroits/F16136).
+ */
+export const PEL_DEPOSIT_CEILING = 61_200;
+export const CEL_DEPOSIT_CEILING = 15_300;
+
+/**
+ * Épargne disponible mais imposée, remplie après les livrets réglementés et jusqu'à son
+ * plafond : CEL (plafond du compte, sinon le plafond légal) et livret bancaire (plafond du
+ * compte). Un livret bancaire sans plafond ne reçoit le reste que s'il n'y a ni Assurance
+ * Vie ni PEA.
+ */
+const AVAILABLE_TAXED_TYPES: readonly AccountType[] = [AccountType.CEL, AccountType.LIVRET_BANCAIRE];
+
 export interface PlacementStep {
   accountId?: string;     // absent pour la suggestion « Ouvrir un PEA/AV »
   accountName: string;
@@ -69,12 +85,7 @@ export interface PlacementStep {
   hint?: string;
 }
 
-/**
- * Répartit `totalToInvest` : livrets réglementés d'abord (meilleur taux, puis LEP > Livret A
- * > LDDS) jusqu'à leur plafond, le reste sur l'Assurance Vie ou le PEA au meilleur taux
- * (jamais un PEE/PER bloqué ni de la crypto, sauf répartition personnalisée), sinon il
- * reste sur le compte courant avec la suggestion d'ouvrir un PEA/AV.
- */
+/** Répartition personnalisée : part (en %) de chaque compte. */
 export type SavingsSplit = { accountId: string; pct: number }[];
 
 /** Répartition personnalisée en vigueur à cette date, sinon `undefined` (plan automatique). */
@@ -94,8 +105,8 @@ export const activeSavingsSplit = (
  * compte de la répartition sans plafond, sinon il suit le plan automatique.
  */
 const splitPlacement = (totalToInvest: number, accounts: SavingsAccount[], fiscalConfig: FiscalConfig, split: SavingsSplit): PlacementStep[] | null => {
-  // Un même compte présent sur deux lignes : parts additionnées (sinon la seconde écrasait
-  // la première et le plafond était vérifié deux fois sur le même solde).
+  // Un même compte présent sur deux lignes : parts additionnées (sinon la seconde écraserait
+  // la première et le plafond serait vérifié deux fois sur le même solde).
   const merged = new Map<string, number>();
   for (const row of split) if (row.pct > 0 && accounts.some(a => a.id === row.accountId)) merged.set(row.accountId, (merged.get(row.accountId) || 0) + row.pct);
   const valid = [...merged.entries()].map(([accountId, pct]) => ({ accountId, pct }));
@@ -103,6 +114,7 @@ const splitPlacement = (totalToInvest: number, accounts: SavingsAccount[], fisca
   if (sum <= 0) return null;
   const ceilings: Partial<Record<AccountType, number>> = {
     [AccountType.LEP]: fiscalConfig.ceilings.lep, [AccountType.LIVRET_A]: fiscalConfig.ceilings.livretA, [AccountType.LDDS]: fiscalConfig.ceilings.ldds,
+    [AccountType.CEL]: CEL_DEPOSIT_CEILING,
   };
   const ceilingOf = (a: SavingsAccount) => (a.ceiling && a.ceiling > 0 ? a.ceiling : ceilings[a.type] || 0);
   const byId = new Map<string, PlacementStep>();
@@ -140,6 +152,13 @@ const splitPlacement = (totalToInvest: number, accounts: SavingsAccount[], fisca
   return steps();
 };
 
+/**
+ * Répartit `totalToInvest` : livrets réglementés d'abord (meilleur taux, puis LEP > Livret A
+ * > LDDS) jusqu'à leur plafond, puis le CEL et les livrets bancaires plafonnés (disponibles
+ * mais imposés), le reste sur l'Assurance Vie ou le PEA au meilleur taux (jamais un PEE/PER
+ * bloqué ni de la crypto, sauf répartition personnalisée), sinon sur un livret bancaire sans
+ * plafond, sinon il reste sur le compte courant avec la suggestion d'ouvrir un PEA/AV.
+ */
 export const computePlacementStrategy = (
   totalToInvest: number,
   accounts: SavingsAccount[],
@@ -154,13 +173,17 @@ export const computePlacementStrategy = (
   const steps: PlacementStep[] = [];
   const liquidTypes = [AccountType.LEP, AccountType.LIVRET_A, AccountType.LDDS];
   const userLiquidAccounts = accounts.filter(a => liquidTypes.includes(a.type));
+  const availableAccounts = accounts.filter(a => AVAILABLE_TAXED_TYPES.includes(a.type));
   // Débordement automatique : seulement les enveloppes disponibles (Assurance Vie, PEA).
   // PEE et PER (bloqués), crypto (volatile), immobilier et « Autre » ne reçoivent de
   // l'argent que si la répartition personnalisée les cite.
   const userOtherAccounts = accounts.filter(a => SURPLUS_TYPES.includes(a.type));
-  const skipped = accounts.filter(a => !liquidTypes.includes(a.type) && !SURPLUS_TYPES.includes(a.type) && a.type !== AccountType.COMPTE_COURANT);
+  const skipped = accounts.filter(a => !liquidTypes.includes(a.type) && !SURPLUS_TYPES.includes(a.type)
+    && !AVAILABLE_TAXED_TYPES.includes(a.type) && a.type !== AccountType.COMPTE_COURANT);
 
-  const priority: Partial<Record<AccountType, number>> = { [AccountType.LEP]: 3, [AccountType.LIVRET_A]: 2, [AccountType.LDDS]: 1 };
+  const priority: Partial<Record<AccountType, number>> = {
+    [AccountType.LEP]: 3, [AccountType.LIVRET_A]: 2, [AccountType.LDDS]: 1, [AccountType.CEL]: 1,
+  };
   const sortAccounts = (a: SavingsAccount, b: SavingsAccount) => {
     const rateA = a.interestRate || 0;
     const rateB = b.interestRate || 0;
@@ -168,45 +191,57 @@ export const computePlacementStrategy = (
     return (priority[b.type] || 0) - (priority[a.type] || 0);
   };
   userLiquidAccounts.sort(sortAccounts);
+  availableAccounts.sort(sortAccounts);
   userOtherAccounts.sort(sortAccounts);
 
   // Plafond du compte s'il est renseigné, sinon celui de la config (même règle que
-  // le remplissage des livrets et les alertes du Dashboard).
+  // le remplissage des livrets et les alertes du Dashboard), ou le plafond légal du CEL.
   const defaults: Partial<Record<AccountType, number>> = {
     [AccountType.LEP]: fiscalConfig.ceilings.lep,
     [AccountType.LIVRET_A]: fiscalConfig.ceilings.livretA,
     [AccountType.LDDS]: fiscalConfig.ceilings.ldds,
+    [AccountType.CEL]: CEL_DEPOSIT_CEILING,
   };
-  for (const acc of userLiquidAccounts) {
-    if (remainingMoney <= 0) break;
-    const ceiling = (acc.ceiling && acc.ceiling > 0) ? acc.ceiling : (defaults[acc.type] || 0);
-    const availableSpace = Math.max(0, ceiling - acc.totalAmount);
-    if (availableSpace > 0) {
-      const amountAllocated = Math.min(remainingMoney, availableSpace);
-      steps.push({ accountId: acc.id, accountName: acc.name, type: acc.type, rate: acc.interestRate, fillAmount: amountAllocated, isFullAfter: amountAllocated >= availableSpace, isLiquid: true });
-      remainingMoney -= amountAllocated;
+  const ceilingOf = (acc: SavingsAccount) => ((acc.ceiling && acc.ceiling > 0) ? acc.ceiling : (defaults[acc.type] || 0));
+  const fillUpToCeiling = (list: SavingsAccount[]) => {
+    for (const acc of list) {
+      if (remainingMoney <= 0) break;
+      const availableSpace = Math.max(0, ceilingOf(acc) - acc.totalAmount);
+      if (availableSpace > 0) {
+        const amountAllocated = Math.min(remainingMoney, availableSpace);
+        steps.push({ accountId: acc.id, accountName: acc.name, type: acc.type, rate: acc.interestRate, fillAmount: amountAllocated, isFullAfter: amountAllocated >= availableSpace, isLiquid: true });
+        remainingMoney -= amountAllocated;
+      }
     }
-  }
+  };
+  fillUpToCeiling(userLiquidAccounts);
+
+  const cappedAvailable = availableAccounts.filter(a => ceilingOf(a) > a.totalAmount);
+  // Le reste : Assurance Vie ou PEA, sinon un livret bancaire sans plafond.
+  const lastResort: SavingsAccount | undefined = userOtherAccounts[0] ?? availableAccounts.find(a => ceilingOf(a) === 0);
 
   // Livrets existants pleins et pas de LDDS : en ouvrir un garderait le surplus disponible
   // à tout moment, sans impôt (12 000 €, même taux que le Livret A).
+  let ldds: PlacementStep | undefined;
   if (remainingMoney > 0 && !accounts.some(a => a.type === AccountType.LDDS)) {
     const livretA = accounts.find(a => a.type === AccountType.LIVRET_A);
-    const fill = Math.min(remainingMoney, fiscalConfig.ceilings.ldds);
-    steps.push({
-      accountName: 'Ouvrir un LDDS', type: AccountType.LDDS, rate: livretA?.interestRate, fillAmount: fill,
-      isFullAfter: false, isLiquid: true, alert: true, infoOnly: userOtherAccounts.length > 0,
-      hint: userOtherAccounts.length > 0
-        ? `Vos livrets sont pleins : un LDDS (même taux que le Livret A, disponible à tout moment, sans impôt) accueillerait ${formatEUR2(fill)} sans les bloquer. En attendant, ce surplus va sur ${userOtherAccounts[0].name}.`
-        : `Vos livrets sont pleins : ouvrez un LDDS (même taux que le Livret A, disponible à tout moment, sans impôt) pour y placer ${formatEUR2(fill)}.`,
-    });
-    if (userOtherAccounts.length === 0) remainingMoney -= fill;
+    const amount = Math.min(remainingMoney, fiscalConfig.ceilings.ldds);
+    const hasDestination = cappedAvailable.length > 0 || lastResort !== undefined;
+    ldds = {
+      accountName: 'Ouvrir un LDDS', type: AccountType.LDDS, rate: livretA?.interestRate, fillAmount: amount,
+      isFullAfter: false, isLiquid: true, alert: true, infoOnly: hasDestination,
+      hint: `Vos livrets sont pleins : ouvrez un LDDS (même taux que le Livret A, disponible à tout moment, sans impôt) pour y placer ${formatEUR2(amount)}.`,
+    };
+    steps.push(ldds);
+    if (!hasDestination) remainingMoney -= amount;
   }
 
+  // Ensuite le CEL et les livrets bancaires plafonnés, jusqu'à leur plafond.
+  fillUpToCeiling(cappedAvailable);
+
   if (remainingMoney > 0) {
-    if (userOtherAccounts.length > 0) {
-      const o = userOtherAccounts[0];
-      steps.push({ accountId: o.id, accountName: o.name, type: o.type, rate: o.interestRate, fillAmount: remainingMoney, isFullAfter: false, isLiquid: false });
+    if (lastResort) {
+      steps.push({ accountId: lastResort.id, accountName: lastResort.name, type: lastResort.type, rate: lastResort.interestRate, fillAmount: remainingMoney, isFullAfter: false, isLiquid: AVAILABLE_TAXED_TYPES.includes(lastResort.type) });
     } else {
       // Rien de disponible : l'argent reste sur le compte courant (suggestion sans compte
       // réel derrière, donc aucun virement à cocher).
@@ -216,6 +251,13 @@ export const computePlacementStrategy = (
       steps.push({ accountName: 'Ouvrir un PEA/AV', type: AccountType.AUTRE, rate: 0, fillAmount: remainingMoney, isFullAfter: false, isLiquid: false, alert: true,
         hint: `${formatEUR2(remainingMoney)} de plus que vos livrets ne peuvent accueillir : en attendant, ils restent sur votre compte courant. Ouvrez un PEA ou une Assurance Vie.${why}` });
     }
+  }
+
+  // LDDS seulement conseillé : dire où va l'argent en attendant (comptes remplis après lui).
+  if (ldds?.infoOnly) {
+    const names = steps.slice(steps.indexOf(ldds) + 1).filter(st => st.accountId).map(st => st.accountName);
+    const where = names.length <= 1 ? names.join('') : `${names.slice(0, -1).join(', ')} et ${names[names.length - 1]}`;
+    ldds.hint = `Vos livrets sont pleins : un LDDS (même taux que le Livret A, disponible à tout moment, sans impôt) accueillerait ${formatEUR2(ldds.fillAmount)} sans les bloquer. En attendant, ce surplus va sur ${where}.`;
   }
   return steps;
 };

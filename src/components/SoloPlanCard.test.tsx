@@ -10,8 +10,8 @@ import { AccountType, type SavingsAccount } from '../types';
 afterEach(cleanup);
 
 const accounts: SavingsAccount[] = [
-  { id: 'la', name: 'Livret A', type: AccountType.LIVRET_A, institution: 'B', ownedAmount: 10000, parentalCapital: 9000, totalAmount: 19000, interestRate: 0 },
-  { id: 'av', name: 'AV', type: AccountType.ASSURANCE_VIE, institution: 'B', ownedAmount: 0, parentalCapital: 0, totalAmount: 0, interestRate: 0 },
+  { id: 'la', name: 'Livret A', type: AccountType.LIVRET_A, institution: 'B', ownedAmount: 10000, parentalCapital: 9000, totalAmount: 19000, interestRate: 0, movements: [] },
+  { id: 'av', name: 'AV', type: AccountType.ASSURANCE_VIE, institution: 'B', ownedAmount: 0, parentalCapital: 0, totalAmount: 0, interestRate: 0, movements: [] },
 ];
 
 describe('SoloPlanCard', () => {
@@ -31,7 +31,7 @@ describe('SoloPlanCard', () => {
   });
 
   it('placement sans taux saisi : même hypothèse de rendement qu’au Rendement, et elle est dite', () => {
-    const pea: SavingsAccount = { id: 'pea', name: 'PEA', type: AccountType.PEA, institution: 'B', ownedAmount: 10000, parentalCapital: 0, totalAmount: 10000, interestRate: 0 };
+    const pea: SavingsAccount = { id: 'pea', name: 'PEA', type: AccountType.PEA, institution: 'B', ownedAmount: 10000, parentalCapital: 0, totalAmount: 10000, interestRate: 0, movements: [] };
     const hypotheses = { rates: { pea: 5 }, assumptions: [{ id: 'pea', name: 'PEA', rate: 5, source: 'observed' as const, since: '2023-01-01' }] };
     render(<SoloPlanCard accounts={[pea]} hypotheses={hypotheses} fiscalConfig={DEFAULT_FISCAL_CONFIG} monthPlan={0} restitutionISO="2027-01-01" />);
     expect(screen.getByRole('note').textContent).toMatch(/PEA : \+5\s% par an, la performance observée depuis janvier 2023/);

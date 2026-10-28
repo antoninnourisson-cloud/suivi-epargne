@@ -28,7 +28,8 @@ export const useDerivedData = (doc: AppDoc, fullData: AppDoc) => {
   // capacité et la somme en plus saisies pour cette paie (lib/payAdjustment).
   const monthGoal = useMemo(() => computeMonthTarget(fullData).total, [fullData]);
   const monthlyPay = useMemo(() => computeMonthlyPay(fullData), [fullData]);
-  const agendaNext = useMemo(() => buildAgenda(fullData).events.slice(0, 3), [fullData]);
+  // Événements à venir ; l'Accueil n'en montre que les premiers (homeAgenda, lib/home).
+  const agendaNext = useMemo(() => buildAgenda(fullData).events, [fullData]);
   const lepTimeline = useMemo(() => lepTimelineFromData(fullData), [fullData]);
   // Saison de la déclaration de revenus (avril à début juin) : rappel dans « À faire ».
   const taxReturnAlert = useMemo(() => buildTaxReturnAlert(fullData), [fullData]);

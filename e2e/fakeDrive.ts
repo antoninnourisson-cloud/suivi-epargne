@@ -18,7 +18,7 @@ const CORS = {
 };
 
 type Data = typeof DEMO_DATA;
-export const copyOf = <T,>(x: T): T => JSON.parse(JSON.stringify(x)) as T;
+const copyOf = <T,>(x: T): T => JSON.parse(JSON.stringify(x)) as T;
 /** Données de démonstration avec le LDDS à `amount` €. */
 export const withLdds = (amount: number, base: Data = DEMO_DATA): Data => {
   const d = copyOf(base);

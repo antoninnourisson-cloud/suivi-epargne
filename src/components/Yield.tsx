@@ -18,7 +18,7 @@ import { round2 } from '../lib/money';
 import { csvAmount } from '../lib/csv';
 import { downloadCsv } from '../services/fileDownload';
 import { inflationOf, isInflationOutdated, realRate } from '../lib/inflation';
-import { accountPerformance, withAssumedRates, type ProjectionHypotheses } from '../lib/performance';
+import { accountPerformance, livretAOverPeriod, withAssumedRates, type ProjectionHypotheses } from '../lib/performance';
 import { ProjectionAssumptionsNote } from './ProjectionAssumptionsNote';
 import { computePerAdvantage, marginalTaxRate } from '../lib/retirement';
 import { CURRENT_ACCOUNT_FRESH_DAYS, balanceFreshness, describeCheckAge, isRecentlyChecked } from '../lib/freshness';
@@ -136,11 +136,14 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig, monthPlan,
     [accounts, fiscalConfig, monthlySpending, lepEligible]);
 
   // --- PERFORMANCE DES PLACEMENTS (valeur, versements, gain, rendement annuel mesuré) ---
-  const livretARate = accounts.find(a => a.type === AccountType.LIVRET_A)?.interestRate;
+  // Comparaison au Livret A sur la même période que chaque mesure (taux datés du Livret A).
   const performance = useMemo(() =>
     accounts
       .filter(a => tracksDeposits(a.type) && a.totalAmount > 0)
-      .map(a => ({ account: a, perf: accountPerformance(a) })),
+      .map(a => {
+        const perf = accountPerformance(a);
+        return { account: a, perf, livretA: perf ? livretAOverPeriod(perf, accounts) : null };
+      }),
     [accounts]);
   type PerfRow = (typeof performance)[number];
 
@@ -262,12 +265,12 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig, monthPlan,
     },
     {
       // Téléphone : « depuis … » passe à la ligne entre les mots, le taux reste d'un bloc.
-      key: 'perf', header: 'Rendement', numeric: true, className: 'max-sm:whitespace-normal', cell: ({ perf }) =>
+      key: 'perf', header: 'Rendement', numeric: true, className: 'max-sm:whitespace-normal', cell: ({ perf, livretA }) =>
         !perf || !perf.measured || perf.periodReturn === null
           ? <span className="text-xs text-on-surface-variant whitespace-nowrap">à mesurer</span>
           : perf.annualized !== null
-            ? <><span className="block font-medium"><span className="whitespace-nowrap">{signedPct(perf.annualized * 100)}</span> <span className="whitespace-nowrap">/ an</span></span><span className="block text-xs text-on-surface-variant">depuis {monthYear(perf.since)}</span></>
-            : <><span className="block font-medium whitespace-nowrap">{signedPct(perf.periodReturn * 100)}</span><span className="block text-xs text-on-surface-variant">depuis {monthYear(perf.since)}, moins d'un an</span></>,
+            ? <><span className="block font-medium"><span className="whitespace-nowrap">{signedPct(perf.annualized * 100)}</span> <span className="whitespace-nowrap">/ an</span></span><span className="block text-xs text-on-surface-variant">depuis {monthYear(perf.since)}</span>{livretA && <span className="block text-xs text-on-surface-variant">Livret A : {formatRate(round2(livretA.annualRate))} / an</span>}</>
+            : <><span className="block font-medium whitespace-nowrap">{signedPct(perf.periodReturn * 100)}</span><span className="block text-xs text-on-surface-variant">depuis {monthYear(perf.since)}, moins d'un an</span>{livretA && <span className="block text-xs text-on-surface-variant">Livret A : {signedPct(livretA.periodReturn * 100)}</span>}</>,
     },
   ];
 
@@ -387,7 +390,7 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig, monthPlan,
             <Info className="w-3.5 h-3.5 shrink-0 mt-px" aria-hidden="true" />
             <span>
               Rendement : gain annuel moyen tenant compte de la date de chaque versement et retrait (taux de rendement interne), mesuré depuis le premier mouvement noté dans Pécule, avant impôt. Il se mesure dès qu'une valeur est actualisée ; il n'est annualisé qu'après un an.
-              {livretARate !== undefined && livretARate > 0 && ` À comparer au Livret A : ${formatRate(livretARate)} aujourd'hui, sans impôt.`}
+              {performance.some(r => r.livretA) && " Sous chaque rendement : ce qu'aurait rapporté le Livret A sur la même période, sans impôt, d'après les taux notés sur votre Livret A."}
             </span>
           </p>
         </Card>
@@ -467,6 +470,7 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig, monthPlan,
                   Votre tranche d'impôt est estimée à {pct1(progressiveOption.marginalRate)}, sous le taux forfaitaire de 12,8 %.
                   {progressiveOption.securities && <> Imposés au barème (case 2OP de la déclaration), ces gains coûteraient environ <b className="font-medium">{fmt(progressiveOption.securities.progressive)}</b> d'impôt sur le revenu au lieu de {fmt(progressiveOption.securities.flat)}. Ce choix vaut pour tous vos revenus de placement de l'année (intérêts, dividendes, plus-values) : comparez les deux calculs au moment de déclarer.</>}
                   {progressiveOption.crypto && <> Plus-values de crypto : leur option pour le barème est distincte (case 3CN), environ {fmt(progressiveOption.crypto.progressive)} au lieu de {fmt(progressiveOption.crypto.flat)}.</>}
+                  {' '}Ce n'est qu'une approximation : Pécule applique une seule tranche à tous ces gains. S'ils font passer une partie de vos revenus dans la tranche suivante, l'impôt réel sera plus élevé ; le simulateur officiel des impôts donne le montant exact.
                 </span>
               </p>
             )}

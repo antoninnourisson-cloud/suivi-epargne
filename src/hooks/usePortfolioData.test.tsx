@@ -1258,7 +1258,7 @@ describe('démarrage rapide et hors ligne', () => {
   });
 
   // La quarantaine n'a qu'une place : ce qui doit la céder part d'abord dans « Versions mises
-  // de côté » (lot 2, filet anti-perte). Ouverture hors ligne avec une copie déjà en quarantaine.
+  // de côté » (filet anti-perte). Ouverture hors ligne avec une copie déjà en quarantaine.
   const reopenOfflineWithPending = async (pending: { fileId: string; budget: number }) => {
     await load();
     await waitFor(() => expect(localStorage.getItem(OFFLINE)).not.toBeNull());
@@ -1328,7 +1328,7 @@ describe('démarrage rapide et hors ligne', () => {
   });
 });
 
-// Filets anti-perte restants (audit #133) : quarantaine relue au démarrage, fichier encore
+// Autres filets anti-perte : quarantaine relue au démarrage, fichier encore
 // listé après un 404, session perdue ou réseau coupé pendant une écriture, autre onglet
 // pendant une écriture, déconnexion.
 describe('filets anti-perte', () => {

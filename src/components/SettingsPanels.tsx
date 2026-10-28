@@ -20,7 +20,7 @@ import {
   isBackendEnabled, listPushDevices, removePushDevice, logoutAllDevices, deleteServerAccount, getServerHealth,
   PushDevice, ServerHealth,
 } from '../services/backendService';
-import { DEFAULT_GEMINI_MODEL, getGeminiModelOverride, setGeminiModelOverride } from '../services/geminiService';
+import { DEFAULT_GEMINI_MODEL, getGeminiModelOverride, setGeminiModelOverride } from '../services/geminiModel';
 import { useToast } from './Toast';
 import { CardSubheading, Hint, Notice, useCardSummary } from './settings/SettingsCard';
 import { SwitchRow } from './settings/fields';

@@ -8,10 +8,10 @@
 // build) est donc aussi demandé : il doit répondre 200 avec un type JavaScript. Un build
 // publié à moitié, un fichier manquant ou une page d'erreur servie à sa place sont signalés.
 
-export const SITE_PAGES = ['', 'presentation.html', 'confidentialite.html'] as const;
+const SITE_PAGES = ['', 'presentation.html', 'confidentialite.html'] as const;
 export const SITE_CHECK_KEY = 'health:site';
 /** Résultat réutilisé pendant 15 min : `/status` est public, il ne doit pas servir de relais. */
-export const SITE_CHECK_TTL_MS = 15 * 60 * 1000;
+const SITE_CHECK_TTL_MS = 15 * 60 * 1000;
 
 export interface SiteCheck {
   checkedAt: string;

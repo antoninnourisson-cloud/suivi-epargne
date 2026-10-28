@@ -17,10 +17,9 @@ import { Button, TextField } from './ui';
 interface Props {
   accounts: SavingsAccount[];
   onApply: (update: (prev: SavingsAccount[]) => SavingsAccount[]) => void;
-  onDone?: () => void;
 }
 
-export const RegulatedRatesEditor: React.FC<Props> = ({ accounts, onApply, onDone }) => {
+export const RegulatedRatesEditor: React.FC<Props> = ({ accounts, onApply }) => {
   const groups = useMemo(() => REGULATED_RATE_GROUPS
     .map(g => ({ ...g, accounts: accounts.filter(a => g.types.includes(a.type)) }))
     .filter(g => g.accounts.length > 0), [accounts]);
@@ -44,7 +43,6 @@ export const RegulatedRatesEditor: React.FC<Props> = ({ accounts, onApply, onDon
     const ids = new Set(g.accounts.map(a => a.id));
     onApply(prev => prev.map(a => (ids.has(a.id) ? applyRateChange(a, rate, d.date) : a)));
     setSaved(key);
-    onDone?.();
   };
 
   return (

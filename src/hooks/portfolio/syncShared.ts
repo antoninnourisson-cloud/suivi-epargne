@@ -16,8 +16,8 @@ const canonicalCache = new WeakMap<object, string>();
 
 /**
  * `canonicalize` d'un état du DOCUMENT (état React, jamais modifié en place), calculée une
- * seule fois par version : la comparaison à Drive était refaite 3 à 4 fois par saisie
- * (sauvegarde auto, miroir, écriture, fin d'écriture), avec un tri récursif des clés.
+ * seule fois par version : sans ce cache, la comparaison à Drive serait refaite 3 à 4 fois
+ * par saisie (sauvegarde auto, miroir, écriture, fin d'écriture), avec un tri récursif des clés.
  * Égale à `canonicalize(currentData())` : la vue affichée, la signature d'écriture et la clé
  * Gemini ne comptent pas dans la forme canonique.
  */

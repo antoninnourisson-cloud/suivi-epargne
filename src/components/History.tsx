@@ -92,7 +92,7 @@ export const History: React.FC<HistoryProps> = ({ history, expensesHistory, revi
     sorted.forEach((s, i) => {
       const prev = i > 0 ? sorted[i - 1] : null;
       // Écart réel en mois avec le point précédent : un trou dans la série (app non
-      // ouverte pendant un trimestre) était présenté comme la variation d'UN mois.
+      // ouverte pendant un trimestre) n'est pas la variation d'UN mois.
       const monthsGap = prev
         ? Math.max(1, Math.round((parseISODate(s.date).getTime() - parseISODate(prev.date).getTime()) / (1000 * 3600 * 24 * 30.4375)))
         : 1;

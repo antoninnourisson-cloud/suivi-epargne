@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { xirr, accountPerformance, assumedAnnualRate, withAssumedRates, isMarketAccount, OBSERVED_RATE_CAP, OBSERVED_RATE_FLOOR, OBSERVED_RATE_MIN_YEARS } from './performance';
+import { averageRateBetween } from './finance';
+import { xirr, accountPerformance, livretAOverPeriod, assumedAnnualRate, withAssumedRates, isMarketAccount, OBSERVED_RATE_CAP, OBSERVED_RATE_FLOOR, OBSERVED_RATE_MIN_YEARS } from './performance';
 import { AccountMovement, AccountType, SavingsAccount } from '../types';
 
 const NOW = new Date(2026, 9, 21);
@@ -169,5 +170,41 @@ describe('hypothèse de rendement', () => {
     expect(rates.a).toBeGreaterThan(4.5);
     expect(input[0].interestRate).toBeUndefined();
     expect(assumptions.map(a => [a.name, a.source])).toEqual([['PEA', 'observed'], ['Crypto', 'missing']]);
+  });
+});
+
+describe('Livret A sur la même période', () => {
+  // Convention : une entrée datée du jour J porte l'ANCIEN taux, valable jusqu'à J.
+  const livretA = acc({ id: 'la', name: 'Livret A', type: AccountType.LIVRET_A, interestRate: 1.7, rateHistory: [
+    { date: '2025-02-01', rate: 3 }, { date: '2025-08-01', rate: 2.4 },
+  ] });
+
+  it('moyenne des taux datés, pondérée par les jours', () => {
+    // 2025-01-01 → 2026-01-01 : 31 j à 3 %, 181 j à 2,4 %, 153 j à 1,7 %.
+    expect(averageRateBetween(livretA, '2025-01-01', '2026-01-01')).toBeCloseTo((31 * 3 + 181 * 2.4 + 153 * 1.7) / 365, 9);
+    // Un seul taux sur la période, et période vide : le taux du jour de début.
+    expect(averageRateBetween(livretA, '2025-09-01', '2026-03-01')).toBeCloseTo(1.7, 9);
+    expect(averageRateBetween(livretA, '2025-03-01', '2025-03-01')).toBe(2.4);
+    // Sans historique : le taux saisi.
+    expect(averageRateBetween({ interestRate: 1.7 }, '2020-01-01', '2026-01-01')).toBe(1.7);
+  });
+
+  it('comparé à la performance mesurée depuis son premier mouvement', () => {
+    const asOf = new Date(2026, 0, 1);
+    const perf = { since: '2025-01-01', years: 1, periodReturn: 0.05 };
+    const cmp = livretAOverPeriod(perf, [acc({}), livretA], asOf)!;
+    expect(cmp.annualRate).toBeCloseTo(averageRateBetween(livretA, '2025-01-01', '2026-01-01'), 9);
+    expect(cmp.periodReturn).toBeCloseTo(cmp.annualRate / 100, 9);
+    // Moins d'un an : le gain du Livret A sur la période seulement.
+    const half = livretAOverPeriod({ since: '2025-08-01', years: 153 / 365, periodReturn: 0.01 }, [livretA], asOf)!;
+    expect(half.annualRate).toBeCloseTo(1.7, 9);
+    expect(half.periodReturn).toBeCloseTo(0.017 * 153 / 365, 9);
+  });
+
+  it('rien sans Livret A, sans taux, ou sans mesure', () => {
+    const perf = { since: '2025-01-01', years: 1, periodReturn: 0.05 };
+    expect(livretAOverPeriod(perf, [acc({})])).toBeNull();
+    expect(livretAOverPeriod(perf, [{ ...livretA, interestRate: 0, rateHistory: [] }])).toBeNull();
+    expect(livretAOverPeriod({ ...perf, periodReturn: null }, [livretA])).toBeNull();
   });
 });

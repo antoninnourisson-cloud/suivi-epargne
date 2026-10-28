@@ -244,7 +244,7 @@ const HOUR_MS = 60 * 60 * 1000;
 /** Délai entre la demande de retrait et le moment où il devient possible. */
 export const LOCK_RESET_DELAY_MS = 24 * HOUR_MS;
 /** Durée de validité d'une demande, comptée depuis la demande. */
-export const LOCK_RESET_REQUEST_LIFETIME_MS = 7 * 24 * HOUR_MS;
+const LOCK_RESET_REQUEST_LIFETIME_MS = 7 * 24 * HOUR_MS;
 // Une demande datée de plus de 5 minutes dans le futur (horloge reculée depuis) est
 // ignorée, plutôt que de faire attendre sans fin.
 const CLOCK_TOLERANCE_MS = 5 * 60 * 1000;

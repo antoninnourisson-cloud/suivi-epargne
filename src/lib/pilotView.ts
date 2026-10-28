@@ -1,6 +1,7 @@
 // Mise en forme de l'écran Pilotage : textes et lignes d'explication construits à partir
 // des chiffres déjà calculés par l'écran (aucun nouveau calcul financier ici).
 import type { PlacementStep } from './finance';
+import { AccountType } from '../types';
 import { formatEUR, formatSignedEUR } from './format';
 
 /** D'où vient le montant à placer : 'calc' (calcul), 'payday' (rappel de paie), 'manual' (saisi). */
@@ -95,6 +96,9 @@ export const placementReason = (step: PlacementStep, custom: boolean): string =>
     return step.isLiquid && step.isFullAfter
       ? "Selon votre répartition, jusqu'au plafond du livret"
       : 'Selon votre répartition personnalisée';
+  }
+  if (step.isLiquid && (step.type === AccountType.CEL || step.type === AccountType.LIVRET_BANCAIRE)) {
+    return `Vos livrets réglementés sont pleins : disponible à tout moment, intérêts imposés${step.isFullAfter ? " ; rempli jusqu'au plafond" : ''}`;
   }
   if (step.isLiquid) {
     return `Disponible à tout moment et sans impôt${step.isFullAfter ? " : rempli jusqu'au plafond" : ''}`;

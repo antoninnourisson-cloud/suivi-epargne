@@ -15,8 +15,8 @@
 // ================================================
 
 export const BACKUP_RECENT = 7;
-export const BACKUP_WEEKS = 5;
-export const BACKUP_MONTHS = 12;
+const BACKUP_WEEKS = 5;
+const BACKUP_MONTHS = 12;
 /** Nombre maximal de copies gardées (7 + 5 + 12). */
 export const BACKUP_MAX_COPIES = BACKUP_RECENT + BACKUP_WEEKS + BACKUP_MONTHS;
 

@@ -8,7 +8,6 @@ interface NumberInputProps {
   placeholder?: string;
   suffix?: string; // ex: '€'
   min?: number;    // borne basse appliquée à la validation (ex: 0 pour un montant)
-  ariaLabel?: string; // libellé pour les lecteurs d'écran quand aucun <label htmlFor> n'est relié
   id?: string;
   inputRef?: React.Ref<HTMLInputElement>;
   describedBy?: string;
@@ -29,7 +28,7 @@ const rawFrench = (n: number | undefined | null): string => (n === undefined || 
  * La valeur est transmise à chaque frappe reconnue (« Entrée » valide donc tout de suite).
  * Une saisie non reconnue est signalée sous le champ, et la valeur précédente est gardée.
  */
-export const NumberInput: React.FC<NumberInputProps> = ({ value, onChange, className, placeholder, suffix, min, ariaLabel, id, inputRef, describedBy, invalid, decimals = 2 }) => {
+export const NumberInput: React.FC<NumberInputProps> = ({ value, onChange, className, placeholder, suffix, min, id, inputRef, describedBy, invalid, decimals = 2 }) => {
   const [focused, setFocused] = useState(false);
   const [raw, setRaw] = useState(rawFrench(value));
   const [badInput, setBadInput] = useState(false);
@@ -48,7 +47,6 @@ export const NumberInput: React.FC<NumberInputProps> = ({ value, onChange, class
         id={id}
         type="text"
         inputMode="decimal"
-        aria-label={ariaLabel}
         aria-invalid={invalid || badInput || undefined}
         aria-describedby={[describedBy, badInput ? errorId : undefined].filter(Boolean).join(' ') || undefined}
         value={focused ? raw : (value || value === 0 ? fmt(value, decimals) : '')}

@@ -139,13 +139,6 @@ export const buildSoloPlan = (
 };
 
 // ---------------------------------------------------------------------------
-// Aide à la déclaration de revenus : déplacée dans ./taxReturn (réexportée ici).
-// ---------------------------------------------------------------------------
-
-export { buildTaxReturnChecklist } from './taxReturn';
-export type { TaxReturnLine } from './taxReturn';
-
-// ---------------------------------------------------------------------------
 // Revue des abonnements
 // ---------------------------------------------------------------------------
 

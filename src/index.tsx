@@ -10,7 +10,7 @@ import './index.css';
 // arrière-plan dès qu'un nouveau déploiement est disponible — mais un onglet déjà ouvert
 // continue d'exécuter le JS DÉJÀ CHARGÉ EN MÉMOIRE tant qu'il n'est pas rechargé. Un tel
 // onglet, resté ouvert avec une session valide (persistance activée), peut alors continuer
-// à faire tourner sa sauvegarde automatique avec un ANCIEN buildData() qui ignore des
+// à faire tourner sa sauvegarde automatique avec un ANCIEN code qui ignore des
 // champs ajoutés depuis — et les faire disparaître silencieusement du fichier Drive
 // partagé à la prochaine écriture (constaté en conditions réelles : geminiApiKey,
 // pickerApiKey et payslips effacés, alors que les champs plus anciens survivaient).
@@ -19,7 +19,7 @@ import './index.css';
 // Le rechargement attend toutefois que rien ne soit en cours (fenêtre ouverte, champ en
 // cours de saisie, saisies pas encore envoyées sur Drive : createSafeReload), pour ne jamais
 // faire perdre une saisie. Cette attente est sans risque pour le fichier : migrate() garde
-// désormais les champs inconnus de l'ancien code, et un fichier écrit avec un schéma plus
+// les champs qu'il ne connaît pas, et un fichier écrit avec un schéma plus
 // récent n'est jamais écrasé (appOutdated).
 if ('serviceWorker' in navigator) {
   // À la TOUTE PREMIÈRE visite, le service worker s'installe et prend le contrôle

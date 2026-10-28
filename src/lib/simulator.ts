@@ -87,7 +87,7 @@ export interface PastSavings {
  * du suivi sont écartés (incomplets).
  */
 export const pastMonthlySavings = (input: {
-  accounts: { type: AccountType; movements?: AccountMovement[] }[];
+  accounts: { type: AccountType; movements: AccountMovement[] }[];
   today: string;
   paydayDay?: number;
   payslips?: Pick<PayslipRecord, 'addedAt' | 'extracted'>[];

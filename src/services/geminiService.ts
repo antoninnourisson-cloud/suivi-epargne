@@ -15,22 +15,11 @@
 // ================================================
 import { PayslipExtractedData } from '../types';
 import { round2 } from '../lib/money';
-import { storageKey } from '../lib/storageKeys';
+import { DEFAULT_GEMINI_MODEL, getGeminiModelOverride } from './geminiModel';
 import { sanitizeStatement, type StatementData } from '../lib/statementImport';
 
-// Modèle multimodal rapide, adapté à l'extraction structurée d'un document. Isolé en
-// constante pour rester simple à faire évoluer : Google déprécie régulièrement les
-// anciens modèles (gemini-2.5-flash a par exemple cessé de répondre, l'API renvoyant
-// elle-même le nom du modèle de remplacement dans son message d'erreur 404) — si ce
-// modèle cesse à son tour de fonctionner, la même erreur indiquera quoi mettre ici.
-const GEMINI_MODEL = 'gemini-3.6-flash';
-
-// Modèle choisi dans Paramètres (sur cet appareil) : permet de remplacer un modèle retiré
-// par Google sans attendre une mise à jour de l'app.
-const MODEL_OVERRIDE_KEY = storageKey('geminiModel');
-export const getGeminiModelOverride = (): string => { try { return localStorage.getItem(MODEL_OVERRIDE_KEY) || ''; } catch { return ''; } };
-export const setGeminiModelOverride = (m: string) => { try { if (m.trim()) localStorage.setItem(MODEL_OVERRIDE_KEY, m.trim()); else localStorage.removeItem(MODEL_OVERRIDE_KEY); } catch { /* non mémorisé */ } };
-export const DEFAULT_GEMINI_MODEL = GEMINI_MODEL;
+// Modèle par défaut et choix fait dans Paramètres : services/geminiModel.ts.
+const GEMINI_MODEL = DEFAULT_GEMINI_MODEL;
 
 // Modèles de repli, essayés dans l'ordre si le principal est saturé ou a disparu. La
 // saturation (« the model is overloaded », HTTP 503) touche un modèle à la fois : un autre
@@ -62,7 +51,7 @@ const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
 /** Un appel à un modèle donné, avec son propre délai maximal. */
 const callModel = async (model: string, apiKey: string, body: string, timeoutMs: number): Promise<Response> => {
-  // Timeout : sans lui, une requête qui pend laissait l'écran "Analyse en cours..." et le
+  // Timeout : sans lui, une requête qui pend laisserait l'écran "Analyse en cours..." et le
   // bouton morts jusqu'au rechargement de la page.
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);

@@ -15,6 +15,11 @@ const openDemo = async (page: Page) => {
   await expect(page.getByRole('heading', { name: 'Accueil', level: 2 })).toBeAttached();
 };
 
+/** Montant « Ma part » d'un compte dans « Mes comptes ». */
+const ownShareCell = (page: Page, name: string) =>
+  page.locator('tbody > tr').filter({ has: page.getByRole('button', { name: `${name} : voir les mouvements`, exact: true }) })
+    .locator('td').nth(1).locator('div').first();
+
 /** Ouvre un écran : barre latérale sur ordinateur, menu « Plus » sur mobile. */
 const goTo = async (page: Page, label: string, isMobile: boolean) => {
   if (!isMobile) {
@@ -42,15 +47,38 @@ test.describe('Pécule en mode démo', () => {
     expect(errors).toEqual([]);
   });
 
-  test('ajout rapide d\'un dépôt', async ({ page }) => {
+  test('ajout rapide d\'un dépôt : solde au centime, ligne au Journal, « Annuler » rend le solde d\'avant', async ({ page, isMobile }) => {
     await openDemo(page);
+    // Démo : LDDS à 3 000 €, entièrement à vous.
+    await goTo(page, 'Mes comptes', isMobile);
+    // Premier affichage de l'écran : le serveur de développement le compile d'abord.
+    await expect(page.getByRole('heading', { name: 'Mes comptes', level: 2 })).toBeVisible({ timeout: 20_000 });
+    const ldds = ownShareCell(page, 'LDDS');
+    await expect(ldds).toHaveText(/^3\s000\s€$/);
+
+    await goTo(page, 'Journal', isMobile);
+    await expect(page.getByRole('heading', { name: 'Journal', level: 2 })).toBeVisible({ timeout: 20_000 });
     await page.getByRole('button', { name: 'Ajouter un mouvement' }).click();
     const dialog = page.getByRole('dialog', { name: 'Ajouter un mouvement' });
     await dialog.getByLabel('Compte').selectOption({ label: 'LDDS' });
-    await dialog.getByLabel('Montant').fill('123');
+    await dialog.getByLabel('Montant').fill('123,45');
     await dialog.getByRole('button', { name: 'Ajouter', exact: true }).click();
     await expect(dialog).toBeHidden();
-    await expect(page.getByRole('status').getByText(/LDDS/)).toBeVisible();
+    const toast = page.getByRole('status').filter({ hasText: /^Dépôt : \+123,45\s€ sur LDDS/ });
+    await expect(toast).toBeVisible();
+    // Une seule ligne, du bon montant, sur le bon compte.
+    const line = page.getByRole('listitem').filter({ has: page.getByRole('button', { name: 'Supprimer « Dépôt »' }) });
+    await expect(line).toHaveCount(1);
+    await expect(line).toContainText('LDDS');
+    await expect(line).toContainText(/\+123,45\s€/);
+
+    await goTo(page, 'Mes comptes', isMobile);
+    await expect(ldds).toHaveText(/^3\s123,45\s€$/);
+    await toast.getByRole('button', { name: 'Annuler' }).click();
+    await expect(ldds).toHaveText(/^3\s000\s€$/);
+    await goTo(page, 'Journal', isMobile);
+    await expect(page.getByRole('heading', { name: 'Journal', level: 2 })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Supprimer « Dépôt »' })).toHaveCount(0);
   });
 
   test('un retrait ne peut pas entamer la part des parents', async ({ page }) => {

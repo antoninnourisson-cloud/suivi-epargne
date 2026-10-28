@@ -14,7 +14,7 @@ export const hasParentalCapital = (accounts: readonly Pick<SavingsAccount, 'pare
  * l'historique ou restitution enregistrée. Sert aux écrans qui montrent le passé (Journal).
  */
 export const hasParentalHistory = (
-  accounts: readonly (Pick<SavingsAccount, 'parentalCapital'> & { movements?: Pick<AccountMovement, 'kind'>[] })[],
+  accounts: readonly (Pick<SavingsAccount, 'parentalCapital'> & { movements: Pick<AccountMovement, 'kind'>[] })[],
   restitution?: Pick<ParentalRestitution, 'done'>,
 ): boolean =>
-  hasParentalCapital(accounts) || !!restitution?.done || accounts.some(a => (a.movements || []).some(m => m.kind === 'parental'));
+  hasParentalCapital(accounts) || !!restitution?.done || accounts.some(a => a.movements.some(m => m.kind === 'parental'));

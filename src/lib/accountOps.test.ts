@@ -87,13 +87,6 @@ describe('balanceChangeMovements', () => {
     const m = balanceChangeMovements(base, { ...base, ownedAmount: 130, totalAmount: 180 }, '2026-10-02', { ownLabel: 'Correction de solde', ownKind: 'adjustment' });
     expect(m.map(x => [x.label, x.amount, x.kind])).toEqual([['Correction de solde (+)', 30, 'adjustment']]);
   });
-  it('reprend tels quels les mouvements déjà préparés par une commande, et n’explique que le reste', () => {
-    const interest = mv({ id: 'i', amount: 20, label: 'Intérêts 2026', kind: 'adjustment' });
-    const next = { ...base, ownedAmount: 150, parentalCapital: 40, totalAmount: 190, movements: [interest] };
-    const m = balanceChangeMovements(base, next, '2026-10-02', { ownLabel: 'Actualisation' });
-    expect(m.map(x => [x.label, x.amount, x.kind])).toEqual([['Intérêts 2026', 20, 'adjustment'], ['Actualisation (+)', 30, undefined], ['Part des parents (-)', 10, 'parental']]);
-    expect(m[0]).toBe(interest);
-  });
 });
 
 describe('versements cumulés et garde-fous', () => {

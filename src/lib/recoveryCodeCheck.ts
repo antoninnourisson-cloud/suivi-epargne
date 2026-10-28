@@ -49,7 +49,7 @@ export const recoveryCodeFileText = (code: string, createdAt: Date): string => [
 export interface BackupEnrollment { enabledAt: string; codeCheckedAt?: string }
 
 /** Un an entre deux vérifications du code de secours. */
-export const BACKUP_CODE_CHECK_DAYS = 365;
+const BACKUP_CODE_CHECK_DAYS = 365;
 
 /**
  * Le rappel « votre code de secours est-il toujours à portée de main ? » est-il dû ? Un an

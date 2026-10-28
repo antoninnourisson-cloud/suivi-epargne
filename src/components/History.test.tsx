@@ -43,8 +43,8 @@ describe('History', () => {
 
 describe('SplitProjectionCard', () => {
   const accounts: SavingsAccount[] = [
-    { id: 'la', name: 'Livret A', institution: 'B', type: AccountType.LIVRET_A, totalAmount: 1000, ownedAmount: 1000, parentalCapital: 0, interestRate: 1.7, ceiling: 22950 },
-    { id: 'av', name: 'Assurance vie', institution: 'A', type: AccountType.ASSURANCE_VIE, totalAmount: 1000, ownedAmount: 1000, parentalCapital: 0, interestRate: 3 },
+    { id: 'la', name: 'Livret A', institution: 'B', type: AccountType.LIVRET_A, totalAmount: 1000, ownedAmount: 1000, parentalCapital: 0, interestRate: 1.7, ceiling: 22950, movements: [] },
+    { id: 'av', name: 'Assurance vie', institution: 'A', type: AccountType.ASSURANCE_VIE, totalAmount: 1000, ownedAmount: 1000, parentalCapital: 0, interestRate: 3, movements: [] },
   ];
 
   it('trois répartitions ; la durée se choisit par un bouton segmenté', () => {

@@ -48,7 +48,7 @@ export const MovementSearch: React.FC<MovementSearchProps> = ({ accounts }) => {
     const isoFragment = toIsoFragment(q);
     const amount = isoFragment ? null : parseFrenchNumber(q);
     return accounts
-      .flatMap(a => (a.movements || []).map(m => ({ account: a, m })))
+      .flatMap(a => a.movements.map(m => ({ account: a, m })))
       .filter(({ m }) => direction === 'all' || m.type === direction)
       .filter(({ account, m }) => {
         if (isoFragment) return m.date.startsWith(isoFragment);

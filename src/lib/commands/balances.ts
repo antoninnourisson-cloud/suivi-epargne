@@ -90,7 +90,7 @@ export const planBalanceUpdate = (acc: SavingsAccount, u: BalanceUpdate): { acco
       ...acc, ownedAmount: owned, parentalCapital: parental, totalAmount: round2(owned + parental), totalDeposits,
       // Solde constaté à la date du relevé (jamais reculée par un relevé plus ancien).
       balanceCheckedAt: laterDay(acc.balanceCheckedAt, u.date),
-      movements: [...(acc.movements || []), ...created],
+      movements: [...acc.movements, ...created],
     },
     created,
   };

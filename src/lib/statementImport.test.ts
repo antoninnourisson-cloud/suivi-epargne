@@ -1,10 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import { AccountType, type SavingsAccount } from '../types';
 import {
-  balanceOnlyByDefault, buildImportItems, guessAccountType, initialChoice, isISODay, isInterestLabel, labelSimilarity, maskAccountNumbers, matchScore,
-  normalizeLabel, olderThanBalance, previewAccountImport, proposeMapping, reviewMovements, sanitizeStatement, statementClosingDate,
+  balanceOnlyByDefault, buildImportItems, guessAccountType, initialChoice, isInterestLabel, labelSimilarity, maskAccountNumbers, matchScore,
+  normalizeLabel, previewAccountImport, proposeMapping, reviewMovements, sanitizeStatement, statementClosingDate,
   statementConsistencyGap, STATEMENT_LIMITS, type StatementData,
 } from './statementImport';
+import { isISODay, olderThanBalance } from './statementDates';
 import { importStatement } from './commands';
 
 const account = (over: Partial<SavingsAccount> & Pick<SavingsAccount, 'id' | 'name' | 'type'>): SavingsAccount => ({
@@ -279,7 +280,7 @@ describe('relevé plus ancien que le compte, placements, opérations à venir', 
     ] };
     expect(olderThanBalance({ ...noCheck, balanceCheckedAt: '2026-09-01' }, '2026-09-30')).toEqual({ since: '2026-10-09', reason: 'movement' });
     expect(olderThanBalance(noCheck, '2026-10-09')).toBeNull();
-    expect(olderThanBalance({ balanceCheckedAt: 'jamais' }, '2026-09-30')).toBeNull();
+    expect(olderThanBalance({ balanceCheckedAt: 'jamais', movements: [] }, '2026-09-30')).toBeNull();
   });
 
   it("propose de ne PAS reprendre un solde plus ancien ; le reprendre reste un choix explicite", () => {

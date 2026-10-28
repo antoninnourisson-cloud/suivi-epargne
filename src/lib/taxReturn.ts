@@ -82,9 +82,9 @@ export const TAX_LINKS = {
 } as const;
 
 /** Total annuel des prix de cession de crypto en dessous duquel les ventes sont exonérées. */
-export const CRYPTO_EXEMPT_DISPOSALS_TOTAL = CRYPTO_EXEMPT_DISPOSALS;
+const CRYPTO_EXEMPT_DISPOSALS_TOTAL = CRYPTO_EXEMPT_DISPOSALS;
 /** Acompte d'impôt retenu par la banque sur les intérêts imposables (prélèvement non libératoire). */
-export const INTEREST_WITHHOLDING_RATE = 0.128;
+const INTEREST_WITHHOLDING_RATE = 0.128;
 
 /** Dates de la campagne, sans chiffre inventé : le calendrier exact sort au printemps. */
 export const TAX_RETURN_CALENDAR_TEXT = 'La déclaration en ligne ouvre en avril ; la date limite tombe fin mai ou début juin selon votre département.';
@@ -199,7 +199,7 @@ export const buildTaxReturnChecklist = (
     });
   }
   const avWithdrawals = accounts.filter(a => a.type === AccountType.ASSURANCE_VIE)
-    .flatMap(a => (a.movements || []).filter(m => m.type === 'OUT' && isCashFlow(m) && inYear(m, incomeYear)));
+    .flatMap(a => a.movements.filter(m => m.type === 'OUT' && isCashFlow(m) && inYear(m, incomeYear)));
   if (avWithdrawals.length > 0) {
     lines.push({ id: 'life-insurance', section: 'savings', box: '2CH / 2DH / 2ZZ', label: 'Rachat d\'assurance vie', confidence: 'info',
       note: 'Votre assureur vous envoie un relevé fiscal au printemps : les montants sont pré-remplis, vérifiez-les avec lui.',
@@ -212,13 +212,13 @@ export const buildTaxReturnChecklist = (
   // --- Déductions et réductions : PER, dons ---
   const pers = accounts.filter(a => a.type === AccountType.PER);
   if (pers.length > 0) {
-    const deposits = pers.reduce((s, a) => s + (a.movements || [])
+    const deposits = pers.reduce((s, a) => s + a.movements
       .filter(m => m.type === 'IN' && isCashFlow(m) && inYear(m, incomeYear))
       .reduce((t, m) => t + m.amount, 0), 0);
     // PER ouvert ou ajouté à Pécule pendant l'année : son solde de départ peut contenir des
     // versements de l'année, que l'app ne distingue pas. On ne conclut pas « rien à déclarer ».
     const startedInYear = pers.some(a => a.openingDate?.startsWith(`${incomeYear}-`)
-      || (a.movements || []).some(m => isInitialBalance(m) && inYear(m, incomeYear)));
+      || a.movements.some(m => isInitialBalance(m) && inYear(m, incomeYear)));
     const startNote = `Votre solde de départ dans Pécule peut contenir des versements de ${incomeYear} : l'attestation annuelle de votre PER donne le bon montant.`;
     lines.push(deposits > 0
       ? {

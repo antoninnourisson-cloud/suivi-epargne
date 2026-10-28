@@ -8,7 +8,7 @@
 // ================================================
 import { AccountMovement, AccountType, SavingsAccount } from '../types';
 import { MS_PER_DAY, formatISODay } from './dates';
-import { tracksDeposits } from './finance';
+import { averageRateBetween, tracksDeposits } from './finance';
 import { round2, signedAmount } from './money';
 
 /** Flux du point de vue de l'épargnant : argent versé négatif, argent retiré ou valeur finale positifs. */
@@ -83,7 +83,7 @@ const isReturnMovement = (m: AccountMovement) => m.kind === 'valuation' || m.kin
  */
 export const accountPerformance = (account: SavingsAccount, asOf: Date = new Date()): AccountPerformance | null => {
   const asOfISO = formatISODay(asOf);
-  const all = account.movements || [];
+  const all = account.movements;
   const past = all.filter(m => m.date <= asOfISO).sort((a, b) => a.date.localeCompare(b.date));
   if (past.length === 0) return null;
   const value = round2(account.totalAmount - all.filter(m => m.date > asOfISO).reduce((s, m) => s + signedAmount(m), 0));
@@ -114,6 +114,32 @@ export const accountPerformance = (account: SavingsAccount, asOf: Date = new Dat
     periodReturn,
     annualized: rate !== null && years >= 1 ? rate : null,
   };
+};
+
+/** Ce qu'aurait rapporté le Livret A sur la même période qu'une performance mesurée. */
+export interface LivretAComparison {
+  /** Taux annuel moyen du Livret A sur la période (en %), d'après son historique daté. */
+  annualRate: number;
+  /** Gain du Livret A sur la période (fraction, intérêts simples : moins d'un an). */
+  periodReturn: number;
+}
+
+/**
+ * Livret A sur la même période que `perf` (de `perf.since` à `asOf`), avec les taux datés
+ * gardés sur le compte Livret A (révisions de février et d'août). `null` sans Livret A,
+ * sans taux connu, ou si la performance n'est pas mesurée.
+ */
+export const livretAOverPeriod = (
+  perf: Pick<AccountPerformance, 'since' | 'years' | 'periodReturn'>,
+  accounts: Pick<SavingsAccount, 'type' | 'interestRate' | 'rateHistory'>[],
+  asOf: Date = new Date(),
+): LivretAComparison | null => {
+  if (perf.periodReturn === null) return null;
+  const livretA = accounts.find(a => a.type === AccountType.LIVRET_A);
+  if (!livretA) return null;
+  const annualRate = averageRateBetween(livretA, perf.since, formatISODay(asOf));
+  if (!(annualRate > 0)) return null;
+  return { annualRate, periodReturn: annualRate / 100 * perf.years };
 };
 
 /** Placement dont la valeur bouge avec les marchés : on y mesure une performance. */

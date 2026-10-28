@@ -227,6 +227,13 @@ describe('ordre et stabilité', () => {
     expect(sortAlerts([b, a, c, d])).toEqual([c, d, a, b]);
   });
 
+  it('sortAlerts : la clôture de l’année (épinglée) passe avant les alertes chiffrées', () => {
+    const big = { tone: 'action' as const, gain: { amount: 900, per: 'an' as const, label: '' } };
+    const info = { tone: 'info' as const };
+    const closing = { tone: 'action' as const, pinned: true };
+    expect(sortAlerts([big, info, closing])).toEqual([closing, big, info]);
+  });
+
   it('aucune alerte pour des données vides', () => {
     expect(run({})).toEqual([]);
   });

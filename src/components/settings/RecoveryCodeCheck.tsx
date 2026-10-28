@@ -9,7 +9,7 @@ import { checkGroups, pickCheckGroups, recoveryCodeFileText } from '../../lib/re
 import { downloadBlob } from '../../services/fileDownload';
 
 /** Propose le code en fichier texte (à ranger hors de l'appareil). */
-export const downloadRecoveryCode = (code: string, now = new Date()): void =>
+const downloadRecoveryCode = (code: string, now = new Date()): void =>
   downloadBlob('pecule-code-de-secours.txt', new Blob([recoveryCodeFileText(code, now)], { type: 'text/plain;charset=utf-8' }));
 
 /** Bouton « Télécharger (fichier texte) » de l'écran du code. */

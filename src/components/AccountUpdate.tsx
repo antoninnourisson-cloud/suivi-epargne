@@ -27,7 +27,6 @@ interface AccountUpdateProps {
   accounts: SavingsAccount[];
   /** Applique le résultat d'une commande (`commit` de useAccountActions) : active « Annuler » après l'enregistrement. */
   onCommit: (patch: CommandPatch) => void;
-  onCancel?: () => void; // Ajout prop optionnelle pour cohérence
   onAddAccount?: () => void;
   /** « Lire un relevé » : soldes et opérations proposés d'après le relevé de la banque. */
   onReadStatement?: () => void;

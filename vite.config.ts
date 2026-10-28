@@ -107,13 +107,12 @@ export default defineConfig({
         background_color: '#f8faf4',
         display: 'standalone',
         orientation: 'portrait',
-        // Relatifs pour matcher le `base` ci-dessus, quel que soit le sous-dossier
-        // sur lequel GitHub Pages sert l'app.
+        // Relatifs, comme le `base` ci-dessus.
         scope: './',
         start_url: './',
         // Appui long sur l'icône de l'app -> action directe, sans repasser par la nav.
-        // `url` relative au `scope` ci-dessus (donc au sous-dossier GitHub Pages, quel
-        // qu'il soit) : App.tsx lit `?action=quickadd` au montage pour ouvrir la modale.
+        // `url` relative au `scope` ci-dessus : `?action=quickadd` ouvre l'ajout rapide
+        // (useDeepLinks, src/app/useAppNavigation.ts).
         shortcuts: [
           {
             name: 'Ajouter un mouvement',
@@ -169,6 +168,11 @@ export default defineConfig({
         // 30 fichiers JS chargés pour afficher l'Accueil → 5, pour presque le même poids
         // (203 → 206 Kio gzip : les icônes des autres écrans viennent avec) ; précache
         // 107 → 44 entrées (572 → 548 Kio gzip).
+        // Revers : un module chargé à la demande de moins de 8 Ko qui ne dépend que du code de
+        // démarrage est fusionné dans le fichier principal (cas d'Agenda ou de QuickAddModal).
+        // Pour le garder hors du démarrage, le charger avec un module plus gros qui ne sert qu'à
+        // lui (ex. services/fiscalWatchGemini.ts, chargé avec le client Gemini). Un manualChunks
+        // par écran ne convient pas : il aspire aussi les dépendances partagées (recharts…).
         experimentalMinChunkSize: 8000,
         manualChunks: id => (id.includes('node_modules/lucide-react') ? 'icons' : id.includes('/src/components/ui/') ? 'ui' : undefined),
       },

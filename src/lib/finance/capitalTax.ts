@@ -6,10 +6,8 @@ import { socialChargesRateFor } from './income';
 import { isSavingsFlow } from './savings';
 
 // --- FISCALITÉ DU CAPITAL (PFU / prélèvements sociaux) ---
-// `socialChargesCapital` (17,2 %) existait dans FiscalConfig depuis le début mais n'était
-// utilisé par aucun calcul. Ce qui suit modélise le régime le plus courant par type de compte
-// — volontairement simplifié, pas une simulation fiscale complète (voir les limites
-// documentées sur chaque cas).
+// Le régime le plus courant par type de compte — volontairement simplifié, pas une simulation
+// fiscale complète (voir les limites documentées sur chaque cas).
 //
 // ATTENTION au sens du résultat : PEA et Assurance Vie sont à fiscalité DIFFÉRÉE — l'impôt
 // n'est dû qu'au retrait, pas chaque année. Ce calcul donne donc le net qu'on toucherait EN
@@ -85,7 +83,7 @@ export const isHousingSavingsIncomeTaxExempt = (account: { type: AccountType; op
  * compte à terme, épargne logement, compte courant rémunéré, « Autre ». La banque retient
  * l'acompte de 12,8 % au versement des intérêts.
  */
-export const YEARLY_TAXED_INTEREST_TYPES: readonly AccountType[] = [
+const YEARLY_TAXED_INTEREST_TYPES: readonly AccountType[] = [
   AccountType.LIVRET_BANCAIRE, AccountType.COMPTE_A_TERME, AccountType.PEL, AccountType.CEL, AccountType.COMPTE_COURANT, AccountType.AUTRE,
 ];
 
@@ -303,7 +301,7 @@ export const computeWeightedAnnualRate = (
   // Un changement daté du jour J marque la FIN de validité du taux historisé (l'app stocke
   // l'ANCIEN taux le jour où il est remplacé) : le taux historisé i court donc du changement
   // précédent jusqu'au sien, et le taux COURANT prend le relais depuis le dernier changement
-  // jusqu'à la fin de la période — et non depuis aujourd'hui, ce qui lui donnait quelques
+  // jusqu'à la fin de la période — et non depuis aujourd'hui, ce qui lui donnerait quelques
   // heures de poids sur l'année en cours et zéro jour sur une année passée.
   const segments = changes.map((change, i) => ({
     // null = "depuis toujours" : le tout premier taux couvre aussi le début de l'année.
@@ -377,12 +375,12 @@ export const CRYPTO_EXEMPT_DISPOSALS = 305;
  * vers votre compte en banque suppose une vente : c'est l'indice de cession dont dispose l'app.
  */
 export const cryptoDisposalsOfYear = (
-  accounts: { type: AccountType; movements?: AccountMovement[] }[],
+  accounts: { type: AccountType; movements: AccountMovement[] }[],
   year: number,
   beforeISO?: string,
 ): number => accounts
   .filter(a => a.type === AccountType.CRYPTO)
-  .reduce((s, a) => s + (a.movements || [])
+  .reduce((s, a) => s + a.movements
     .filter(m => m.type === 'OUT' && isSavingsFlow(m) && m.date.startsWith(`${year}-`) && (!beforeISO || m.date < beforeISO))
     .reduce((t, m) => t + m.amount, 0), 0);
 

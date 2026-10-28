@@ -38,7 +38,7 @@
 //   backup-puts:<sub>:<date>  nombre d'envois du jour (plafond quotidien)
 //   alert:lock-reset:<hash>  alerte « retrait du verrou demandé » déjà envoyée (1 h)
 //   fiscal-watch:*    veille fiscale hebdomadaire (Workers AI, pages publiques seulement : fiscalWatchJob.ts)
-// Le state OAuth n'est plus stocké : il est signé (HMAC) et lié au navigateur par cookie.
+// Le state OAuth n'est pas stocké : il est signé (HMAC) et lié au navigateur par cookie.
 //
 // Sessions liées à l'appareil (deviceProof.ts) : une session qui porte une clé publique
 // exige à chaque requête une preuve signée par la clé privée, non exportable, de l'appareil,
@@ -354,8 +354,8 @@ const handleAuthCallback = async (req: Request, env: Env, url: URL): Promise<Res
     : existing!;
   // Session AVANT le compte : une déconnexion du dernier appareil (ou la tâche quotidienne)
   // qui tournerait au même moment voit déjà cette session et ne l'efface pas
-  // (releaseUserIfUnused). Dans l'autre ordre, elle pouvait effacer le compte tout juste
-  // écrit, et la nouvelle session était purgée à son premier /token (NO_USER).
+  // (releaseUserIfUnused). Dans l'autre ordre, elle pourrait effacer le compte tout juste
+  // écrit, et la nouvelle session serait purgée à son premier /token (NO_USER).
   const { token: sessionToken } = await createSession(env.STORE, identity.sub, identity.email!);
   // Durée de vie neuve à chaque connexion : le compte survit à toute session ouverte.
   await writeUser(env.STORE, identity.sub, record);
@@ -635,7 +635,7 @@ const handleTestPush = async (req: Request, env: Env): Promise<Response> => {
 };
 
 /** « 20 octobre à 14:05 », heure de Paris. */
-export const parisDateTime = (ms: number): string =>
+const parisDateTime = (ms: number): string =>
   new Intl.DateTimeFormat('fr-FR', { timeZone: 'Europe/Paris', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }).format(new Date(ms));
 /** « 27 octobre », heure de Paris. */
 const parisDay = (ms: number): string =>

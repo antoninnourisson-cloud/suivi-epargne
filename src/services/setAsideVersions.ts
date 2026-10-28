@@ -27,8 +27,8 @@ export interface SetAsideVersion {
 }
 
 const KEY = storageKey('setAside');
-export const SET_ASIDE_DAYS = 30;
-export const SET_ASIDE_MAX = 6;
+const SET_ASIDE_DAYS = 30;
+const SET_ASIDE_MAX = 6;
 const DAY_MS = 86_400_000;
 
 const isEntry = (v: unknown): v is SetAsideVersion => {

@@ -46,4 +46,8 @@ describe('placementReason', () => {
     expect(placementReason({ ...step, isLiquid: false, isFullAfter: false }, false)).toMatch(/livrets sont pleins/);
     expect(placementReason({ ...step, isFullAfter: false }, true)).toBe('Selon votre répartition personnalisée');
   });
+  it('ne dit pas « sans impôt » pour un CEL ou un livret bancaire', () => {
+    expect(placementReason({ ...step, type: AccountType.CEL }, false)).toBe("Vos livrets réglementés sont pleins : disponible à tout moment, intérêts imposés ; rempli jusqu'au plafond");
+    expect(placementReason({ ...step, type: AccountType.LIVRET_BANCAIRE, isFullAfter: false }, false)).toBe('Vos livrets réglementés sont pleins : disponible à tout moment, intérêts imposés');
+  });
 });

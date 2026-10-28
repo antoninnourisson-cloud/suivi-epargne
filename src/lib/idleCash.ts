@@ -17,10 +17,10 @@ import { computePlacementStrategy, PlacementStep } from './finance';
 import { CURRENT_ACCOUNT_FRESH_DAYS, isRecentlyChecked } from './freshness';
 
 /** Coussin gardé sur le compte courant : 1,5 mois de dépenses. */
-export const CASH_BUFFER_MONTHS = 1.5;
+const CASH_BUFFER_MONTHS = 1.5;
 /** En dessous, l'argent qui dort ne vaut pas la peine d'être signalé. */
-export const MIN_DORMANT_EUR = 300;
-export const MIN_IDLE_GAIN_PER_YEAR = 5;
+const MIN_DORMANT_EUR = 300;
+const MIN_IDLE_GAIN_PER_YEAR = 5;
 
 /** Montant gardé sur le compte courant pour les dépenses du quotidien. */
 export const currentAccountBuffer = (monthlySpending: number): number =>
@@ -85,7 +85,9 @@ export const computeIdleCash = (input: IdleCashInput): IdleCash | null => {
   const excess = Math.floor(cash - buffer);
   if (excess < MIN_DORMANT_EUR) return null;
 
-  const steps = computePlacementStrategy(excess, idleDestinations(input.accounts, input.lepEligible), input.fiscalConfig)
+  // Livrets sans impôt seulement (le gain affiché est le taux brut) : CEL et livret bancaire écartés.
+  const taxFree = idleDestinations(input.accounts, input.lepEligible).filter(a => a.type !== AccountType.CEL && a.type !== AccountType.LIVRET_BANCAIRE);
+  const steps = computePlacementStrategy(excess, taxFree, input.fiscalConfig)
     .filter(s => s.isLiquid && !s.infoOnly && s.fillAmount > 0);
   if (steps.length === 0) return null;
   const placed = steps.reduce((s, st) => s + st.fillAmount, 0);

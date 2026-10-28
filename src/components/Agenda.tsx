@@ -99,7 +99,7 @@ export const Agenda: React.FC<AgendaProps> = ({ data, onOpen }) => {
           <span className="min-w-0 text-sm font-medium text-on-surface break-words">{e.title}</span>
           {amount && <span className="shrink-0 text-sm font-medium">{amount}</span>}
         </span>
-        {/* « 14 oct. · dans 5 jours » sous le titre, sans couper la date (#115). */}
+        {/* « 14 oct. · dans 5 jours » sous le titre, sans couper la date. */}
         <span className="block text-xs text-on-surface-variant">
           <time dateTime={e.date} className="whitespace-nowrap">{frenchDay(d).split(' ')[0]} {SHORT_MONTH.format(d)}</time>
           {' · '}<span className="whitespace-nowrap">{when(e.date)}</span>

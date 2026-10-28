@@ -1,4 +1,4 @@
-// Chemins nominaux du serveur jamais exercés jusqu'ici (audit #140) : jeton d'accès renvoyé
+// Chemins nominaux du serveur : jeton d'accès renvoyé
 // par /token (l'appel que l'app fait toutes les heures), rotation du refresh token par Google,
 // et tournée quotidienne des rappels réussie (mode discret, dédoublonnage, appareil injoignable).
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';

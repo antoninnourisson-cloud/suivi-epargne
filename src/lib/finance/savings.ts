@@ -33,12 +33,12 @@ export const isSavingsFlow = (m: AccountMovement, trackingStartISO?: string) =>
   !m.kind && !isInitialBalance(m) && (!trackingStartISO || m.date >= trackingStartISO);
 
 export const computeAccountBalanceAtDate = (
-  accounts: { ownedAmount: number; movements?: AccountMovement[] }[],
+  accounts: { ownedAmount: number; movements: AccountMovement[] }[],
   dateStr: string
 ): number =>
   accounts.reduce((total, acc) => {
     let balance = acc.ownedAmount;
-    (acc.movements || []).filter(m => m.date > dateStr && !isInitialBalance(m) && !isParentalMovement(m)).forEach(m => {
+    acc.movements.filter(m => m.date > dateStr && !isInitialBalance(m) && !isParentalMovement(m)).forEach(m => {
       balance += m.type === 'IN' ? -m.amount : m.amount;
     });
     return total + balance;
@@ -59,7 +59,7 @@ export const computeAccountBalanceAtDate = (
  * déjà montrés à l'utilisateur, pour un gain de précision négligeable.
  */
 export const computeRecentSavingsRate = (
-  accounts: { ownedAmount: number; movements?: AccountMovement[] }[],
+  accounts: { ownedAmount: number; movements: AccountMovement[] }[],
   windowDays: number = 90,
   asOfDate: Date = new Date()
 ): number | null => {
@@ -69,7 +69,7 @@ export const computeRecentSavingsRate = (
   const nowStr = formatISODay(asOfDate);
   const pastStr = formatISODay(past);
 
-  const hasMovementsInWindow = accounts.some(a => (a.movements || []).some(m => m.date > pastStr && m.date <= nowStr && m.kind !== 'parental' && m.kind !== 'valuation'));
+  const hasMovementsInWindow = accounts.some(a => a.movements.some(m => m.date > pastStr && m.date <= nowStr && m.kind !== 'parental' && m.kind !== 'valuation'));
   if (!hasMovementsInWindow) return null;
 
   const totalNow = computeAccountBalanceAtDate(accounts, nowStr);
@@ -94,7 +94,7 @@ export interface DueRecurring {
  */
 export const findDueRecurring = (
   recurrings: RecurringMovement[],
-  accounts: { id: string; movements?: AccountMovement[] }[],
+  accounts: { id: string; movements: AccountMovement[] }[],
   asOfDate: Date = new Date(),
   skipped: Set<string> = new Set()
 ): DueRecurring[] => {
@@ -110,7 +110,7 @@ export const findDueRecurring = (
       if (asOfDate.getDate() < day) return [];
       const account = accounts.find(a => a.id === r.accountId);
       if (!account) return []; // compte supprimé depuis
-      const alreadyDone = (account.movements || []).filter(mv => !isParentalMovement(mv)).some(mv =>
+      const alreadyDone = account.movements.filter(mv => !isParentalMovement(mv)).some(mv =>
         mv.date.startsWith(monthKey) && mv.type === r.type && Math.abs(mv.amount - r.amount) < 0.005
       );
       if (alreadyDone) return [];
@@ -128,7 +128,7 @@ export const findDueRecurring = (
  * les variations de valeur des placements (`kind: 'valuation'`) ne comptent pas.
  */
 export const computeMonthSavedAmount = (
-  accounts: { type: AccountType; movements?: AccountMovement[] }[],
+  accounts: { type: AccountType; movements: AccountMovement[] }[],
   asOfDate: Date = new Date(),
   trackingStartISO?: string
 ): number => {
@@ -137,7 +137,7 @@ export const computeMonthSavedAmount = (
   let total = 0;
   for (const a of accounts) {
     if (a.type === AccountType.COMPTE_COURANT || a.type === AccountType.IMMOBILIER) continue;
-    for (const m of a.movements || []) {
+    for (const m of a.movements) {
       if (!isSavingsFlow(m, trackingStartISO) || !m.date.startsWith(monthKey) || m.date > todayKey) continue;
       total += signedAmount(m);
     }
@@ -154,29 +154,3 @@ export interface MonthSavingsRate {
   saved: number;  // versements − retraits du mois (voir computeMonthSavedAmount)
   rate: number;   // part de la paie, en % (0 si paie inconnue)
 }
-
-/**
- * Taux d'épargne des `months` derniers mois, mois en cours inclus (partiel). Rapporté à la
- * paie ACTUELLE : l'app ne connaît pas l'historique exact des salaires.
- */
-export const computeSavingsRateHistory = (
-  accounts: { type: AccountType; movements?: AccountMovement[] }[],
-  monthlyPay: number,
-  months: number = 12,
-  asOfDate: Date = new Date(),
-  trackingStartISO?: string
-): MonthSavingsRate[] => {
-  const out: MonthSavingsRate[] = [];
-  for (let k = months - 1; k >= 0; k--) {
-    const end = k === 0
-      ? asOfDate
-      : new Date(asOfDate.getFullYear(), asOfDate.getMonth() - k + 1, 0);
-    const saved = computeMonthSavedAmount(accounts, end, trackingStartISO);
-    out.push({
-      month: `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, '0')}`,
-      saved,
-      rate: monthlyPay > 0 ? (saved / monthlyPay) * 100 : 0,
-    });
-  }
-  return out;
-};

@@ -57,7 +57,7 @@ test.describe('écrans Material 3 (démo)', () => {
     const title = row.locator('p').first();
     const action = row.getByRole('button', { name: "Pas de l'épargne" });
     const [t, a] = [await title.boundingBox(), await action.boundingBox()];
-    // Le titre n'est plus réduit à une lettre : au moins la moitié de la ligne.
+    // Le titre n'est pas réduit à une lettre : au moins la moitié de la ligne.
     expect(t!.width).toBeGreaterThan(150);
     expect(a!.y).toBeGreaterThanOrEqual(t!.y + t!.height - 1);
     expect(a!.height).toBeGreaterThanOrEqual(48);

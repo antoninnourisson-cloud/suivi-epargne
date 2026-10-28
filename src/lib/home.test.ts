@@ -4,8 +4,9 @@ import { DEFAULT_FISCAL_CONFIG, LATEST_TAX_SCALE } from '../constants';
 import {
   availabilitySlices, averageFullMonthRate, buildHomeTodos, buildStackedSeries, dateRangeProblem, daysSinceLastMovement, defaultDateRange,
   findCeilingAlerts, findInactiveEmptyAccounts, isConstrainedAccount, isDateRange, monthDelta, parentalYearEndInterest, payPeriodSavings, periodCsvExport, savingsGauge,
-  savingsOn, savingsProjection, upcomingDebits, MAX_SERIES_DAYS, type HomeTodoInput,
+  savingsOn, savingsProjection, upcomingDebits, homeAgenda, MAX_SERIES_DAYS, type HomeTodoInput,
 } from './home';
+import { buildAgenda } from './agenda';
 import type { Alert } from './alerts';
 
 const fiscal = { ...DEFAULT_FISCAL_CONFIG, ceilings: { livretA: 22950, ldds: 12000, lep: 10000 } };
@@ -68,6 +69,23 @@ describe('signaux de l\'Accueil', () => {
     const now = new Date(2026, 9, 20, 18);
     const list = upcomingDebits([sub('in3', '2026-01-23'), sub('today', '2026-01-20'), sub('far', '2026-01-05'), sub('off', '2026-01-21', { active: false })], now);
     expect(list.map(d => [d.s.id, d.inDays])).toEqual([['today', 0], ['in3', 3]]);
+  });
+
+  it('« Prochaines échéances » ne répète pas un prélèvement déjà dans les 7 prochains jours', () => {
+    const sub = (id: string, anchorDate: string, frequency: Subscription['frequency'] = 'monthly'): Subscription =>
+      ({ id, name: id, amount: 10, debitAccount: '', frequency, anchorDate, active: true });
+    const now = new Date(2026, 9, 20, 18);
+    const subscriptions = [sub('Musique', '2026-01-22'), sub('Assurance', '2025-11-05', 'yearly')];
+    const config = { grossAnnual: 0, leisureBudget: 0, projectSavings: 0, taxRateManual: 0, extraMonthlyIncome: 0, paydayDay: 27 };
+    const { events } = buildAgenda({ accounts: [], expenses: [], history: [], subscriptions, config }, now);
+    const debits = upcomingDebits(subscriptions, now);
+    expect(debits.map(d => d.s.name)).toEqual(['Musique']);
+    // Musique (22/10) est déjà dans la carte des prélèvements : les trois suivants à la place,
+    // y compris Musique le mois prochain (hors des 7 jours).
+    expect(homeAgenda(events, debits).map(e => [e.title, e.date])).toEqual([
+      ['Jour de paie', '2026-10-27'], ['Assurance', '2026-11-05'], ['Musique', '2026-11-22'],
+    ]);
+    expect(homeAgenda(events, []).map(e => e.title)).toEqual(['Musique', 'Jour de paie', 'Assurance']);
   });
 
   it('reminds the parents\' interest in December only', () => {
@@ -331,7 +349,7 @@ describe('liste « À faire »', () => {
     }));
     const open = january({ year: 2026, closed: false, inSeason: true, done: 1, total: 7 });
     expect(open.map(t => t.key)).toEqual(['year-closing-2026']);
-    expect(open[0]).toMatchObject({ icon: 'calendar-check', tone: 'action', snoozable: true, text: 'Clôture de l\'année 2026 : 1 étape sur 7 faite.' });
+    expect(open[0]).toMatchObject({ icon: 'calendar-check', tone: 'action', snoozable: true, pinned: true, text: 'Clôture de l\'année 2026 : 1 étape sur 7 faite.' });
     expect(open[0].primary?.action).toEqual({ type: 'open-year-closing' });
     expect(january({ year: 2026, closed: false, inSeason: true, done: 3, total: 7 })[0].text).toBe('Clôture de l\'année 2026 : 3 étapes sur 7 faites.');
     // Clôturée : plus de tâche de clôture ni de taux servi ; barème, paramètres fiscaux et copie

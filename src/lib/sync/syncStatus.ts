@@ -91,7 +91,7 @@ export type SyncPhase =
  * Priorité : hors ligne, envoi arrêté (session expirée, fichier d'une version plus récente,
  * chargement raté), écriture en cours, erreur, choix en attente, puis dernière écriture
  * confirmée. Un envoi arrêté passe avant la dernière écriture : sans cela, l'indicateur
- * restait vert (« Synchronisé ») pendant que les saisies s'accumulaient sur l'appareil.
+ * resterait vert (« Synchronisé ») pendant que les saisies s'accumulent sur l'appareil.
  */
 export const syncPhase = (s: SyncStatus, conflictOpen: boolean, lastSavedAt: Date | null): SyncPhase =>
   s.offline ? { kind: 'offline' }

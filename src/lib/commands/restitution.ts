@@ -64,9 +64,9 @@ export const recordRestitution = (state: CommandState, input: { date: string }):
 export const undoRestitution = (state: CommandState): CommandResult => {
   const previous = state.parentalRestitution;
   if (!previous?.done) return fail('nothing-to-do', 'Aucune restitution à annuler.');
-  const touched = state.accounts.filter(a => (a.movements || []).some(isRestitutionMovement)).map(a => a.id);
+  const touched = state.accounts.filter(a => a.movements.some(isRestitutionMovement)).map(a => a.id);
   const snap = snapshotBalances(state.accounts, touched);
-  const accounts = state.accounts.map(a => (a.movements || [])
+  const accounts = state.accounts.map(a => a.movements
     .filter(isRestitutionMovement)
     .reduce((cur, m) => applyMovement(cur, m, -1), a));
   const { done: _done, ...rest } = previous;

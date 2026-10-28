@@ -13,10 +13,6 @@ export interface IncomeInput {
    * des revenus d'indépendant ni des loyers, qui ont leurs propres règles : le Pilotage le dit.
    */
   extraMonthlyIncome: number;
-  /** @deprecated Ignoré : `workBenefits.navigo` est la seule source (inactif ⇒ 0 €). Lu seulement par migrate(). */
-  navigoBase?: number;
-  /** @deprecated Idem. */
-  navigoRate?: number;
   /** > 0 pour forcer un taux de prélèvement à la source (appliqué au net imposable AVANT l'abattement de 10 %). */
   taxRateManual: number;
 }
@@ -131,9 +127,9 @@ export const nonDeductibleCsgFromNet = (netMonthly: number, salaryChargesRate: n
 /** Part de l'abonnement exonérée en tout temps (prise en charge obligatoire), en %. */
 export const TRANSPORT_MANDATORY_SHARE = 50;
 /** Part exonérée pendant le régime temporaire (obligatoire + facultative), en %. */
-export const TRANSPORT_TEMPORARY_EXEMPT_SHARE = 75;
+const TRANSPORT_TEMPORARY_EXEMPT_SHARE = 75;
 /** Premières et dernières années de revenus du régime temporaire, connues à ce jour. */
-export const TRANSPORT_TEMPORARY_FIRST_YEAR = 2022;
+const TRANSPORT_TEMPORARY_FIRST_YEAR = 2022;
 export const TRANSPORT_TEMPORARY_LAST_YEAR = 2026;
 
 /** Dernière année du régime temporaire : celle des paramètres si la veille l'a prolongé. */
@@ -197,8 +193,7 @@ export const computeIncome = (
   const socialCharges = grossMonth * fiscalConfig.salaryChargesRate;
   const netSalaryOnly = grossMonth - socialCharges;
 
-  // Seule source : l'avantage Navigo. Désactivé ⇒ aucun remboursement (les anciens champs
-  // config.navigoBase / navigoRate ne servent plus qu'à migrate()).
+  // Seule source : l'avantage Navigo. Désactivé ⇒ aucun remboursement.
   const transport = splitTransportRefund(workBenefits.navigo, year, fiscalConfig);
   const navigoGain = transport.refund;
 

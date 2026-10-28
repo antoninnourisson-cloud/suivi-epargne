@@ -45,7 +45,7 @@ const isObservation = (m: AccountMovement): boolean =>
 /** Dernier solde constaté ('YYYY-MM-DD', jamais après `todayISO`), ou `undefined` s'il n'y en a aucun. */
 export const lastBalanceCheck = (account: Pick<SavingsAccount, 'balanceCheckedAt' | 'movements'>, todayISO: string): string | undefined => {
   let latest = account.balanceCheckedAt ? (account.balanceCheckedAt > todayISO ? todayISO : account.balanceCheckedAt) : undefined;
-  for (const m of account.movements || []) {
+  for (const m of account.movements) {
     if (m.date <= todayISO && isObservation(m) && (!latest || m.date > latest)) latest = m.date;
   }
   return latest;

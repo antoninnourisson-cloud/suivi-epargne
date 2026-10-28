@@ -16,9 +16,6 @@ export interface InflationFigure { rate: number; year: number; source?: string }
  */
 export const DEFAULT_INFLATION: InflationFigure = { rate: 0.9, year: 2025, source: 'https://www.insee.fr/fr/statistiques/8726461' };
 
-/** Page INSEE qui donne la série annuelle (relue par la veille fiscale du serveur). */
-export const INSEE_INFLATION_PAGE = 'https://www.insee.fr/fr/statistiques/4268033';
-
 /** Inflation à utiliser : celle des paramètres fiscaux si elle est plus récente, sinon celle livrée avec l'app. */
 export const inflationOf = (cfg: Pick<FiscalConfig, 'inflation'>): InflationFigure =>
   cfg.inflation && cfg.inflation.year >= DEFAULT_INFLATION.year ? cfg.inflation : DEFAULT_INFLATION;

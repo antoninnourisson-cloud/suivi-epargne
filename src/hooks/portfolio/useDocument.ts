@@ -71,18 +71,8 @@ export const useDocument = () => {
       setParentalRestitution: top('parentalRestitution'),
       setActivePayslipId: top('activePayslipId'),
       setFiscalConfig: top('fiscalConfig'),
-      /**
-       * Modifie les avantages à partir de leur état le plus récent (seuls les champs touchés
-       * changent), et garde la copie du Navigo dans config (ancien format, encore lu).
-       */
-      updateWorkBenefits: (update: (prev: WorkBenefits) => WorkBenefits) => setDoc(d => {
-        const workBenefits = update(d.workBenefits);
-        const { navigo } = workBenefits;
-        return {
-          ...d, workBenefits,
-          config: navigo.active ? { ...d.config, navigoBase: navigo.basePrice, navigoRate: navigo.refundRate } : d.config,
-        };
-      }),
+      /** Modifie les avantages à partir de leur état le plus récent (seuls les champs touchés changent). */
+      updateWorkBenefits: (update: (prev: WorkBenefits) => WorkBenefits) => setDoc(d => ({ ...d, workBenefits: update(d.workBenefits) })),
       /** Modifie un ou plusieurs réglages (les autres restent tels quels). */
       patchConfig: (patch: Partial<Config>) => setDoc(d => ({ ...d, config: { ...d.config, ...patch } })),
     };

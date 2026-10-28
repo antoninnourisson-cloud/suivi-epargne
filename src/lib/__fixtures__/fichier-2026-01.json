@@ -1,0 +1,65 @@
+{
+  "accounts": [
+    {
+      "id": "acc-la",
+      "name": "Livret A ",
+      "type": "Livret A",
+      "institution": "Banque  Exemple",
+      "totalAmount": 15000,
+      "ownedAmount": 8000,
+      "parentalCapital": 7000,
+      "interestRate": 3,
+      "isRevolut": false,
+      "isTaxable": false
+    },
+    {
+      "id": "acc-crypto",
+      "name": "Portefeuille",
+      "type": "Cryptomonnaies",
+      "institution": "Plateforme",
+      "totalAmount": "812.5",
+      "ownedAmount": 812.5,
+      "parentalCapital": 0,
+      "recentHighRate": 12,
+      "recentLowRate": -8
+    },
+    {
+      "id": "acc-pee",
+      "name": "Épargne salariale",
+      "type": "PEE (Plan Epargne Entreprise)",
+      "institution": "Employeur",
+      "totalAmount": 2400,
+      "ownedAmount": 2400,
+      "parentalCapital": 0
+    },
+    {
+      "id": "acc-scpi",
+      "name": "SCPI",
+      "type": "Immobilier (SCPI/Physique)",
+      "institution": "Gestionnaire",
+      "totalAmount": 5000,
+      "ownedAmount": 5000,
+      "parentalCapital": 0
+    }
+  ],
+  "expenses": [
+    { "id": "exp-1", "name": "Loyer", "amount": 650, "paymentMethod": "Virement Permanent" },
+    { "id": "exp-2", "name": "Téléphone", "amount": 9.99, "paymentMethod": "Prélèvement" }
+  ],
+  "history": [
+    { "date": "2026-01-21", "totalAmount": 23000, "ownedAmount": 16000 },
+    { "date": "2026-01-22", "totalAmount": 23212.5, "ownedAmount": 16212.5 }
+  ],
+  "config": {
+    "grossAnnual": 42000,
+    "leisureBudget": 250,
+    "projectSavings": 150,
+    "navigoBase": 86.4,
+    "navigoRate": 50,
+    "taxRateManual": 0,
+    "extraMonthlyIncome": 0
+  },
+  "goalPrompt": "Un apport pour un appartement",
+  "financing": { "interestRate": 3.2, "insuranceRate": 0.3 },
+  "lastView": "dashboard"
+}

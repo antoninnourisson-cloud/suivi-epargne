@@ -8,7 +8,6 @@ import {
   subscriptionMonthlyCost,
   subscriptionsAsExpenses,
   totalFixedCharges,
-  computeSavingsRateHistory,
   computeDonationSummary,
   accountAgeYears,
   computeUnlockCost,
@@ -27,7 +26,7 @@ import {
   confirmRatesUnchanged,
   applyRateChange,
   activeSavingsSplit,
-  computeSavedSince,
+  missingSplitAccounts,
   computeAccruedInterest,
 } from './finance';
 import { DEFAULT_FISCAL_CONFIG as CFG, TAX_SCALES, LATEST_TAX_SCALE } from '../constants';
@@ -131,18 +130,6 @@ describe('abonnements', () => {
     // L'annuel ne pèse pas sur les charges mensuelles : il ne fait que déclencher un rappel.
     expect(subscriptionsAsExpenses(subs).map(e => e.id)).toEqual(['sub:n']);
     expect(totalFixedCharges([{ id: 'loyer', name: 'Loyer', amount: 800 }], subs)).toBeCloseTo(800 + 13.49);
-  });
-});
-
-describe("taux d'épargne", () => {
-  it('rapporte les versements de chaque mois à la paie, mois en cours inclus', () => {
-    const accounts = [acc({ movements: [
-      { id: '1', date: '2026-08-05', amount: 500, label: 'x', type: 'IN' },
-      { id: '2', date: '2026-09-05', amount: 250, label: 'x', type: 'IN' },
-    ] })];
-    const h = computeSavingsRateHistory(accounts, 2500, 3, NOW);
-    expect(h.map(m => m.month)).toEqual(['2026-07', '2026-08', '2026-09']);
-    expect(h.map(m => m.rate)).toEqual([0, 20, 10]);
   });
 });
 
@@ -334,6 +321,55 @@ describe('surplus une fois les livrets pleins', () => {
   });
 });
 
+describe('CEL et livret bancaire dans le plan automatique', () => {
+  const full = [
+    acc({ id: 'la', name: 'Livret A', type: AccountType.LIVRET_A, interestRate: 1.7, totalAmount: 22950, ownedAmount: 22950 }),
+    acc({ id: 'ldds', name: 'LDDS', type: AccountType.LDDS, interestRate: 1.7, totalAmount: 12000, ownedAmount: 12000 }),
+  ];
+  const la = acc({ id: 'la', name: 'Livret A', type: AccountType.LIVRET_A, interestRate: 1.7, totalAmount: 22800, ownedAmount: 22800 });
+  const cel = acc({ id: 'cel', name: 'CEL', type: AccountType.CEL, interestRate: 1, totalAmount: 15000, ownedAmount: 15000 });
+  const lb = acc({ id: 'lb', name: 'Livret Boost', type: AccountType.LIVRET_BANCAIRE, interestRate: 3, ceiling: 5000, totalAmount: 4800, ownedAmount: 4800 });
+  const lbOpen = acc({ id: 'lbo', name: 'Livret sans plafond', type: AccountType.LIVRET_BANCAIRE, interestRate: 2, totalAmount: 100, ownedAmount: 100 });
+  const av = acc({ id: 'av', name: 'AV', type: AccountType.ASSURANCE_VIE, interestRate: 2.6, totalAmount: 4000, ownedAmount: 4000 });
+
+  it('remplit après les livrets réglementés, au meilleur taux, jusqu\'au plafond, puis l\'AV', () => {
+    const steps = computePlacementStrategy(1000, [av, cel, lb, la, full[1]], CFG);
+    // Livret A (150 de place), livret bancaire à 3 % (200), CEL (plafond légal 15 300 : 300), AV.
+    expect(steps.map(s => [s.accountId, s.fillAmount, s.isFullAfter, s.isLiquid])).toEqual([
+      ['la', 150, true, true], ['lb', 200, true, true], ['cel', 300, true, true], ['av', 350, false, false],
+    ]);
+  });
+  it('plafond du compte prioritaire sur le plafond légal du CEL', () => {
+    const steps = computePlacementStrategy(500, [...full, { ...cel, ceiling: 15100 }, av], CFG);
+    expect(steps.map(s => [s.accountId, s.fillAmount])).toEqual([['cel', 100], ['av', 400]]);
+  });
+  it('un livret bancaire sans plafond ne passe jamais avant l\'AV', () => {
+    const steps = computePlacementStrategy(500, [...full, lbOpen, av], CFG);
+    expect(steps.map(s => [s.accountId, s.fillAmount])).toEqual([['av', 500]]);
+  });
+  it('sans AV ni PEA, le reste va sur le livret bancaire sans plafond plutôt que sur le compte courant', () => {
+    const steps = computePlacementStrategy(500, [...full, lbOpen], CFG);
+    expect(steps.map(s => [s.accountId, s.fillAmount, s.isLiquid])).toEqual([['lbo', 500, true]]);
+  });
+  it('LDDS conseillé sans retirer l\'argent qui va déjà sur le CEL et l\'AV', () => {
+    const steps = computePlacementStrategy(1000, [full[0], cel, av], CFG);
+    expect(steps.map(s => [s.accountName, s.fillAmount, !!s.infoOnly])).toEqual([
+      ['Ouvrir un LDDS', 1000, true], ['CEL', 300, false], ['AV', 700, false],
+    ]);
+    expect(steps[0].hint).toContain('En attendant, ce surplus va sur CEL et AV.');
+  });
+  it('CEL plein et rien d\'autre : suggestion d\'un PEA ou d\'une AV, sans le citer comme écarté', () => {
+    const steps = computePlacementStrategy(500, [...full, { ...cel, totalAmount: 15300 }], CFG);
+    expect(steps).toHaveLength(1);
+    expect(steps[0].accountName).toBe('Ouvrir un PEA/AV');
+    expect(steps[0].hint).not.toContain('CEL');
+  });
+  it('la répartition personnalisée respecte le plafond légal du CEL', () => {
+    const steps = computePlacementStrategy(1000, [cel, av], CFG, [{ accountId: 'cel', pct: 50 }, { accountId: 'av', pct: 50 }]);
+    expect(steps.filter(s => s.accountId).map(s => [s.accountId, s.fillAmount])).toEqual([['cel', 300], ['av', 700]]);
+  });
+});
+
 describe('solde initial', () => {
   it("n'est compté ni comme épargne du mois ni dans la reconstitution du passé", () => {
     const a = acc({ totalAmount: 5300, ownedAmount: 5300, movements: [
@@ -383,6 +419,12 @@ describe('répartition personnalisée', () => {
     expect(activeSavingsSplit({ savingsSplit: split, savingsSplitFrom: '2027-01-01' }, NOW)).toBeUndefined();
     expect(activeSavingsSplit({ savingsSplit: split, savingsSplitFrom: '2027-01-01' }, new Date(2027, 0, 1))).toEqual(split);
   });
+  it('signale les lignes dont le compte a été supprimé depuis', () => {
+    const withGone = [...split, { accountId: 'supprime', pct: 10 }];
+    expect(missingSplitAccounts(withGone, [la, av])).toEqual([{ accountId: 'supprime', pct: 10 }]);
+    expect(missingSplitAccounts(split, [la, av])).toEqual([]);
+    expect(missingSplitAccounts(undefined, [la, av])).toEqual([]);
+  });
 });
 
 describe('part des parents tracée', () => {
@@ -401,7 +443,6 @@ describe('part des parents tracée', () => {
       { id: 'v', date: '2026-09-06', amount: 100, label: 'Virement', type: 'IN' },
     ] });
     expect(computeMonthSavedAmount([a], NOW)).toBe(100);
-    expect(computeSavedSince([a], '2026-09-01', NOW)).toBe(100);
   });
 
   it('un solde initial rapporte depuis l’ouverture du compte', () => {
@@ -422,7 +463,6 @@ describe('corrections et point de départ du suivi', () => {
   });
   it('seuls les mouvements après le point de départ comptent', () => {
     expect(computeMonthSavedAmount([a], NOW, '2026-09-20')).toBe(200);
-    expect(computeSavedSince([a], '2026-09-01', NOW, '2026-09-20')).toBe(200);
   });
 });
 
@@ -432,13 +472,16 @@ describe('fonds euros et petites cessions de crypto', () => {
     const all = computeWithdrawalTax(av, 1000, CFG, NOW);
     const euro = computeWithdrawalTax({ ...av, euroFundPct: 100 }, 1000, CFG, NOW);
     const half = computeWithdrawalTax({ ...av, euroFundPct: 50 }, 1000, CFG, NOW);
-    expect(all.socialCharges).toBeGreaterThan(0);
+    // 1 000 € retirés d'un contrat de 10 000 € (6 000 € versés) : 400 € de gains, prélèvements
+    // sociaux de l'assurance vie à 17,2 %, soit 68,80 €.
+    expect(all.socialCharges).toBeCloseTo(68.8, 6);
     expect(euro.socialCharges).toBe(0);
     expect(half.socialCharges).toBeCloseTo(all.socialCharges / 2);
   });
   it('exonère une cession de crypto de 305 € au plus', () => {
     const c = acc({ type: AccountType.CRYPTO, totalDeposits: 6000 });
     expect(computeWithdrawalTax(c, 300, CFG, NOW).incomeTax).toBe(0);
-    expect(computeWithdrawalTax(c, 1000, CFG, NOW).incomeTax).toBeGreaterThan(0);
+    // 1 000 € cédés sur 10 000 € (6 000 € versés) : 400 € de plus-value, impôt à 12,8 %.
+    expect(computeWithdrawalTax(c, 1000, CFG, NOW).incomeTax).toBeCloseTo(51.2, 6);
   });
 });

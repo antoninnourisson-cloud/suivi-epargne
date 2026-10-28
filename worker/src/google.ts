@@ -91,8 +91,8 @@ const DATA_FILE_NAME = 'suivi_epargne.json';
 /** Fichier de données de l'utilisateur, passé par `migrate()` comme dans l'app : un ancien
  *  format ou un fichier abîmé ne fausse pas les rappels. `null` s'il n'existe pas.
  *  Même recherche que l'app (findConfigFiles) : avec des fichiers en double, c'est le plus
- *  récemment modifié qui compte. Avant, le plus ancien (tri par date de création) était lu,
- *  et les rappels partaient de données périmées. */
+ *  récemment modifié qui compte (le plus ancien, par date de création, donnerait des rappels
+ *  sur des données périmées). */
 export const readDataFile = async (accessToken: string): Promise<GlobalAppData | null> => {
   const q = encodeURIComponent(`name = '${DATA_FILE_NAME}' and trashed = false`);
   const order = encodeURIComponent('modifiedTime desc');

@@ -318,7 +318,7 @@ describe('parentalMode', () => {
     expect(hasParentalCapital([{ parentalCapital: 0 }, { parentalCapital: 10 }])).toBe(true);
     expect(hasParentalCapital([{ parentalCapital: 0 }])).toBe(false);
     expect(hasParentalHistory([{ parentalCapital: 0, movements: [{ kind: 'parental' }] }])).toBe(true);
-    expect(hasParentalHistory([{ parentalCapital: 0 }], { done: { date: '2027-01-01', accounts: [], interestsOffered: [] } })).toBe(true);
+    expect(hasParentalHistory([{ parentalCapital: 0, movements: [] }], { done: { date: '2027-01-01', accounts: [], interestsOffered: [] } })).toBe(true);
     expect(hasParentalHistory([{ parentalCapital: 0, movements: [{}] }])).toBe(false);
   });
 });

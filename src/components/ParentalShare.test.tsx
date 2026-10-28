@@ -9,7 +9,7 @@ import { AccountType, type SavingsAccount } from '../types';
 afterEach(cleanup);
 
 const account = (id: string, name: string, owned: number, parental: number): SavingsAccount => ({
-  id, name, type: AccountType.LIVRET_A, institution: 'Banque', ownedAmount: owned, parentalCapital: parental, totalAmount: owned + parental,
+  id, name, type: AccountType.LIVRET_A, institution: 'Banque', ownedAmount: owned, parentalCapital: parental, totalAmount: owned + parental, movements: [],
 });
 
 const renderShare = (accounts: SavingsAccount[]) => render(

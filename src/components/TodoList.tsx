@@ -24,6 +24,8 @@ export interface TodoSpec {
   snoozable?: boolean;
   /** Ce que l'alerte vaut en euros : puce « +39 €/an », et rang dans la liste. */
   gain?: AlertGain;
+  /** En tête de la liste quel que soit son montant (clôture de l'année en janvier-février). */
+  pinned?: boolean;
 }
 
 const PER: Record<AlertGain['per'], { short: string; long: string }> = {
@@ -55,7 +57,8 @@ export const TodoList: React.FC<{ items: TodoSpec[] }> = ({ items }) => {
   const now = Date.now();
   const visible = items.filter(i => !(snoozed[i.key] > now));
   if (visible.length === 0) return null;
-  // Actions avant informations ; dans chaque groupe, la plus grosse somme en euros d'abord.
+  // Tâches épinglées d'abord, puis actions avant informations ; dans chaque groupe, la plus
+  // grosse somme en euros d'abord.
   const sorted = sortAlerts(visible);
   const shown = showAll ? sorted : sorted.slice(0, SHOWN_BY_DEFAULT);
 

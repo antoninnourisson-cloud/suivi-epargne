@@ -64,7 +64,8 @@ export interface SavingsAccount {
   openingDate?: string;
   contractEndDate?: string;
   ceiling?: number;
-  movements?: AccountMovement[];
+  // Toujours présent (migrate() le crée vide) : jamais `undefined` après chargement.
+  movements: AccountMovement[];
   isTaxable?: boolean;
   rateHistory?: RateChange[];
   tags?: string[];
@@ -296,7 +297,7 @@ export interface FiscalConfig {
   inflation?: { rate: number; year: number; source?: string };
 }
 
-// --- NOUVELLE INTERFACE ---
+// Avantages salariaux (Paramètres) : comptés dans la paie nette du Pilotage.
 export interface WorkBenefits {
   navigo: {
     active: boolean;
@@ -324,13 +325,11 @@ export interface GlobalAppData {
   history: PortfolioSnapshot[];
   expensesHistory?: ExpenseSnapshot[];
   fiscalConfig?: FiscalConfig;
-  workBenefits?: WorkBenefits; // <--- AJOUT
+  workBenefits?: WorkBenefits;
   config: {
     grossAnnual: number;
     leisureBudget: number;
     projectSavings: number;
-    navigoBase?: number; // Gardé pour rétrocompatibilité
-    navigoRate?: number; // Gardé pour rétrocompatibilité
     taxRateManual: number;
     extraMonthlyIncome: number;
     // Clés API saisies par l'utilisateur, stockées en clair dans son propre fichier Drive
@@ -378,8 +377,8 @@ export interface GlobalAppData {
     // date de clôture. Une année clôturée n'a plus de rappel de clôture (Accueil, agenda, serveur).
     yearClosings?: Record<string, YearClosingRecord>;
   };
-  // L'ancien champ `goals` (écran « Objectifs », retiré) n'est plus lu : migrate() le garde
-  // tel quel dans le fichier, comme tout champ inconnu.
+  // Les anciens fichiers peuvent contenir `goals` (objectifs d'épargne) : jamais lu, gardé tel
+  // quel par migrate() comme tout champ inconnu.
   lastView?: string;
   payslips?: PayslipRecord[];
   recurringMovements?: RecurringMovement[];

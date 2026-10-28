@@ -113,7 +113,10 @@ export const describeLepTimeline = (t: LepTimeline | null): { title: string; det
   return null;
 };
 
-/** Plafond de RFR du foyer : plafond pour une part, plus un montant par demi-part. */
+/**
+ * Plafond de RFR du foyer : plafond pour une part, plus un montant fixe par demi-part au-delà
+ * de la première (grille officielle), et non une multiplication du plafond.
+ */
 const lepHouseholdCeiling = (fiscal: FiscalConfig | undefined): number | undefined => {
   const base = fiscal?.lepIncomeCeiling;
   if (!base) return undefined;
@@ -129,7 +132,7 @@ export const lepTimelineFromData = (data: GlobalAppData, asOf: Date = new Date()
   const c = data.config;
   // Le revenu fiscal de référence compte tous les salaires : l'autre salaire du Pilotage aussi.
   const estimate = c?.grossAnnual > 0
-    ? computeIncome({ grossAnnual: c.grossAnnual, extraMonthlyIncome: c.extraMonthlyIncome ?? 0, navigoBase: c.navigoBase ?? 0, navigoRate: c.navigoRate ?? 0, taxRateManual: 0 }, fiscal, data.workBenefits ?? DEFAULT_WORK_BENEFITS, asOf.getFullYear()).netTaxableYear
+    ? computeIncome({ grossAnnual: c.grossAnnual, extraMonthlyIncome: c.extraMonthlyIncome ?? 0, taxRateManual: 0 }, fiscal, data.workBenefits ?? DEFAULT_WORK_BENEFITS, asOf.getFullYear()).netTaxableYear
     : undefined;
   const years = buildLepIncomeYears(data, asOf, estimate, { cap: fiscal.standardAllowanceCap, min: fiscal.standardAllowanceMin });
   return computeLepTimeline(data.accounts || [], years, ceiling, asOf);

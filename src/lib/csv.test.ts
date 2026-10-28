@@ -12,7 +12,7 @@ describe('csv', () => {
     expect(csvCell('Livret A; BNP')).toBe('"Livret A; BNP"');
     expect(csvCell('Le "bon" compte')).toBe('"Le ""bon"" compte"');
     expect(csvCell('ligne 1\nligne 2')).toBe('"ligne 1\nligne 2"');
-    // La virgule n'est plus un séparateur : rien à échapper.
+    // La virgule n'est pas le séparateur : rien à échapper.
     expect(csvCell('Livret A, BNP')).toBe('Livret A, BNP');
   });
 

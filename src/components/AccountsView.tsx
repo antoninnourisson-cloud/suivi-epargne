@@ -68,8 +68,8 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
 
   // Regroupe les mouvements < 1€ (bruit typique des PEE) en une ligne synthétique.
   type DisplayMovement = AccountMovement & { grouped?: boolean };
-  const buildDisplayMovements = (movements: AccountMovement[] | undefined): DisplayMovement[] => {
-    const sorted = [...(movements || [])].sort((a, b) => b.date.localeCompare(a.date));
+  const buildDisplayMovements = (movements: AccountMovement[]): DisplayMovement[] => {
+    const sorted = [...movements].sort((a, b) => b.date.localeCompare(a.date));
     if (!groupSmallMovements) return sorted;
     const small = sorted.filter(m => Math.abs(m.amount) < 1);
     const large = sorted.filter(m => Math.abs(m.amount) >= 1);
@@ -279,7 +279,7 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
                                     </li>
                                   ))}
                                 </ul>
-                                {(!acc.movements || acc.movements.length === 0) && <p className="text-center text-on-surface-variant italic py-4">Aucun mouvement enregistré.</p>}
+                                {acc.movements.length === 0 && <p className="text-center text-on-surface-variant italic py-4">Aucun mouvement enregistré.</p>}
                               </div>
                             </td>
                           </tr>

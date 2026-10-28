@@ -100,7 +100,7 @@ const SAVINGS_EXCLUDED = new Set([AccountType.COMPTE_COURANT, AccountType.IMMOBI
 
 /** Argent mis de côté (part propre) entre `start` inclus et `end` exclu, sans dépasser `today`. */
 export const savedBetween = (
-  accounts: { type: AccountType; movements?: AccountMovement[] }[],
+  accounts: { type: AccountType; movements: AccountMovement[] }[],
   start: string,
   end: string,
   today: string,
@@ -109,7 +109,7 @@ export const savedBetween = (
   let total = 0;
   for (const a of accounts) {
     if (SAVINGS_EXCLUDED.has(a.type)) continue;
-    for (const m of a.movements || []) {
+    for (const m of a.movements) {
       if (!isSavingsFlow(m, trackingStartISO) || m.date < start || m.date >= end || m.date > today) continue;
       total += signedAmount(m);
     }
@@ -143,12 +143,12 @@ export interface GoodMonthsSummary {
  * plus récent (undefined : rien encore). Avant cette date, rien n'était enregistré.
  */
 export const savingsTrackingFrom = (
-  accounts: { type: AccountType; movements?: AccountMovement[] }[],
+  accounts: { type: AccountType; movements: AccountMovement[] }[],
   trackingStartISO?: string,
 ): string | undefined => {
   const firstFlow = accounts
     .filter(a => !SAVINGS_EXCLUDED.has(a.type))
-    .flatMap(a => (a.movements || []).filter(m => isSavingsFlow(m, trackingStartISO)).map(m => m.date))
+    .flatMap(a => a.movements.filter(m => isSavingsFlow(m, trackingStartISO)).map(m => m.date))
     .sort()[0];
   return [firstFlow, trackingStartISO].filter((d): d is string => !!d).sort().pop();
 };
@@ -159,7 +159,7 @@ export const savingsTrackingFrom = (
  * d'avant l'app. Un mois raté par an est couvert par un joker.
  */
 export const computeGoodMonths = (input: {
-  accounts: { type: AccountType; movements?: AccountMovement[] }[];
+  accounts: { type: AccountType; movements: AccountMovement[] }[];
   today: string;
   paydayDay?: number;
   payslips?: Pick<PayslipRecord, 'addedAt' | 'extracted'>[];
@@ -331,7 +331,7 @@ export const computePayReview = (input: {
   for (const a of input.accounts) {
     if (SAVINGS_EXCLUDED.has(a.type)) continue;
     let net = 0;
-    for (const m of a.movements || []) {
+    for (const m of a.movements) {
       if (m.date < last.start || m.date >= last.end) continue;
       if (m.kind === 'valuation') { valuation += signedAmount(m); continue; }
       if (!isSavingsFlow(m, input.trackingStartISO)) continue;

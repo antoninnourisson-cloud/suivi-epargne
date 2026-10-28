@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   generateRecoveryCode, formatRecoveryCode, parseRecoveryCode, deriveBackupKey, newSalt, encryptBackup, decryptBackup,
-  parseBackupBlob, codeMatchesBlob, b64urlEncode, b64urlDecode, CloudBackupError, shouldAutoUpload, AUTO_UPLOAD_INTERVAL_MS,
+  parseBackupBlob, b64urlEncode, b64urlDecode, CloudBackupError, shouldAutoUpload, AUTO_UPLOAD_INTERVAL_MS,
   type CloudBackupBlobV1,
 } from './cloudBackupCrypto';
 
@@ -75,7 +75,6 @@ describe('copie chiffrée v1', () => {
     const { blob } = await setup();
     const other = generateRecoveryCode().bytes;
     expect(await errorCode(decryptBackup(blob, other))).toBe('WRONG_CODE');
-    expect(await codeMatchesBlob(other, blob)).toBe(false);
   });
 
   it('un texte chiffré modifié est refusé (CORRUPTED)', async () => {

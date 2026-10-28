@@ -147,7 +147,7 @@ export const AccountForm: React.FC<AccountFormProps> = ({ onSave, initialData, o
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (ownedNegative || rateUnreadable) return;
-    // parseFrenchNumber et non parseFloat : « 2,4 » donnait 2 %. Un placement sans hypothèse
+    // parseFrenchNumber et non parseFloat : « 2,4 » donnerait 2 %. Un placement sans hypothèse
     // reste sans taux (la performance observée prend le relais) ; un livret vide vaut 0 %.
     const newRate = parsedRate ?? (market ? undefined : 0);
 
@@ -163,6 +163,7 @@ export const AccountForm: React.FC<AccountFormProps> = ({ onSave, initialData, o
       // Champs que ce formulaire n'édite pas (date de vérification du taux, champs inconnus
       // d'une version plus récente…) : conservés tels quels.
       ...initialData,
+      movements: initialData?.movements ?? [],
       id: initialData?.id || crypto.randomUUID(),
       // Espaces superflus retirés : « BPVF » et « BPVF  » apparaissaient comme deux établissements.
       name: name.trim().replace(/\s+/g, ' ') || `${type} - ${institution.trim()}`,

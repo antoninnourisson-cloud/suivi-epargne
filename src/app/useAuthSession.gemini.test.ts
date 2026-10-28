@@ -4,7 +4,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
 import { useAuthSession } from './useAuthSession';
-import { getGeminiModelOverride, setGeminiModelOverride } from '../services/geminiService';
+import { getGeminiModelOverride, setGeminiModelOverride } from '../services/geminiModel';
 import { MARK, STORAGE_KEYS, keysOfKind, readMarks, setMark } from '../lib/storageKeys';
 
 vi.mock('../services/googleDriveService', () => ({

@@ -7,7 +7,7 @@ import type { Dispatch, SetStateAction } from 'react';
 import { initGoogleApi, handleAuthClick, handleSignOut, resumeSession, hasStoredSession } from '../services/googleDriveService';
 import { isBackendEnabled } from '../services/backendService';
 import { disablePush } from '../services/pushService';
-import { setGeminiModelOverride } from '../services/geminiService';
+import { setGeminiModelOverride } from '../services/geminiModel';
 import { clearStoredDrafts } from '../components/update/draft';
 import { clearTraces } from '../lib/storageKeys';
 import type { PortfolioData } from '../hooks/usePortfolioData';

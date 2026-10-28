@@ -108,8 +108,8 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
   // Brouillon du montant du rappel de paie : on ne persiste qu'une saisie interprétable
   // (vide = capacité calculée), sans réécrire le champ pendant la frappe.
   const [paydayAmountDraft, setPaydayAmountDraft] = useState(paydayAmount !== undefined ? String(paydayAmount) : '');
-  // Le Pilotage peut s'afficher avant la fin du chargement Drive : le champ restait alors
-  // vide alors qu'un montant était enregistré. On le resynchronise quand la valeur arrive.
+  // Le Pilotage peut s'afficher avant la fin du chargement Drive : le champ resterait alors
+  // vide alors qu'un montant est enregistré. On le resynchronise quand la valeur arrive.
   useEffect(() => {
     setPaydayAmountDraft(prev => (parseFrenchNumber(prev) ?? undefined) === paydayAmount ? prev : (paydayAmount !== undefined ? String(paydayAmount).replace('.', ',') : ''));
   }, [paydayAmount]);
@@ -240,8 +240,8 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
       [AccountType.LDDS]: fiscalConfig.ceilings.ldds,
     };
     // TOUS les comptes de chaque type réglementé, pas seulement le premier trouvé : un
-    // second Livret A était invisible ici et exclu de l'espace restant. Le plafond saisi
-    // sur le compte prime sur la config globale (il était stocké mais jamais lu).
+    // second Livret A compte aussi dans l'espace restant. Le plafond saisi sur le compte
+    // prime sur celui des paramètres fiscaux.
     return [AccountType.LEP, AccountType.LIVRET_A, AccountType.LDDS].flatMap(type =>
       accounts.filter(a => a.type === type).map(acc => {
         const ceiling = (acc.ceiling && acc.ceiling > 0) ? acc.ceiling : (defaults[type] || 10000);
@@ -267,9 +267,9 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
     const liquidMoney = accounts.filter(a => !a.contractEndDate && ![AccountType.IMMOBILIER, AccountType.PER, AccountType.PEE].includes(a.type)).reduce((sum, a) => sum + a.ownedAmount, 0);
     const monthlyBurn = budgetData.totalFixed;
 
-    // Le retour anticipé "Infini" doit porter TOUS les champs lus par le JSX : l'ancienne
-    // version omettait years/months/days/monthlyBurn et l'écran affichait littéralement
-    // "m j" et "Avec € de charges fixes".
+    // Le retour anticipé "Infini" doit porter TOUS les champs lus par le JSX : sans
+    // years/months/days/monthlyBurn, l'écran afficherait littéralement "m j" et
+    // "Avec € de charges fixes".
     if (monthlyBurn === 0) {
       return { infinite: true, years: 0, months: 0, days: 0, monthlyBurn: 0, totalMonths: Infinity };
     }

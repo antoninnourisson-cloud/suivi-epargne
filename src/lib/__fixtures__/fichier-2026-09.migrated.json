@@ -1,0 +1,233 @@
+{
+  "accounts": [
+    {
+      "id": "acc-la",
+      "name": "Livret A",
+      "type": "Livret A",
+      "institution": "Banque Exemple",
+      "totalAmount": 15200,
+      "ownedAmount": 8200,
+      "parentalCapital": 7000,
+      "interestRate": 2.4,
+      "openingDate": "2019-03-01",
+      "rateHistory": [
+        {
+          "date": "2026-02-01",
+          "rate": 2.4
+        }
+      ],
+      "movements": [
+        {
+          "id": "m1",
+          "date": "2026-01-21",
+          "amount": 8000,
+          "label": "Solde initial",
+          "type": "IN"
+        },
+        {
+          "id": "m2",
+          "date": "2026-03-28",
+          "amount": 200,
+          "label": "Épargne du mois",
+          "type": "IN"
+        },
+        {
+          "id": "m3",
+          "date": "2026-05-02",
+          "amount": 150,
+          "label": "Virement vers LDDS",
+          "type": "OUT",
+          "linkId": "l1"
+        },
+        {
+          "id": "m4",
+          "date": "2026-06-30",
+          "amount": 150,
+          "label": "Actualisation (+)",
+          "type": "IN"
+        }
+      ]
+    },
+    {
+      "id": "acc-ldds",
+      "name": "LDDS",
+      "type": "LDDS",
+      "institution": "Banque Exemple",
+      "totalAmount": 3150,
+      "parentalCapital": 0,
+      "interestRate": 1.7,
+      "movements": [
+        {
+          "id": "m6",
+          "date": "2026-01-21",
+          "amount": 3000,
+          "label": "Solde initial",
+          "type": "IN"
+        },
+        {
+          "id": "m7",
+          "date": "2026-05-02",
+          "amount": 150,
+          "label": "Virement de Livret A",
+          "type": "IN",
+          "linkId": "l1"
+        }
+      ],
+      "ownedAmount": 3150
+    },
+    {
+      "id": "acc-av",
+      "name": "Assurance vie",
+      "type": "Assurance Vie",
+      "institution": "Assureur",
+      "totalAmount": 4300,
+      "ownedAmount": 4300,
+      "parentalCapital": 0,
+      "interestRate": 2.6,
+      "totalDeposits": 4000,
+      "movements": []
+    }
+  ],
+  "expenses": [
+    {
+      "id": "exp-1",
+      "name": "Loyer",
+      "amount": 650
+    }
+  ],
+  "history": [
+    {
+      "date": "2026-08-31",
+      "totalAmount": 22500,
+      "ownedAmount": 15500
+    },
+    {
+      "date": "2026-09-30",
+      "totalAmount": 22650,
+      "ownedAmount": 15650
+    }
+  ],
+  "expensesHistory": [
+    {
+      "date": "2026-09-01",
+      "total": 659.99
+    }
+  ],
+  "fiscalConfig": {
+    "salaryChargesRate": 0.2232,
+    "socialChargesCapital": 0.186,
+    "standardAllowance": 0.1,
+    "standardAllowanceCap": 14171,
+    "ceilings": {
+      "livretA": 22950,
+      "ldds": 12000,
+      "lep": 10000
+    },
+    "legalMaturity": {
+      "pea": 5,
+      "assuranceVie": 8,
+      "pee": 5
+    },
+    "lepIncomeCeiling": 22419,
+    "lepHouseholdParts": 1,
+    "taxBrackets": [
+      {
+        "limit": 11294,
+        "rate": 0
+      },
+      {
+        "limit": 28797,
+        "rate": 0.11
+      },
+      {
+        "limit": 82341,
+        "rate": 0.3
+      },
+      {
+        "limit": 177106,
+        "rate": 0.41
+      },
+      {
+        "limit": null,
+        "rate": 0.45
+      }
+    ],
+    "socialChargesLifeInsurance": 0.172,
+    "decote": {
+      "single": 897,
+      "rate": 0.4525,
+      "threshold": 1982
+    },
+    "standardAllowanceMin": 509,
+    "lepCeilingPerHalfPart": 6149,
+    "donation75Ceiling": 2000
+  },
+  "workBenefits": {
+    "navigo": {
+      "active": true,
+      "basePrice": 88.8,
+      "refundRate": 75
+    },
+    "mutuelle": {
+      "active": true,
+      "totalCost": 48,
+      "employerRate": 50
+    },
+    "mealVouchers": {
+      "active": false,
+      "faceValue": 9,
+      "employerRate": 60,
+      "daysPerMonth": 18
+    }
+  },
+  "config": {
+    "grossAnnual": 42000,
+    "leisureBudget": 250,
+    "projectSavings": 150,
+    "navigoBase": 88.8,
+    "navigoRate": 75,
+    "taxRateManual": 0,
+    "extraMonthlyIncome": 0,
+    "parentsEmail": "parents@exemple.invalid",
+    "geminiApiKey": "cle-factice-de-test",
+    "paydayDay": 27
+  },
+  "goals": [
+    {
+      "id": "g1",
+      "name": "Voyage",
+      "targetAmount": 1500,
+      "savedAmount": 400,
+      "deadline": "2027-06-01"
+    }
+  ],
+  "payslips": [
+    {
+      "id": "p1",
+      "fileId": "fichier-1",
+      "fileName": "fiche-2026-08.pdf",
+      "addedAt": "2026-09-02T08:00:00.000Z",
+      "extracted": {
+        "period": "2026-08",
+        "grossAmount": 3500,
+        "netPaid": 2650
+      },
+      "reviewed": true
+    }
+  ],
+  "recurringMovements": [
+    {
+      "id": "r1",
+      "accountId": "acc-la",
+      "amount": 200,
+      "type": "IN",
+      "label": "Épargne du mois",
+      "dayOfMonth": 28,
+      "active": true
+    }
+  ],
+  "activePayslipId": "p1",
+  "schemaVersion": 2,
+  "subscriptions": [],
+  "donations": []
+}

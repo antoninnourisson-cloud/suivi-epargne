@@ -88,8 +88,8 @@ export const SyncBanners: React.FC<SyncBannersProps> = ({ data, onReconnect, onO
       </div>
     )}
     {data.unreadableLocalCopy && (
-      // Copie locale jamais envoyée sur Drive, mais illisible : on le dit (avant, elle était
-      // ignorée en silence, puis écrasée par la copie suivante).
+      // Copie locale jamais envoyée sur Drive, mais illisible : on le dit (sinon elle serait
+      // écrasée sans prévenir par la copie suivante).
       <div role="alert" className="mb-4 bg-surface-container-high text-on-surface rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <p className="flex items-start gap-2 text-sm">
           <AlertTriangle className="w-5 h-5 shrink-0 text-error" aria-hidden="true" />
@@ -109,7 +109,7 @@ const UNREADABLE_TEXT: Record<'lost' | 'unavailable', string> = {
 /**
  * Toasts qui suivent la synchronisation : « Enregistré » après une écriture Drive CONFIRMÉE
  * (`lastSavedAt`, posé seulement après la réponse de Drive : la retombée de « Sauvegarde... »
- * affichait « Enregistré » même quand l'écriture venait d'échouer), et « mis à jour depuis un
+ * afficherait « Enregistré » même quand l'écriture vient d'échouer), et « mis à jour depuis un
  * autre appareil » quand Drive a été rechargé en silence.
  */
 export const useSyncToasts = (lastSavedAt: Date | null, remoteUpdatedAt: number | null, addToast: AddToast) => {

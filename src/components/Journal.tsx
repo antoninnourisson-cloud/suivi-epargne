@@ -88,7 +88,7 @@ export const Journal: React.FC<Props> = ({ accounts, restitution, onDeleteMoveme
   const entries = useMemo(() => {
     const out: Entry[] = [];
     for (const a of accounts) {
-      for (const m of a.movements || []) {
+      for (const m of a.movements) {
         const kind: Entry['kind'] = m.kind === 'parental' ? 'parental' : m.kind === 'valuation' ? 'valuation' : m.kind === 'adjustment' ? 'adjustment' : isInitialBalance(m) ? 'initial' : 'own';
         // Les mouvements de restitution s'annulent depuis Part parentale (sinon le relevé
         // de restitution resterait affiché alors que le capital serait rétabli).

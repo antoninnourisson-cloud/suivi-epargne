@@ -175,7 +175,7 @@ describe('saveAccount / deleteAccount', () => {
 
   it('nouveau compte : solde initial, annulable ; part des parents négative refusée', () => {
     const s0 = state();
-    const r = ok(saveAccount(s0, { account: { id: 'n', name: 'PEA', institution: 'B', type: AccountType.PEA, totalAmount: 0, ownedAmount: 500, parentalCapital: 0 }, today: '2026-10-07' }));
+    const r = ok(saveAccount(s0, { account: { id: 'n', name: 'PEA', institution: 'B', type: AccountType.PEA, totalAmount: 0, ownedAmount: 500, parentalCapital: 0, movements: [] }, today: '2026-10-07' }));
     const s1 = applyPatch(s0, r.next);
     expect(acc(s1, 'n')).toMatchObject({ totalAmount: 500, movements: [{ label: 'Solde initial', amount: 500, tag: 'initial' }] });
     expect(applyPatch(s1, r.undo(s1))).toEqual(s0);

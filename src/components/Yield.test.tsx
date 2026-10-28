@@ -52,6 +52,17 @@ describe('Rendement', () => {
     expect(screen.getByText(/Crypto : rendement à renseigner/)).toBeTruthy();
   });
 
+  it('performance comparée au Livret A sur la même période (taux datés du Livret A)', () => {
+    const livretA = acc({ interestRate: 1.7, rateHistory: [{ date: '2025-02-01', rate: 3 }, { date: '2025-08-01', rate: 2.4 }] });
+    render(<Yield accounts={[pea, livretA]} fiscalConfig={DEFAULT_FISCAL_CONFIG} />);
+    const row = within(screen.getByRole('table', { name: /rendement annuel de chaque placement/ })).getByRole('row', { name: /PEA/ });
+    // Mesure depuis janvier 2024 : un mois à 3 %, puis 2,4 %, puis 1,7 % : moyenne entre 1,7 et 3 %.
+    const shown = Number(row.textContent!.match(/Livret A : ([\d,]+)\s% \/ an/)![1].replace(',', '.'));
+    expect(shown).toBeGreaterThan(1.7);
+    expect(shown).toBeLessThan(3);
+    expect(screen.getByText(/ce qu'aurait rapporté le Livret A sur la même période/)).toBeTruthy();
+  });
+
   it('hypothèses prudentes : performance plafonnée, mesure trop courte, crypto jamais projetée', () => {
     const boom = acc({
       id: 'cto', name: 'Compte-titres', type: AccountType.CTO, totalAmount: 3000, ownedAmount: 3000,
@@ -128,6 +139,7 @@ describe('Rendement', () => {
     render(<Yield accounts={[boost]} fiscalConfig={DEFAULT_FISCAL_CONFIG} taxableIncome={20_000} />);
     expect(screen.getByText(/Votre tranche d'impôt est estimée à 11\s%/)).toBeTruthy();
     expect(screen.getByText(/case 2OP de la déclaration/)).toBeTruthy();
+    expect(screen.getByText(/Ce n'est qu'une approximation : Pécule applique une seule tranche/)).toBeTruthy();
     cleanup();
     render(<Yield accounts={[boost]} fiscalConfig={DEFAULT_FISCAL_CONFIG} taxableIncome={40_000} />);
     expect(screen.queryByText(/case 2OP/)).toBeNull();

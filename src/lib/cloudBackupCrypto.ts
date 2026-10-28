@@ -200,12 +200,6 @@ export const parseBackupBlob = (raw: unknown): CloudBackupBlobV1 => {
   };
 };
 
-/** Le code correspond-il à cette copie ? (sans déchiffrer) */
-export const codeMatchesBlob = async (codeBytes: Uint8Array<ArrayBuffer>, blob: CloudBackupBlobV1): Promise<boolean> => {
-  const { kcv } = await deriveBackupKey(codeBytes, b64urlDecode(blob.salt), ['decrypt']);
-  return kcv === blob.kcv;
-};
-
 /**
  * Déchiffre une copie avec le code de secours. Erreurs propres :
  * WRONG_CODE (le code ne correspond pas), CORRUPTED (copie modifiée ou abîmée),

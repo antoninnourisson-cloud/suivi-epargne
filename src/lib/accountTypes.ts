@@ -6,7 +6,10 @@
 // ================================================
 import { AccountType, FiscalConfig, SavingsAccount } from '../types';
 import { round2 } from './money';
-import { PFU_INCOME_TAX_RATE, isHousingSavingsIncomeTaxExempt, socialChargesRateFor } from './finance';
+import { PFU_INCOME_TAX_RATE, isHousingSavingsIncomeTaxExempt, socialChargesRateFor, PEL_DEPOSIT_CEILING, CEL_DEPOSIT_CEILING } from './finance';
+
+// Plafonds légaux de l'épargne logement : définis avec le plan de placement, qui s'en sert.
+export { PEL_DEPOSIT_CEILING, CEL_DEPOSIT_CEILING };
 
 /** Nom affiché dans la liste « Type » (la valeur enregistrée reste celle de l'enum). */
 export const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
@@ -27,14 +30,6 @@ export const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
   [AccountType.IMMOBILIER]: 'Immobilier',
   [AccountType.AUTRE]: 'Autre',
 };
-
-/**
- * Plafonds légaux des versements de l'épargne logement (les intérêts peuvent les dépasser).
- * Vérifiés le 2026-10-21 : PEL 61 200 € (https://www.service-public.gouv.fr/particuliers/vosdroits/F16140),
- * CEL 15 300 € (https://www.service-public.gouv.fr/particuliers/vosdroits/F16136).
- */
-export const PEL_DEPOSIT_CEILING = 61_200;
-export const CEL_DEPOSIT_CEILING = 15_300;
 
 /** Plafond proposé à la création d'un compte (0 : pas de plafond). */
 export const defaultCeiling = (type: AccountType, cfg: Pick<FiscalConfig, 'ceilings'>): number => {

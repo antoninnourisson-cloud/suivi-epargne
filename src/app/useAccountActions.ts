@@ -115,7 +115,7 @@ export const useAccountActions = (doc: AppDoc, setters: Setters, addToast: AddTo
       },
 
       renameMovement: (accountId: string, movementId: string, currentLabel: string) => {
-        const m = commandStateRef.current.accounts.find(a => a.id === accountId)?.movements?.find(x => x.id === movementId);
+        const m = commandStateRef.current.accounts.find(a => a.id === accountId)?.movements.find(x => x.id === movementId);
         if (m && isRestitutionMovement(m)) return;
         deps.current.dialog.open({
           kind: 'prompt', title: 'Renommer le mouvement', defaultValue: currentLabel, confirmLabel: 'Renommer',

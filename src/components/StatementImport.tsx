@@ -12,8 +12,9 @@ import { Modal } from './Modal';
 import { Button, IconButton, MoneyText, fieldClass } from './ui';
 import {
   balanceOnlyByDefault, buildImportItems, initialChoice, previewAccountImport, proposeMapping, statementClosingDate, statementConsistencyGap,
-  type OlderBalance, type ReviewedMovement, type StatementAccount, type StatementAccountChoice, type StatementData,
+  type ReviewedMovement, type StatementAccount, type StatementAccountChoice, type StatementData,
 } from '../lib/statementImport';
+import type { OlderBalance } from '../lib/statementDates';
 import { importStatement, type StatementImportItem } from '../lib/commands';
 import { tracksDeposits } from '../lib/finance';
 import { formatEUR, formatSignedEUR } from '../lib/format';

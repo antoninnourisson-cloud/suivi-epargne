@@ -11,12 +11,11 @@ export const LastSavedAtContext = createContext<Date | null>(null);
 /**
  * Retour visuel HONNÊTE pour un bouton d'enregistrement.
  *
- * Le piège corrigé ici : `AccountUpdate` et `TransferManager` affichaient
- * « ...avec succès ! » dès la mise à jour de l'état LOCAL, avant toute écriture sur Drive.
- * Si la sauvegarde échouait ensuite (conflit, session expirée, hors-ligne), l'utilisateur
- * avait déjà lu que c'était bon. C'est exactement la raison pour laquelle le toast global
- * d'App.tsx se base sur `lastSavedAt` — horodatage écrit UNIQUEMENT après une écriture
- * Drive confirmée — et non sur la retombée de `isSaving`.
+ * Piège évité : annoncer la réussite dès la mise à jour de l'état LOCAL, avant toute écriture
+ * sur Drive. Si la sauvegarde échoue ensuite (conflit, session expirée, hors ligne),
+ * l'utilisateur aurait déjà lu que c'était bon. Le statut se fonde donc sur `lastSavedAt`,
+ * horodatage écrit UNIQUEMENT après une écriture Drive confirmée, et non sur la retombée de
+ * `isSaving`.
  *
  * Usage : appeler `markPending()` au clic, puis afficher `status`. Le passage à 'saved'
  * n'intervient que lorsque `lastSavedAt` avance réellement. `lastSavedAt` vient du contexte

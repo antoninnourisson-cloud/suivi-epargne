@@ -114,8 +114,8 @@ test.describe('Répétition générale de la restitution', () => {
     const totalRow = planTable.locator('tbody tr').filter({ has: page.getByRole('cell', { name: 'Total', exact: true }) });
     expect(euros(await totalRow.locator('td').nth(1).textContent())).toBe(totalParents);
 
-    // Date du retrait effacée : refus explicite (autrefois, la part des parents était mise
-    // à zéro SANS mouvement de restitution, donc impossible à rétablir depuis l'écran).
+    // Date du retrait effacée : refus explicite (sinon la part des parents serait mise à zéro
+    // SANS mouvement de restitution, donc impossible à rétablir depuis l'écran).
     await recordRestitution(page, '');
     await expect(page.getByRole('alert').filter({ hasText: 'Date de retrait invalide.' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Restitution du capital' })).toBeVisible();

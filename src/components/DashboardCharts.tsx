@@ -1,7 +1,7 @@
 // ================================================
 // FILE: src/components/DashboardCharts.tsx
-// Graphiques du Tableau de bord, chargés à part : la bibliothèque de graphiques (recharts,
-// ~370 Ko) n'est plus nécessaire pour afficher les cartes, qui apparaissent tout de suite.
+// Graphiques du Tableau de bord, chargés à part : les cartes apparaissent tout de suite, sans
+// attendre la bibliothèque de graphiques (recharts, ~370 Ko).
 // Chaque graphique remplit la hauteur que lui donne l'Accueil et porte sa propre phrase de
 // synthèse et son bouton « Voir les données » (le tableau prend alors la place du tracé).
 // ================================================

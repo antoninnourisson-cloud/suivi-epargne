@@ -37,15 +37,15 @@ const monthsUntil = (from: Date, to: Date) =>
   Math.max(1, Math.ceil((to.getTime() - from.getTime()) / (MS_PER_DAY * 30.4375)));
 
 /** Mouvements de VOTRE argent (ni la part des parents), à ce jour. */
-const ownMovementsUntil = (movements: AccountMovement[] | undefined, todayISO: string) =>
-  (movements || []).filter(m => m.kind !== 'parental' && m.date <= todayISO);
+const ownMovementsUntil = (movements: AccountMovement[], todayISO: string) =>
+  movements.filter(m => m.kind !== 'parental' && m.date <= todayISO);
 
 /**
  * Votre part d'un compte à une date : `ownedAmount` moins vos mouvements datés après elle
  * (même convention que la carte « Mon épargne nette » de l'Accueil).
  */
 export const ownedAmountAt = (account: Pick<SavingsAccount, 'movements' | 'ownedAmount'>, iso: string): number =>
-  (account.movements || []).reduce((s, m) => (m.date > iso && m.kind !== 'parental' ? s - signedAmount(m) : s), account.ownedAmount);
+  account.movements.reduce((s, m) => (m.date > iso && m.kind !== 'parental' ? s - signedAmount(m) : s), account.ownedAmount);
 
 /**
  * Part disponible d'un PEE à `asOfDate`. Versements (mouvements entrants hors variation de

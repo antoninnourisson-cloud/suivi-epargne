@@ -75,16 +75,16 @@ export const RESTITUTION_LABEL = 'Restitution aux parents';
 
 /**
  * Comptes tels qu'ils seront après la restitution : part parentale retirée, avec un
- * mouvement « part des parents » daté du retrait. Sans ce mouvement, l'app « oubliait »
- * que ce capital avait existé et sous-estimait les intérêts passés.
+ * mouvement « part des parents » daté du retrait. Sans ce mouvement, l'app « oublierait »
+ * que ce capital a existé et sous-estimerait les intérêts passés.
  */
-export const accountsAfterRestitution = <T extends { ownedAmount: number; parentalCapital: number; totalAmount: number; movements?: AccountMovement[] }>(accounts: T[], dateISO?: string): T[] =>
+export const accountsAfterRestitution = <T extends { ownedAmount: number; parentalCapital: number; totalAmount: number; movements: AccountMovement[] }>(accounts: T[], dateISO?: string): T[] =>
   accounts.map(a => ({
     ...a,
     parentalCapital: 0,
     totalAmount: round2(a.ownedAmount),
     movements: dateISO && a.parentalCapital > 0
-      ? [...(a.movements || []), { id: `restitution-${dateISO}-${Math.random().toString(36).slice(2, 8)}`, date: dateISO, amount: round2(a.parentalCapital), label: RESTITUTION_LABEL, type: 'OUT' as const, kind: 'parental' as const, tag: 'restitution' as const }]
+      ? [...a.movements, { id: `restitution-${dateISO}-${Math.random().toString(36).slice(2, 8)}`, date: dateISO, amount: round2(a.parentalCapital), label: RESTITUTION_LABEL, type: 'OUT' as const, kind: 'parental' as const, tag: 'restitution' as const }]
       : a.movements,
   }));
 

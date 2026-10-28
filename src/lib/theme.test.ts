@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { initialPreference, isThemePreference, resolveDark, toggledPreference } from './theme';
+import { initialPreference, resolveDark, toggledPreference } from './theme';
 
 describe('thème', () => {
   it('suit le système en « Automatique », sinon le choix', () => {
@@ -29,12 +29,5 @@ describe('thème', () => {
   it('le bouton rapide passe au thème inverse de celui affiché', () => {
     expect(toggledPreference(true)).toBe('light');
     expect(toggledPreference(false)).toBe('dark');
-  });
-
-  it('reconnaît les préférences valides', () => {
-    expect(isThemePreference('system')).toBe(true);
-    expect(isThemePreference('dark')).toBe(true);
-    expect(isThemePreference('auto')).toBe(false);
-    expect(isThemePreference(undefined)).toBe(false);
   });
 });

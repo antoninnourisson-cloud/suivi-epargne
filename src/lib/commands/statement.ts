@@ -13,7 +13,7 @@ import type { AccountMovement, SavingsAccount } from '../../types';
 import { applyMovement, canWithdrawOwn, restoreBalances, round2, snapshotBalances } from '../accountOps';
 import { formatEUR } from '../format';
 import { EPS } from '../money';
-import { isISODay, olderThanBalance } from '../statementImport';
+import { isISODay, olderThanBalance } from '../statementDates';
 import { laterDay } from './accounts';
 import { planBalanceUpdate } from './balances';
 import { CommandResult, CommandState, fail } from './types';

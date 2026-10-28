@@ -87,7 +87,7 @@ export const proofNonces = async (secret: string, sessionHash: string, nowMs = D
 // ---------- Preuve ----------
 
 /** Message signé : nonce du serveur, méthode, chemin (sans paramètres). */
-export const proofMessage = (nonce: string, method: string, path: string): Uint8Array<ArrayBuffer> =>
+const proofMessage = (nonce: string, method: string, path: string): Uint8Array<ArrayBuffer> =>
   utf8(`${nonce}\n${method.toUpperCase()}\n${path}`);
 
 /** `stale` : nonce inconnu ou périmé (l'app reprend le nonce rendu et réessaie). */

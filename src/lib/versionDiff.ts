@@ -3,7 +3,7 @@
 //
 // Les deux contenus passent par migrate() (point d'entrée unique de toute donnée), puis sont
 // comparés par identifiant : comptes (solde total et part propre), mouvements de chaque
-// compte, et les autres parties du fichier (réglages, charges, objectifs…). Les points
+// compte, et les autres parties du fichier (réglages, charges, abonnements…). Les points
 // mensuels de l'historique sont ignorés : ils se recalculent à partir des soldes.
 import { migrate, stableStringify, withoutDeviceOnlyFields } from './schema';
 import { round2, EPS } from './money';
@@ -19,8 +19,6 @@ export interface VersionSummary {
   accountCount: number;
   movementCount: number;
 }
-
-export type Side = 'local' | 'remote';
 
 export interface AccountDiff {
   id: string;
@@ -79,7 +77,7 @@ const summarize = (d: GlobalAppData): VersionSummary => ({
   totalSavings: sum(d.accounts.map(a => a.totalAmount)),
   ownShare: sum(d.accounts.map(a => a.ownedAmount)),
   accountCount: d.accounts.length,
-  movementCount: d.accounts.reduce((n, a) => n + (a.movements?.length ?? 0), 0),
+  movementCount: d.accounts.reduce((n, a) => n + a.movements.length, 0),
 });
 
 // Forme comparée : migrée, sans ce qui ne quitte jamais l'appareil (clé Gemini).
@@ -117,8 +115,8 @@ export const diffVersions = (localRaw: unknown, remoteRaw: unknown): VersionDiff
     const lb = balances(l), rb = balances(r);
     const balanceDiffers = differs(lb.total, rb.total) || differs(lb.own, rb.own);
 
-    const lm = new Map((l.movements ?? []).map(m => [m.id, m]));
-    const rm = new Map((r.movements ?? []).map(m => [m.id, m]));
+    const lm = new Map(l.movements.map(m => [m.id, m]));
+    const rm = new Map(r.movements.map(m => [m.id, m]));
     let movementDiff = false;
     for (const [id, m] of lm) {
       const other = rm.get(id);

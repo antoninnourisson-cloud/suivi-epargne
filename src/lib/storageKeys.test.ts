@@ -3,6 +3,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   STORAGE_KEYS, OBSOLETE_KEYS, MARK, cleanUpStorage, clearTraces, hasMark, keysOfKind, pruneMarks, pruneSnoozed, readMarks, setMark,
+  skippedRecurringIds,
 } from './storageKeys';
 
 const memoryStorage = (init: Record<string, string> = {}): Storage => {
@@ -83,6 +84,17 @@ describe('repères datés de l\'Accueil', () => {
     const s = memoryStorage({ home_marks: JSON.stringify(marks) });
     cleanUpStorage(s, '2030-01-01');
     expect(JSON.parse(s.getItem('home_marks')!)).toEqual({ [seen]: '2024-01-15' });
+  });
+
+  it('« Pas ce mois-ci » : échéances écartées du mois demandé seulement', () => {
+    const marks = {
+      [MARK.skippedRecurring('2026-10', 'r1')]: '2026-10-05',
+      [MARK.skippedRecurring('2026-10', 'r2')]: '2026-10-06',
+      [MARK.skippedRecurring('2026-09', 'r3')]: '2026-09-05',
+      [MARK.payRaiseSeen('p1')]: '2026-10-01',
+    };
+    expect([...skippedRecurringIds(marks, '2026-10')].sort()).toEqual(['r1', 'r2']);
+    expect([...skippedRecurringIds(marks, '2026-11')]).toEqual([]);
   });
 
   it('ignores a damaged marks object', () => {

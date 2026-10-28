@@ -1,5 +1,5 @@
-// Modifications sans effet sur les soldes, autrefois écrites dans l'interface : libellé d'un
-// mouvement, marque « ajustement », annulation d'un changement de taux des livrets.
+// Modifications sans effet sur les soldes : libellé d'un mouvement, marque « ajustement »,
+// annulation d'un changement de taux des livrets.
 import type { SavingsAccount } from '../../types';
 import { isRestitutionMovement } from '../accountOps';
 import { REGULATED_RATE_GROUPS } from '../finance';
@@ -10,10 +10,10 @@ import { CommandResult, CommandState, fail } from './types';
  * reconnaître) ; un libellé vide est ignoré. Renvoie la même liste quand rien ne change.
  */
 export const renameMovement = (accounts: SavingsAccount[], accountId: string, movementId: string, label: string): SavingsAccount[] => {
-  const movement = accounts.find(a => a.id === accountId)?.movements?.find(m => m.id === movementId);
+  const movement = accounts.find(a => a.id === accountId)?.movements.find(m => m.id === movementId);
   if (!label || !movement || isRestitutionMovement(movement)) return accounts;
   return accounts.map(acc => (acc.id !== accountId ? acc : {
-    ...acc, movements: acc.movements?.map(m => (m.id === movementId ? { ...m, label } : m)),
+    ...acc, movements: acc.movements.map(m => (m.id === movementId ? { ...m, label } : m)),
   }));
 };
 
@@ -21,7 +21,7 @@ export const renameMovement = (accounts: SavingsAccount[], accountId: string, mo
 export const toggleMovementAdjustment = (accounts: SavingsAccount[], accountId: string, movementId: string): SavingsAccount[] =>
   accounts.map(a => (a.id !== accountId ? a : {
     ...a,
-    movements: (a.movements || []).map(m => (m.id !== movementId ? m : m.kind === 'adjustment' ? { ...m, kind: undefined } : { ...m, kind: 'adjustment' as const })),
+    movements: a.movements.map(m => (m.id !== movementId ? m : m.kind === 'adjustment' ? { ...m, kind: undefined } : { ...m, kind: 'adjustment' as const })),
   }));
 
 /**

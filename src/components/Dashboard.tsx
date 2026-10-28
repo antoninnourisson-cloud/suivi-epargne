@@ -36,7 +36,7 @@ import { computeAlerts } from '../lib/alerts';
 import { lepStillEligible } from '../lib/idleCash';
 import { findStaleBalances } from '../lib/freshness';
 import {
-  availabilitySlices, buildHomeTodos, daysSinceLastMovement, findCeilingAlerts, findInactiveEmptyAccounts,
+  availabilitySlices, buildHomeTodos, daysSinceLastMovement, findCeilingAlerts, findInactiveEmptyAccounts, homeAgenda,
   monthDelta as computeMonthDelta, parentalYearEndInterest, payPeriodSavings, savingsGauge, savingsOn, savingsProjection, upcomingDebits as findUpcomingDebits,
   type HomeAction, type HomeTodoIcon,
 } from '../lib/home';
@@ -139,6 +139,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalC
   );
   const projection = useMemo(() => savingsProjection(accounts, new Date()), [accounts]);
   const debits = useMemo(() => findUpcomingDebits(subscriptions, new Date()), [subscriptions]);
+  const agenda = useMemo(() => homeAgenda(agendaNext, debits), [agendaNext, debits]);
 
   // --- Motivation : bons mois, jalons, point de paie ---
   const motivation = useMemo(() => motivationSettings({ gamification, goodMonthThreshold }), [gamification, goodMonthThreshold]);
@@ -237,7 +238,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalC
     }
   };
   const todos: TodoSpec[] = homeTodos.map(t => ({
-    key: t.key, icon: TODO_ICONS[t.icon], tone: t.tone, text: t.text, detail: t.detail, gain: t.gain, snoozable: t.snoozable,
+    key: t.key, icon: TODO_ICONS[t.icon], tone: t.tone, text: t.text, detail: t.detail, gain: t.gain, snoozable: t.snoozable, pinned: t.pinned,
     primary: t.primary && { label: t.primary.label, onClick: () => run(t.primary!.action) },
     secondary: t.secondary && { label: t.secondary.label, onClick: () => run(t.secondary!.action) },
     extra: t.key === 'rates' && ratesEditorOpen && onUpdateAccounts ? <RegulatedRatesEditor accounts={accounts} onApply={onUpdateAccounts} /> : undefined,
@@ -317,7 +318,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalC
           />
         )}
         {emergency && <EmergencyCard emergency={emergency} onSetMonths={onSetEmergencyMonths} />}
-        {agendaNext.length > 0 && <AgendaCard events={agendaNext} onNavigate={onNavigate} />}
+        {agenda.length > 0 && <AgendaCard events={agenda} onNavigate={onNavigate} />}
         {debits.length > 0 && <UpcomingDebitsCard debits={debits} />}
       </div>
 

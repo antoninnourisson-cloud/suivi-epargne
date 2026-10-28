@@ -340,8 +340,8 @@ const ensureOk = async (res: Response): Promise<Response> => {
 };
 
 // Toute requête a un délai maximal : sans lui, un fetch qui pend (portail captif, TLS
-// bloqué) laissait le mutex de sauvegarde occupé POUR TOUJOURS — plus aucune écriture
-// Drive ne partait, isSaving restait allumé, zéro message. AbortError est converti en
+// bloqué) laisserait le mutex de sauvegarde occupé POUR TOUJOURS — plus aucune écriture
+// Drive ne partirait, isSaving resterait allumé, zéro message. AbortError est converti en
 // TypeError pour rejoindre le chemin "problème réseau" existant des appelants.
 const FETCH_TIMEOUT_MS = 30_000;
 const fetchWithTimeout = async (url: string, options: RequestInit = {}): Promise<Response> => {
@@ -417,18 +417,16 @@ export const handleSignOut = async () => {
  * réellement aucun ; toute autre erreur est propagée.
  *
  * Ce point est critique : l'appelant interprète « aucun » comme « premier démarrage »
- * et crée alors un fichier vide. Avant, un `catch` global renvoyait `null` pour
- * n'importe quelle panne (403 rateLimitExceeded, 503 backendError — courants chez
- * Drive), ce qui créait un SECOND `suivi_epargne.json` vide, y basculait l'app et
- * y écrivait un portefeuille à zéro. Les vraies données survivaient mais devenaient
- * inatteignables (la recherche renvoyant `files[0]` sans tri). Un échec doit donc
- * remonter et faire échouer le chargement, jamais se déguiser en « pas de données ».
+ * et crée alors un fichier vide. Répondre « aucun » à n'importe quelle panne (403
+ * rateLimitExceeded, 503 backendError — courants chez Drive) créerait un SECOND
+ * `suivi_epargne.json` vide, y basculerait l'app et y écrirait un portefeuille à zéro :
+ * les vraies données deviendraient inatteignables. Un échec doit donc remonter et faire
+ * échouer le chargement, jamais se déguiser en « pas de données ».
  *
  * Plusieurs fichiers homonymes peuvent exister (fichier mis à la corbeille puis restauré
  * pendant qu'un autre appareil en recréait un) : ils sont tous renvoyés, LE PLUS RÉCEMMENT
- * MODIFIÉ D'ABORD. Avant, le plus ancien (tri par date de création) était ouvert en silence
- * au démarrage suivant, avec des données périmées. L'appelant signale les doublons et
- * laisse l'utilisateur choisir (voir usePortfolioData).
+ * MODIFIÉ D'ABORD (le plus ancien, par date de création, aurait des données périmées).
+ * L'appelant signale les doublons et laisse l'utilisateur choisir (voir usePortfolioData).
  */
 // `headRevisionId` est lu dans la même requête (le champ File « headRevisionId », disponible
 // pour un fichier au contenu binaire comme ce JSON : developers.google.com/workspace/drive/
@@ -459,8 +457,8 @@ export const readConfigFile = async (fileId: string): Promise<unknown> => {
  * compte toutes les mutations du fichier, métadonnées incluses, et il continue de
  * s'incrémenter tout seul quelques secondes APRÈS une écriture (mesuré : un simple
  * PATCH le fait passer de N à N+1 immédiatement, puis à N+2 ~2 s plus tard, sans
- * aucune intervention extérieure). Le relire juste après un PATCH donnait donc une
- * valeur périmée d'avance, et la sauvegarde suivante croyait détecter un autre
+ * aucune intervention extérieure). Le relire juste après un PATCH donnerait donc une
+ * valeur périmée d'avance, et la sauvegarde suivante croirait détecter un autre
  * appareil → faux conflits à répétition sur un seul et même appareil.
  * `headRevisionId` ne change, lui, qu'à une vraie écriture de contenu.
  */
@@ -588,9 +586,9 @@ const VERIFY_RETRY_MS = 1500;
  *
  * Historique illisible (réseau coupé, Drive saturé, session expirée juste après le PATCH) :
  * l'écriture, elle, a RÉUSSI. Ce n'est donc pas un échec d'écriture : on la garde, avec un
- * verdict « inconnu » (avertissement en console), comme un historique non concluant. Avant,
- * l'erreur remontait comme un échec de sauvegarde : l'app gardait l'ancienne révision et
- * ouvrait ensuite un faux conflit contre sa propre écriture (ou se croyait hors ligne).
+ * verdict « inconnu » (avertissement en console), comme un historique non concluant. Remontée
+ * comme un échec de sauvegarde, l'erreur ferait garder l'ancienne révision, puis ouvrir un
+ * faux conflit contre notre propre écriture (ou croire l'app hors ligne).
  */
 const verifyWrite = async (fileId: string, expectedRevision: string, ourRevision: string): Promise<void> => {
   const check = async (): Promise<WriteVerdict | null> => {
@@ -768,7 +766,7 @@ export const openDrivePicker = async (pickerApiKey: string): Promise<PickedDrive
         } else if (data.action === picker.Action.CANCEL) {
           resolve(null);
         } else if (data.action === 'error') {
-          // Sans cette branche, une erreur interne du Picker laissait la promesse pendante
+          // Sans cette branche, une erreur interne du Picker laisserait la promesse pendante
           // à jamais — bouton "Importer" mort jusqu'au rechargement de la page.
           reject(new Error('PICKER_ERROR'));
         }

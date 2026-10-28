@@ -17,8 +17,8 @@ const isVaultUnavailable = (err: unknown) => err instanceof Error && err.message
 // Abri : copies jamais envoyées, illisibles pour l'instant
 // ---------------------------------------------------------------------------
 // Sans clé de chiffrement disponible, le miroir s'écrit en clair et la quarantaine ne peut pas
-// relire ce qu'elle remplace : une copie chiffrée illisible « pour l'instant » était donc
-// écrasée à la première saisie, et perdue le jour où le stockage revenait. Elle est d'abord
+// relire ce qu'elle remplace : une copie chiffrée illisible « pour l'instant » serait donc
+// écrasée à la première saisie, et perdue le jour où le stockage revient. Elle est d'abord
 // déplacée ici, telle quelle (liste de copies chiffrées), puis relue à chaque chargement.
 
 const isStringList = (v: unknown): v is string[] => Array.isArray(v) && v.every(s => typeof s === 'string');
@@ -200,7 +200,7 @@ export interface HeldReadable { stored: string; snap: StoredSnapshot }
  * (contenu canonique de Drive) : renvoie la plus récente, `candidates` compris. `clearSynced` :
  * une copie identique à Drive est effacée (elle y est déjà). Une copie rattachée à un AUTRE
  * fichier Drive appartient à un autre compte : ni proposée, ni effacée.
- * Une copie illisible n'est plus ignorée en silence : elle est renvoyée dans `unreadable`,
+ * Une copie illisible n'est pas ignorée en silence : elle est renvoyée dans `unreadable`,
  * pour que l'utilisateur le sache (des modifications jamais envoyées existent, mais ne
  * peuvent pas être proposées). `held` : copies de l'abri redevenues lisibles (voir releaseHeldCopies).
  */

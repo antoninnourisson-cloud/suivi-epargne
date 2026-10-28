@@ -2,7 +2,7 @@
 // boutons faits d'une seule icône) : passe axe-core
 // « color-contrast » sur les écrans les plus lus et sur une boîte de confirmation, en clair
 // et en sombre. Garde-fou contre le retour d'un texte gris trop pâle ou d'un bouton dont le
-// fond est forcé (« Valider le dépôt » était à 3,6:1).
+// fond est forcé.
 import { test, expect, type Page } from './fixtures';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -75,8 +75,8 @@ const iconContrastViolations = (page: Page): Promise<string[]> => page.evaluate(
   return out;
 });
 
-// Écrans les plus lus, et ceux dont les petites icônes ont été corrigées (Mes comptes, Dons,
-// Fiches de paie ; les échéances récurrentes sont dans « Versements »).
+// Écrans les plus lus, et ceux qui ont de petites icônes (Mes comptes, Dons, Fiches de paie ;
+// les échéances récurrentes sont dans « Virements »).
 const VIEWS = ['dashboard', 'transfers', 'pilot', 'journal', 'parental', 'accounts', 'yield', 'donations', 'payslips', 'agenda', 'subscriptions', 'history'];
 
 for (const theme of ['light', 'dark'] as const) {
@@ -120,8 +120,8 @@ for (const theme of ['light', 'dark'] as const) {
       }
     });
 
-    // Barre du bas d'« Actualiser les soldes » (surface inversée) : « Enregistrer » y était à
-    // 2,3:1 en sombre. Elle n'apparaît qu'avec un solde modifié.
+    // Barre du bas d'« Actualiser les soldes » (surface inversée, le piège est en sombre).
+    // Elle n'apparaît qu'avec un solde modifié.
     test('barre « Enregistrer » d’Actualiser les soldes', async ({ page }) => {
       await page.goto('/?demo=1&view=update');
       await page.getByRole('button', { name: /^LDDS/ }).click();

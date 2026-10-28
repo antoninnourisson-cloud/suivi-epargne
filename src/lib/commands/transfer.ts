@@ -17,7 +17,7 @@ export interface LinkedTransferInput {
 
 /**
  * Enregistre le virement (montant arrondi au centime, comme les soldes : une saisie « 10,005 »
- * laissait sinon des mouvements dont la somme différait des soldes d'un centime). Les
+ * laisserait sinon des mouvements dont la somme diffère des soldes d'un centime). Les
  * versements cumulés des placements qui les suivent bougent avec (argent réellement déplacé).
  * Annulation exacte : les deux comptes reviennent à leur état d'avant, ce qui a été fait
  * depuis sur ces comptes est gardé.

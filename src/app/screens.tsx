@@ -37,6 +37,8 @@ export const ConflictDialog = lazyWithRetry(() => import('../components/sync/Con
 export const LogoutDialog = lazyWithRetry(() => import('../components/sync/LogoutDialog').then(m => ({ default: m.LogoutDialog })));
 export const QuickAddModal = lazyWithRetry(() => import('../components/QuickAddModal').then(m => ({ default: m.QuickAddModal })));
 export const StatementImport = lazyWithRetry(() => import('../components/StatementImport').then(m => ({ default: m.StatementImport })));
+// Verrou de l'app : seulement sur les appareils où il est activé.
+export const AppLockScreen = lazyWithRetry(() => import('../components/AppLockScreen').then(m => ({ default: m.AppLockScreen })));
 export const WhatsNewModal = lazyWithRetry(() => import('../components/WhatsNew').then(m => ({ default: m.WhatsNewModal })));
 
 /** Morceau chargé à part : rien ne s'affiche à sa place le temps de son chargement. */

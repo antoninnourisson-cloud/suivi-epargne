@@ -10,6 +10,7 @@ import { EPS, round2, signedAmount } from './money';
 import { daysBetween, parseISODate } from './dates';
 import { tracksDeposits } from './finance';
 import type { StatementImportItem } from './commands/statement';
+import { isISODay, olderThanBalance, type OlderBalance } from './statementDates';
 
 export interface StatementMovement {
   /** Date de l'opération, AAAA-MM-JJ. */
@@ -48,14 +49,6 @@ export const STATEMENT_LIMITS = { accounts: 12, movements: 400, amount: 100_000_
 // ---------------------------------------------------------------------------
 // Filtrage de la réponse de Gemini
 // ---------------------------------------------------------------------------
-
-/** Jour AAAA-MM-JJ qui existe au calendrier (années 2000 à 2100). */
-export const isISODay = (v: unknown): v is string => {
-  if (typeof v !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
-  const [y, m, d] = v.split('-').map(Number);
-  if (y < 2000 || y > 2100 || m < 1 || m > 12 || d < 1) return false;
-  return d <= new Date(y, m, 0).getDate();
-};
 
 const record = (v: unknown): Record<string, unknown> | null =>
   v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : null;
@@ -178,7 +171,7 @@ export const matchScore = (stmt: Pick<StatementAccount, 'name'>, acc: Pick<Savin
 };
 
 /** Score minimal pour proposer un compte (en dessous : « Ne pas importer », à choisir). */
-export const MATCH_THRESHOLD = 3;
+const MATCH_THRESHOLD = 3;
 
 /**
  * Compte proposé pour chaque compte du relevé (`undefined` = aucun). Un de vos comptes n'est
@@ -251,9 +244,9 @@ export const labelSimilarity = (a: string, b: string): number => {
 export const balanceOnlyByDefault = (type: AccountType): boolean => type === AccountType.COMPTE_COURANT || tracksDeposits(type);
 
 /** Jours d'écart tolérés entre une opération et un mouvement déjà saisi (date de valeur, saisie le lendemain). */
-export const DUPLICATE_WINDOW_DAYS = 3;
+const DUPLICATE_WINDOW_DAYS = 3;
 /** Même tolérance, élargie quand les libellés se ressemblent. */
-export const DUPLICATE_WINDOW_SIMILAR_DAYS = 7;
+const DUPLICATE_WINDOW_SIMILAR_DAYS = 7;
 
 /**
  * Statut de chaque opération du relevé pour le compte choisi. Chaque mouvement existant ne
@@ -263,7 +256,7 @@ export const DUPLICATE_WINDOW_SIMILAR_DAYS = 7;
  * (`balanceOnlyByDefault`). Avec `today`, une opération datée après aujourd'hui est `future`.
  */
 export const reviewMovements = (stmt: Pick<StatementAccount, 'movements'>, account: SavingsAccount, today?: string): ReviewedMovement[] => {
-  const pool = (account.movements || []).filter(m => m.kind !== 'parental' && m.tag !== 'initial');
+  const pool = account.movements.filter(m => m.kind !== 'parental' && m.tag !== 'initial');
   const used = new Set<string>();
   return stmt.movements.map(m => {
     const day = parseISODate(m.date);
@@ -287,26 +280,6 @@ export const reviewMovements = (stmt: Pick<StatementAccount, 'movements'>, accou
       selected: status === 'new' && !balanceOnlyByDefault(account.type),
     };
   });
-};
-
-/**
- * Solde du relevé plus ancien que ce que le compte sait déjà : son dernier solde vérifié
- * (`checked`), ou un mouvement enregistré après la date du relevé (`movement`, le plus récent).
- * Le reprendre ramènerait le compte en arrière : ce qui a bougé depuis serait effacé par une
- * fausse « Actualisation ».
- */
-export interface OlderBalance { since: string; reason: 'checked' | 'movement' }
-
-/** Voir `OlderBalance` ; `null` : le relevé n'est pas plus ancien que le compte. */
-export const olderThanBalance = (account: Pick<SavingsAccount, 'balanceCheckedAt' | 'movements'>, closingDate: string): OlderBalance | null => {
-  if (account.balanceCheckedAt && isISODay(account.balanceCheckedAt) && account.balanceCheckedAt > closingDate) {
-    return { since: account.balanceCheckedAt, reason: 'checked' };
-  }
-  let latest: string | undefined;
-  for (const m of account.movements || []) {
-    if (isISODay(m.date) && m.date > closingDate && (!latest || m.date > latest)) latest = m.date;
-  }
-  return latest ? { since: latest, reason: 'movement' } : null;
 };
 
 // ---------------------------------------------------------------------------

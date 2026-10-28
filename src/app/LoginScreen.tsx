@@ -3,7 +3,7 @@ import React from 'react';
 import { AlertTriangle, Loader2 } from 'lucide-react';
 import { Logo } from '../components/Logo';
 import { Button } from '../components/Button';
-import { LockResetNotice } from '../components/AppLockScreen';
+import { LockResetNotice } from '../components/LockResetNotice';
 import { APP_VERSION } from '../appVersion';
 
 interface LoginScreenProps {

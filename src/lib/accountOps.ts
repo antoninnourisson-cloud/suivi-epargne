@@ -1,9 +1,9 @@
 // ================================================
 // FILE: src/lib/accountOps.ts
 // Toutes les opérations qui modifient les soldes d'un compte passent par ici : ajouter ou
-// retirer un mouvement, et l'annuler à l'identique. Avant, ce calcul (part propre, part
-// des parents, total, versements cumulés, arrondis) était recopié à six endroits et
-// dérivait d'un endroit à l'autre.
+// retirer un mouvement, et l'annuler à l'identique. Ce calcul (part propre, part des
+// parents, total, versements cumulés, arrondis) n'existe qu'ici : recopié, il dériverait
+// d'un écran à l'autre.
 // ================================================
 import { AccountMovement, SavingsAccount } from '../types';
 import { depositsAfterCashFlow, isInitialBalance, tracksDeposits } from './finance';
@@ -12,10 +12,7 @@ import { EPS, round2, signedAmount } from './money';
 export { round2 };
 
 /**
- * Mouvements qui expliquent le passage d'un solde à un autre (fiche modifiée, actualisation) :
- * - mouvements DÉJÀ préparés par une commande (updateBalances, quickAdd) et portés par
- *   `next.movements` (absents de `old`) : ce sont eux qui expliquent l'écart, repris tels
- *   quels ; seul un reste éventuel est déduit ci-dessous ;
+ * Mouvements qui expliquent le passage d'un solde à un autre (fiche du compte modifiée) :
  * - variation de VOTRE part : un mouvement « {ownLabel} » (de nature `ownKind`, par exemple
  *   `adjustment` pour une correction qui n'est pas de l'épargne) ; sur un placement qui suit
  *   ses versements, l'argent versé/retiré (`cashFlow`) et la variation de valeur
@@ -28,18 +25,13 @@ export const balanceChangeMovements = (
   date: string,
   opts: { ownLabel: string; ownKind?: 'adjustment'; cashFlow?: number; splitValuation?: boolean },
 ): AccountMovement[] => {
-  const known = new Set((old.movements || []).map(m => m.id));
-  const declared = (next.movements || []).filter(m => !known.has(m.id));
-  const declaredSum = (parental: boolean) => declared
-    .filter(m => (m.kind === 'parental') === parental)
-    .reduce((s, m) => s + signedAmount(m), 0);
-  const out: AccountMovement[] = [...declared];
+  const out: AccountMovement[] = [];
   const push = (amount: number, label: string, kind?: AccountMovement['kind']) => {
     const a = round2(amount);
     if (Math.abs(a) <= 0.001) return;
     out.push({ id: crypto.randomUUID(), date, amount: Math.abs(a), label: `${label} (${a > 0 ? '+' : '-'})`, type: a > 0 ? 'IN' : 'OUT', ...(kind ? { kind } : {}) });
   };
-  const ownDiff = next.ownedAmount - old.ownedAmount - declaredSum(false);
+  const ownDiff = next.ownedAmount - old.ownedAmount;
   if (opts.splitValuation) {
     const cash = opts.cashFlow ?? 0;
     push(cash, cash > 0 ? 'Versement' : 'Retrait');
@@ -47,7 +39,7 @@ export const balanceChangeMovements = (
   } else {
     push(ownDiff, opts.ownLabel, opts.ownKind);
   }
-  push(next.parentalCapital - old.parentalCapital - declaredSum(true), 'Part des parents', 'parental');
+  push(next.parentalCapital - old.parentalCapital, 'Part des parents', 'parental');
   return out;
 };
 
@@ -93,7 +85,7 @@ export const applyMovement = (
         : Math.max(0, round2(totalDeposits + flow)); // annulation : on retire exactement ce qui avait été ajouté
     }
   }
-  const movements = sign > 0 ? [...(acc.movements || []), m] : (acc.movements || []).filter(x => x.id !== m.id);
+  const movements = sign > 0 ? [...acc.movements, m] : acc.movements.filter(x => x.id !== m.id);
   return { ...acc, ownedAmount, parentalCapital, totalAmount: round2(ownedAmount + parentalCapital), totalDeposits, movements };
 };
 
@@ -103,7 +95,7 @@ export type BalanceSnapshot = Record<string, Pick<SavingsAccount, 'ownedAmount' 
 export const snapshotBalances = (accounts: SavingsAccount[], ids: string[]): BalanceSnapshot =>
   Object.fromEntries(accounts.filter(a => ids.includes(a.id)).map(a => [a.id, {
     ownedAmount: a.ownedAmount, parentalCapital: a.parentalCapital, totalAmount: a.totalAmount,
-    totalDeposits: a.totalDeposits, movements: [...(a.movements || [])],
+    totalDeposits: a.totalDeposits, movements: [...a.movements],
   }]));
 
 /**
@@ -119,9 +111,9 @@ export const restoreBalances = (accounts: SavingsAccount[], snap: BalanceSnapsho
   const next = accounts.map(a => {
     const s = snap[a.id];
     if (!s) return a;
-    const known = new Set((s.movements || []).map(m => m.id));
-    const later = (a.movements || []).filter(m => !known.has(m.id) && !created.has(m.id));
-    let restored: SavingsAccount = { ...a, ...s, movements: [...(s.movements || [])] };
+    const known = new Set(s.movements.map(m => m.id));
+    const later = a.movements.filter(m => !known.has(m.id) && !created.has(m.id));
+    let restored: SavingsAccount = { ...a, ...s, movements: [...s.movements] };
     for (const m of later) restored = applyMovement(restored, m, 1, { trackDeposits: true });
     if (restored.ownedAmount < -EPS && a.ownedAmount >= -EPS) broken = true;
     return restored;
@@ -149,7 +141,7 @@ export const findCancellingGroups = (accounts: SavingsAccount[]): CancellingGrou
   const out: CancellingGroup[] = [];
   for (const a of accounts) {
     const byDate = new Map<string, AccountMovement[]>();
-    for (const m of a.movements || []) {
+    for (const m of a.movements) {
       if (m.kind || m.linkId || m.tag) continue;
       byDate.set(m.date, [...(byDate.get(m.date) || []), m]);
     }

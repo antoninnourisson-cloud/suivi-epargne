@@ -167,7 +167,7 @@ test.describe('Synchronisation avec Drive (faux Drive)', () => {
     const alert = page.getByRole('alert').filter({ hasText: 'Votre session Google a expiré' });
     await expect(alert).toBeVisible({ timeout: 15_000 });
     await expect(alert.getByRole('button', { name: 'Se reconnecter' })).toBeVisible();
-    // L'indicateur de synchronisation le dit aussi (il restait vert, « Sur Drive à … »).
+    // L'indicateur de synchronisation le dit aussi (pas de « Sur Drive à … » en vert).
     const indicator = isMobile ? page.getByRole('banner') : page.locator('aside');
     await expect(indicator.getByText(isMobile ? 'Reconnexion' : 'Reconnexion requise', { exact: true })).toBeVisible();
     await expect(indicator.getByText(/Sur Drive à|Synchronisé/)).toHaveCount(0);

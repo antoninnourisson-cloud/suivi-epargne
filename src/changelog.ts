@@ -15,6 +15,28 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '2026.10.28-2',
+    date: '2026-10-28',
+    title: 'Virements simplifiés, démarrage plus rapide',
+    items: [
+      "Virements : l'onglet « Dépôt » laisse place au bouton « Dépôt ou retrait », qui ouvre la même fenêtre que l'ajout rapide.",
+      "L'Accueil ne répète plus dans « Prochaines échéances » un prélèvement déjà affiché dans « Prélèvements des 7 prochains jours ».",
+      "L'application démarre un peu plus vite : le verrou, la lecture de documents par Gemini et une partie de l'import de relevé ne se chargent que quand vous en avez besoin.",
+    ],
+  },
+  {
+    version: '2026.10.28',
+    date: '2026-10-28',
+    title: 'Plan de placement et comparaison au Livret A',
+    items: [
+      "Le plan de placement automatique remplit maintenant aussi votre CEL et vos livrets bancaires plafonnés, après les livrets réglementés et jusqu'à leur plafond. Un livret bancaire sans plafond ne reçoit le reste que si vous n'avez ni assurance vie ni PEA.",
+      "Dans votre répartition personnalisée, un CEL ne dépasse plus son plafond légal de 15 300 € : le surplus va sur vos autres comptes.",
+      "Dans Rendement, chaque placement est comparé à ce qu'aurait rapporté le Livret A sur la même période, d'après les taux notés sur votre Livret A.",
+      "L'estimation de l'option pour le barème (case 2OP) précise clairement que ce n'est qu'une approximation.",
+      "En janvier et en février, la « Clôture de l'année » passe en tête de la liste « À faire » de l'Accueil.",
+    ],
+  },
+  {
     version: '2026.10.23-4',
     date: '2026-10-23',
     title: 'Sécurité renforcée : reconnectez-vous une fois',

@@ -15,7 +15,7 @@
 
 export type CsvCell = string | number | boolean | null | undefined;
 
-export const CSV_SEPARATOR = ';';
+const CSV_SEPARATOR = ';';
 export const CSV_BOM = '﻿';
 
 /** Montant au centime, virgule décimale : 1234.5 → « 1234,50 » (vide si le nombre est illisible). */

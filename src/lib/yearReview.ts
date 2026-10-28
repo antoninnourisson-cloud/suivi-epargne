@@ -62,7 +62,7 @@ const plural = (n: number, word: string) => `${n} ${word}${n > 1 ? 's' : ''}`;
 export const yearsWithData = (data: GlobalAppData, today: Date = new Date()): number[] => {
   const current = today.getFullYear();
   const set = new Set<number>([current]);
-  for (const a of data.accounts || []) for (const m of a.movements || []) set.add(Number(m.date.slice(0, 4)));
+  for (const a of data.accounts || []) for (const m of a.movements) set.add(Number(m.date.slice(0, 4)));
   for (const s of data.history || []) set.add(Number(s.date.slice(0, 4)));
   return [...set]
     .filter(y => y > 2000 && y <= current)
@@ -83,7 +83,7 @@ export const defaultReviewYear = (years: number[], today: Date = new Date()): nu
  */
 const isEmptyYear = (data: GlobalAppData, year: number, review: YearReview) => {
   const trackingStart = data.config?.trackingStartDate;
-  const hasFlows = (data.accounts || []).some(a => (a.movements || []).some(m => m.date.startsWith(`${year}-`) && isSavingsFlow(m, trackingStart)));
+  const hasFlows = (data.accounts || []).some(a => a.movements.some(m => m.date.startsWith(`${year}-`) && isSavingsFlow(m, trackingStart)));
   const hasSnapshots = (data.history || []).some(s => s.date.startsWith(`${year}-`));
   return !hasFlows && !hasSnapshots && !review.restitution;
 };
@@ -170,7 +170,7 @@ export const buildYearInReview = (data: GlobalAppData, year: number, today: Date
   let goodMonths: GoodMonthsSummary | undefined;
   if (motivation.enabled) {
     const firstFlow = accounts
-      .flatMap(a => (a.movements || []).filter(m => isSavingsFlow(m, trackingStart)).map(m => m.date))
+      .flatMap(a => a.movements.filter(m => isSavingsFlow(m, trackingStart)).map(m => m.date))
       .sort()[0];
     const from = firstFlow && firstFlow < `${Y}-01-01` ? firstFlow : `${Y}-01-01`;
     const count = Math.min(360, Math.max(1, monthsBetween(from, today) + 2));

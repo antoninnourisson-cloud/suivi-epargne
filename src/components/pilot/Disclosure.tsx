@@ -8,7 +8,6 @@ interface DisclosureProps {
   /** Résumé affiché à droite du titre quand le panneau est fermé (ex. « 1 250 €/mois »). */
   summary?: React.ReactNode;
   icon?: React.ComponentType<{ className?: string }>;
-  defaultOpen?: boolean;
   headingLevel?: 3 | 4;
   /** `card` : panneau bordé autonome ; `plain` : rangée dans une liste de panneaux. */
   appearance?: 'card' | 'plain';
@@ -16,9 +15,9 @@ interface DisclosureProps {
 }
 
 export const Disclosure: React.FC<DisclosureProps> = ({
-  title, summary, icon: Icon, defaultOpen = false, headingLevel = 3, appearance = 'card', children,
+  title, summary, icon: Icon, headingLevel = 3, appearance = 'card', children,
 }) => {
-  const [open, setOpen] = useState(defaultOpen);
+  const [open, setOpen] = useState(false);
   const base = useId();
   const H = `h${headingLevel}` as 'h3' | 'h4';
   const shell = appearance === 'card'

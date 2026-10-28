@@ -14,7 +14,7 @@ import { useDriveSync } from './portfolio/useDriveSync';
 import { useMonthlySnapshots } from './portfolio/useMonthlySnapshots';
 
 export type {
-  ConflictVersion, SyncConflictView, ImportOutcome, ConflictChoice, ConflictResolution, SyncFailure,
+  ConflictVersion, SyncConflictView, ConflictChoice, ConflictResolution,
 } from './portfolio/syncShared';
 
 export const usePortfolioData = (isAuthenticated: boolean) => {

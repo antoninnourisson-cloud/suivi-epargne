@@ -10,8 +10,8 @@ export const laterDay = (a: string | undefined, b: string): string => (a && a > 
 
 /**
  * Enregistre la fiche d'un compte :
- * - total recalculé : il vaut TOUJOURS part propre + part des parents (le formulaire
- *   pouvait le rompre, et la première opération suivante faisait alors bondir le solde) ;
+ * - total recalculé : il vaut TOUJOURS part propre + part des parents (sinon le
+ *   formulaire pourrait le rompre, et la première opération suivante ferait bondir le solde) ;
  * - nouveau compte : un mouvement « Solde initial » pour la part propre ;
  * - compte existant : des mouvements qui expliquent l'écart (« Correction de solde » de
  *   nature `adjustment`, hors épargne ; part des parents à part), sinon l'historique ne
@@ -50,14 +50,14 @@ export const saveAccount = (state: CommandState, input: { account: SavingsAccoun
   // cet écart-là est de l'argent versé/retiré, le reste une variation de valeur.
   const depositsMoved = tracksDeposits(existing.type) && existing.totalDeposits !== undefined && normalized.totalDeposits !== undefined
     && Math.abs(normalized.totalDeposits - existing.totalDeposits) > EPS;
-  const added = balanceChangeMovements(existing, { ...normalized, movements: existing.movements }, today, depositsMoved
+  const added = balanceChangeMovements(existing, normalized, today, depositsMoved
     ? { ownLabel: 'Correction de solde', splitValuation: true, cashFlow: round2(normalized.totalDeposits! - existing.totalDeposits!) }
     : { ownLabel: 'Correction de solde', ownKind: 'adjustment' });
   const snap = snapshotBalances(state.accounts, [existing.id]);
   const saved = added.length > 0 ? { ...normalized, balanceCheckedAt: laterDay(normalized.balanceCheckedAt, today) } : normalized;
   return {
     ok: true, isNew: false,
-    next: { accounts: state.accounts.map(a => (a.id === existing.id ? { ...saved, movements: [...(a.movements || []), ...added] } : a)) },
+    next: { accounts: state.accounts.map(a => (a.id === existing.id ? { ...saved, movements: [...a.movements, ...added] } : a)) },
     message: `« ${normalized.name} » enregistré`,
     // La fiche d'avant (nom, taux…) puis ses soldes exacts ; les mouvements ajoutés depuis sont rejoués.
     undo: current => ({

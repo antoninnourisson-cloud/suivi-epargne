@@ -112,7 +112,11 @@ describe('computeYearReview', () => {
     expect(r.worst).toEqual({ month: 4, saved: -100 });
     expect(r.netStart).toBe(1000);
     expect(r.netEnd).toBe(1400);
-    expect(r.interest).toBeGreaterThan(0);
+    // Livret A à 2 %, règle des quinzaines : 1 000 € sur les 24 quinzaines (20 €), + 500 € à
+    // partir du 16 février sur 21 quinzaines (8,75 €), − 100 € à partir du 1er mai sur 16
+    // quinzaines (− 1,33 €) : 27,42 €.
+    expect(r.interest).toBeCloseTo(20 + 8.75 - 100 * 0.02 * 16 / 24, 10);
+    expect(r.interest).toBeCloseTo(27.42, 2);
   });
 
   it("reprend la restitution et les intérêts offerts de l'année", () => {

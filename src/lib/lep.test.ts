@@ -55,6 +55,20 @@ describe('éligibilité au LEP dans le temps', () => {
   });
 });
 
+describe('plafond du foyer', () => {
+  it('ajoute un montant fixe par demi-part au-delà de la première, sans multiplier le plafond', () => {
+    const lep = { id: 'l', name: 'LEP', type: AccountType.LEP, totalAmount: 100, ownedAmount: 100, parentalCapital: 0 };
+    const doc = migrate({ accounts: [lep], config: { grossAnnual: 30_000 } });
+    const ceilingFor = (lepHouseholdParts: number) =>
+      lepTimelineFromData({ ...doc, fiscalConfig: { ...doc.fiscalConfig, lepIncomeCeiling: 22_000, lepCeilingPerHalfPart: 6_149, lepHouseholdParts } }, NOW)?.ceiling;
+    expect(ceilingFor(1)).toBe(22_000);
+    expect(ceilingFor(1.5)).toBe(22_000 + 6_149);
+    expect(ceilingFor(2)).toBe(22_000 + 2 * 6_149);
+    // Sans plafond renseigné : pas de suivi.
+    expect(lepTimelineFromData({ ...doc, fiscalConfig: { ...doc.fiscalConfig, lepIncomeCeiling: undefined } }, NOW)).toBeNull();
+  });
+});
+
 describe('estimation du revenu de l\'année en cours', () => {
   it('compte l\'autre salaire du Pilotage, comme le revenu fiscal de référence', () => {
     const asOf = new Date(2026, 5, 15);

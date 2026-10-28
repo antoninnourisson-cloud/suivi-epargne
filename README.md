@@ -83,19 +83,20 @@ Pécule (anciennement *Suivi Épargne*) est une application web installable (PWA
 - **Journal des modifications** : mouvements, taux, restitution. Annulation, mouvements de test qui s'annulent repérés, marquage « Pas de l'épargne », « Repartir de zéro » à une date sans rien effacer.
 - **Recherche** dans tous les mouvements, étiquettes, virements internes liés, mouvements récurrents mensuels.
 - **Ajout rapide** : bouton flottant et raccourcis de l'icône installée (ajouter, actualiser, virements de paie).
+- **Virements** : onglets « Virement » (entre vos comptes, annulable) et « Récurrents » ; le bouton « Dépôt ou retrait » ouvre le même ajout rapide que le bouton flottant.
 - **Taux des livrets datés** (date d'effet), mis à jour pour tous les livrets concernés d'un coup. **Conseil quinzaine** avant un retrait de livret.
 
 ### Paie et budget
 - Calcul du **« super net »** : barème progressif, décote, charges salariales, CSG non déductible, abattement de 10 %, Navigo, mutuelle, titres-restaurant. **Mode exact** d'après une fiche de paie. Avantages salariaux pré-remplis depuis les fiches de paie.
 - **Votre paie, virement par virement** : liste à cocher (charges fixes, abonnements, épargne projets, argent plaisir, répartition de l'épargne entre les comptes), versements enregistrés en un clic.
 - **Capacité d'épargne du mois** et **somme en plus à placer** (prime, cadeau…) réglables dans le Pilotage pour la paie en cours, jusqu'à la paie suivante (même objectif pour le Pilotage, la jauge de l'Accueil et la relance de paie).
-- **Répartition personnalisée** de l'épargne à partir d'une date, stratégie de placement selon les taux et plafonds, durée de survie.
+- **Répartition personnalisée** de l'épargne à partir d'une date, stratégie de placement selon les taux et plafonds (livrets réglementés, puis CEL et livrets bancaires plafonnés, puis assurance vie ou PEA), durée de survie.
 - **Fiches de paie** : import depuis Drive (Google Picker), extraction par Gemini (nouvelles tentatives, modèles de repli), relecture obligatoire, graphique du net, hausse de salaire repérée.
 - **Lire un relevé** (Actualiser les soldes, ou la fiche d'un compte) : le relevé de la banque (PDF ou capture), choisi sur l'appareil, est lu par Gemini avec la clé de l'appareil. Pécule propose le compte correspondant, le nouveau solde et les opérations à ajouter (doublons et opérations déjà comprises décochés, compte courant et placements : seul le solde par défaut, contrôle « ancien solde + opérations = nouveau solde ») ; le solde d'un relevé plus ancien que le compte n'est repris que sur choix explicite ; rien n'est enregistré avant « Importer » (commande `importStatement`, avec « Annuler »). Lecture fictive en mode démo.
 
 ### Rendement et fiscalité
 - **Intérêts réellement acquis** (règle des quinzaines), intérêts attendus au 31 décembre, taux pondérés dans le temps, manque à gagner du cash dormant.
-- **Rendement net et après inflation** (inflation annuelle de l'INSEE, datée) et projection selon la répartition (100 % Livret A, votre répartition, 100 % assurance vie) sur 5, 10 ou 20 ans ; un placement sans rendement saisi prend sa performance observée (après deux ans de suivi, hors crypto, ramenée entre −5 % et +8 % par an), sinon la projection le signale.
+- **Rendement net et après inflation** (inflation annuelle de l'INSEE, datée) et projection selon la répartition (100 % Livret A, votre répartition, 100 % assurance vie) sur 5, 10 ou 20 ans ; un placement sans rendement saisi prend sa performance observée (après deux ans de suivi, hors crypto, ramenée entre −5 % et +8 % par an), sinon la projection le signale. Chaque rendement mesuré est mis en regard du **Livret A sur la même période** (taux moyen pondéré par les jours).
 - **PER** : impôt en moins grâce aux versements (taux marginal, plafond de l'avis d'impôt ou estimé).
 - **Gains nets si retrait** : PFU, prélèvements sociaux (18,6 %, 17,2 % sur l'assurance vie), part en fonds euros de l'AV, exonération d'impôt sur le revenu du PEA après 5 ans (le PEE l'est toujours), abattement de l'AV après 8 ans (7,5 %, 12,8 % au-delà de 150 000 € de versements), cession crypto exonérée jusqu'à 305 €. Plus-values latentes, plafond du PEA, compte à rebours de maturité (« horloge fiscale »).
 - **LEP** : plafonds de revenus, alerte et date de fermeture probable. L'avis d'imposition (PDF ou photo) est lu par Gemini, qui en relève le revenu fiscal de référence et le nombre de parts.
@@ -183,7 +184,7 @@ Détail du serveur, de ses routes et de son stockage : [worker/README.md](worker
 
 ## Modèle de données et invariants
 
-Un seul document JSON (`GlobalAppData`, [`src/types.ts`](src/types.ts)) : comptes et mouvements, charges, historiques mensuels, objectifs, fiches de paie, mouvements récurrents, abonnements, dons, paramètres fiscaux (`fiscalConfig`), avantages salariaux, configuration.
+Un seul document JSON (`GlobalAppData`, [`src/types.ts`](src/types.ts)) : comptes et mouvements, charges, historiques mensuels, fiches de paie, mouvements récurrents, abonnements, dons, paramètres fiscaux (`fiscalConfig`), avantages salariaux, configuration.
 
 | Règle | Où |
 |---|---|
@@ -246,13 +247,13 @@ npm run theme          # régénère src/theme/m3.css depuis scripts/m3-theme.mj
 
 Pour `npm run e2e`, installe une fois le navigateur : `npx playwright install chromium` (en local, la config utilise Chrome s'il est installé). Le serveur de développement est lancé automatiquement. En CI (ou avec `E2E_TARGET=build`), Playwright construit le **build de production** dans `dist-e2e/` et le sert avec `vite preview` : CSP de production, service worker et minification sont donc testés ([`e2e/target.ts`](e2e/target.ts)). La CI repasse ensuite `e2e/production.spec.ts` sur `dist`, le dossier exact que `deploy.yml` publie (`E2E_DIST=dist`, servi tel quel). La plupart des parcours tournent en mode démo ; ceux de la synchronisation (conflit, sauvegarde locale, hors ligne, session expirée, échec de lecture) tournent sans démo, contre un faux Drive en mémoire ([`e2e/fakeDrive.ts`](e2e/fakeDrive.ts)), sans aucun appel à Google ni au serveur. Aucun test ne joint le vrai serveur : les tests importent `test` depuis [`e2e/fixtures.ts`](e2e/fixtures.ts), qui coupe ces appels (règle ESLint).
 
-**Couverture des tests unitaires** (mesurée le 23 octobre 2026, seuils plancher dans [`vitest.config.ts`](vitest.config.ts), vérifiés par la CI). Deux chiffres, à ne pas confondre :
+**Couverture des tests unitaires** (mesurée le 28 octobre 2026, seuils plancher dans [`vitest.config.ts`](vitest.config.ts), vérifiés par la CI). Deux chiffres, à ne pas confondre :
 
 | Périmètre | Instructions | Branches | Fonctions | Lignes |
 |---|---:|---:|---:|---:|
-| **Toute l'app** (écrans, hooks, services, App.tsx, serveur, edge) | 81,7 % | 75,0 % | 73,1 % | 85,0 % |
-| Cœur métier (`src/lib`, `worker/src`, `edge/src`) | 96,8 % | 89,6 % | 97,7 % | 98,5 % |
-| Filets anti-perte (synchronisation Drive, copies locales, sauvegarde de secours, session, verrou) | 91,1 % | 83,8 % | 89,4 % | 95,5 % |
+| **Toute l'app** (écrans, hooks, services, App.tsx, serveur, edge) | 81,7 % | 75,3 % | 73,2 % | 85,1 % |
+| Cœur métier (`src/lib`, `worker/src`, `edge/src`) | 97,0 % | 90,5 % | 98,1 % | 98,6 % |
+| Filets anti-perte (synchronisation Drive, copies locales, sauvegarde de secours, session, verrou) | 91,1 % | 83,9 % | 89,4 % | 95,7 % |
 
 La plupart des écrans ont des tests unitaires (React Testing Library) ; ils sont aussi couverts par les tests de bout en bout, qui ne comptent pas dans ces chiffres.
 
@@ -269,7 +270,7 @@ VITE_BACKEND_URL=http://localhost:8787
 - URI de redirection (mode serveur) : `https://<worker>.workers.dev/auth/callback` ;
 - API activées : Google Drive, Google Picker ;
 - écran de consentement **« En production »** (en mode test, les sessions expirent après 7 jours) ;
-- une clé API pour le Picker, saisie dans Paramètres (à restreindre par référent HTTP).
+- deux clés API de navigateur : « Picker » (saisie dans Paramètres) et « Gemini API Key ». **Les deux** limitent leurs sites autorisés (référents HTTP) à `https://pecule-app.com/*` : sans cela, le sélecteur de fichiers Drive affiche « The API developer key is invalid » (voir [MAINTENANCE.md § 8](MAINTENANCE.md#8-nom-de-domaine)) ;
 
 ## Déploiement
 
@@ -277,8 +278,8 @@ Avant chaque mise à jour visible, ajoute une entrée **en tête** de [`src/chan
 
 | Workflow | Déclencheur | Rôle |
 |---|---|---|
-| [`ci.yml`](.github/workflows/ci.yml) · *Vérifications* | PR, push sur `main`, chaque lundi à 6 h UTC, appel par `deploy.yml` | lint, types, tests avec seuils de couverture (toute l'app, cœur métier, filets anti-perte), tests de bout en bout Playwright sur le build de production, build publié (tailles dans le résumé) testé tel quel par `e2e/production.spec.ts` puis gardé en artefact `site-dist`, audit des dépendances (informatif) |
-| [`deploy.yml`](.github/workflows/deploy.yml) · *Déploiement* | push sur `main`, ou lancement manuel | `ci.yml` une fois, puis ensemble : GitHub Pages (build testé `site-dist` repris sans reconstruire), `wrangler deploy` du serveur (`worker/`) et du Worker d'en-têtes `pecule-edge` (`edge/` : HSTS, anti-iframe, cache… devant GitHub Pages), à chaque push : app et serveur toujours accordés. Puis tag `v<version>` et Release avec les puces du changelog (une fois par version) |
+| [`ci.yml`](.github/workflows/ci.yml) · *Vérifications* | PR, chaque lundi à 6 h UTC, et à chaque push sur `main` via `deploy.yml` (une seule fois par push) | lint, types, tests avec seuils de couverture (toute l'app, cœur métier, filets anti-perte), tests de bout en bout Playwright sur le build de production, build publié (tailles dans le résumé) testé tel quel par `e2e/production.spec.ts` puis gardé en artefact `site-dist`, audit des dépendances (informatif) |
+| [`deploy.yml`](.github/workflows/deploy.yml) · *Déploiement* | push sur `main`, ou lancement manuel (Run workflow : « Version à publier » = `main`, ou un tag pour revenir à une version précédente, sans créer de tag ; voir MAINTENANCE.md § 5) | `ci.yml` une fois, puis ensemble : GitHub Pages (build testé `site-dist` repris sans reconstruire), `wrangler deploy` du serveur (`worker/`) et du Worker d'en-têtes `pecule-edge` (`edge/` : HSTS, anti-iframe, cache… devant GitHub Pages), à chaque push : app et serveur toujours accordés. Puis tag `v<version>` et Release avec les puces du changelog (une fois par version) |
 | [`monitor.yml`](.github/workflows/monitor.yml) · *Surveillance* | chaque jour à 6 h 30 UTC, ou lancement manuel | site (script principal compris : un écran blanc est détecté), pages publiques, serveur (`/status`), certificat TLS, HSTS ; ouvre/ferme une issue `panne` |
 
 - **App** : l'URL du serveur est dans [`.env.production`](.env.production). Le commit déployé est injecté au build (`__BUILD_SHA__`).

@@ -10,10 +10,20 @@ name: Déploiement
 # (artefact site-dist) : rien n'est reconstruit entre le test et la mise en ligne. Après un
 # déploiement réussi, la version en tête de src/changelog.ts est publiée comme tag + GitHub
 # Release (une fois).
+# Retour arrière sans terminal : Actions → Déploiement → Run workflow, champ « Version à
+# publier » = un tag (v2026.10.23-4) ou un commit. Ce commit est revérifié par ci.yml puis
+# publié partout (site + serveur + en-têtes) ; aucun tag ni Release n'est créé. Le push
+# suivant sur main republie main. Procédure : MAINTENANCE.md § 5.
 on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Version à publier : main, un tag (ex. v2026.10.23-4) ou un commit'
+        type: string
+        required: true
+        default: main
 
 permissions:
   contents: read
@@ -28,6 +38,9 @@ jobs:
   checks:
     name: Vérifications
     uses: ./.github/workflows/ci.yml
+    with:
+      # Vide sur un push : le commit poussé.
+      ref: ${{ inputs.ref }}
 
   cloudflare:
     name: Secrets Cloudflare
@@ -61,6 +74,8 @@ jobs:
       - name: Checkout du code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          # Le commit exact vérifié par ci.yml (celui d'un retour arrière, sinon le push).
+          ref: ${{ needs.checks.outputs.sha }}
           persist-credentials: false
 
       - name: Installation de Node.js
@@ -79,7 +94,7 @@ jobs:
           workingDirectory: worker
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: deploy --message "${{ github.sha }}"
+          command: deploy --message "${{ needs.checks.outputs.sha }}"
 
   edge:
     name: Déploiement des en-têtes de sécurité
@@ -94,6 +109,8 @@ jobs:
       - name: Checkout du code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          # Le commit exact vérifié par ci.yml (celui d'un retour arrière, sinon le push).
+          ref: ${{ needs.checks.outputs.sha }}
           persist-credentials: false
 
       - name: Installation de Node.js
@@ -114,7 +131,7 @@ jobs:
           workingDirectory: edge
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: deploy --message "${{ github.sha }}"
+          command: deploy --message "${{ needs.checks.outputs.sha }}"
 
   build:
     name: Build vérifié
@@ -154,8 +171,10 @@ jobs:
   release:
     name: Release
     # Après le site ET les deux Workers (sautés sans secrets Cloudflare : la Release part quand même).
+    # Jamais pour un retour arrière (Run workflow avec une autre version que main) : le tag
+    # en tête du changelog de main désignerait alors un commit qui n'est pas celui publié.
     needs: [deploy, worker, edge]
-    if: ${{ always() && needs.deploy.result == 'success' && contains(fromJSON('["success", "skipped"]'), needs.worker.result) && contains(fromJSON('["success", "skipped"]'), needs.edge.result) }}
+    if: ${{ always() && (github.event_name == 'push' || inputs.ref == 'main') && needs.deploy.result == 'success' && contains(fromJSON('["success", "skipped"]'), needs.worker.result) && contains(fromJSON('["success", "skipped"]'), needs.edge.result) }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:

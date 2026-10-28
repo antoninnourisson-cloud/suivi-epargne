@@ -24,7 +24,8 @@ vi.mock('../services/appLockService', () => ({
   getPinCooldownSeconds: () => svc.cooldown,
 }));
 
-import { AppLockScreen, LockResetNotice } from './AppLockScreen';
+import { AppLockScreen } from './AppLockScreen';
+import { LockResetNotice } from './LockResetNotice';
 import type { LockResetRequest } from '../services/appLockService';
 
 const typeDigits = (digits: string) => {

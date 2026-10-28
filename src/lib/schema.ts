@@ -5,7 +5,7 @@
 // entre dans l'app : chargement Drive, import, restauration locale, synchronisation entre
 // onglets, et lecture par le serveur de notifications.
 // ================================================
-import { AppDoc, ExpenseSnapshot, FiscalConfig, GlobalAppData, PortfolioSnapshot, TaxBracket, YearClosingRecord } from '../types';
+import { AccountType, AppDoc, ExpenseSnapshot, FiscalConfig, GlobalAppData, PortfolioSnapshot, TaxBracket, YearClosingRecord } from '../types';
 import { DEFAULT_DECOTE, DEFAULT_FISCAL_CONFIG, DEFAULT_WORK_BENEFITS } from '../constants';
 import { normalizeAccounts, dedupeMonthlySnapshots, migrateFiscalConfig } from './finance';
 import { round2 } from './money';
@@ -22,8 +22,6 @@ const DEFAULT_CONFIG: GlobalAppData['config'] = {
   grossAnnual: 45000,
   leisureBudget: 300,
   projectSavings: 200,
-  navigoBase: 90.80,
-  navigoRate: 67.24,
   taxRateManual: 0,
   extraMonthlyIncome: 0,
 };
@@ -53,6 +51,14 @@ const finite = (v: unknown): number | undefined => {
   return Number.isFinite(n) ? n : undefined;
 };
 const OPTIONAL_ACCOUNT_NUMBERS = ['totalDeposits', 'interestRate', 'ceiling'] as const;
+/** Types de compte des premiers fichiers (janvier 2026), écrits sous un autre nom depuis. */
+const LEGACY_ACCOUNT_TYPES: Readonly<Record<string, AccountType>> = {
+  'PEE (Plan Epargne Entreprise)': AccountType.PEE,
+  'Immobilier (SCPI/Physique)': AccountType.IMMOBILIER,
+  'Cryptomonnaies': AccountType.CRYPTO,
+  'Compte Titres': AccountType.CTO,
+  'Compte à Terme': AccountType.COMPTE_A_TERME,
+};
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
 /** `{ year, ... }` lisible : année entière plausible et nombre fini positif sous `key`. */
 const datedFigure = (v: unknown, key: 'rate' | 'amount'): boolean =>
@@ -73,6 +79,7 @@ const sanitizeAccount = (a: Record<string, unknown>): Record<string, unknown> =>
     ...a,
     name: typeof a.name === 'string' ? a.name : String(a.name ?? 'Compte'),
     institution: typeof a.institution === 'string' ? a.institution : '',
+    ...(typeof a.type === 'string' && Object.hasOwn(LEGACY_ACCOUNT_TYPES, a.type) ? { type: LEGACY_ACCOUNT_TYPES[a.type] } : {}),
     ownedAmount: round2(owned),
     parentalCapital: round2(parental),
     totalAmount: round2(owned + parental),
@@ -230,7 +237,7 @@ export const migrate = (raw: unknown): AppDoc => {
     const closings = sanitizeYearClosings(config.yearClosings);
     if (closings) config.yearClosings = closings; else delete config.yearClosings;
   }
-  // Ancien format : l'avantage Navigo vivait dans config (navigoBase / navigoRate).
+  // Ancien format : l'avantage Navigo vivait dans config (navigoBase / navigoRate, gardés tels quels).
   // Fichier abîmé ou incomplet : chaque avantage est complété champ par champ.
   const workBenefits = isObj(r.workBenefits)
     ? withDefaults(r.workBenefits, DEFAULT_WORK_BENEFITS)

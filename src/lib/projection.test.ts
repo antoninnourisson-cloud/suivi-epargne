@@ -84,10 +84,23 @@ describe('projectSavings', () => {
   const av = acc({ id: 'av', name: 'AV', type: AccountType.ASSURANCE_VIE, interestRate: 3 });
 
   it('compose les intérêts nets et répartit selon la répartition', () => {
-    const r = projectSavings([la, av], CFG, 1000, 1, [{ accountId: 'la', pct: 50 }, { accountId: 'av', pct: 50 }]);
+    // De janvier à décembre 2026, 500 € par mois sur chaque compte, versés après les intérêts du mois.
+    const r = projectSavings([la, av], CFG, 1000, 1, [{ accountId: 'la', pct: 50 }, { accountId: 'av', pct: 50 }], undefined, new Date(2026, 0, 1));
     expect(r.deposited).toBe(12000);
-    expect(r.interest).toBeGreaterThan(0);
-    expect(r.byAccount.find(b => b.accountId === 'la')!.amount).toBeGreaterThan(6000);
+    // Livret A à 1,7 % : intérêts des soldes 0, 500 … 5 500 € (somme 33 000 €), versés au
+    // 31 décembre : 33 000 × 1,7 % / 12 = 46,75 €.
+    expect(r.byAccount.find(b => b.accountId === 'la')!.amount).toBeCloseTo(6046.75, 8);
+    // Assurance vie à 3 %, nette à 2,1 % (17,2 % + 12,8 % retenus) composée chaque mois :
+    // 500 × ((1 + i)^12 − 1) / i avec i = 0,175 % : (1 + i)^12 = 1,0212033, soit 6 058,09 €.
+    expect(r.byAccount.find(b => b.accountId === 'av')!.amount).toBeCloseTo(6058.09, 2);
+    expect(r.interest).toBeCloseTo(46.75 + 58.09, 2);
+  });
+  it('12 000 € versés en un an sur un Livret A à 1,7 % : intérêts au 31 décembre seulement', () => {
+    // Départ en janvier : 1 000 × (0 + 1 + … + 11) = 66 000 € de soldes mensuels → 93,50 €.
+    expect(projectSavings([la], CFG, 1000, 1, undefined, undefined, new Date(2026, 0, 1)).interest).toBeCloseTo(93.5, 8);
+    // Départ en octobre : seuls octobre, novembre et décembre (0 + 1 000 + 2 000 €) sont versés
+    // au 31 décembre, soit 4,25 € ; ceux de janvier à septembre le seront l'année suivante.
+    expect(projectSavings([la], CFG, 1000, 1, undefined, undefined, new Date(2026, 9, 1)).interest).toBeCloseTo(4.25, 8);
   });
   it('ne verse plus au-delà du plafond du Livret A (seuls les intérêts le dépassent, comme en vrai)', () => {
     const r = projectSavings([la, av], CFG, 1000, 3, [{ accountId: 'la', pct: 100 }]);

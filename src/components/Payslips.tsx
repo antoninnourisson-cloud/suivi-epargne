@@ -206,8 +206,8 @@ export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, 
   const patchDraftField = (field: 'employer' | 'period', value: string) => {
     setDraft(d => d && ({ ...d, fields: { ...d.fields, [field]: value } }));
   };
-  // parseFrenchNumber : parseFloat stockait NaN dans le record (propagé jusqu'à « NaN € »
-  // dans le Pilotage) et perdait les virgules décimales. Champ vidé : montant retiré.
+  // parseFrenchNumber : parseFloat stockerait NaN dans le record (propagé jusqu'à « NaN € »
+  // dans le Pilotage) et perdrait les virgules décimales. Champ vidé : montant retiré.
   const patchAmount = (field: AmountField, value: string) => {
     const raw = value.trim();
     const parsed = raw === '' ? undefined : parseFrenchNumber(raw);

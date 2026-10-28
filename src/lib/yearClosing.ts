@@ -102,7 +102,7 @@ export const isClosingSeason = (now: Date): boolean => now.getMonth() <= 1;
 /** Année à clôturer : toujours l'année écoulée. */
 export const closingYearOf = (now: Date): number => now.getFullYear() - 1;
 
-export const closingRecordOf = (config: Pick<Config, 'yearClosings'> | undefined, year: number): YearClosingRecord =>
+const closingRecordOf = (config: Pick<Config, 'yearClosings'> | undefined, year: number): YearClosingRecord =>
   config?.yearClosings?.[String(year)] ?? {};
 
 export const isYearClosed = (config: Pick<Config, 'yearClosings'> | undefined, year: number): boolean =>
@@ -156,7 +156,7 @@ const STATEMENT_TYPES = [AccountType.ASSURANCE_VIE, AccountType.PEA, AccountType
  */
 const existedAtYearEnd = (a: SavingsAccount, yearEnd: string) => {
   if (a.openingDate && a.openingDate > yearEnd) return false;
-  const moves = a.movements || [];
+  const moves = a.movements;
   return moves.length === 0 ? a.totalAmount > 0.005 : moves.some(m => m.date <= yearEnd);
 };
 
@@ -409,7 +409,7 @@ const natureOf = (m: AccountMovement): string =>
 
 /** Part des parents à une date : leur capital d'aujourd'hui, moins leurs mouvements d'après. */
 const parentalAt = (a: SavingsAccount, iso: string) =>
-  (a.movements || []).reduce((s, m) => (m.date > iso && m.kind === 'parental' ? s - signedAmount(m) : s), a.parentalCapital);
+  a.movements.reduce((s, m) => (m.date > iso && m.kind === 'parental' ? s - signedAmount(m) : s), a.parentalCapital);
 
 /**
  * Mouvements de l'année (tous les comptes, dans l'ordre des dates), puis les soldes au
@@ -420,7 +420,7 @@ export const yearArchiveCsv = (data: Pick<GlobalAppData, 'accounts'>, year: numb
   const accounts = data.accounts || [];
   const from = `${year}-01-01`, to = `${year}-12-31`;
   const moves = accounts
-    .flatMap(a => (a.movements || []).filter(m => m.date >= from && m.date <= to).map(m => ({ a, m })))
+    .flatMap(a => a.movements.filter(m => m.date >= from && m.date <= to).map(m => ({ a, m })))
     .sort((x, y) => x.m.date.localeCompare(y.m.date) || x.a.name.localeCompare(y.a.name));
   const balances = accounts
     .filter(a => !(a.openingDate && a.openingDate > to))

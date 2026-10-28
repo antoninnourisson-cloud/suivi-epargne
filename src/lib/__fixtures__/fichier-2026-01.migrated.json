@@ -1,0 +1,158 @@
+{
+  "accounts": [
+    {
+      "id": "acc-la",
+      "name": "Livret A",
+      "type": "Livret A",
+      "institution": "Banque Exemple",
+      "totalAmount": 15000,
+      "ownedAmount": 8000,
+      "parentalCapital": 7000,
+      "interestRate": 3,
+      "isRevolut": false,
+      "isTaxable": false,
+      "movements": []
+    },
+    {
+      "id": "acc-crypto",
+      "name": "Portefeuille",
+      "type": "Crypto",
+      "institution": "Plateforme",
+      "totalAmount": 812.5,
+      "ownedAmount": 812.5,
+      "parentalCapital": 0,
+      "recentHighRate": 12,
+      "recentLowRate": -8,
+      "movements": []
+    },
+    {
+      "id": "acc-pee",
+      "name": "Épargne salariale",
+      "type": "PEE",
+      "institution": "Employeur",
+      "totalAmount": 2400,
+      "ownedAmount": 2400,
+      "parentalCapital": 0,
+      "movements": []
+    },
+    {
+      "id": "acc-scpi",
+      "name": "SCPI",
+      "type": "Immobilier",
+      "institution": "Gestionnaire",
+      "totalAmount": 5000,
+      "ownedAmount": 5000,
+      "parentalCapital": 0,
+      "movements": []
+    }
+  ],
+  "expenses": [
+    {
+      "id": "exp-1",
+      "name": "Loyer",
+      "amount": 650,
+      "paymentMethod": "Virement Permanent"
+    },
+    {
+      "id": "exp-2",
+      "name": "Téléphone",
+      "amount": 9.99,
+      "paymentMethod": "Prélèvement"
+    }
+  ],
+  "history": [
+    {
+      "date": "2026-01-22",
+      "totalAmount": 23212.5,
+      "ownedAmount": 16212.5
+    }
+  ],
+  "config": {
+    "grossAnnual": 42000,
+    "leisureBudget": 250,
+    "projectSavings": 150,
+    "navigoBase": 86.4,
+    "navigoRate": 50,
+    "taxRateManual": 0,
+    "extraMonthlyIncome": 0
+  },
+  "goalPrompt": "Un apport pour un appartement",
+  "financing": {
+    "interestRate": 3.2,
+    "insuranceRate": 0.3
+  },
+  "schemaVersion": 2,
+  "expensesHistory": [],
+  "payslips": [],
+  "recurringMovements": [],
+  "subscriptions": [],
+  "donations": [],
+  "fiscalConfig": {
+    "salaryChargesRate": 0.2232,
+    "socialChargesCapital": 0.186,
+    "socialChargesLifeInsurance": 0.172,
+    "standardAllowance": 0.1,
+    "standardAllowanceCap": 14555,
+    "standardAllowanceMin": 509,
+    "decote": {
+      "single": 897,
+      "rate": 0.4525,
+      "threshold": 1982
+    },
+    "donation75Ceiling": 2000,
+    "ceilings": {
+      "livretA": 22950,
+      "ldds": 12000,
+      "lep": 10000
+    },
+    "legalMaturity": {
+      "pea": 5,
+      "assuranceVie": 8,
+      "pee": 5
+    },
+    "lepIncomeCeiling": 23028,
+    "lepCeilingPerHalfPart": 6149,
+    "lepHouseholdParts": 1,
+    "taxBrackets": [
+      {
+        "limit": 11600,
+        "rate": 0
+      },
+      {
+        "limit": 29579,
+        "rate": 0.11
+      },
+      {
+        "limit": 84577,
+        "rate": 0.3
+      },
+      {
+        "limit": 181917,
+        "rate": 0.41
+      },
+      {
+        "limit": null,
+        "rate": 0.45
+      }
+    ],
+    "taxScaleYear": 2026
+  },
+  "workBenefits": {
+    "navigo": {
+      "active": true,
+      "basePrice": 86.4,
+      "refundRate": 50
+    },
+    "mutuelle": {
+      "active": true,
+      "totalCost": 50,
+      "employerRate": 50
+    },
+    "mealVouchers": {
+      "active": true,
+      "faceValue": 10,
+      "employerRate": 60,
+      "daysPerMonth": 20
+    }
+  }
+}

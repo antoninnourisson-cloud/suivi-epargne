@@ -33,10 +33,10 @@ export const BACKEND_URL: string = (import.meta.env.VITE_BACKEND_URL || '').repl
 export const isBackendEnabled = (): boolean => BACKEND_URL !== '';
 
 const SESSION_KEY = 'backend_session';
-export const PROOF_HEADER = 'X-Pecule-Proof';
-export const NONCE_HEADER = 'X-Pecule-Nonce';
+const PROOF_HEADER = 'X-Pecule-Proof';
+const NONCE_HEADER = 'X-Pecule-Nonce';
 
-export const getSessionToken = (): string | null => lsGet(SESSION_KEY);
+const getSessionToken = (): string | null => lsGet(SESSION_KEY);
 export const hasBackendSession = (): boolean => !!getSessionToken();
 
 export interface AccessTokenResponse { access_token: string; expires_in: number }
@@ -333,7 +333,7 @@ export const consumeLoginCode = async (): Promise<(AccessTokenResponse & { sessi
   }
   // La session n'est PAS enregistrée ici : l'appelant range d'abord le jeton d'accès, puis
   // la session (saveBackendSession). Dans l'ordre inverse, un code s'exécutant entre les
-  // deux voyait « une session mais pas de jeton » et lançait un rafraîchissement superflu.
+  // deux verrait « une session mais pas de jeton » et lancerait un rafraîchissement superflu.
   return { session: data.session, access_token: data.access_token, expires_in: data.expires_in };
 };
 

@@ -44,4 +44,13 @@ test.describe('Virements (démo)', () => {
     await expect(accountRow(page, 'LDDS')).toContainText(/3\s000/);
     await expect(accountRow(page, 'Livret A')).toContainText(/15\s200/);
   });
+
+  test('dépôt ou retrait sur un seul compte : l’ajout rapide, pas un second formulaire', async ({ page }) => {
+    await page.addInitScript(v => { try { localStorage.setItem('last_seen_version', v); } catch { /* ignoré */ } }, LATEST_VERSION);
+    await page.goto('/?demo=1&view=transfers');
+    await expect(page.getByRole('heading', { name: 'Virements', level: 2 })).toBeVisible();
+    await expect(page.getByRole('tab')).toHaveText(['Virement', 'Récurrents']);
+    await page.getByRole('button', { name: 'Dépôt ou retrait' }).click();
+    await expect(page.getByRole('dialog', { name: 'Ajouter un mouvement' })).toBeVisible();
+  });
 });

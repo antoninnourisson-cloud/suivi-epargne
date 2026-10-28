@@ -78,7 +78,7 @@ const subscribe = (listener: () => void) => {
 };
 
 /** Choix explicite : enregistré (sauf « Automatique », qui efface le choix). */
-export const setThemePreference = (preference: ThemePreference) => {
+const setThemePreference = (preference: ThemePreference) => {
   init();
   if (preference === 'system') lsDel(CHOICE_KEY);
   else lsSet(CHOICE_KEY, preference);

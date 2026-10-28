@@ -1,6 +1,6 @@
 // Section « Plus de détails » de l'Accueil : projection, répartition par établissement et
 // courbe d'épargne sur une période choisie. Montée seulement quand la section est ouverte :
-// la courbe (une boucle par jour, jusqu'à cinq ans) n'est plus recalculée à chaque saisie
+// la courbe (une boucle par jour, jusqu'à cinq ans) n'est pas recalculée à chaque saisie
 // tant qu'elle est repliée.
 import React, { Suspense, useEffect, useMemo, useState } from 'react';
 import { ChartLine, Download, Landmark, TrendingDown, TrendingUp } from 'lucide-react';

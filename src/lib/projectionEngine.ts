@@ -74,7 +74,7 @@ export const startProjection = (setup: ProjectionSetup): ProjectionState => ({
 export const idleAccount = (state: ProjectionState): ProjectedAccount => {
   let cc = state.accounts.find(a => a.type === AccountType.COMPTE_COURANT);
   if (!cc) {
-    cc = { id: IDLE_ACCOUNT_ID, name: 'Compte courant', type: AccountType.COMPTE_COURANT, institution: '', totalAmount: 0, ownedAmount: 0, parentalCapital: 0, own: 0, accrued: 0 };
+    cc = { id: IDLE_ACCOUNT_ID, name: 'Compte courant', type: AccountType.COMPTE_COURANT, institution: '', totalAmount: 0, ownedAmount: 0, parentalCapital: 0, movements: [], own: 0, accrued: 0 };
     state.accounts.push(cc);
   }
   return cc;

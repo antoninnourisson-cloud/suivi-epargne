@@ -7,7 +7,7 @@
 // `interest` / `cash` : ventilation de l'écart corrigée à la main (absente = proposition
 // automatique) : intérêts crédités d'un livret, ou argent versé/retiré d'un placement.
 // `touched` : champs saisis par l'utilisateur. Les champs NON modifiés suivent les comptes
-// en direct (un ajout rapide fait pendant que l'écran est ouvert n'est plus écrasé par un
+// en direct (un ajout rapide fait pendant que l'écran est ouvert n'est pas écrasé par un
 // ancien solde au moment d'enregistrer).
 import type { SavingsAccount } from '../../types';
 import type { BalanceUpdate } from '../../lib/commands';

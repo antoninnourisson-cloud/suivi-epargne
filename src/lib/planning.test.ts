@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { computeEmergencyFund, buildSoloPlan, buildTaxReturnChecklist, reviewSubscriptions, benefitsFromPayslips } from './planning';
+import { computeEmergencyFund, buildSoloPlan, reviewSubscriptions, benefitsFromPayslips } from './planning';
+import { buildTaxReturnChecklist } from './taxReturn';
 import { DEFAULT_FISCAL_CONFIG as CFG } from '../constants';
 import { AccountType } from '../types';
 

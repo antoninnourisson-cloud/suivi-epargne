@@ -18,8 +18,8 @@ export const PENDING_KEY = storageKey('pending');
 /**
  * Copies jamais envoyées qui n'ont pas pu être relues faute de stockage protégé (IndexedDB
  * indisponible pour l'instant) : liste de copies chiffrées, gardées telles quelles. Sans cet
- * abri, la première saisie (miroir) ou la quarantaine les écrasait, et elles étaient perdues
- * le jour où le stockage revenait. Relues à chaque chargement (voir localCopies).
+ * abri, la première saisie (miroir) ou la quarantaine les écraserait, et elles seraient
+ * perdues le jour où le stockage revient. Relues à chaque chargement (voir localCopies).
  */
 export const HELD_KEY = storageKey('held');
 /** Annonce des sauvegardes aux autres onglets (l'événement `storage` ne se déclenche que dans les AUTRES onglets). */

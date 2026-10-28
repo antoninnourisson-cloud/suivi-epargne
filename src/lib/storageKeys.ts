@@ -115,7 +115,7 @@ const LEGACY_PAY_RAISE = /^pay_raise_seen_(.+)$/;
 /** Repère → date (AAAA-MM-JJ) à laquelle il a été posé. */
 export type Marks = Record<string, string>;
 /** Repères gardés un peu plus d'un an : au-delà, ils ne servent plus (mois, année, fiche passés). */
-export const MARK_RETENTION_DAYS = 400;
+const MARK_RETENTION_DAYS = 400;
 
 const isMarks = (v: unknown): v is Marks =>
   !!v && typeof v === 'object' && !Array.isArray(v) && Object.values(v as Record<string, unknown>).every(x => typeof x === 'string');

@@ -16,7 +16,7 @@ export interface WriteStamp {
   deviceId?: string;
 }
 
-export const WRITE_STAMP_FIELD = 'lastWrite';
+const WRITE_STAMP_FIELD = 'lastWrite';
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 

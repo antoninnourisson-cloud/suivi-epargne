@@ -23,7 +23,7 @@ export const SESSION_MAX_AGE = 60 * DAY;   // plafond absolu (secondes)
 export const SESSION_IDLE_TTL = 30 * DAY;  // expiration sans utilisation (secondes)
 export const MAX_SESSIONS_PER_USER = 20;
 /** Génération des sessions ouvertes depuis la liaison à l'appareil. */
-export const SESSION_GEN = 2;
+const SESSION_GEN = 2;
 const MIN_KV_TTL = 60;                     // minimum accepté par KV pour expirationTtl
 
 export interface SessionRecord {

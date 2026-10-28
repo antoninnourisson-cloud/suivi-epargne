@@ -6,11 +6,6 @@
 
 export type ThemePreference = 'system' | 'light' | 'dark';
 
-export const THEME_PREFERENCES: readonly ThemePreference[] = ['system', 'light', 'dark'];
-
-export const isThemePreference = (v: unknown): v is ThemePreference =>
-  typeof v === 'string' && (THEME_PREFERENCES as readonly string[]).includes(v);
-
 /** Thème réellement affiché. */
 export const resolveDark = (preference: ThemePreference, systemDark: boolean): boolean =>
   preference === 'system' ? systemDark : preference === 'dark';

@@ -64,9 +64,11 @@ interface ScreenRouterProps {
   accountForm: AccountFormState;
   /** « Déconnecter tous les appareils » (Paramètres, sécurité). */
   onSignedOutEverywhere: () => void;
+  /** Ouvre l'ajout rapide d'un mouvement (fonction stable d'App). */
+  onQuickAdd: () => void;
 }
 
-export const ScreenRouter = memo(function ScreenRouter({ view, setView, data, derived, actions, fiscalWatch, accountForm, onSignedOutEverywhere }: ScreenRouterProps) {
+export const ScreenRouter = memo(function ScreenRouter({ view, setView, data, derived, actions, fiscalWatch, accountForm, onSignedOutEverywhere, onQuickAdd }: ScreenRouterProps) {
   const addToast = useAddToast();
   const dialog = useDialog();
   const { doc } = data;
@@ -116,7 +118,7 @@ export const ScreenRouter = memo(function ScreenRouter({ view, setView, data, de
           payChecklist={doc.payChecklist} onPayChecklistChange={data.setPayChecklist}
           onRecordPayDeposit={actions.recordPayDeposit} onCancelPayDeposit={actions.cancelPayDeposit} />}
 
-        {view === 'transfers' && <TransferManager accounts={doc.accounts} onCommit={actions.commit} recurringMovements={doc.recurringMovements} onUpdateRecurring={data.setRecurringMovements} />}
+        {view === 'transfers' && <TransferManager accounts={doc.accounts} onCommit={actions.commit} recurringMovements={doc.recurringMovements} onUpdateRecurring={data.setRecurringMovements} onQuickAdd={onQuickAdd} />}
         {view === 'update' && <AccountUpdate accounts={doc.accounts} onCommit={actions.commit} onAddAccount={openNewAccount}
           onReadStatement={() => setStatementFor({})} />}
         {statementFor && <Lazy><StatementImport accounts={doc.accounts} geminiApiKey={data.geminiApiKey} preferredAccountId={statementFor.accountId}

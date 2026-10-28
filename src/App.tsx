@@ -14,7 +14,6 @@ import { useTheme } from './hooks/useTheme';
 import { useAppLock } from './hooks/useAppLock';
 import { useFiscalWatch } from './hooks/useFiscalWatch';
 import { LastSavedAtContext } from './hooks/useSaveFeedback';
-import { AppLockScreen } from './components/AppLockScreen';
 import { BootSkeleton } from './components/BootSkeleton';
 import { BottomNav } from './components/BottomNav';
 import { MovedNotice } from './components/MovedNotice';
@@ -32,7 +31,7 @@ import { useDeepLinks, useViewFocus, useViewState } from './app/useAppNavigation
 import { useDerivedData } from './app/useDerivedData';
 import { useAccountActions } from './app/useAccountActions';
 import { useAppBadge, useCloudBackup } from './app/useBackgroundTasks';
-import { Lazy, QuickAddModal, WhatsNewModal, usePreloadScreens } from './app/screens';
+import { AppLockScreen, Lazy, QuickAddModal, WhatsNewModal, usePreloadScreens } from './app/screens';
 import { ScreenRouter, useAccountForm, useScreenData } from './app/ScreenRouter';
 import { SyncBanners, useSyncToasts } from './app/SyncBanners';
 import { SyncDialogsHost, useSyncDialogs } from './app/SyncDialogs';
@@ -101,9 +100,14 @@ const AppRoot: React.FC = () => {
   // les données, pour ne jamais laisser filtrer d'information (y compris le simple fait qu'une
   // session Google est déjà active) tant que ce n'est pas déverrouillé.
   if (locked) {
-    return <AppLockScreen onUnlock={lockFlow.unlock} hasUnsyncedChanges={data.hasUnsyncedChanges()}
-      resetRequest={lock.resetRequest} onRequestReset={lock.requestReset} onCancelRequest={lock.cancelResetRequest}
-      onForgot={lockFlow.forgotCode} />;
+    // Pendant le chargement du verrou : une surface vide, rien des données ni de la session.
+    return (
+      <React.Suspense fallback={<div className="min-h-screen bg-surface" aria-busy="true" />}>
+        <AppLockScreen onUnlock={lockFlow.unlock} hasUnsyncedChanges={data.hasUnsyncedChanges()}
+          resetRequest={lock.resetRequest} onRequestReset={lock.requestReset} onCancelRequest={lock.cancelResetRequest}
+          onForgot={lockFlow.forgotCode} />
+      </React.Suspense>
+    );
   }
   // Session enregistrée en cours de vérification : la structure de l'app tout de suite.
   if (!isAuthenticated && auth.sessionPending) return <BootSkeleton message="Ouverture de votre session…" />;
@@ -136,7 +140,7 @@ const AppRoot: React.FC = () => {
         <SyncBanners data={data} onReconnect={() => void auth.reconnect()} onOpenConflict={syncDialogs.openConflict} />
         <BackupDeletionNotice active={data.dataShown && !data.isLoadingData} onOpenSettings={() => setView('settings')} />
         <ScreenRouter view={view} setView={setView} data={screenData} derived={derived} actions={actions}
-          fiscalWatch={fiscalWatch} accountForm={accountForm} onSignedOutEverywhere={auth.signedOutEverywhere} />
+          fiscalWatch={fiscalWatch} accountForm={accountForm} onSignedOutEverywhere={auth.signedOutEverywhere} onQuickAdd={openQuickAdd} />
       </AppShell>
     </LastSavedAtContext.Provider>
   );

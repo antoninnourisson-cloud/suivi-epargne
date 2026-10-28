@@ -73,7 +73,7 @@ describe('RestitutionPanel : annulation de la restitution', () => {
 });
 
 const account = (id: string, name: string, owned: number, parental: number): SavingsAccount => ({
-  id, name, type: AccountType.LIVRET_A, institution: 'Banque', ownedAmount: owned, parentalCapital: parental, totalAmount: owned + parental, interestRate: 1.7,
+  id, name, type: AccountType.LIVRET_A, institution: 'Banque', ownedAmount: owned, parentalCapital: parental, totalAmount: owned + parental, interestRate: 1.7, movements: [],
 });
 
 const setup = (accounts: SavingsAccount[], restitution?: ParentalRestitution) => {

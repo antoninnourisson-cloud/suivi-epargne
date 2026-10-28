@@ -212,7 +212,7 @@ export const computeYearReview = (data: GlobalAppData, year: number, asOfDate: D
   const flowsFrom = startSnap
     ? formatISODay(new Date(Number(startSnap.date.slice(0, 4)), Number(startSnap.date.slice(5, 7)), 0))
     : `${year - 1}-12-31`;
-  const flowsSinceStart = accounts.reduce((sum, a) => sum + (a.movements || [])
+  const flowsSinceStart = accounts.reduce((sum, a) => sum + a.movements
     .filter(m => m.kind !== 'valuation' && m.kind !== 'parental' && m.kind !== 'adjustment' && m.label !== 'Solde initial' && m.date > flowsFrom && m.date <= endISO)
     .reduce((t, m) => t + (signedAmount(m)), 0), 0);
   const gap = (netEnd - netStart) - flowsSinceStart;

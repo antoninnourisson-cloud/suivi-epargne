@@ -355,6 +355,7 @@ describe('écran mémoïsé', () => {
   const accountForm: AccountFormState = { editingAccount: undefined, setEditingAccount: () => {}, showForm: false, setShowForm: () => {} };
   const setView = () => {};
   const onSignedOut = () => {};
+  const onQuickAdd = () => {};
 
   it('un changement d’état d’App sans rapport (fenêtre, toast, sauvegarde) ne re-rend pas l’écran', () => {
     for (const k of Object.keys(renders)) delete renders[k];
@@ -364,7 +365,7 @@ describe('écran mémoïsé', () => {
       return <>
         <button onClick={() => setN(n + 1)}>etat-app {n}</button>
         <button onClick={() => setD({ ...data, doc: { ...doc } })}>donnees</button>
-        <ScreenRouter view="dashboard" setView={setView} data={d} derived={derived} actions={actions} fiscalWatch={fiscalWatch} accountForm={accountForm} onSignedOutEverywhere={onSignedOut} />
+        <ScreenRouter view="dashboard" setView={setView} data={d} derived={derived} actions={actions} fiscalWatch={fiscalWatch} accountForm={accountForm} onSignedOutEverywhere={onSignedOut} onQuickAdd={onQuickAdd} />
       </>;
     };
     render(<UiProviders><Parent /></UiProviders>);

@@ -34,7 +34,7 @@ export const marginalTaxRate = (taxableIncome: number, brackets: TaxBracket[]): 
 /** Versements volontaires de l'année sur vos PER (hors solde initial, valorisation, part des parents et corrections). */
 export const perContributions = (accounts: SavingsAccount[], year: number): number => round2(accounts
   .filter(a => a.type === AccountType.PER)
-  .reduce((s, a) => s + (a.movements || [])
+  .reduce((s, a) => s + a.movements
     .filter(m => m.type === 'IN' && !m.kind && !isInitialBalance(m) && m.date.startsWith(`${year}-`))
     .reduce((t, m) => t + m.amount, 0), 0));
 

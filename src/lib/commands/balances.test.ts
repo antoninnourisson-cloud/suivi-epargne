@@ -1,8 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { AccountType, SavingsAccount } from '../../types';
-import { balanceChangeMovements } from '../accountOps';
 import { computeGoodMonths, computePayReview } from '../motivation';
-import { computeSavedSince, suggestCreditedInterest } from '../finance';
+import { computeMonthSavedAmount, suggestCreditedInterest } from '../finance';
 import { breakdownDraft, draftToUpdate, type Draft } from '../../components/update/draft';
 import { applyPatch, CommandState, quickAdd, updateBalances } from './index';
 
@@ -58,11 +57,11 @@ describe('intérêts crédités proposés à part', () => {
     const january = months.months.find(m => m.start === '2026-12-27')!;
     expect(january).toMatchObject({ saved: 300, good: false });
     expect(computePayReview({ accounts: s.accounts, goodMonths: months, today: '2027-01-28' })).toMatchObject({ deposits: 300, good: false });
-    expect(computeSavedSince(s.accounts, '2027-01-01', new Date(2027, 0, 28))).toBe(300);
+    expect(computeMonthSavedAmount(s.accounts, new Date(2027, 0, 28))).toBe(300);
 
-    // Sans la ventilation (ancien comportement), le même relevé faisait un « bon mois ».
+    // Sans la ventilation, le même relevé compterait 540 € d'épargne (un « bon mois »).
     const legacy = applyPatch({ accounts: [livretA()] }, ok(updateBalances({ accounts: [livretA()] }, { updates: [{ accountId: 'la', date: '2027-01-05', owned: 10540, parental: 0 }] })).next);
-    expect(computeSavedSince(legacy.accounts, '2027-01-01', new Date(2027, 0, 28))).toBe(540);
+    expect(computeMonthSavedAmount(legacy.accounts, new Date(2027, 0, 28))).toBe(540);
   });
 
   it("l'utilisateur corrige la proposition ; au-delà de la hausse, refus", () => {
@@ -134,15 +133,5 @@ describe('updateBalances : garde-fous et annulation', () => {
     expect(acc(s1, 'lep')).toMatchObject({ ownedAmount: 7600, parentalCapital: 2400, totalAmount: 10000 });
     expect(acc(s1, 'lep').movements!.map(m => [m.label, m.amount, m.kind])).toEqual([['Actualisation (+)', 100, undefined], ['Part des parents (-)', 100, 'parental']]);
     expect(applyPatch(s1, r.undo(s1))).toEqual(s0);
-  });
-
-  it('le repli par le hook (balanceChangeMovements) reprend exactement les mouvements préparés', () => {
-    const s0 = state();
-    const r = ok(updateBalances(s0, { updates: [{ accountId: 'la', date: '2027-01-05', owned: 10540, parental: 0, interest: 240, interestLabel: 'Intérêts 2026' }] }));
-    const planned = acc(applyPatch(s0, r.next), 'la');
-    const replayed = balanceChangeMovements(acc(s0, 'la'), planned, '2027-01-05', { ownLabel: 'Actualisation' });
-    expect(replayed).toEqual(planned.movements!.slice(-2));
-    const avPlanned = acc(applyPatch(s0, ok(updateBalances(s0, { updates: [{ accountId: 'av', date: '2027-01-05', owned: 4500, parental: 0, deposits: 4200, cashFlow: 200 }] })).next), 'av');
-    expect(balanceChangeMovements(av(), avPlanned, '2027-01-05', { ownLabel: 'Actualisation', splitValuation: true })).toEqual(avPlanned.movements);
   });
 });

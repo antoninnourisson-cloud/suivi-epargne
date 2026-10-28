@@ -8,12 +8,11 @@
  * interprétable, pour que l'appelant distingue « valeur invalide » de « zéro » — distinction
  * essentielle quand la valeur est un solde bancaire.
  *
- * Historique du bug que ça corrige : `NumberInput` passait en `type="number"` pendant le
- * focus. Or un input `type="number"` renvoie `''` dès que son contenu est invalide *à ses
- * yeux* — et `"12,5"` en fait partie. La virgule étant LE séparateur décimal du clavier
- * français (et celui que l'app affiche elle-même via `toLocaleString('fr-FR')`), retaper un
- * montant lu à l'écran produisait `''` → `parseFloat('')` = NaN → `0` enregistré
- * silencieusement. C'est donc à nous de parser, pas au navigateur.
+ * Pourquoi ne pas laisser faire le navigateur : un input `type="number"` renvoie `''` dès que
+ * son contenu est invalide *à ses yeux* — et `"12,5"` en fait partie. La virgule étant LE
+ * séparateur décimal du clavier français (et celui que l'app affiche elle-même via
+ * `toLocaleString('fr-FR')`), un montant relu à l'écran puis retapé donnerait `''` →
+ * `parseFloat('')` = NaN → `0` enregistré sans rien dire. C'est donc à nous de parser.
  */
 export const parseFrenchNumber = (input: string): number | null => {
   // `\s` couvre aussi les espaces insécables (U+00A0 / U+202F) que produit `toLocaleString`
@@ -27,9 +26,8 @@ export const parseFrenchNumber = (input: string): number | null => {
 };
 
 /**
- * Variante pour les `<input type="number">` bruts encore présents dans l'app : garantit
- * qu'un champ vidé ou invalide ne propage JAMAIS `NaN` dans les données persistées.
- * `fallback` est la valeur retenue dans ce cas.
+ * Variante avec valeur de repli : un champ vidé ou invalide ne propage JAMAIS `NaN` dans les
+ * données enregistrées. `fallback` est la valeur retenue dans ce cas.
  */
 export const safeNumber = (raw: string, fallback = 0): number => {
   const parsed = parseFrenchNumber(raw);
@@ -38,7 +36,7 @@ export const safeNumber = (raw: string, fallback = 0): number => {
 
 /**
  * Taux stocké en fraction (0,186) ↔ affiché en pourcentage (18,6 %). Arrondi pour effacer le
- * bruit des nombres à virgule (18,6 / 100 donnait 0,18600000000000003) sans perdre une
+ * bruit des nombres à virgule (18,6 / 100 donne 0,18600000000000003) sans perdre une
  * décimale utile (0,2232 → 22,32 %).
  */
 export const fractionToPercent = (fraction: number): number => Math.round(fraction * 100 * 1e6) / 1e6;
