@@ -80,10 +80,11 @@ export default defineConfig({
     appVersionPlugin(),
     VitePWA({
       registerType: 'autoUpdate',
-      // Réception des notifications push (public/push-sw.js), greffée sur le service
-      // worker généré plutôt que de réécrire toute la stratégie de cache à la main.
+      // Réception des notifications push (public/push-sw.js) et des fichiers partagés vers
+      // l'app (public/share-sw.js), greffées sur le service worker généré plutôt que de
+      // réécrire toute la stratégie de cache à la main.
       workbox: {
-        importScripts: ['push-sw.js'],
+        importScripts: ['push-sw.js', 'share-sw.js'],
         // La police est servie avec l'app : précachée pour l'affichage hors ligne. Les icônes
         // de public/ (pwa-*.png, apple-touch-icon.png) sont prises par ce motif : plus de
         // liste includeAssets, qui les faisait figurer deux fois dans le précache.
@@ -110,6 +111,16 @@ export default defineConfig({
         // Relatifs, comme le `base` ci-dessus.
         scope: './',
         start_url: './',
+        // « Partager vers Pécule » (app installée, Android) : un PDF ou une image partagé
+        // depuis une autre app arrive en POST sur `partager`, reçu par public/share-sw.js.
+        share_target: {
+          action: './partager',
+          method: 'POST',
+          enctype: 'multipart/form-data',
+          params: {
+            files: [{ name: 'fichiers', accept: ['application/pdf', '.pdf', 'image/png', 'image/jpeg', 'image/webp'] }],
+          },
+        },
         // Appui long sur l'icône de l'app -> action directe, sans repasser par la nav.
         // `url` relative au `scope` ci-dessus : `?action=quickadd` ouvre l'ajout rapide
         // (useDeepLinks, src/app/useAppNavigation.ts).
@@ -169,7 +180,8 @@ export default defineConfig({
         // (203 → 206 Kio gzip : les icônes des autres écrans viennent avec) ; précache
         // 107 → 44 entrées (572 → 548 Kio gzip).
         // Revers : un module chargé à la demande de moins de 8 Ko qui ne dépend que du code de
-        // démarrage est fusionné dans le fichier principal (cas d'Agenda ou de QuickAddModal).
+        // démarrage est fusionné dans le fichier principal (Agenda et QuickAddModal sont donc
+        // chargés ensemble : components/agendaQuickAdd.ts).
         // Pour le garder hors du démarrage, le charger avec un module plus gros qui ne sert qu'à
         // lui (ex. services/fiscalWatchGemini.ts, chargé avec le client Gemini). Un manualChunks
         // par écran ne convient pas : il aspire aussi les dépendances partagées (recharts…).

@@ -9,9 +9,10 @@
 // Cache (réponses 200 et 304 seulement ; le reste garde l'en-tête de l'origine) :
 // - fichiers au nom haché par Vite (/assets/nom-HASH.js, workbox-HASH.js) : un an,
 //   « immutable » : leur contenu ne change jamais sous le même nom ;
-// - pages HTML, service worker (sw.js), son extension push (push-sw.js, importée par sw.js,
-//   donc servie par le cache HTTP : voir updateViaCache), registerSW.js et le manifeste :
-//   « no-cache », revalidés à chaque fois, pour qu'une mise à jour arrive tout de suite.
+// - pages HTML, service worker (sw.js), ses extensions (push-sw.js et share-sw.js, importées
+//   par sw.js, donc servies par le cache HTTP : voir updateViaCache), registerSW.js et le
+//   manifeste : « no-cache », revalidés à chaque fois, pour qu'une mise à jour arrive tout
+//   de suite.
 // Sans ce Worker, Cloudflare imposait 4 heures à tout (réglage « Browser Cache TTL »).
 //
 // La politique de contenu complète (CSP) reste dans la balise <meta> d'index.html, seule
@@ -44,7 +45,7 @@ export const REVALIDATE = 'no-cache';
 // Nom haché par Vite : « nom-XXXXXXXX.ext » (8 caractères base64url ; le nom peut contenir des tirets).
 const HASHED_ASSET = /^\/assets\/[^/]+-[A-Za-z0-9_-]{8}\.[a-z0-9]+$/;
 const HASHED_WORKBOX = /^\/workbox-[0-9a-f]{8}\.js$/;
-const ALWAYS_FRESH = new Set(['/sw.js', '/push-sw.js', '/registerSW.js', '/manifest.webmanifest']);
+const ALWAYS_FRESH = new Set(['/sw.js', '/push-sw.js', '/share-sw.js', '/registerSW.js', '/manifest.webmanifest']);
 
 /** En-tête Cache-Control à imposer pour ce chemin, ou `null` pour garder celui de l'origine. */
 export const cacheControlFor = (pathname: string, contentType: string | null): string | null => {

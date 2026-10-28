@@ -16,6 +16,8 @@
 - **Déploiement automatique du Worker** depuis GitHub Actions (`.github/workflows/deploy.yml`, avec le site et le Worker d'en-têtes, à chaque push sur `main` depuis le 26/10/2026). Actif dès que les deux secrets du dépôt `CLOUDFLARE_API_TOKEN` et `CLOUDFLARE_ACCOUNT_ID` existent ; d'ici là, le job est sauté et `npm run deploy` reste possible à la main.
 - **Plus aucun envoi d'e-mail** : l'autorisation Gmail (`gmail.send`) est retirée de la connexion Google, qui ne demande plus aucune portée sensible.
 - **Préférences de notification par type**, **avantages salariaux d'après les fiches de paie**, **LEP : alerte avant fermeture et lecture de l'avis d'imposition**, **veille fiscale hebdomadaire** (d'abord avec Gemini ; depuis octobre 2026 sur le serveur avec Cloudflare Workers AI, Gemini en secours ; l'app propose, vous validez).
+- **Partager vers Pécule** (octobre 2026) : l'app installée sur Android reçoit un PDF ou une image partagé depuis une autre app (Web Share Target) et propose de l'importer comme fiche de paie, relevé bancaire ou avis d'imposition ; fichier gardé sur l'appareil le temps de l'import seulement.
+- **Demander à Pécule** (octobre 2026) : questions en français sur ses propres données, réponses de Gemini avec la clé de l'appareil d'après un résumé compact (sans e-mail, identifiant Drive, clé ni texte libre). Lecture seule, conversation jamais enregistrée.
 - **Octobre 2026** : Material 3 Expressive, motivation (bons mois, jalons, point de paie), simulateur « Et si… », alertes en euros, « Votre année », écriture Drive vérifiée, sauvegarde de secours chiffrée, en-têtes de sécurité, surveillance quotidienne, tests de bout en bout, wiki. Détail par phase ci-dessous.
 
 ## Feuille de route (par phases, sans dates)
@@ -92,7 +94,6 @@ Grand ménage et remise à plat de tout ce qui entoure le code :
 ### En continu
 - Architecture : montants en centimes, store et moteur de synchronisation, paquet `domain/` partagé avec le serveur.
 - Maintenance : versions majeures (voir *exploitation* ci-dessus et le calendrier de MAINTENANCE.md § 4), TypeScript 7 dès que typescript-eslint le prend en charge.
-- Pistes : « Demander à Pécule » (assistant).
 
 ## Notes techniques à ne pas perdre
 

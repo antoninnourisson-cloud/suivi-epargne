@@ -22,7 +22,7 @@ export const PALETTE_CLASS = `(${PALETTE_UTILITIES})-(${PALETTE_COLORS})-(50|[1-
 const LEGACY_PALETTE = `/(^|[^a-zA-Z0-9_-])${PALETTE_CLASS}([^a-zA-Z0-9_-]|$)/`;
 
 export default tseslint.config(
-  { ignores: ['dist', 'dist-e2e', 'node_modules', 'worker/node_modules', 'worker/.wrangler', 'edge/node_modules', 'edge/.wrangler', 'public/push-sw.js', 'dev-dist'] },
+  { ignores: ['dist', 'dist-e2e', 'node_modules', 'worker/node_modules', 'worker/.wrangler', 'edge/node_modules', 'edge/.wrangler', 'public/push-sw.js', 'public/share-sw.js', 'dev-dist'] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {

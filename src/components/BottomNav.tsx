@@ -4,6 +4,7 @@ import { MoreHorizontal, X } from 'lucide-react';
 import { NAV_ITEMS, NAV_SECTIONS, NavItem, View } from '../navigation';
 import { Modal } from './Modal';
 import { IconButton } from './ui';
+import { AskNavButton } from './AskNavButton';
 
 interface BottomNavProps {
   view: View;
@@ -12,6 +13,8 @@ interface BottomNavProps {
   setMoreOpen: (open: boolean) => void;
   /** Écrans masqués (ex. part parentale en mode solo). */
   hidden?: View[];
+  /** Ouvre « Demander à Pécule » (bouton en tête du panneau). */
+  onAsk?: () => void;
 }
 
 // `expanded` : bouton qui ouvre une feuille (« Plus ») ; le lecteur d'écran annonce qu'il
@@ -26,7 +29,7 @@ const TabButton: React.FC<{ active: boolean; onClick: () => void; icon: NavItem[
   </button>
 );
 
-export const BottomNav: React.FC<BottomNavProps> = ({ view, setView, moreOpen, setMoreOpen, hidden = [] }) => {
+export const BottomNav: React.FC<BottomNavProps> = ({ view, setView, moreOpen, setMoreOpen, hidden = [], onAsk }) => {
   const items = NAV_ITEMS.filter(i => !hidden.includes(i.key));
   const tabs = items.filter(i => i.tab);
   const more = items.filter(i => !i.tab);
@@ -44,6 +47,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ view, setView, moreOpen, s
           <h2 className="text-base font-medium text-on-surface">Plus d'écrans</h2>
           <IconButton label="Fermer le menu" icon={X} onClick={() => setMoreOpen(false)} className="-my-1 -mr-2" />
         </div>
+        {onAsk && <AskNavButton onClick={() => { setMoreOpen(false); onAsk(); }} className="mt-2" />}
         {[...NAV_SECTIONS, undefined].map(section => {
           const group = more.filter(i => i.section === section);
           if (group.length === 0) return null;

@@ -98,6 +98,8 @@ interface DashboardProps {
   onValidatePayReview?: (key: string) => void;
   // Clôture de l'année écoulée (lib/yearClosing) : une tâche en janvier-février.
   yearClosing?: YearClosingStatus | null;
+  /** « Demander à Pécule » (entrée et fenêtre chargées à part), sous l'épargne nette. */
+  askSlot?: React.ReactNode;
 }
 
 const TODO_ICONS: Record<HomeTodoIcon, TodoSpec['icon']> = {
@@ -114,7 +116,7 @@ const SLICE_STYLE: Record<'available' | 'tax' | 'locked', Pick<AvailabilitySegme
   locked: { color: 'bg-outline', hatch: 'dense' },
 };
 
-export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalConfig, onDeleteAccount, recurringMovements = [], onRecordRecurring, monthPlan, monthGoal, monthlyPay = 0, paydayDay, trackingStartDate, subscriptions = [], onUpdateFiscalConfig, onOpenSettings, onUpdateAccounts, payRaise, onAcceptPayRaise, onDismissPayRaise, onNavigate, onAddAccount, lastExportAt, onExport, emergency, onSetEmergencyMonths, agendaNext = [], lepTimeline, taxReturnAlert, payslips = [], gamification, goodMonthThreshold, milestonesSeen, payReviewsDone, rfrByYear, restitutionDoneOn, restitutionPlannedDate, onMarkMilestonesSeen, onValidatePayReview, yearClosing }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalConfig, onDeleteAccount, recurringMovements = [], onRecordRecurring, monthPlan, monthGoal, monthlyPay = 0, paydayDay, trackingStartDate, subscriptions = [], onUpdateFiscalConfig, onOpenSettings, onUpdateAccounts, payRaise, onAcceptPayRaise, onDismissPayRaise, onNavigate, onAddAccount, lastExportAt, onExport, emergency, onSetEmergencyMonths, agendaNext = [], lepTimeline, taxReturnAlert, payslips = [], gamification, goodMonthThreshold, milestonesSeen, payReviewsDone, rfrByYear, restitutionDoneOn, restitutionPlannedDate, onMarkMilestonesSeen, onValidatePayReview, yearClosing, askSlot }) => {
   const today = localTodayISO();
   const choices = useHomeChoices(today);
   const backupCodeCheckDue = useBackupCodeCheckDue();
@@ -289,6 +291,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalC
           </AvailabilityBar>
         </div>
       </Card>
+
+      {askSlot}
 
       {/* Bilan de la paie précédente, une fois, jusqu'à validation. */}
       {showPayReview && payReview && (

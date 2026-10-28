@@ -9,9 +9,9 @@ import type { View } from '../navigation';
 
 afterEach(cleanup);
 
-const Harness: React.FC<{ setView: (v: View) => void }> = ({ setView }) => {
+const Harness: React.FC<{ setView: (v: View) => void; onAsk?: () => void }> = ({ setView, onAsk }) => {
   const [moreOpen, setMoreOpen] = useState(false);
-  return <BottomNav view="dashboard" setView={setView} moreOpen={moreOpen} setMoreOpen={setMoreOpen} />;
+  return <BottomNav view="dashboard" setView={setView} moreOpen={moreOpen} setMoreOpen={setMoreOpen} onAsk={onAsk} />;
 };
 
 describe('BottomNav', () => {
@@ -30,5 +30,14 @@ describe('BottomNav', () => {
     const home = screen.getAllByRole('button').find(b => b.getAttribute('aria-current') === 'page');
     expect(home?.hasAttribute('aria-haspopup')).toBe(false);
     expect(home?.hasAttribute('aria-expanded')).toBe(false);
+  });
+
+  it('« Demander à Pécule » en tête du panneau : ferme le panneau et ouvre l’assistant', () => {
+    const onAsk = vi.fn();
+    render(<Harness setView={vi.fn()} onAsk={onAsk} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Plus' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Demander à Pécule' }));
+    expect(onAsk).toHaveBeenCalledOnce();
+    expect(screen.queryByRole('dialog', { name: "Plus d'écrans" })).toBeNull();
   });
 });

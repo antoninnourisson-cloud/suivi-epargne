@@ -3,11 +3,13 @@
 // Import de fiches de paie depuis le Drive de l'utilisateur (Google Picker — le fichier
 // original n'est jamais copié, on ne stocke que sa référence) et extraction des montants
 // via l'API Gemini, à la demande explicite (chaque clic consomme le quota de l'utilisateur).
+// Une fiche reçue par « Partager vers Pécule » est lue depuis l'appareil : elle n'est pas
+// copiée sur Drive, la fiche enregistrée garde seulement son nom (sans lien Drive).
 // ================================================
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { PayslipRecord, PayslipExtractedData } from '../types';
 import { openDrivePicker, downloadFileAsBase64 } from '../services/googleDriveService';
-import { extractPayslipData, GeminiError } from '../services/geminiService';
+import { extractPayslipData, fileToBase64, GeminiError } from '../services/geminiService';
 import { parseFrenchNumber } from '../lib/numbers';
 import { FileText, Upload, Sparkles, Trash2, ExternalLink, AlertTriangle, Check, X, Loader2, KeyRound, TrendingUp, Wand2, PenLine } from 'lucide-react';
 import { formatEUR, formatPeriod, toInputAmount } from '../lib/format';
@@ -37,6 +39,9 @@ interface PayslipsProps {
   onClearActivePayslip: () => void;
   /** Clé manquante : ouvre Paramètres, rubrique « Clés et services ». */
   onOpenKeys?: () => void;
+  /** Fiche reçue par « Partager vers Pécule » : ouverte comme un import, puis rendue (`onSharedFileTaken`). */
+  sharedFile?: File | null;
+  onSharedFileTaken?: () => void;
 }
 
 const fmt = (n: number | undefined) =>
@@ -55,6 +60,8 @@ interface DraftPayslip {
   // Échec passager (saturation, réseau) : on propose de relancer l'extraction.
   retryable?: boolean;
   fields: PayslipExtractedData;
+  /** Fichier de l'appareil (partagé vers Pécule), lu sans passer par Drive ; `fileId` vide. */
+  localFile?: File;
 }
 
 const emptyFields: PayslipExtractedData = {};
@@ -125,7 +132,7 @@ const describeError = (e: unknown, blocked: string[]): string => {
   return parts.join(' — ');
 };
 
-export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, geminiApiKey, pickerApiKey, onApplyToPilotage, activePayslipId, onClearActivePayslip, onOpenKeys }) => {
+export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, geminiApiKey, pickerApiKey, onApplyToPilotage, activePayslipId, onClearActivePayslip, onOpenKeys, sharedFile, onSharedFileTaken }) => {
   const t = chartTheme(useIsDark());
   const [draft, setDraft] = useState<DraftPayslip | null>(null);
   const [pickerBusy, setPickerBusy] = useState(false);
@@ -136,6 +143,14 @@ export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, 
   const removeWithUndo = useUndoableRemove();
 
   const keysMissing = !geminiApiKey || !pickerApiKey;
+
+  // Fiche partagée vers Pécule : elle devient l'import en cours (sans référence Drive).
+  useEffect(() => {
+    if (!sharedFile) return;
+    setDraft({ fileId: '', fileName: sharedFile.name, mimeType: sharedFile.type || 'application/pdf', status: 'picked', fields: { ...emptyFields }, localFile: sharedFile });
+    setBadFields({});
+    onSharedFileTaken?.();
+  }, [sharedFile, onSharedFileTaken]);
 
   // Courbe d'évolution du net : uniquement les fiches dont la période et le net ont bien
   // été renseignés (extraction partielle ou saisie manuelle incomplète exclues du tracé).
@@ -180,12 +195,15 @@ export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, 
     setDraft({ ...draft, status: 'extracting', error: undefined, errorDetail: undefined, retryable: false });
     setBadFields({});
 
-    // Étape 1 : téléchargement depuis Drive. Étape 2 : analyse Gemini. Chacune est
-    // diagnostiquée séparément, avec la cause technique exacte affichée à l'écran.
-    const download = await withCspWatch(() => downloadFileAsBase64(draft.fileId));
+    // Étape 1 : lecture du fichier (téléchargement depuis Drive, ou fichier partagé déjà sur
+    // l'appareil). Étape 2 : analyse Gemini. Chacune est diagnostiquée séparément, avec la
+    // cause technique exacte affichée à l'écran.
+    const local = draft.localFile;
+    const download = await withCspWatch(() => (local ? fileToBase64(local) : downloadFileAsBase64(draft.fileId)));
     if (download.error !== undefined) {
-      console.error('Téléchargement fiche de paie échoué', download.error);
-      setDraft(d => d && ({ ...d, status: 'reviewing', error: 'Le téléchargement du fichier depuis Drive a échoué.', errorDetail: describeError(download.error, download.blocked), retryable: true }));
+      console.error('Lecture fiche de paie échouée', download.error);
+      const error = local ? 'La lecture du fichier a échoué.' : 'Le téléchargement du fichier depuis Drive a échoué.';
+      setDraft(d => d && ({ ...d, status: 'reviewing', error, errorDetail: describeError(download.error, download.blocked), retryable: true }));
       return;
     }
     const analysis = await withCspWatch(() => extractPayslipData(geminiApiKey, download.result as string, draft.mimeType));
@@ -240,10 +258,10 @@ export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, 
     () => [...payslips].sort((a, b) => (b.extracted.period || '').localeCompare(a.extracted.period || '')),
     [payslips]
   );
-  // Retrait annulable (le fichier reste sur le Drive) ; le focus va sur la fiche voisine,
-  // sinon sur « Importer depuis Drive », sinon (bouton absent ou désactivé) sur le titre.
+  // Retrait annulable (le fichier reste sur le Drive, s'il y était) ; le focus va sur la fiche
+  // voisine, sinon sur « Importer depuis Drive », sinon (bouton absent ou désactivé) sur le titre.
   const removePayslip = (p: PayslipRecord) => {
-    removeWithUndo(payslips, p, onUpdatePayslips, `Fiche de ${periodName(p)} retirée de la liste (le fichier reste sur votre Drive)`);
+    removeWithUndo(payslips, p, onUpdatePayslips, `Fiche de ${periodName(p)} retirée de la liste${p.fileId ? ' (le fichier reste sur votre Drive)' : ''}`);
     focusAfterRemoval(() => listRef.current, sorted.findIndex(x => x.id === p.id), () => importRef.current);
   };
 
@@ -305,6 +323,9 @@ export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, 
                   </Button>
                 </div>
                 <p className="text-xs text-on-surface-variant">L'analyse utilise votre quota Gemini, à chaque clic.</p>
+                {draft.localFile && (
+                  <p className="text-xs text-on-surface-variant">Fiche reçue par partage : elle n'est pas copiée sur votre Drive. Seuls son nom et les montants vérifiés sont enregistrés.</p>
+                )}
               </>
             )}
 
@@ -425,18 +446,22 @@ export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, 
                         <Wand2 className="w-4 h-4" aria-hidden="true" /> Utiliser pour le Pilotage{' '}<span className="sr-only">(fiche de {name})</span>
                       </Button>
                     )}
-                    <a
-                      href={driveUrl(p.fileId)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      aria-label={`Ouvrir la fiche de ${name} sur Drive (nouvel onglet)`}
-                      title="Ouvrir sur Drive"
-                      className={iconLink}
-                      data-focus-after-removal
-                    >
-                      <ExternalLink className="w-5 h-5" aria-hidden="true" />
-                    </a>
-                    <IconButton icon={Trash2} tone="danger" label={`Retirer la fiche de ${name} de la liste`} onClick={() => removePayslip(p)} />
+                    {/* Fiche reçue par partage : pas de fichier sur Drive, donc pas de lien. */}
+                    {p.fileId && (
+                      <a
+                        href={driveUrl(p.fileId)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        aria-label={`Ouvrir la fiche de ${name} sur Drive (nouvel onglet)`}
+                        title="Ouvrir sur Drive"
+                        className={iconLink}
+                        data-focus-after-removal
+                      >
+                        <ExternalLink className="w-5 h-5" aria-hidden="true" />
+                      </a>
+                    )}
+                    <IconButton icon={Trash2} tone="danger" label={`Retirer la fiche de ${name} de la liste`} onClick={() => removePayslip(p)}
+                      data-focus-after-removal={p.fileId ? undefined : true} />
                   </>}
                 />
               );

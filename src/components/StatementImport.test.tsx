@@ -176,4 +176,13 @@ describe('StatementImport', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Autre relevé' }));
     expect(screen.getByRole('button', { name: /Choisir le relevé/ })).toBeTruthy();
   });
+
+  it('fichier partagé vers Pécule : lu dès l’ouverture, une seule fois', async () => {
+    const shared = new File(['%PDF'], 'releve-partage.pdf', { type: 'application/pdf' });
+    const read = vi.fn(async () => statement());
+    setup({ read, initialFile: shared });
+    expect(await screen.findByRole('heading', { name: 'Relecture du relevé' })).toBeTruthy();
+    expect(read).toHaveBeenCalledTimes(1);
+    expect(read).toHaveBeenCalledWith(shared);
+  });
 });

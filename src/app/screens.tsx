@@ -7,7 +7,7 @@ import { isView, type View } from '../navigation';
 import { LAST_VIEW_KEY } from '../hooks/portfolio/keys';
 
 export const Journal = lazyWithRetry(() => import('../components/Journal').then(m => ({ default: m.Journal })));
-export const Agenda = lazyWithRetry(() => import('../components/Agenda').then(m => ({ default: m.Agenda })));
+export const Agenda = lazyWithRetry(() => import('../components/agendaQuickAdd').then(m => ({ default: m.Agenda })));
 export const Donations = lazyWithRetry(() => import('../components/Donations').then(m => ({ default: m.Donations })));
 export const Subscriptions = lazyWithRetry(() => import('../components/Subscriptions').then(m => ({ default: m.Subscriptions })));
 export const Dashboard = lazyWithRetry(() => import('../components/Dashboard').then(m => ({ default: m.Dashboard })));
@@ -35,8 +35,13 @@ export const SoloPlanCard = lazyWithRetry(() => import('../components/SoloPlanCa
 export const YearClosingCard = lazyWithRetry(() => import('../components/year/YearClosingCard').then(m => ({ default: m.YearClosingCard })));
 export const ConflictDialog = lazyWithRetry(() => import('../components/sync/ConflictDialog').then(m => ({ default: m.ConflictDialog })));
 export const LogoutDialog = lazyWithRetry(() => import('../components/sync/LogoutDialog').then(m => ({ default: m.LogoutDialog })));
-export const QuickAddModal = lazyWithRetry(() => import('../components/QuickAddModal').then(m => ({ default: m.QuickAddModal })));
+export const QuickAddModal = lazyWithRetry(() => import('../components/agendaQuickAdd').then(m => ({ default: m.QuickAddModal })));
 export const StatementImport = lazyWithRetry(() => import('../components/StatementImport').then(m => ({ default: m.StatementImport })));
+// « Partager vers Pécule » : seulement quand l'app est ouverte par un partage (`?partage=`).
+export const ShareTargetHost = lazyWithRetry(() => import('../components/share/ShareTargetHost').then(m => ({ default: m.ShareTargetHost })));
+// « Demander à Pécule » : l'entrée de l'Accueil, et la fenêtre ouverte depuis la navigation.
+export const AskPeculeEntry = lazyWithRetry(() => import('../components/ask/AskPecule').then(m => ({ default: m.AskPeculeEntry })));
+export const AskPeculeSheet = lazyWithRetry(() => import('../components/ask/AskPecule').then(m => ({ default: m.AskPecule })));
 // Verrou de l'app : seulement sur les appareils où il est activé.
 export const AppLockScreen = lazyWithRetry(() => import('../components/AppLockScreen').then(m => ({ default: m.AppLockScreen })));
 export const WhatsNewModal = lazyWithRetry(() => import('../components/WhatsNew').then(m => ({ default: m.WhatsNewModal })));
@@ -62,7 +67,7 @@ const START_VIEW_LOADERS: Partial<Record<View, () => Promise<unknown>>> = {
   transfers: () => import('../components/TransferManager'),
   accounts: () => import('../components/AccountsView'),
   journal: () => import('../components/Journal'),
-  agenda: () => import('../components/Agenda'),
+  agenda: () => import('../components/agendaQuickAdd'),
   yield: () => import('../components/Yield'),
   history: () => import('../components/History'),
   simulator: () => import('../components/Simulator'),

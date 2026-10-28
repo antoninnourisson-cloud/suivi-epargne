@@ -1,7 +1,7 @@
 // L'écran courant (un seul monté à la fois), chargé à la demande. Composant mémoïsé : il ne
 // se re-rend que si le document, l'écran ou ce qui en dérive change, jamais pour un toast,
 // une fenêtre, une bannière ou l'indicateur de sauvegarde (voir les props stables d'App).
-import { memo, Suspense, useMemo, useState } from 'react';
+import { memo, Suspense, useCallback, useMemo, useState } from 'react';
 import type { PortfolioData } from '../hooks/usePortfolioData';
 import type { FiscalWatch } from '../hooks/useFiscalWatch';
 import type { SavingsAccount } from '../types';
@@ -9,9 +9,9 @@ import { isView, type View } from '../navigation';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import { openSettingsSection } from '../components/settings/sections';
 import {
-  AccountUpdate, AccountsView, Agenda, AssistantPilot, CloudBackupPanel, Dashboard, Donations, DriveBackupsPanel,
+  AccountUpdate, AccountsView, Agenda, AskPeculeEntry, AssistantPilot, CloudBackupPanel, Dashboard, Donations, DriveBackupsPanel,
   FiscalWatchCard, History, Journal, Lazy, MotivationSettings, ParentalShare, Payslips, ServerSecurityPanel,
-  SetAsideVersionsPanel, Settings, Simulator, SoloPlanCard, StatementImport, Subscriptions, TaxNoticePanel, TaxReturnHelper,
+  SetAsideVersionsPanel, Settings, ShareTargetHost, Simulator, SoloPlanCard, StatementImport, Subscriptions, TaxNoticePanel, TaxReturnHelper,
   TransferManager, ViewLoader, Yield, YearClosingCard,
 } from './screens';
 import type { DerivedData } from './useDerivedData';
@@ -66,9 +66,13 @@ interface ScreenRouterProps {
   onSignedOutEverywhere: () => void;
   /** Ouvre l'ajout rapide d'un mouvement (fonction stable d'App). */
   onQuickAdd: () => void;
+  /** « Partager vers Pécule » : valeur de `?partage=` (sinon `null`), données prêtes, fin du partage. */
+  shareMarker: string | null;
+  shareReady: boolean;
+  onShareDone: () => void;
 }
 
-export const ScreenRouter = memo(function ScreenRouter({ view, setView, data, derived, actions, fiscalWatch, accountForm, onSignedOutEverywhere, onQuickAdd }: ScreenRouterProps) {
+export const ScreenRouter = memo(function ScreenRouter({ view, setView, data, derived, actions, fiscalWatch, accountForm, onSignedOutEverywhere, onQuickAdd, shareMarker, shareReady, onShareDone }: ScreenRouterProps) {
   const addToast = useAddToast();
   const dialog = useDialog();
   const { doc } = data;
@@ -77,6 +81,9 @@ export const ScreenRouter = memo(function ScreenRouter({ view, setView, data, de
   const raise = usePayRaise(doc, data, addToast);
   // « Lire un relevé » (Actualiser, fiche d'un compte) : une seule fenêtre, au-dessus de l'écran.
   const [statementFor, setStatementFor] = useState<{ accountId?: string } | null>(null);
+  // Fiche de paie partagée vers Pécule, en attente de l'écran des fiches qui la prend.
+  const [sharedPayslip, setSharedPayslip] = useState<File | null>(null);
+  const sharedPayslipTaken = useCallback(() => setSharedPayslip(null), []);
 
   const openNewAccount = () => { setView('accounts'); setEditingAccount(undefined); setShowForm(true); };
   const openSettings = (section: Parameters<typeof openSettingsSection>[0]) => { openSettingsSection(section); setView('settings'); };
@@ -107,6 +114,7 @@ export const ScreenRouter = memo(function ScreenRouter({ view, setView, data, de
           milestonesSeen={c.milestonesSeen} payReviewsDone={c.payReviewsDone} rfrByYear={c.rfrByYear}
           restitutionDoneOn={doc.parentalRestitution?.done?.date} restitutionPlannedDate={doc.parentalRestitution?.plannedDate}
           yearClosing={derived.yearClosing}
+          askSlot={<Lazy><AskPeculeEntry data={derived.fullData} geminiApiKey={data.geminiApiKey} taxEstimate={derived.taxEstimate} monthPlan={derived.monthPlan} onOpenSettings={openSettings} /></Lazy>}
           onMarkMilestonesSeen={actions.markMilestonesSeen} onValidatePayReview={actions.validatePayReview} />}
 
         {view === 'pilot' && <AssistantPilot
@@ -151,7 +159,10 @@ export const ScreenRouter = memo(function ScreenRouter({ view, setView, data, de
           taxHelper={<Lazy><TaxReturnHelper data={derived.fullData} taxEstimates={derived.taxEstimates} allowanceRate={doc.fiscalConfig.standardAllowance} allowanceCap={doc.fiscalConfig.standardAllowanceCap} ceiling75={doc.fiscalConfig.donation75Ceiling} /></Lazy>} />}
         {view === 'subscriptions' && <Subscriptions subscriptions={doc.subscriptions} onUpdate={data.setSubscriptions} monthlyPay={derived.monthlyPay} />}
         {view === 'payslips' && <Payslips payslips={doc.payslips} onUpdatePayslips={data.setPayslips} geminiApiKey={data.geminiApiKey} pickerApiKey={c.pickerApiKey ?? ''} onApplyToPilotage={actions.applyPayslip} activePayslipId={doc.activePayslipId} onClearActivePayslip={actions.clearActivePayslip}
-          onOpenKeys={() => { openSettingsSection('keys'); setView('settings'); }} />}
+          onOpenKeys={() => { openSettingsSection('keys'); setView('settings'); }}
+          sharedFile={sharedPayslip} onSharedFileTaken={sharedPayslipTaken} />}
+        {shareMarker !== null && <Lazy><ShareTargetHost marker={shareMarker} ready={shareReady} data={data} onImportStatement={actions.importStatement}
+          onPayslip={file => { setSharedPayslip(file); setView('payslips'); }} onOpenKeys={() => openSettings('keys')} onDone={onShareDone} /></Lazy>}
 
         {view === 'settings' && <Settings
           payslips={doc.payslips}

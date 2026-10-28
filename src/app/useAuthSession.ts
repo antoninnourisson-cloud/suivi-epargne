@@ -20,6 +20,13 @@ import type { AddToast, DialogApi } from './UiProviders';
 const DEMO_ALLOWED: boolean = import.meta.env.DEV || __E2E_DEMO__;
 const demoRequested = () => DEMO_ALLOWED && new URLSearchParams(window.location.search).has('demo');
 
+// Fichier reçu par « Partager vers Pécule » et pas encore lu (cache `pecule-partage`, voir
+// public/share-sw.js et services/sharedFile) : il ne survit pas à la déconnexion. Nom écrit
+// ici plutôt qu'importé, pour que ce module reste hors du code de démarrage.
+const forgetSharedFile = () => {
+  if (typeof caches !== 'undefined') void caches.delete('pecule-partage').catch(() => undefined);
+};
+
 interface AuthDeps {
   isAuthenticated: boolean;
   setIsAuthenticated: Dispatch<SetStateAction<boolean>>;
@@ -154,6 +161,7 @@ export const useAuthSession = ({ isAuthenticated, setIsAuthenticated, data, lock
     // qui se connectera ensuite sur cet appareil, peut-être partagé. « Code oublié » passe
     // par cette déconnexion : même effacement.
     clearTraces();
+    forgetSharedFile();
   }, [setIsAuthenticated, resetData, forgetGemini]);
 
   /**
@@ -175,6 +183,7 @@ export const useAuthSession = ({ isAuthenticated, setIsAuthenticated, data, lock
     resetData();
     forgetGemini();
     clearTraces();
+    forgetSharedFile();
     addToast({ message: 'Tous les appareils sont déconnectés', kind: 'success' });
   }, [setIsAuthenticated, resetData, addToast, forgetGemini]);
 

@@ -72,6 +72,7 @@ Pécule (anciennement *Suivi Épargne*) est une application web installable (PWA
 - **Projection** à 6 et 12 mois d'après le rythme réel des 90 derniers jours, avec une alerte si le rythme dérive.
 - Prélèvements des 7 prochains jours, évolution empilée par compte, répartition par établissement.
 - Pastille sur l'icône de l'app installée : nombre de choses à faire.
+- **Demander à Pécule** (Accueil, panneau « Plus » sur téléphone, menu latéral sur ordinateur) : questions en français sur ses propres chiffres (« Combien ai-je épargné ce trimestre ? »), suggestions, conversation à plusieurs tours. Gemini répond avec la clé de l'appareil (calculs confiés à son exécution de code, réinterrogé sans si le modèle la refuse) d'après un résumé compact et déterministe des données (`src/lib/askSnapshot.ts` : comptes, épargne sur 24 mois et totaux déjà calculés, soldes mensuels, 60 jours à venir, virements, abonnements, paie nette, intérêts, impôt, restitution ; ni e-mail, ni identifiant Drive, ni clé, ni texte libre ; taille plafonnée). Lecture seule ; conversation en mémoire seulement, effacée à la fermeture, au verrouillage et à la déconnexion.
 
 ### Comptes et mouvements
 - **Part propre et capital des parents** distingués sur chaque compte. Le capital parental est intouchable, ses intérêts reviennent à l'utilisateur.
@@ -93,6 +94,7 @@ Pécule (anciennement *Suivi Épargne*) est une application web installable (PWA
 - **Répartition personnalisée** de l'épargne à partir d'une date, stratégie de placement selon les taux et plafonds (livrets réglementés, puis CEL et livrets bancaires plafonnés, puis assurance vie ou PEA), durée de survie.
 - **Fiches de paie** : import depuis Drive (Google Picker), extraction par Gemini (nouvelles tentatives, modèles de repli), relecture obligatoire, graphique du net, hausse de salaire repérée.
 - **Lire un relevé** (Actualiser les soldes, ou la fiche d'un compte) : le relevé de la banque (PDF ou capture), choisi sur l'appareil, est lu par Gemini avec la clé de l'appareil. Pécule propose le compte correspondant, le nouveau solde et les opérations à ajouter (doublons et opérations déjà comprises décochés, compte courant et placements : seul le solde par défaut, contrôle « ancien solde + opérations = nouveau solde ») ; le solde d'un relevé plus ancien que le compte n'est repris que sur choix explicite ; rien n'est enregistré avant « Importer » (commande `importStatement`, avec « Annuler »). Lecture fictive en mode démo.
+- **Partager vers Pécule** (app installée sur Android, Chrome) : un PDF ou une image partagé depuis Gmail, Drive ou Fichiers est reçu par le service worker (`public/share-sw.js`, Web Share Target déclaré dans le manifeste), gardé sur l'appareil seulement, puis, après le verrou et le chargement des données, Pécule demande « Que voulez-vous importer ? » : fiche de paie (lue depuis l'appareil, sans copie ni lien Drive), relevé bancaire ou avis d'imposition. Rien n'est envoyé à Gemini avant ce choix ; le fichier est effacé dès sa lecture, à la déconnexion, et au bout d'une heure s'il n'a jamais été ouvert.
 
 ### Rendement et fiscalité
 - **Intérêts réellement acquis** (règle des quinzaines), intérêts attendus au 31 décembre, taux pondérés dans le temps, manque à gagner du cash dormant.
@@ -142,7 +144,7 @@ flowchart LR
   Edge -->|HTML, JS, CSS| UI
 
   Drive[(Google Drive<br/>suivi_epargne.json)]
-  Gemini[Gemini API<br/>fiches de paie, avis d'imposition,<br/>relevés, veille fiscale en secours]
+  Gemini[Gemini API<br/>fiches de paie, avis d'imposition,<br/>relevés, Demander à Pécule,<br/>veille fiscale en secours]
   SP[service-public.gouv.fr]
 
   subgraph Worker["Cloudflare Worker (facultatif) : suivi-epargne-api"]
@@ -203,7 +205,7 @@ Liste complète et raisons : [MAINTENANCE.md §1](MAINTENANCE.md#1-invariants-à
 - **Moindre privilège Google** : `drive.file` uniquement (les fichiers créés par l'app), plus `openid` et `email` côté serveur pour l'identité. Aucune portée sensible, aucun envoi d'e-mail.
 - **CSP stricte** dans [`index.html`](index.html) : aucun script intégré, scripts Google limités aux fichiers exacts chargés (`gsi/client`, `js/api.js` et ses modules), connexions limitées à Google et à l'origine **exacte** du Worker (injectée au build par `vite.config.ts`). Test : [`edge/test/csp.test.ts`](edge/test/csp.test.ts).
 - **Session serveur liée à l'appareil** : clé ECDSA P-256 non exportable créée à la connexion, chaque requête au Worker signée sur un nonce du serveur valable 10 minutes au plus ([`worker/src/deviceProof.ts`](worker/src/deviceProof.ts)) ; un jeton de session copié seul ne sert à rien (une copie du profil entier du navigateur emporte la clé). Les sessions d'avant la liaison sont refusées (une reconnexion). Paramètres liste les appareils connectés (« Déconnecter »).
-- **En-têtes HTTP** ajoutés par le Worker `pecule-edge` devant GitHub Pages : HSTS, `X-Frame-Options: DENY` et `frame-ancestors 'none'`, `nosniff`, `Referrer-Policy`, `Permissions-Policy`, `Cross-Origin-Opener-Policy`, et cache adapté (fichiers hachés : un an, `immutable` ; pages, `sw.js`, `push-sw.js` : `no-cache`) (détail : [MAINTENANCE.md § 8](MAINTENANCE.md#8-nom-de-domaine)).
+- **En-têtes HTTP** ajoutés par le Worker `pecule-edge` devant GitHub Pages : HSTS, `X-Frame-Options: DENY` et `frame-ancestors 'none'`, `nosniff`, `Referrer-Policy`, `Permissions-Policy`, `Cross-Origin-Opener-Policy`, et cache adapté (fichiers hachés : un an, `immutable` ; pages, `sw.js`, `push-sw.js`, `share-sw.js` : `no-cache`) (détail : [MAINTENANCE.md § 8](MAINTENANCE.md#8-nom-de-domaine)).
 - **Serveur** :
   - refresh token chiffré en AES-256-GCM, gardé seulement tant qu'une session ou une notification s'en sert (effacé à la déconnexion du dernier appareil, 61 jours au plus sans usage) ;
   - sessions stockées hachées (SHA-256), expirées après 30 jours d'inactivité et 60 jours au plus ;
@@ -217,7 +219,7 @@ Liste complète et raisons : [MAINTENANCE.md §1](MAINTENANCE.md#1-invariants-à
 - **Sauvegarde de secours chiffrée de bout en bout** (facultative, Paramètres) : l'app chiffre ses données (AES-256-GCM, clé dérivée par HKDF-SHA-256 d'un code de secours de 128 bits montré une seule fois) avant de les confier au Worker (KV, conservation échelonnée de 24 copies au plus, 1 an chacune ; effacement toujours différé de 7 jours, annulable). Le serveur ne voit ni le code ni la clé ; l'appareil garde seulement une clé non exportable, limitée au chiffrement, pour l'envoi hebdomadaire. Sans le code, les copies sont illisibles. Code : [`src/lib/cloudBackupCrypto.ts`](src/lib/cloudBackupCrypto.ts), [`src/services/cloudBackup.ts`](src/services/cloudBackup.ts).
 - **Sur l'appareil** : verrou biométrique ou PIN, copie locale chiffrée par une clé non exportable, clé Gemini propre à l'appareil.
 - **Tout révoquer** : « Déconnecter tous les appareils » et « Supprimer mes données serveur » dans Paramètres, ou myaccount.google.com/permissions (ce dernier garde la sauvegarde de secours chiffrée : « Désactiver » ou « Supprimer mes données serveur » programme son effacement 7 jours plus tard, annulable).
-- **Tiers** : les fiches de paie, l'avis d'imposition et les relevés bancaires envoyés à Gemini contiennent des données personnelles. Avec une clé gratuite, Google peut s'en servir. La veille fiscale (Workers AI, ou Gemini en secours) ne reçoit que des textes publics. Voir les [règles de confidentialité](https://pecule-app.com/confidentialite.html).
+- **Tiers** : les fiches de paie, l'avis d'imposition et les relevés bancaires envoyés à Gemini contiennent des données personnelles, comme le résumé des données joint aux questions de « Demander à Pécule ». Avec une clé gratuite, Google peut s'en servir. La veille fiscale (Workers AI, ou Gemini en secours) ne reçoit que des textes publics. Voir les [règles de confidentialité](https://pecule-app.com/confidentialite.html).
 - **Dépôt** : CodeQL, détection des secrets et Dependabot (alertes et mises à jour groupées), actions GitHub épinglées par SHA, permissions minimales dans chaque workflow, surveillance quotidienne de la production.
 
 Signaler une faille : voir [SECURITY.md](SECURITY.md). Contact : [contact@pecule-app.com](mailto:contact@pecule-app.com).
@@ -296,7 +298,7 @@ Avant chaque mise à jour visible, ajoute une entrée **en tête** de [`src/chan
 │   ├── ISSUE_TEMPLATE/     bug · idée · liens (sécurité, contact, code de conduite)
 │   ├── pull_request_template.md
 │   └── dependabot.yml      app, worker/, edge/, Actions
-├── public/                 icônes, police, presentation.html, confidentialite.html, push-sw.js
+├── public/                 icônes, police, presentation.html, confidentialite.html, push-sw.js, share-sw.js
 ├── scripts/
 │   └── m3-theme.mjs        génère la palette Material 3 (npm run theme → src/theme/m3.css)
 ├── src/

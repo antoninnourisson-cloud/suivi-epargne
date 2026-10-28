@@ -84,7 +84,7 @@ describe('en-têtes de cache', () => {
   });
 
   it('pages, service worker, extension push, enregistrement et manifeste : revalidés à chaque fois', async () => {
-    for (const path of ['/', '/index.html', '/confidentialite.html', '/sw.js', '/push-sw.js', '/registerSW.js', '/manifest.webmanifest']) {
+    for (const path of ['/', '/index.html', '/confidentialite.html', '/sw.js', '/push-sw.js', '/share-sw.js', '/registerSW.js', '/manifest.webmanifest']) {
       expect((await served(path)).headers.get('Cache-Control'), path).toBe(REVALIDATE);
     }
     expect((await served('/presentation', 'text/html; charset=utf-8')).headers.get('Cache-Control')).toBe(REVALIDATE);

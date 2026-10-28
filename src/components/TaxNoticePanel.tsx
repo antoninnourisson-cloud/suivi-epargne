@@ -1,8 +1,8 @@
 // Revenus fiscaux de référence (éligibilité au LEP) : importés depuis un avis d'imposition
 // lu par Gemini, ou corrigés à la main. Rien n'est enregistré sans validation.
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { FileSearch, Loader2, Check, X, Upload } from 'lucide-react';
-import { extractTaxNotice, TaxNoticeData } from '../services/geminiService';
+import { extractTaxNotice, fileToBase64, TaxNoticeData } from '../services/geminiService';
 import { formatEUR } from '../lib/format';
 import { Button, Card } from './ui';
 import { Hint, useCardSummary, useInSettingsCard } from './settings/SettingsCard';
@@ -15,16 +15,11 @@ interface Props {
   householdParts?: number;
   onSave: (year: number, rfr: number) => void;
   onSetParts: (parts: number) => void;
+  /** Avis déjà reçu (« Partager vers Pécule ») : lu dès l'ouverture. */
+  initialFile?: File;
 }
 
-const toBase64 = (file: File) => new Promise<string>((resolve, reject) => {
-  const r = new FileReader();
-  r.onload = () => resolve(String(r.result).split(',')[1] || '');
-  r.onerror = () => reject(r.error);
-  r.readAsDataURL(file);
-});
-
-export const TaxNoticePanel: React.FC<Props> = ({ geminiApiKey, rfrByYear, householdParts, onSave, onSetParts }) => {
+export const TaxNoticePanel: React.FC<Props> = ({ geminiApiKey, rfrByYear, householdParts, onSave, onSetParts, initialFile }) => {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState<TaxNoticeData | null>(null);
@@ -36,14 +31,25 @@ export const TaxNoticePanel: React.FC<Props> = ({ geminiApiKey, rfrByYear, house
   const known = Object.entries(rfrByYear).filter(([, v]) => v > 0).sort(([a], [b]) => Number(b) - Number(a))[0];
   useCardSummary('rfr', known ? `RFR ${known[0]} : ${formatEUR(known[1], 0)}` : 'RFR estimé (aucun avis saisi)');
 
-  const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const onFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = '';
-    if (!file) return;
+    if (file) void readFile(file);
+  };
+  // Avis partagé : lu une seule fois (le double montage du mode strict ne le relit pas).
+  const initialRead = useRef(false);
+  useEffect(() => {
+    if (!initialFile || !geminiApiKey || initialRead.current) return;
+    initialRead.current = true;
+    void readFile(initialFile);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- une seule lecture, à l'ouverture
+  }, [initialFile, geminiApiKey]);
+
+  async function readFile(file: File) {
     if (file.size > 15 * 1024 * 1024) { setError('Fichier trop lourd (15 Mo au plus).'); return; }
     setBusy(true); setError(null); setDraft(null);
     try {
-      const data = await extractTaxNotice(geminiApiKey, await toBase64(file), file.type || 'application/pdf');
+      const data = await extractTaxNotice(geminiApiKey, await fileToBase64(file), file.type || 'application/pdf');
       if (!data.incomeYear || data.rfr === undefined) setError("Gemini n'a pas trouvé l'année ou le revenu fiscal de référence : saisissez-les à la main ci-dessous.");
       else setDraft(data);
     } catch (err) {
@@ -51,7 +57,7 @@ export const TaxNoticePanel: React.FC<Props> = ({ geminiApiKey, rfrByYear, house
     } finally {
       setBusy(false);
     }
-  };
+  }
 
   const body = (
     <>

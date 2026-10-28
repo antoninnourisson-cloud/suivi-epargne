@@ -30,6 +30,14 @@ const modelChain = (): string[] => {
   return [...new Set([...(o ? [o] : []), GEMINI_MODEL, ...FALLBACK_MODELS])];
 };
 
+/** Contenu d'un fichier de l'appareil en base64 (sans l'en-tête `data:`), tel que l'attend Gemini. */
+export const fileToBase64 = (file: Blob) => new Promise<string>((resolve, reject) => {
+  const r = new FileReader();
+  r.onload = () => resolve(String(r.result).split(',')[1] || '');
+  r.onerror = () => reject(r.error);
+  r.readAsDataURL(file);
+});
+
 // Statuts qui justifient de réessayer : surcharge / quota momentané / erreur passagère.
 // 400 (requête invalide), 401/403 (clé refusée) ne changeront pas en réessayant.
 const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
@@ -350,4 +358,30 @@ export const extractBankStatement = async (apiKey: string, base64Data: string, m
     // Relevé de plusieurs pages : réponse plus longue que pour une fiche de paie.
     options.retryDelaysMs ?? [2_000, 6_000], options.requestTimeoutMs ?? 120_000);
   return sanitizeStatement(parseObject(answer));
+};
+
+// --- Demander à Pécule ---
+
+/** Un échange de la conversation : question (`user`) ou réponse (`model`). */
+export interface ChatTurn { role: 'user' | 'model'; text: string }
+
+/**
+ * Conversation : consigne système (avec le résumé des données) puis les échanges, la dernière
+ * question en dernier. Seul outil : l'exécution de code de Gemini, pour faire les calculs
+ * (sommes, écarts, moyennes) au lieu de les estimer ; Gemini ne lit que ce qui est envoyé.
+ * Un modèle qui refuse cet outil (400, ex. modèle choisi dans Paramètres) est réinterrogé
+ * sans. Même chaîne de modèles et mêmes reprises que le reste.
+ */
+export const askGeminiChat = async (apiKey: string, systemText: string, turns: ChatTurn[], options: ExtractOptions = {}): Promise<string> => {
+  const request = (withCode: boolean) => generate(apiKey, JSON.stringify({
+    system_instruction: { parts: [{ text: systemText }] },
+    contents: turns.map(t => ({ role: t.role, parts: [{ text: t.text }] })),
+    ...(withCode ? { tools: [{ code_execution: {} }] } : {}),
+  }), options.retryDelaysMs ?? [2_000, 6_000], options.requestTimeoutMs ?? 90_000);
+  try {
+    return (await request(true)).trim();
+  } catch (e) {
+    if (!(e instanceof GeminiError) || !e.message.startsWith('Gemini API 400')) throw e;
+    return (await request(false)).trim();
+  }
 };

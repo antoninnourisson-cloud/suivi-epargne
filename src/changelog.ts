@@ -15,6 +15,17 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '2026.10.28-3',
+    date: '2026-10-28',
+    title: 'Demander à Pécule, et partager un document vers Pécule',
+    items: [
+      "Nouveau : « Demander à Pécule » répond à vos questions sur vos comptes, votre épargne et vos échéances, avec Gemini et votre propre clé. On l'ouvre depuis l'Accueil, le menu sur ordinateur ou le panneau « Plus » sur téléphone.",
+      "Gemini reçoit seulement un résumé chiffré de vos données (ni e-mail, ni clé, ni notes). La conversation n'est jamais enregistrée : elle s'efface à la fermeture, au verrouillage et à la déconnexion, et l'assistant ne modifie rien.",
+      "Sur Android, avec l'app installée : « Partager » → Pécule depuis Gmail, Drive ou Fichiers envoie un PDF ou une image à Pécule, qui vous demande s'il s'agit d'une fiche de paie, d'un relevé bancaire ou d'un avis d'imposition.",
+      "Une fiche de paie partagée est lue depuis votre appareil, sans être copiée sur votre Drive. Le fichier partagé est effacé de l'appareil dès sa lecture.",
+    ],
+  },
+  {
     version: '2026.10.28-2',
     date: '2026-10-28',
     title: 'Virements simplifiés, démarrage plus rapide',

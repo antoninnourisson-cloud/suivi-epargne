@@ -13,6 +13,7 @@ vi.mock('../services/googleDriveService', () => ({
 }));
 vi.mock('../services/geminiService', () => ({
   extractPayslipData: vi.fn(),
+  fileToBase64: vi.fn(async () => 'QkFTRTY0'),
   GeminiError: class GeminiError extends Error { code = 'OTHER'; },
 }));
 
@@ -112,5 +113,42 @@ describe('Fiches de paie', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Retirer la fiche de septembre 2026 de la liste' }));
     expect(screen.getByText("Aucune fiche de paie pour l'instant")).toBeTruthy();
     await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Fiches de paie' })));
+  });
+
+  it('fiche partagée vers Pécule : lue depuis l’appareil, enregistrée sans lien Drive', async () => {
+    const gemini = await import('../services/geminiService');
+    const drive = await import('../services/googleDriveService');
+    vi.mocked(gemini.extractPayslipData).mockResolvedValueOnce({ period: '2026-10', netPaid: 2100, employer: 'ACME' });
+    const shared = new File(['%PDF'], 'Bulletin octobre.pdf', { type: 'application/pdf' });
+    const taken = vi.fn();
+    let latest: PayslipRecord[] = [];
+    const Shared = () => {
+      const [list, setList] = useState<PayslipRecord[]>([]);
+      latest = list;
+      return <Payslips payslips={list} onUpdatePayslips={setList} geminiApiKey="g" pickerApiKey="" onApplyToPilotage={() => {}} onClearActivePayslip={() => {}}
+        sharedFile={shared} onSharedFileTaken={taken} />;
+    };
+    render(<Shared />);
+    expect(screen.getByRole('heading', { name: 'Bulletin octobre.pdf' })).toBeTruthy();
+    expect(taken).toHaveBeenCalled();
+    expect(screen.getByText(/pas copiée sur votre Drive/)).toBeTruthy();
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: "Analyser avec l'IA" })); });
+    expect(gemini.fileToBase64).toHaveBeenCalledWith(shared);
+    expect(drive.downloadFileAsBase64).not.toHaveBeenCalled();
+    expect(gemini.extractPayslipData).toHaveBeenCalledWith('g', 'QkFTRTY0', 'application/pdf');
+    fireEvent.click(await screen.findByRole('button', { name: /Enregistrer la fiche/ }));
+    expect(latest[0]).toMatchObject({ fileId: '', fileName: 'Bulletin octobre.pdf', extracted: { netPaid: 2100 } });
+    expect(screen.queryByRole('link', { name: /sur Drive/ })).toBeNull();
+    expect(screen.getByRole('button', { name: /Retirer la fiche/ }).hasAttribute('data-focus-after-removal')).toBe(true);
+  });
+
+  it('fiche partagée illisible : erreur de lecture, nouvel essai proposé', async () => {
+    const gemini = await import('../services/geminiService');
+    vi.mocked(gemini.fileToBase64).mockRejectedValueOnce(new Error('lecture'));
+    const shared = new File(['%PDF'], 'b.pdf', { type: '' });
+    render(<Payslips payslips={[]} onUpdatePayslips={() => {}} geminiApiKey="g" pickerApiKey="" onApplyToPilotage={() => {}} onClearActivePayslip={() => {}} sharedFile={shared} />);
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: "Analyser avec l'IA" })); });
+    expect(await screen.findByText('La lecture du fichier a échoué.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Réessayer l'analyse/ })).toBeTruthy();
   });
 });

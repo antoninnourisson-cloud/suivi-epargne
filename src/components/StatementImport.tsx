@@ -34,6 +34,8 @@ export interface StatementImportProps {
   onOpenKeys?: () => void;
   /** Lecture du fichier (tests) ; par défaut Gemini, ou la lecture fictive du mode démo. */
   read?: (file: File) => Promise<StatementData>;
+  /** Fichier déjà reçu (« Partager vers Pécule ») : lu dès l'ouverture, sans repasser par le choix. */
+  initialFile?: File;
 }
 
 const frDay = (iso: string) => iso.split('-').reverse().join('/');
@@ -53,10 +55,10 @@ const olderNote = (closing: string, older: OlderBalance): string =>
     : `Ce relevé s'arrête le ${frDay(closing)}, avant un mouvement déjà enregistré le ${frDay(older.since)} : reprendre son solde effacerait ce qui a bougé depuis.`)
   + ' Laissez décoché, sauf si vous êtes sûr que ce solde est le bon.';
 
-export const StatementImport: React.FC<StatementImportProps> = ({ accounts, geminiApiKey, preferredAccountId, onClose, onImport, onOpenKeys, read }) => {
+export const StatementImport: React.FC<StatementImportProps> = ({ accounts, geminiApiKey, preferredAccountId, onClose, onImport, onOpenKeys, read, initialFile }) => {
   const demo = isDemoSession();
   const canRead = demo || !!geminiApiKey;
-  const [step, setStep] = useState<'pick' | 'reading' | 'review'>('pick');
+  const [step, setStep] = useState<'pick' | 'reading' | 'review'>(initialFile && canRead ? 'reading' : 'pick');
   const [error, setError] = useState<{ text: string; key?: boolean } | null>(null);
   const [data, setData] = useState<StatementData | null>(null);
   const [choices, setChoices] = useState<StatementAccountChoice[]>([]);
@@ -73,10 +75,21 @@ export const StatementImport: React.FC<StatementImportProps> = ({ accounts, gemi
   const choiceFor = (s: StatementAccount, d: StatementData, accountId: string | undefined): StatementAccountChoice =>
     initialChoice(s, d, accountId ? accounts.find(a => a.id === accountId) : undefined, today);
 
-  const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const onFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = '';
-    if (!file) return;
+    if (file) void readFile(file);
+  };
+  // Fichier partagé : lu une seule fois (le double montage du mode strict ne le relit pas).
+  const initialRead = useRef(false);
+  useEffect(() => {
+    if (!initialFile || !canRead || initialRead.current) return;
+    initialRead.current = true;
+    void readFile(initialFile);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- une seule lecture, à l'ouverture
+  }, [initialFile, canRead]);
+
+  async function readFile(file: File) {
     setError(null);
     setStep('reading');
     try {
@@ -97,7 +110,7 @@ export const StatementImport: React.FC<StatementImportProps> = ({ accounts, gemi
       setError({ text: r.message, key: r.kind === 'key' });
       setStep('pick');
     }
-  };
+  }
 
   const patchChoice = (i: number, patch: Partial<StatementAccountChoice>) => {
     setError(null);

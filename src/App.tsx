@@ -19,6 +19,7 @@ import { BottomNav } from './components/BottomNav';
 import { MovedNotice } from './components/MovedNotice';
 import { BackupDeletionNotice } from './components/BackupDeletionNotice';
 import { QuickAddFab, QuickAddNavButton, showQuickAddFab } from './components/QuickAddFab';
+import { AskNavButton } from './components/AskNavButton';
 import { whatsNewPending } from './components/whatsNewGate';
 import { registerReloadBlocker } from './services/swUpdates';
 import { isSettledOnDrive, syncPhase } from './lib/sync/syncStatus';
@@ -31,7 +32,8 @@ import { useDeepLinks, useViewFocus, useViewState } from './app/useAppNavigation
 import { useDerivedData } from './app/useDerivedData';
 import { useAccountActions } from './app/useAccountActions';
 import { useAppBadge, useCloudBackup } from './app/useBackgroundTasks';
-import { AppLockScreen, Lazy, QuickAddModal, WhatsNewModal, usePreloadScreens } from './app/screens';
+import { AppLockScreen, AskPeculeSheet, Lazy, QuickAddModal, WhatsNewModal, usePreloadScreens } from './app/screens';
+import { openSettingsSection } from './components/settings/sections';
 import { ScreenRouter, useAccountForm, useScreenData } from './app/ScreenRouter';
 import { SyncBanners, useSyncToasts } from './app/SyncBanners';
 import { SyncDialogsHost, useSyncDialogs } from './app/SyncDialogs';
@@ -57,10 +59,21 @@ const AppRoot: React.FC = () => {
   const { isDark, toggleTheme } = useTheme();
   // « Quoi de neuf » (et tout l'historique) n'est chargé que s'il a quelque chose à montrer.
   const [showWhatsNew] = useState(whatsNewPending);
+  // « Partager vers Pécule » : l'app a été ouverte par un partage (`?partage=`, laissé par
+  // public/share-sw.js). La fenêtre de choix (ScreenRouter, chargée à la demande) ne prend le
+  // fichier qu'une fois l'app déverrouillée et les données chargées.
+  const [shareMarker, setShareMarker] = useState(() => new URLSearchParams(window.location.search).get('partage'));
+  const endShare = useCallback(() => setShareMarker(null), []);
   const [moreNavOpen, setMoreNavOpen] = useState(false);
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const openQuickAdd = useCallback(() => setQuickAddOpen(true), []);
   const closeQuickAdd = useCallback(() => setQuickAddOpen(false), []);
+  // « Demander à Pécule » depuis la navigation : la fenêtre (et sa conversation) est retirée au
+  // verrouillage et à la déconnexion, et ne se rouvre pas d'elle-même ensuite.
+  const [askOpen, setAskOpen] = useState(false);
+  if (askOpen && (locked || !isAuthenticated)) setAskOpen(false);
+  const openAsk = useCallback(() => setAskOpen(true), []);
+  const closeAsk = useCallback(() => setAskOpen(false), []);
 
   const syncDialogs = useSyncDialogs(data.syncConflict, !!data.conflict);
   const auth = useAuthSession({ isAuthenticated, setIsAuthenticated, data, lock, addToast, dialog, openLogoutDialog: syncDialogs.openLogout });
@@ -122,7 +135,7 @@ const AppRoot: React.FC = () => {
         view={view} setView={setView} showParentalScreen={derived.showParentalScreen}
         syncPhase={syncPhase(data.syncStatus, data.syncConflict, data.lastSavedAt)} lastSavedAt={data.lastSavedAt}
         isDark={isDark} onToggleTheme={toggleTheme} onRequestLogout={auth.requestLogout} mainRef={mainRef}
-        navAction={data.accounts.length > 0 ? <QuickAddNavButton onClick={openQuickAdd} /> : undefined}
+        navAction={<>{data.accounts.length > 0 && <QuickAddNavButton onClick={openQuickAdd} />}<AskNavButton onClick={openAsk} className={data.accounts.length > 0 ? 'mt-3' : ''} /></>}
         overlays={<>
           {/* Ajout rapide flottant (téléphone), masqué là où l'écran a déjà son propre ajout ou
               sa barre d'enregistrement (voir showQuickAddFab). Sur ordinateur : navAction. */}
@@ -130,7 +143,9 @@ const AppRoot: React.FC = () => {
             <QuickAddFab scrollRef={mainRef} resetKey={view} onClick={openQuickAdd} />
           )}
           {quickAddOpen && <Lazy><QuickAddModal open={quickAddOpen} accounts={data.accounts} onClose={closeQuickAdd} onSubmit={actions.quickAdd} /></Lazy>}
-          <StableBottomNav view={view} setView={setView} moreOpen={moreNavOpen} setMoreOpen={setMoreNavOpen} hidden={hiddenScreens} />
+          <StableBottomNav view={view} setView={setView} moreOpen={moreNavOpen} setMoreOpen={setMoreNavOpen} hidden={hiddenScreens} onAsk={openAsk} />
+          {askOpen && <Lazy><AskPeculeSheet data={fullData} geminiApiKey={data.geminiApiKey} taxEstimate={derived.taxEstimate} monthPlan={derived.monthPlan}
+            onClose={closeAsk} onOpenSettings={section => { openSettingsSection(section); setView('settings'); }} /></Lazy>}
           {/* Une fois après chaque mise à jour : ce qui a changé. */}
           {showWhatsNew && <Lazy><WhatsNewModal isNewUser={data.accounts.length === 0} /></Lazy>}
           <MovedNotice />
@@ -140,7 +155,8 @@ const AppRoot: React.FC = () => {
         <SyncBanners data={data} onReconnect={() => void auth.reconnect()} onOpenConflict={syncDialogs.openConflict} />
         <BackupDeletionNotice active={data.dataShown && !data.isLoadingData} onOpenSettings={() => setView('settings')} />
         <ScreenRouter view={view} setView={setView} data={screenData} derived={derived} actions={actions}
-          fiscalWatch={fiscalWatch} accountForm={accountForm} onSignedOutEverywhere={auth.signedOutEverywhere} onQuickAdd={openQuickAdd} />
+          fiscalWatch={fiscalWatch} accountForm={accountForm} onSignedOutEverywhere={auth.signedOutEverywhere} onQuickAdd={openQuickAdd}
+          shareMarker={shareMarker} shareReady={data.dataShown && !data.isLoadingData} onShareDone={endShare} />
       </AppShell>
     </LastSavedAtContext.Provider>
   );

@@ -14,11 +14,12 @@ import { useAccountActions } from './useAccountActions';
 import { UiProviders, useAddToast, useDialog, useMainUiShown, type AddToast, type DialogApi } from './UiProviders';
 
 const renders: Record<string, number> = {};
+const lastProps: Record<string, Record<string, unknown>> = {};
 vi.mock('./screens', () => {
-  const stub = (name: string) => () => { renders[name] = (renders[name] ?? 0) + 1; return <div data-testid={name} />; };
-  const names = ['AccountUpdate', 'AccountsView', 'Agenda', 'AssistantPilot', 'CloudBackupPanel', 'Dashboard', 'Donations', 'DriveBackupsPanel',
+  const stub = (name: string) => (props: Record<string, unknown>) => { renders[name] = (renders[name] ?? 0) + 1; lastProps[name] = props; return <div data-testid={name} />; };
+  const names = ['AccountUpdate', 'AccountsView', 'Agenda', 'AskPeculeEntry', 'AssistantPilot', 'CloudBackupPanel', 'Dashboard', 'Donations', 'DriveBackupsPanel',
     'FiscalWatchCard', 'History', 'Journal', 'MotivationSettings', 'ParentalShare', 'Payslips', 'ServerSecurityPanel',
-    'SetAsideVersionsPanel', 'Settings', 'Simulator', 'SoloPlanCard', 'Subscriptions', 'TaxNoticePanel', 'TaxReturnHelper',
+    'SetAsideVersionsPanel', 'Settings', 'ShareTargetHost', 'Simulator', 'SoloPlanCard', 'Subscriptions', 'TaxNoticePanel', 'TaxReturnHelper',
     'TransferManager', 'Yield', 'ViewLoader'];
   return {
     ...Object.fromEntries(names.map(n => [n, stub(n)])),
@@ -356,6 +357,7 @@ describe('écran mémoïsé', () => {
   const setView = () => {};
   const onSignedOut = () => {};
   const onQuickAdd = () => {};
+  const onShareDone = () => {};
 
   it('un changement d’état d’App sans rapport (fenêtre, toast, sauvegarde) ne re-rend pas l’écran', () => {
     for (const k of Object.keys(renders)) delete renders[k];
@@ -365,7 +367,7 @@ describe('écran mémoïsé', () => {
       return <>
         <button onClick={() => setN(n + 1)}>etat-app {n}</button>
         <button onClick={() => setD({ ...data, doc: { ...doc } })}>donnees</button>
-        <ScreenRouter view="dashboard" setView={setView} data={d} derived={derived} actions={actions} fiscalWatch={fiscalWatch} accountForm={accountForm} onSignedOutEverywhere={onSignedOut} onQuickAdd={onQuickAdd} />
+        <ScreenRouter view="dashboard" setView={setView} data={d} derived={derived} actions={actions} fiscalWatch={fiscalWatch} accountForm={accountForm} onSignedOutEverywhere={onSignedOut} onQuickAdd={onQuickAdd} shareMarker={null} shareReady onShareDone={onShareDone} />
       </>;
     };
     render(<UiProviders><Parent /></UiProviders>);
@@ -375,5 +377,33 @@ describe('écran mémoïsé', () => {
     expect(renders.Dashboard).toBe(1);
     fireEvent.click(screen.getByText('donnees'));
     expect(renders.Dashboard).toBe(2);
+  });
+});
+
+describe('partage vers Pécule (aiguillage)', () => {
+  it("fiche de paie partagée : l'écran des fiches la reçoit, puis la rend", () => {
+    const doc = emptyData();
+    const data = { doc, geminiApiKey: 'k', patchConfig: () => {}, setActivePayslipId: () => {} } as unknown as ScreenData;
+    const accountForm: AccountFormState = { editingAccount: undefined, setEditingAccount: () => {}, showForm: false, setShowForm: () => {} };
+    const onShareDone = vi.fn();
+    const Parent = () => {
+      const [view, setView] = useState<'dashboard' | 'payslips'>('dashboard');
+      const [marker, setMarker] = useState<string | null>('1');
+      return <ScreenRouter view={view} setView={v => setView(v as 'payslips')} data={data} derived={{} as DerivedData} actions={{ importStatement: () => null } as unknown as AccountActions}
+        fiscalWatch={{ proposals: [] } as unknown as FiscalWatch} accountForm={accountForm} onSignedOutEverywhere={() => {}} onQuickAdd={() => {}}
+        shareMarker={marker} shareReady onShareDone={() => { onShareDone(); setMarker(null); }} />;
+    };
+    render(<UiProviders><Parent /></UiProviders>);
+    const host = lastProps.ShareTargetHost as { marker: string; ready: boolean; onPayslip: (f: File) => void; onDone: () => void };
+    expect(host.marker).toBe('1');
+    expect(host.ready).toBe(true);
+    const file = new File(['%PDF'], 'paie.pdf', { type: 'application/pdf' });
+    act(() => { host.onPayslip(file); host.onDone(); });
+    expect(onShareDone).toHaveBeenCalled();
+    expect(screen.queryByTestId('ShareTargetHost')).toBeNull();
+    const payslips = lastProps.Payslips as { sharedFile: File | null; onSharedFileTaken: () => void };
+    expect(payslips.sharedFile).toBe(file);
+    act(() => payslips.onSharedFileTaken());
+    expect((lastProps.Payslips as { sharedFile: File | null }).sharedFile).toBeNull();
   });
 });
