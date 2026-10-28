@@ -9,21 +9,14 @@ name: Vérifications
 #   jamais si ces vérifications échouent, et il publie le dossier `dist` construit et testé
 #   ici (artefact site-dist). Pas de déclencheur `push` ici : les mêmes vérifications
 #   tourneraient deux fois par push.
+# Le code vérifié est toujours celui de l'exécution (github.sha), jamais une version reçue en
+# paramètre : un retour arrière lance deploy.yml DEPUIS un tag (Use workflow from), avec le
+# cache propre à ce tag, sans pouvoir écrire dans celui de main (empoisonnement du cache).
 on:
   pull_request:
   schedule:
     - cron: '0 6 * * 1'
   workflow_call:
-    inputs:
-      ref:
-        # Retour à une version précédente (deploy.yml → Run workflow) : tag ou commit à
-        # vérifier et à construire. Vide = le commit qui a déclenché l'exécution.
-        type: string
-        default: ''
-    outputs:
-      sha:
-        description: Commit exact vérifié et construit, repris par le déploiement des Workers.
-        value: ${{ jobs.checks.outputs.sha }}
   workflow_dispatch:
 
 permissions:
@@ -40,22 +33,11 @@ jobs:
     name: Types, tests, build
     runs-on: ubuntu-latest
     timeout-minutes: 25
-    outputs:
-      sha: ${{ steps.sha.outputs.sha }}
     steps:
       - name: Checkout du code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          # Vide (pull request, lundi, push) : le commit de l'exécution, comme avant.
-          ref: ${{ inputs.ref }}
           persist-credentials: false
-
-      - name: Commit vérifié
-        id: sha
-        run: |
-          sha=$(git rev-parse HEAD)
-          echo "sha=${sha}" >> "$GITHUB_OUTPUT"
-          echo "Commit vérifié : ${sha}"
 
       - name: Installation de Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
