@@ -1,6 +1,7 @@
 // src/components/AccountUpdate.tsx
 // Écran « Actualiser les soldes » : une ligne compacte par compte, qui se déplie sur la
-// saisie (nouveau solde, total affiché par la banque, ou ajustement « + / − x € »).
+// saisie (nouveau solde, total affiché par la banque, ou ajustement « + / − x € »), ou se
+// confirme tel quel (« Inchangé »).
 // Toute la logique des brouillons vit ici (calculs purs dans update/draft) ; les lignes
 // (update/AccountUpdateRow) affichent. L'enregistrement passe par la commande
 // updateBalances : saisie illisible refusée, arrondi au centime, part propre ≥ 0, intérêts
@@ -96,6 +97,17 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onCommit
     return next;
   });
   const [saveError, setSaveError] = useState<string | null>(null);
+  // « Inchangé » : soldes confirmés tels quels, enregistrés avec le reste (le constat est
+  // daté, sans mouvement : le rappel « Solde à vérifier » s'éteint).
+  const [confirmed, setConfirmed] = useState<Set<string>>(() => new Set());
+  const toggleConfirmed = (id: string) => {
+    setSaveError(null);
+    setConfirmed(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
 
   const patchDraft = (id: string, patch: Partial<Draft>) => {
     setSaveError(null);
@@ -155,6 +167,9 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onCommit
 
   const breakdowns = Object.fromEntries(accounts.map(account => [account.id, breakdownDraft(account, updates[account.id] ?? draftFrom(account))]));
   const changedCount = accounts.filter(account => breakdowns[account.id].changed).length;
+  // Confirmés sans écart (une saisie l'emporte sur « Inchangé »).
+  const confirmedCount = accounts.filter(account => confirmed.has(account.id) && !breakdowns[account.id].changed).length;
+  const pendingCount = changedCount + confirmedCount;
 
   // Saisie directe du total affiché par la banque : la part propre en est déduite, le
   // capital parental (qui ne bouge pas) restant tel quel.
@@ -174,6 +189,7 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onCommit
   /** Tout revient aux soldes enregistrés ; la saisie conservée est effacée. */
   const resetDrafts = () => {
     setUpdatesRaw(Object.fromEntries(accounts.map(a => [a.id, draftFrom(a)])));
+    setConfirmed(new Set());
     setRestoredIds([]);
     clearStoredDrafts();
   };
@@ -181,14 +197,14 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onCommit
   const handleSaveAll = () => {
     const rows = accounts
       .map(account => ({ account, draft: updates[account.id] ?? draftFrom(account), b: breakdowns[account.id] }))
-      .filter(r => r.b.changed);
-    const invalid = rows.find(r => Object.keys(r.b.errors).length > 0);
+      .filter(r => r.b.changed || confirmed.has(r.account.id));
+    const invalid = rows.find(r => r.b.changed && Object.keys(r.b.errors).length > 0);
     if (invalid) {
       setSaveError(`${invalid.account.name} : ${Object.values(invalid.b.errors)[0]}`);
       setExpanded(prev => new Set(prev).add(invalid.account.id));
       return;
     }
-    const r = updateBalances({ accounts }, { updates: rows.map(x => draftToUpdate(x.account, x.draft, x.b)) });
+    const r = updateBalances({ accounts }, { updates: rows.map(x => ({ ...draftToUpdate(x.account, x.draft, x.b), ...(confirmed.has(x.account.id) ? { confirm: true } : {}) })) });
     if (!r.ok) { setSaveError(r.error); return; }
     setSaveError(null);
     markPending();
@@ -197,6 +213,7 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onCommit
     // Brouillons remis à zéro : un second « Enregistrer » ne rejoue pas les versements
     // (le flux d'argent `cashFlow` aurait été compté deux fois).
     setUpdatesRaw(prev => Object.fromEntries(Object.entries(prev).map(([id, d]) => [id, { ...d, cashFlow: 0, interest: undefined, cash: undefined, touched: [] }])));
+    setConfirmed(new Set());
     setRestoredIds([]);
     clearStoredDrafts();
   };
@@ -218,7 +235,10 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onCommit
     );
   }
 
-  const changedLabel = `${changedCount} compte${changedCount > 1 ? 's' : ''} modifié${changedCount > 1 ? 's' : ''}${restoredIds.length > 0 ? ' (saisie restaurée)' : ''}`;
+  const changedLabel = [
+    changedCount > 0 && `${changedCount} compte${changedCount > 1 ? 's' : ''} modifié${changedCount > 1 ? 's' : ''}${restoredIds.length > 0 ? ' (saisie restaurée)' : ''}`,
+    confirmedCount > 0 && `${confirmedCount} solde${confirmedCount > 1 ? 's' : ''} confirmé${confirmedCount > 1 ? 's' : ''}`,
+  ].filter(Boolean).join(' · ');
   const saved = saveStatus === 'saved' && (
     <span role="status" className="text-sm font-medium text-primary flex items-center gap-1">
       <CheckCircle className="w-4 h-4" aria-hidden="true" /> Enregistré sur Drive
@@ -238,8 +258,8 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onCommit
             </Button>
           )}
           {/* Bouton désactivé : on dit pourquoi (Button, état désactivé Material 3). */}
-          {changedCount === 0 && saveStatus === 'idle' && <span id="update-save-why" className="text-sm text-on-surface-variant">Aucun solde modifié</span>}
-          <Button onClick={handleSaveAll} isLoading={saveStatus === 'pending'} disabled={changedCount === 0} aria-describedby={changedCount === 0 && saveStatus === 'idle' ? 'update-save-why' : undefined}>
+          {pendingCount === 0 && saveStatus === 'idle' && <span id="update-save-why" className="text-sm text-on-surface-variant">Aucun solde modifié ni confirmé</span>}
+          <Button onClick={handleSaveAll} isLoading={saveStatus === 'pending'} disabled={pendingCount === 0} aria-describedby={pendingCount === 0 && saveStatus === 'idle' ? 'update-save-why' : undefined}>
             <Save className="w-4 h-4" aria-hidden="true" /> Tout enregistrer
           </Button>
         </>}
@@ -262,6 +282,8 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onCommit
               today={today}
               expanded={expanded.has(account.id)}
               onToggle={() => toggle(account.id)}
+              confirmed={confirmed.has(account.id)}
+              onToggleConfirmed={() => toggleConfirmed(account.id)}
               onOwnedChange={val => handleOwnedChange(account.id, val)}
               onParentalChange={val => handleParentalChange(account.id, val)}
               onBankTotalChange={val => handleBankTotalChange(account.id, val)}
@@ -276,7 +298,7 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onCommit
         </ul>
       </Card>
 
-      {changedCount > 0 && (
+      {pendingCount > 0 && (
         <div className="fixed left-4 right-4 bottom-20 md:bottom-6 md:left-auto md:right-8 md:w-[28rem] z-30 flex items-center justify-between gap-2 p-3 pl-5 rounded-2xl bg-inverse-surface text-inverse-on-surface shadow-lg">
           <span className="text-sm font-medium">{changedLabel}</span>
           <span className="flex items-center gap-1 shrink-0">
@@ -287,7 +309,7 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onCommit
           </span>
         </div>
       )}
-      {changedCount > 0 && <div className="h-24" aria-hidden />}
+      {pendingCount > 0 && <div className="h-24" aria-hidden />}
     </div>
   );
 };

@@ -189,7 +189,7 @@ export const buildYearClosing = (data: GlobalAppData, year: number, now: Date = 
   const steps: YearClosingStep[] = [];
   const inScope = accounts.filter(a => existedAtYearEnd(a, yearEnd));
 
-  // 1. Soldes au 31 décembre : constatés depuis (Actualiser, fiche, « Solde vérifié »).
+  // 1. Soldes au 31 décembre : constatés depuis (Actualiser, fiche, « Confirmer le solde »).
   const balanceAccounts = inScope.filter(a => !STATEMENT_TYPES.includes(a.type) && freshnessLimitDays(a.type) !== null);
   if (balanceAccounts.length > 0) {
     const items = balanceAccounts.map(a => {

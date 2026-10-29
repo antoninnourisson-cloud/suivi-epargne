@@ -26,5 +26,11 @@ test.describe('Historique (démo)', () => {
 
     const deltas = page.getByRole('table', { name: 'Variation de votre patrimoine mois par mois' });
     await expect(deltas.locator('tbody tr')).toHaveCount(12);
+    // Téléphone : la variation suit « Votre part » (la colonne Total est masquée) ; ordinateur :
+    // celle du total, à côté de la colonne Total.
+    const narrow = page.viewportSize()!.width < 640;
+    await expect(deltas.getByRole('columnheader', { name: 'Variation de votre part' })).toBeVisible({ visible: narrow });
+    await expect(deltas.getByRole('columnheader', { name: 'Variation du total' })).toBeVisible({ visible: !narrow });
+    await expect(deltas.getByRole('columnheader', { name: 'Total', exact: true })).toBeVisible({ visible: !narrow });
   });
 });

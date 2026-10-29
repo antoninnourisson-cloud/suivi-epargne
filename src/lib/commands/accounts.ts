@@ -17,7 +17,7 @@ export const laterDay = (a: string | undefined, b: string): string => (a && a > 
  *   nature `adjustment`, hors épargne ; part des parents à part), sinon l'historique ne
  *   totalise plus le solde. Le compte reste à sa place dans la liste ;
  * - solde constaté (`balanceCheckedAt`) : daté du jour à la création et quand la fiche change
- *   un solde (le bouton « Solde vérifié » de « Mes comptes » passe lui-même la date du jour) ;
+ *   un solde (le bouton « Confirmer le solde » de « Mes comptes » passe lui-même la date du jour) ;
  * - refus : saisie illisible, part des parents négative, ou total inférieur à la part des
  *   parents (votre part deviendrait négative).
  */

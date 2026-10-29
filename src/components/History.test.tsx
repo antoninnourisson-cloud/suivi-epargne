@@ -39,6 +39,19 @@ describe('History', () => {
     expect(screen.getByRole('tab', { name: 'Charges fixes' }).getAttribute('aria-selected')).toBe('true');
     expect(screen.getByText("L'historique des charges se construit au fil des mois")).toBeTruthy();
   });
+
+  it('mois de la restitution : sur téléphone, la variation de votre part (le total, parents compris, reste sur ordinateur)', () => {
+    render(<History history={[snap('2026-12-31', 17700, 8200), snap('2027-01-31', 8400, 8400)]} expensesHistory={[]} />);
+    const table = screen.getByRole('table', { name: 'Variation de votre patrimoine mois par mois' });
+    const header = (name: string) => screen.getByRole('columnheader', { name });
+    // Colonne visible sous 640 px avec « Votre part » ; celle du total va avec la colonne Total.
+    expect(header('Variation de votre part').className).toMatch(/(^|\s)sm:hidden/);
+    expect(header('Variation du total').className).toMatch(/max-sm:hidden/);
+    expect(header('Total').className).toMatch(/max-sm:hidden/);
+    const cells = Array.from(table.querySelectorAll('tbody tr')[0].children).map(c => [c.className.includes('max-sm:hidden') ? 'large' : c.className.match(/(^|\s)sm:hidden/) ? 'phone' : 'all', c.textContent]);
+    expect(cells.filter(([where]) => where !== 'large').map(([, t]) => t?.replace(/\s/g, ' '))).toEqual(['janv. 27', '8 400 €', '+200 €']);
+    expect(cells.filter(([where]) => where !== 'phone').map(([, t]) => t?.replace(/\s/g, ' '))).toEqual(['janv. 27', '8 400 €', '8 400 €', '−9 300 €']);
+  });
 });
 
 describe('SplitProjectionCard', () => {

@@ -1,6 +1,7 @@
 // Comptes en mode démo (?demo=1) : fraîcheur du solde compte par compte (« À faire » nomme
-// le compte à revérifier, « Solde vérifié » l'éteint), performance d'un placement, rendement
-// après inflation, et création d'un livret bancaire (nouveau type, imposé).
+// le compte à revérifier, « Confirmer le solde » l'éteint), performance d'un placement, rendement
+// après inflation, création d'un livret bancaire (nouveau type, imposé), et mouvements d'un
+// compte lisibles sur téléphone (deux niveaux, menu « ⋮ », « Voir plus »).
 import { test, expect, type Page } from './fixtures';
 import { LATEST_VERSION } from '../src/changelog';
 
@@ -14,7 +15,7 @@ const accountRow = (page: Page, name: string) =>
   page.locator('tbody > tr').filter({ has: page.getByRole('button', { name: `${name} : voir les mouvements`, exact: true }) });
 
 test.describe('Comptes (démo)', () => {
-  test("« À faire » nomme le compte à revérifier, et « Solde vérifié » l'éteint", async ({ page }) => {
+  test("« À faire » nomme le compte à revérifier, et « Confirmer le solde » l'éteint", async ({ page }) => {
     await open(page);
     const list = page.locator('#todo-list');
     await expect(list).toBeVisible();
@@ -25,9 +26,9 @@ test.describe('Comptes (démo)', () => {
     await open(page, 'accounts');
     const lep = accountRow(page, 'LEP');
     await expect(lep).toContainText('Solde vérifié il y a 4 mois');
-    await lep.getByRole('button', { name: /Solde vérifié/ }).click();
+    await lep.getByRole('button', { name: /Confirmer le solde/ }).click();
     await expect(accountRow(page, 'LEP')).toContainText("Solde vérifié aujourd'hui");
-    await expect(accountRow(page, 'LEP').getByRole('button', { name: /Solde vérifié/ })).toHaveCount(0);
+    await expect(accountRow(page, 'LEP').getByRole('button', { name: /Confirmer le solde/ })).toHaveCount(0);
   });
 
   test("le placement affiche son gain et son rendement annuel ; Rendement montre l'effet de l'inflation", async ({ page }) => {
@@ -67,5 +68,33 @@ test.describe('Comptes (démo)', () => {
     const row = accountRow(page, 'Livret bancaire');
     await expect(row).toContainText('Livret bancaire (imposé)');
     await expect(row).toContainText("Solde vérifié aujourd'hui");
+  });
+
+  test('mouvements d’un compte : dans la page, sur deux niveaux, actions dans « ⋮ » sur téléphone', async ({ page, isMobile }) => {
+    await open(page, 'accounts');
+    await page.getByRole('button', { name: 'Livret A : voir les mouvements', exact: true }).click();
+    const list = page.getByRole('list', { name: 'Mouvements' });
+    await expect(list).toBeVisible();
+    // Plus de zone défilante imbriquée : la liste n'a pas de hauteur maximale.
+    expect(await list.evaluate(el => getComputedStyle(el).overflowY)).toBe('visible');
+    const first = list.getByRole('listitem').first();
+    await expect(first.locator('time')).toHaveText(/^\d{1,2} [a-zéû]+\.? \d{4}$/);
+    // Rien ne déborde de l'écran.
+    const box = await list.boundingBox();
+    expect(box!.x + box!.width).toBeLessThanOrEqual(page.viewportSize()!.width);
+    if (isMobile) {
+      await expect(first.getByRole('button', { name: /^Supprimer «/ })).toBeHidden();
+      const more = first.getByRole('button', { name: /^Actions pour «/ });
+      await more.click();
+      const menu = page.getByRole('menu');
+      await expect(menu.getByRole('menuitem', { name: 'Renommer' })).toBeFocused();
+      await expect(menu.getByRole('menuitem', { name: 'Supprimer' })).toBeVisible();
+      await page.keyboard.press('Escape');
+      await expect(menu).toBeHidden();
+      await expect(more).toBeFocused();
+    } else {
+      await expect(first.getByRole('button', { name: /^Renommer «/ })).toBeVisible();
+      await expect(first.getByRole('button', { name: /^Actions pour «/ })).toBeHidden();
+    }
   });
 });

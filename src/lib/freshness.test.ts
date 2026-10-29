@@ -70,7 +70,7 @@ describe('comptes à revérifier', () => {
     expect(findStaleBalances([emptied], NOW)).toEqual([]);
   });
 
-  it('« Solde vérifié » proposé : solde à revérifier, ou compte courant au-delà de 15 jours', () => {
+  it('« Confirmer le solde » proposé : solde à revérifier, ou compte courant au-delà de 15 jours', () => {
     const cc = (days: number | null) => {
       const a = acc({ type: AccountType.COMPTE_COURANT, balanceCheckedAt: days === null ? undefined : formatISODay(new Date(2026, 9, 21 - days)) });
       return offersBalanceCheck(a.type, balanceFreshness(a, NOW));

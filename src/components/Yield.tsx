@@ -49,7 +49,7 @@ interface YieldProps {
   monthlySpending?: number;
   /** false : le LEP va fermer, il n'est plus proposé pour l'argent qui dort. */
   lepEligible?: boolean;
-  /** « Solde vérifié » : le solde affiché du compte est confirmé aujourd'hui (annulable). */
+  /** « Confirmer le solde » : le solde affiché du compte est confirmé aujourd'hui (annulable). */
   onConfirmBalance?: (account: SavingsAccount) => void;
   /** Hypothèses de rendement (useDerivedData) ; calculées ici si absentes. */
   hypotheses?: ProjectionHypotheses;
@@ -351,7 +351,7 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig, monthPlan,
             </p>
             {onConfirmBalance && (
               <Button type="button" variant="tonal" className="max-sm:h-12" onClick={() => onConfirmBalance(staleCurrent.a)}>
-                <CheckCircle2 className="w-4 h-4" aria-hidden="true" /> Solde vérifié<span className="sr-only"> : {staleCurrent.a.name} est à jour aujourd'hui</span>
+                <CheckCircle2 className="w-4 h-4" aria-hidden="true" /> Confirmer le solde<span className="sr-only"> de {staleCurrent.a.name} : il est à jour aujourd'hui</span>
               </Button>
             )}
           </div>

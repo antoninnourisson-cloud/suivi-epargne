@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-// « Mes comptes » : fraîcheur du solde de chaque compte (« Solde vérifié »), total d'une
+// « Mes comptes » : fraîcheur du solde de chaque compte (« Confirmer le solde »), total d'une
 // étiquette (projet), performance d'un placement.
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { render, screen, fireEvent, cleanup, within } from '@testing-library/react';
@@ -31,25 +31,25 @@ const setup = (accounts: SavingsAccount[]) => {
 const rowOf = (name: string) => screen.getByRole('button', { name: `${name} : voir les mouvements` }).closest('tr')!;
 
 describe('Mes comptes', () => {
-  it('fraîcheur : « Solde vérifié » sur un compte en retard date le solde du jour', () => {
+  it('fraîcheur : « Confirmer le solde » sur un compte en retard date le solde du jour', () => {
     const { handleSaveAccount } = setup([
       acc({ id: 'lep', name: 'LEP', type: AccountType.LEP, balanceCheckedAt: daysAgo(120) }),
       acc({ id: 'cc', name: 'Compte courant', type: AccountType.COMPTE_COURANT, balanceCheckedAt: daysAgo(2) }),
     ]);
     const lep = within(rowOf('LEP'));
     expect(lep.getByText(/Solde vérifié il y a 4 mois/)).toBeTruthy();
-    fireEvent.click(lep.getByRole('button', { name: /Solde vérifié/ }));
+    fireEvent.click(lep.getByRole('button', { name: /Confirmer le solde/ }));
     expect(handleSaveAccount).toHaveBeenCalledWith(expect.objectContaining({ id: 'lep', balanceCheckedAt: localTodayISO() }));
     const cc = within(rowOf('Compte courant'));
     expect(cc.getByText('Solde vérifié il y a 2 jours')).toBeTruthy();
-    expect(cc.queryByRole('button', { name: /Solde vérifié/ })).toBeNull();
+    expect(cc.queryByRole('button', { name: /Confirmer le solde/ })).toBeNull();
   });
 
-  it('compte courant vérifié il y a 20 jours : « Solde vérifié » proposé (l’argent qui dort n’est chiffré que sur 15 jours)', () => {
+  it('compte courant vérifié il y a 20 jours : « Confirmer le solde » proposé (l’argent qui dort n’est chiffré que sur 15 jours)', () => {
     const { handleSaveAccount } = setup([acc({ id: 'cc', name: 'Compte courant', type: AccountType.COMPTE_COURANT, balanceCheckedAt: daysAgo(20) })]);
     const cc = within(rowOf('Compte courant'));
     expect(cc.getByText('Solde vérifié il y a 20 jours').className).not.toMatch(/text-tertiary/);
-    fireEvent.click(cc.getByRole('button', { name: /Solde vérifié/ }));
+    fireEvent.click(cc.getByRole('button', { name: /Confirmer le solde/ }));
     expect(handleSaveAccount).toHaveBeenCalledWith(expect.objectContaining({ id: 'cc', balanceCheckedAt: localTodayISO() }));
   });
 
@@ -77,5 +77,64 @@ describe('Mes comptes', () => {
     ]);
     expect(within(rowOf('PEA')).getByText(/Gain/).textContent).toMatch(/Gain \+100\s€ · \+[\d,]+\s% par an depuis janvier 2024/);
     expect(within(rowOf('Crypto')).getByText('Performance : actualisez la valeur du compte pour la mesurer.')).toBeTruthy();
+  });
+});
+
+describe('Mes comptes : mouvements d’un compte', () => {
+  const many = acc({
+    id: 'la', name: 'Livret A',
+    movements: Array.from({ length: 25 }, (_, i) => ({
+      id: `m${i}`, date: `2026-09-${String(i + 1).padStart(2, '0')}`, amount: 10 + i, label: `Épargne ${i + 1}`, type: 'IN' as const,
+    })),
+  });
+  const openList = (onDelete = vi.fn(), onRename = vi.fn()) => {
+    const setEditingAccount = vi.fn();
+    render(
+      <AccountsView
+        accounts={[many]} fiscalConfig={DEFAULT_FISCAL_CONFIG} onUpdateAccounts={vi.fn()} setView={vi.fn()}
+        editingAccount={many} setEditingAccount={setEditingAccount} showForm={false} setShowForm={vi.fn()}
+        handleSaveAccount={vi.fn()} handleDeleteAccount={vi.fn()} handleDeleteMovement={onDelete} handleRenameMovement={onRename}
+        hasParental={false}
+      />,
+    );
+    return screen.getByRole('list', { name: 'Mouvements' });
+  };
+
+  it('lignes sur deux niveaux (date courte), 20 d’abord puis « Voir plus », sans zone défilante', () => {
+    const list = openList();
+    expect(list.className).not.toMatch(/overflow-y-auto|max-h-/);
+    expect(within(list).getAllByRole('listitem')).toHaveLength(20);
+    // Plus récent d'abord, date écrite en clair.
+    const first = within(list).getAllByRole('listitem')[0];
+    expect(first.textContent).toMatch(/Épargne 25\+34\s€25 sept\. 2026/);
+    fireEvent.click(screen.getByRole('button', { name: 'Voir plus (5 autres)' }));
+    expect(within(list).getAllByRole('listitem')).toHaveLength(25);
+    expect(screen.queryByRole('button', { name: /Voir plus/ })).toBeNull();
+  });
+
+  it('menu « ⋮ » : renommer ou supprimer, Échap le referme et rend le focus', () => {
+    const onDelete = vi.fn();
+    const onRename = vi.fn();
+    openList(onDelete, onRename);
+    const more = screen.getByRole('button', { name: 'Actions pour « Épargne 25 »' });
+    expect(more.getAttribute('aria-expanded')).toBe('false');
+    fireEvent.click(more);
+    const menu = screen.getByRole('menu', { name: 'Actions pour « Épargne 25 »' });
+    expect(document.activeElement).toBe(within(menu).getByRole('menuitem', { name: 'Renommer' }));
+    fireEvent.keyDown(menu, { key: 'ArrowDown' });
+    expect(document.activeElement).toBe(within(menu).getByRole('menuitem', { name: 'Supprimer' }));
+    fireEvent.keyDown(menu, { key: 'Escape' });
+    expect(screen.queryByRole('menu')).toBeNull();
+    expect(document.activeElement).toBe(more);
+    fireEvent.click(more);
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Supprimer' }));
+    expect(onDelete).toHaveBeenCalledWith('la', 'm24');
+    fireEvent.click(more);
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Renommer' }));
+    expect(onRename).toHaveBeenCalledWith('la', 'm24', 'Épargne 25');
+    // Clic ailleurs : le menu se ferme.
+    fireEvent.click(more);
+    fireEvent.pointerDown(document.body);
+    expect(screen.queryByRole('menu')).toBeNull();
   });
 });

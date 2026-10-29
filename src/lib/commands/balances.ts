@@ -39,6 +39,12 @@ export interface BalanceUpdate {
   interestDate?: string;
   /** Placements suivis : argent réellement versé (+) ou retiré (−) ; le reste de l'écart est une valorisation. */
   cashFlow?: number;
+  /**
+   * « Inchangé » : le solde affiché est confirmé tel quel. Sans écart, le constat est daté du
+   * relevé (`balanceCheckedAt`), sans aucun mouvement : le rappel « Solde à vérifier »
+   * s'éteint. Avec un écart, l'actualisation date déjà le constat (sans effet).
+   */
+  confirm?: boolean;
 }
 
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
@@ -111,11 +117,20 @@ export const planBalanceUpdate = (acc: SavingsAccount, u: BalanceUpdate): { acco
 export const updateBalances = (state: CommandState, input: { updates: BalanceUpdate[] }): CommandResult<{ changedIds: string[]; createdIds: string[] }> => {
   const planned = new Map<string, SavingsAccount>();
   const createdIds: string[] = [];
+  // Soldes confirmés tels quels (« Inchangé »), pour le message.
+  const confirmedIds = new Set<string>();
   for (const u of input.updates) {
     const acc = state.accounts.find(a => a.id === u.accountId);
     if (!acc) continue;
     const p = planBalanceUpdate(acc, u);
-    if (!p) continue;
+    if (!p) {
+      if (!u.confirm || !ISO_DAY.test(u.date)) continue;
+      const checked = laterDay(acc.balanceCheckedAt, u.date);
+      if (checked === acc.balanceCheckedAt) continue;
+      planned.set(acc.id, { ...acc, balanceCheckedAt: checked });
+      confirmedIds.add(acc.id);
+      continue;
+    }
     if ('error' in p) return fail('invalid', p.error);
     planned.set(acc.id, p.account);
     createdIds.push(...p.created.map(m => m.id));
@@ -130,7 +145,9 @@ export const updateBalances = (state: CommandState, input: { updates: BalanceUpd
     changedIds,
     createdIds,
     next: { accounts: state.accounts.map(a => planned.get(a.id) ?? a) },
-    message: only ? `${only.name} actualisé` : `${planned.size} comptes actualisés`,
+    message: confirmedIds.size === planned.size
+      ? (only ? `${only.name} : solde confirmé` : `${planned.size} soldes confirmés`)
+      : only ? `${only.name} actualisé` : `${planned.size} comptes actualisés`,
     // Soldes exacts d'avant, et la date du dernier constat d'avant.
     undo: current => {
       const restored = restoreBalances(current.accounts, snap, createdIds);

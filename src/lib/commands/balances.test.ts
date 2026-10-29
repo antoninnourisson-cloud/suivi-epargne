@@ -152,4 +152,30 @@ describe('updateBalances : garde-fous et annulation', () => {
     expect(acc(s1, 'lep').movements!.map(m => [m.label, m.amount, m.kind])).toEqual([['Actualisation (+)', 100, undefined], ['Part des parents (-)', 100, 'parental']]);
     expect(applyPatch(s1, r.undo(s1))).toEqual(s0);
   });
+
+  it('« Inchangé » : solde confirmé sans mouvement (le rappel s’éteint), annulable', () => {
+    const s0: CommandState = { accounts: state().accounts.map(a => a.id === 'lep' ? { ...a, balanceCheckedAt: '2026-06-01' } : a) };
+    const r = ok(updateBalances(s0, { updates: [{ accountId: 'lep', date: '2026-10-29', owned: 7500, parental: 2500, confirm: true }] }));
+    expect(r.message).toBe('LEP : solde confirmé');
+    const s1 = applyPatch(s0, r.next);
+    expect(acc(s1, 'lep')).toMatchObject({ balanceCheckedAt: '2026-10-29', ownedAmount: 7500, movements: [] });
+    expect(applyPatch(s1, r.undo(s1))).toEqual(s0);
+    // Jamais vérifié auparavant : l'annulation retire la date.
+    const r2 = ok(updateBalances(state(), { updates: [{ accountId: 'la', date: '2026-10-29', owned: 10000, parental: 0, confirm: true }, { accountId: 'av', date: '2026-10-29', owned: 4300, parental: 0, deposits: 4000, confirm: true }] }));
+    expect(r2.message).toBe('2 soldes confirmés');
+    const s2 = applyPatch(state(), r2.next);
+    expect(acc(s2, 'av').totalDeposits).toBe(4000);
+    expect(applyPatch(s2, r2.undo(s2))).toEqual(state());
+  });
+
+  it('« Inchangé » : déjà vérifié ce jour-là (ou plus tard) ⇒ rien à faire ; date invalide ⇒ refus ; mêlé à une actualisation ⇒ message d’actualisation', () => {
+    const s0: CommandState = { accounts: state().accounts.map(a => a.id === 'lep' ? { ...a, balanceCheckedAt: '2026-10-29' } : a) };
+    expect(updateBalances(s0, { updates: [{ accountId: 'lep', date: '2026-10-20', owned: 7500, parental: 2500, confirm: true }] })).toMatchObject({ ok: false, code: 'nothing-to-do' });
+    expect(updateBalances(s0, { updates: [{ accountId: 'la', date: 'demain', owned: 10000, parental: 0, confirm: true }] })).toMatchObject({ ok: false, code: 'invalid' });
+    const r = ok(updateBalances(state(), { updates: [
+      { accountId: 'la', date: '2026-10-29', owned: 10000, parental: 0, confirm: true },
+      { accountId: 'lep', date: '2026-10-29', owned: 7600, parental: 2500 },
+    ] }));
+    expect(r.message).toBe('2 comptes actualisés');
+  });
 });

@@ -25,6 +25,20 @@ test.describe('Actualiser les soldes (démo)', () => {
     await expect(page.getByRole('button', { name: 'Tout enregistrer' })).toBeDisabled();
   });
 
+  test('« Inchangé » confirme un solde qui n’a pas bougé, et éteint le rappel', async ({ page, isMobile }) => {
+    await openUpdate(page, isMobile);
+    // Démo : LEP vérifié il y a quatre mois (rappel « Solde à vérifier » de l'Accueil).
+    const row = page.getByRole('button', { name: /^LEP/ });
+    await expect(row).toContainText('Solde vérifié il y a 4 mois');
+    await expect(page.getByRole('button', { name: 'Tout enregistrer' })).toBeDisabled();
+    await page.getByRole('button', { name: 'Solde de LEP inchangé' }).click();
+    await expect(page.getByText('1 solde confirmé')).toBeVisible();
+    await page.getByRole('button', { name: 'Tout enregistrer' }).click();
+    await expect(row).toContainText("Solde vérifié aujourd'hui");
+    await expect(row).toContainText('10 000,00');
+    await expect(page.getByRole('button', { name: 'Solde de LEP inchangé' })).toHaveCount(0);
+  });
+
   test('un nouveau solde est enregistré', async ({ page, isMobile }) => {
     await openUpdate(page, isMobile);
     await page.getByRole('button', { name: /^LDDS/ }).click();

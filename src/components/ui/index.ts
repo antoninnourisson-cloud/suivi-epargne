@@ -8,6 +8,7 @@ export { EmptyState } from './EmptyState';
 export { IconButton } from './IconButton';
 export { ListItem } from './ListItem';
 export { MoneyText } from './MoneyText';
+export { OverflowMenu, type OverflowAction } from './OverflowMenu';
 export { PageHeader } from './PageHeader';
 export { SegmentedButton } from './SegmentedButton';
 export { Sparkline, sparkPath } from './Sparkline';

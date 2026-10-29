@@ -1,14 +1,16 @@
 // Une ligne de l'écran « Actualiser les soldes » : résumé compact (nom, solde, écart en
-// cours de saisie) qui se déplie sur les trois façons de saisir le nouveau solde.
+// cours de saisie, date du dernier solde vérifié) qui se déplie sur les trois façons de
+// saisir le nouveau solde ; « Inchangé » confirme le solde tel quel.
 // Aucun calcul d'enregistrement ici : la ligne affiche le brouillon et remonte les saisies.
 import React, { useId, useState } from 'react';
 import { ChevronDown, Lightbulb, Users, User, Pencil } from 'lucide-react';
 import { SavingsAccount } from '../../types';
 import { Button } from '../Button';
-import { DeltaBadge, MoneyText, SegmentedButton, TextField } from '../ui';
+import { Chip, DeltaBadge, MoneyText, SegmentedButton, TextField } from '../ui';
 import { parseFrenchNumber } from '../../lib/numbers';
 import { quinzaineWithdrawalTip } from '../../lib/finance';
 import { parseISODate } from '../../lib/dates';
+import { balanceFreshness, describeCheckAge, offersBalanceCheck } from '../../lib/freshness';
 import { formatEUR, toInputAmount, frenchDay } from '../../lib/format';
 import type { Adjust, Draft, DraftBreakdown, EntryMode } from './draft';
 
@@ -22,6 +24,9 @@ interface AccountUpdateRowProps {
   today: string;
   expanded: boolean;
   onToggle: () => void;
+  /** Solde marqué « Inchangé » (confirmé tel quel à l'enregistrement). */
+  confirmed?: boolean;
+  onToggleConfirmed?: () => void;
   onOwnedChange: (val: string) => void;
   onParentalChange: (val: string) => void;
   onBankTotalChange: (val: string) => void;
@@ -51,7 +56,7 @@ const SummaryLine: React.FC<{ label: string; icon: React.ComponentType<{ classNa
 );
 
 export const AccountUpdateRow: React.FC<AccountUpdateRowProps> = ({
-  account, draft: u, breakdown: b, adjust: a, adjustError, today, expanded, onToggle,
+  account, draft: u, breakdown: b, adjust: a, adjustError, today, expanded, onToggle, confirmed = false, onToggleConfirmed,
   onOwnedChange, onParentalChange, onBankTotalChange, onDepositsChange, onDateChange, onInterestChange, onCashChange, onPatchAdjust, onApplyAdjust,
 }) => {
   const panelId = useId();
@@ -88,6 +93,11 @@ export const AccountUpdateRow: React.FC<AccountUpdateRowProps> = ({
   const tip = diffOwned < 0 ? quinzaineWithdrawalTip(account, -diffOwned, when) : null;
   const since = when.getDate() < 16 ? '1er' : '16';
 
+  // Dernier solde vérifié ; « Inchangé » est proposé d'office pour un solde à revérifier
+  // (rappel « Solde à vérifier » de l'Accueil), et sur la ligne dépliée pour les autres.
+  const fresh = balanceFreshness(account, parseISODate(today));
+  const offerConfirm = !!onToggleConfirmed && !isChanged && fresh.days !== 0 && (confirmed || expanded || offersBalanceCheck(account.type, fresh));
+
   const bankTooLow = u.bankTotal !== undefined && (parseFrenchNumber(u.bankTotal) ?? Infinity) < parental;
 
   return (
@@ -110,6 +120,9 @@ export const AccountUpdateRow: React.FC<AccountUpdateRowProps> = ({
                 </span>
               )}
             </span>
+            <span className={`block text-xs truncate ${fresh.stale && !isChanged && !confirmed ? 'font-medium text-tertiary' : 'text-on-surface-variant'}`}>
+              Solde {describeCheckAge(fresh.days)}
+            </span>
           </span>
           <span className="flex flex-col items-end gap-1 shrink-0">
             {diffTotal !== 0 ? (
@@ -128,6 +141,16 @@ export const AccountUpdateRow: React.FC<AccountUpdateRowProps> = ({
           <ChevronDown className={`w-5 h-5 shrink-0 text-on-surface-variant transition-transform ${expanded ? 'rotate-180' : ''}`} aria-hidden="true" />
         </button>
       </h3>
+      {offerConfirm && (
+        <div className="px-4 sm:px-6 pb-3 -mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
+          <Chip selected={confirmed} onClick={onToggleConfirmed} className="max-sm:h-12" aria-label={`Solde de ${account.name} inchangé`}>
+            Inchangé
+          </Chip>
+          <span className="text-xs text-on-surface-variant">
+            {confirmed ? 'Solde confirmé tel quel à l’enregistrement.' : 'Le solde n’a pas bougé ? Confirmez-le.'}
+          </span>
+        </div>
+      )}
 
       <div id={panelId} hidden={!expanded} className="px-4 sm:px-6 pb-5 pt-1 space-y-5">
         <SegmentedButton<EntryMode>

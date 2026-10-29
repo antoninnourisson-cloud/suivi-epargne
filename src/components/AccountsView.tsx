@@ -7,9 +7,9 @@ import type { View } from '../navigation';
 import { AccountForm } from './AccountForm';
 import { MovementSearch } from './MovementSearch';
 import { RegulatedRatesEditor } from './RegulatedRatesEditor';
+import { AccountMovementList, type DisplayMovement } from './AccountMovementList';
 import { AccountTotal } from './AccountTotal';
 import { computeMaturityCountdown, computePeeAvailability, describeMaturity } from '../lib/finance';
-import { isRestitutionMovement } from '../lib/accountOps';
 import { formatEUR, formatRate, formatSignedEUR } from '../lib/format';
 import { PlusCircle, Pencil, Trash2, Clock, ChevronDown, Tag, CheckCircle2, TrendingUp, FileText } from 'lucide-react';
 import { signedAmount } from '../lib/money';
@@ -67,7 +67,6 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
   const [activeTagFilter, setActiveTagFilter] = useState<string | null>(null);
 
   // Regroupe les mouvements < 1€ (bruit typique des PEE) en une ligne synthétique.
-  type DisplayMovement = AccountMovement & { grouped?: boolean };
   const buildDisplayMovements = (movements: AccountMovement[]): DisplayMovement[] => {
     const sorted = [...movements].sort((a, b) => b.date.localeCompare(a.date));
     if (!groupSmallMovements) return sorted;
@@ -99,7 +98,7 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
   const tagTotal = activeTagFilter ? totalsForTag(accounts, activeTagFilter) : null;
 
   const openForm = (acc?: SavingsAccount) => { setEditingAccount(acc); setShowForm(true); };
-  // « Solde vérifié » : le solde affiché est bien celui de la banque, aujourd'hui.
+  // « Confirmer le solde » : le solde affiché est bien celui de la banque, aujourd'hui.
   const markChecked = (acc: SavingsAccount) => handleSaveAccount({ ...acc, balanceCheckedAt: localTodayISO() });
 
   return (
@@ -220,10 +219,9 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
                               <div className="mt-1 flex flex-wrap items-center gap-x-2 text-xs">
                                 <span className={fresh.stale ? 'font-medium text-tertiary' : 'text-on-surface-variant'}>Solde {describeCheckAge(fresh.days)}</span>
                                 {offersBalanceCheck(acc.type, fresh) && (
-                                  <button type="button" onClick={() => markChecked(acc)}
-                                    className="inline-flex items-center gap-1 min-h-12 md:min-h-8 font-medium text-primary hover:underline">
-                                    <CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" /> Solde vérifié<span className="sr-only"> : {acc.name} est à jour aujourd'hui</span>
-                                  </button>
+                                  <Button type="button" variant="text" size="sm" onClick={() => markChecked(acc)} className="-ml-3 max-md:h-12!">
+                                    <CheckCircle2 className="w-4 h-4" aria-hidden="true" /> Confirmer le solde<span className="sr-only"> de {acc.name} : il est à jour aujourd'hui</span>
+                                  </Button>
                                 )}
                               </div>
                             )}
@@ -264,21 +262,12 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
                                   <input type="checkbox" checked={groupSmallMovements} onChange={e => setGroupSmallMovements(e.target.checked)} className="w-5 h-5 accent-primary" />
                                   Regrouper les mouvements de moins de 1 €
                                 </label>
-                                <ul className="max-h-60 overflow-y-auto space-y-2">
-                                  {buildDisplayMovements(acc.movements).map(m => (
-                                    <li key={m.id} className={`flex justify-between items-center gap-2 px-3 py-1 rounded-xl text-xs border border-outline-variant ${m.grouped ? 'bg-surface-container-high italic' : 'bg-surface-container-lowest dark:bg-surface-container-low'}`}>
-                                      <div className="flex items-center gap-2 min-w-0">
-                                        <span className="text-on-surface-variant tabular-nums bg-surface-container-highest px-2 py-1 rounded-sm whitespace-nowrap">{m.date.split('-').reverse().join('/')}</span>
-                                        <span className="font-medium text-on-surface break-words">{m.label}</span>
-                                        {!m.grouped && !isRestitutionMovement(m) && <IconButton icon={Pencil} label={`Renommer « ${m.label} »`} onClick={() => handleRenameMovement(acc.id, m.id, m.label)} />}
-                                      </div>
-                                      <div className="flex items-center gap-1 shrink-0">
-                                        <span className={`tabular-nums whitespace-nowrap text-sm font-medium ${m.type === 'IN' ? 'text-gain' : 'text-loss'}`}>{m.type === 'IN' ? '+' : '−'}{formatEUR(m.amount)}</span>
-                                        {!m.grouped && !isRestitutionMovement(m) && <IconButton icon={Trash2} tone="danger" label={`Supprimer « ${m.label} »`} onClick={() => handleDeleteMovement(acc.id, m.id)} />}
-                                      </div>
-                                    </li>
-                                  ))}
-                                </ul>
+                                <AccountMovementList
+                                  key={acc.id}
+                                  movements={buildDisplayMovements(acc.movements)}
+                                  onRename={(id, label) => handleRenameMovement(acc.id, id, label)}
+                                  onDelete={id => handleDeleteMovement(acc.id, id)}
+                                />
                                 {acc.movements.length === 0 && <p className="text-center text-on-surface-variant italic py-4">Aucun mouvement enregistré.</p>}
                               </div>
                             </td>

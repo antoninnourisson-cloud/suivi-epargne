@@ -6,6 +6,8 @@ interface IconButtonProps extends Omit<React.ButtonHTMLAttributes<HTMLButtonElem
   label: string;
   icon: React.ComponentType<{ className?: string }>;
   tone?: 'default' | 'danger';
+  /** React 19 : la ref est une prop, transmise au bouton (focus rendu par un menu). */
+  ref?: React.Ref<HTMLButtonElement>;
 }
 
 export const IconButton: React.FC<IconButtonProps> = ({ label, icon: Icon, tone = 'default', className = '', title, ...rest }) => (

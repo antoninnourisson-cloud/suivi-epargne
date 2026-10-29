@@ -115,7 +115,7 @@ describe('Rendement', () => {
     expect(screen.queryByText('Manque à gagner')).toBeNull();
     expect(screen.getByText(/Solde de « Compte courant » jamais vérifié : s'il est toujours de 5\s000\s€, confirmez-le/)).toBeTruthy();
     // Solde inchangé : confirmé en un geste (« Actualiser » n'enregistre que des soldes qui changent).
-    fireEvent.click(screen.getByRole('button', { name: /Solde vérifié/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Confirmer le solde/ }));
     expect(onConfirmBalance).toHaveBeenCalledWith(expect.objectContaining({ id: 'cc' }));
     cleanup();
     const today = new Date();

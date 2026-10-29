@@ -3,7 +3,7 @@
 // Fraîcheur des soldes, compte par compte : date du dernier solde constaté et comptes à
 // revérifier, avec un délai adapté à chaque type de compte. Un versement prévu (liste de la
 // paie, mouvement régulier, ajout rapide) ne compte PAS comme un constat : seul un solde lu à
-// la banque (« Actualiser », fiche du compte, « Solde vérifié ») le fait. Fonctions pures,
+// la banque (« Actualiser », fiche du compte, « Confirmer le solde ») le fait. Fonctions pures,
 // partagées par l'app (À faire, Mes comptes, alertes) et le serveur de notifications.
 // ================================================
 import { AccountMovement, AccountType, SavingsAccount } from '../types';
@@ -117,10 +117,10 @@ export const describeStaleBalances = (stale: StaleBalance[]): string | null => {
 export const CURRENT_ACCOUNT_FRESH_DAYS = 15;
 
 /**
- * Proposer « Solde vérifié » (confirmer en un geste un solde inchangé) : solde à revérifier,
+ * Proposer « Confirmer le solde » (un solde inchangé, en un geste) : solde à revérifier,
  * ou compte courant constaté il y a plus de CURRENT_ACCOUNT_FRESH_DAYS jours. Sans cela,
- * l'argent qui dort ne serait plus chiffré pendant la moitié du mois, et « Actualiser »
- * n'enregistre que des soldes qui changent.
+ * l'argent qui dort ne serait plus chiffré pendant la moitié du mois (« Actualiser » le
+ * propose aussi, sous le nom « Inchangé »).
  */
 export const offersBalanceCheck = (type: AccountType, f: Pick<BalanceFreshness, 'days' | 'stale'>): boolean =>
   f.stale || (type === AccountType.COMPTE_COURANT && (f.days === null || f.days > CURRENT_ACCOUNT_FRESH_DAYS));

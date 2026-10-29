@@ -32,7 +32,7 @@ const TABS: { value: Tab; label: string; icon: React.ComponentType<{ className?:
   { value: 'charges', label: 'Charges fixes', icon: Receipt },
 ];
 
-interface DeltaRow { date: string; total: number; owned: number; deltaTotal: number | null; monthsGap: number }
+interface DeltaRow { date: string; total: number; owned: number; deltaTotal: number | null; deltaOwned: number | null; monthsGap: number }
 
 const fmt = (n: number) => formatEUR(n, 0);
 // Formateurs créés une fois (toLocaleDateString en recrée un à chaque appel, pour chaque point).
@@ -42,21 +42,24 @@ const MONTH_LONG = new Intl.DateTimeFormat('fr-FR', { month: 'long', year: 'nume
 const monthLabel = (iso: string) => MONTH_SHORT.format(parseISODate(iso));
 const monthLong = (iso: string) => MONTH_LONG.format(parseISODate(iso));
 
+/** Variation d'un mois (« — » pour le premier point), précisée quand elle couvre plusieurs mois. */
+const deltaCell = (value: number | null, monthsGap: number) => value === null
+  ? <span className="text-on-surface-variant">—</span>
+  : <>
+    <MoneyText value={value} decimals={0} signed tone="auto" />
+    {monthsGap > 1 && <span className="block text-xs text-on-surface-variant">sur {monthsGap} mois</span>}
+  </>;
+
 // Tableau « mois par mois » : le total est masqué sur téléphone (quatre colonnes ne tiennent
-// pas dans 320 px), la variation reste (elle porte sur le total, parents compris).
+// pas dans 320 px). La variation suit la colonne visible : celle de votre part sur téléphone,
+// celle du total (parents compris) sur ordinateur, à côté de la colonne Total. Sinon, le mois
+// de la restitution, −9 500 € s'afficheraient à côté d'une « Votre part » stable.
 const DELTA_COLUMNS: Column<DeltaRow>[] = [
   { key: 'date', header: 'Mois', cell: r => monthLabel(r.date) },
   { key: 'total', header: 'Total', numeric: true, className: 'max-sm:hidden', cell: r => fmt(r.total) },
   { key: 'owned', header: 'Votre part', numeric: true, cell: r => fmt(r.owned) },
-  {
-    key: 'delta', header: 'Variation du total', numeric: true,
-    cell: r => r.deltaTotal === null
-      ? <span className="text-on-surface-variant">—</span>
-      : <>
-        <MoneyText value={r.deltaTotal} decimals={0} signed tone="auto" />
-        {r.monthsGap > 1 && <span className="block text-xs text-on-surface-variant">sur {r.monthsGap} mois</span>}
-      </>,
-  },
+  { key: 'deltaOwned', header: 'Variation de votre part', numeric: true, className: 'sm:hidden', cell: r => deltaCell(r.deltaOwned, r.monthsGap) },
+  { key: 'delta', header: 'Variation du total', numeric: true, className: 'max-sm:hidden', cell: r => deltaCell(r.deltaTotal, r.monthsGap) },
 ];
 
 export const History: React.FC<HistoryProps> = ({ history, expensesHistory, reviewData, closingSlot }) => {
@@ -96,7 +99,7 @@ export const History: React.FC<HistoryProps> = ({ history, expensesHistory, revi
       const monthsGap = prev
         ? Math.max(1, Math.round((parseISODate(s.date).getTime() - parseISODate(prev.date).getTime()) / (1000 * 3600 * 24 * 30.4375)))
         : 1;
-      rows.push({ date: s.date, total: s.totalAmount, owned: s.ownedAmount, deltaTotal: prev ? s.totalAmount - prev.totalAmount : null, monthsGap });
+      rows.push({ date: s.date, total: s.totalAmount, owned: s.ownedAmount, deltaTotal: prev ? s.totalAmount - prev.totalAmount : null, deltaOwned: prev ? s.ownedAmount - prev.ownedAmount : null, monthsGap });
     });
     return rows.reverse();
   }, [sorted]);

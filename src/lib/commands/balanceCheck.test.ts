@@ -33,7 +33,7 @@ describe('fiche du compte', () => {
     expect(acc(applyPatch(s, renamed.next), 'la').balanceCheckedAt).toBe('2026-05-01');
   });
 
-  it('« Solde vérifié » : la date passée est gardée, et l’annulation la remet', () => {
+  it('« Confirmer le solde » : la date passée est gardée, et l’annulation la remet', () => {
     const s: CommandState = { accounts: [livret()] };
     const r = ok(saveAccount(s, { account: { ...livret(), balanceCheckedAt: '2026-10-21' }, today: '2026-10-21' }));
     const next = applyPatch(s, r.next);
