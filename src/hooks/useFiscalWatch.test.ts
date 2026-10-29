@@ -24,7 +24,8 @@ vi.mock('../services/backendService', () => ({
 const gemini = vi.hoisted(() => ({ ask: vi.fn() }));
 vi.mock('../services/geminiService', () => ({ askGeminiWithSearch: gemini.ask }));
 
-import { useFiscalWatch, pickWatchResult, isServerResultFresh, describeServerWatch, StoredWatch } from './useFiscalWatch';
+import { useFiscalWatch, pickWatchResult, isServerResultFresh, StoredWatch } from './useFiscalWatch';
+import { describeServerWatch } from './fiscalWatchEngine';
 import type { ServerFiscalWatch } from '../services/backendService';
 
 const NOW = new Date('2026-10-14T10:00:00Z');
@@ -76,7 +77,8 @@ describe('useFiscalWatch', () => {
     backend.getServer.mockResolvedValue(server(new Date(Date.now() - 86_400_000).toISOString()));
     const { result } = renderHook(() => useFiscalWatch('cle-gemini', DEFAULT_FISCAL_CONFIG, [la], true));
     await waitFor(() => expect(result.current.source).toBe('server'));
-    expect(result.current.proposals.map(p => p.key)).toEqual(['ceiling.livretA']);
+    // Propositions calculées par le moteur, chargé à part (import()) : elles suivent de peu.
+    await waitFor(() => expect(result.current.proposals.map(p => p.key)).toEqual(['ceiling.livretA']));
     expect(result.current.serverReport?.rows).toHaveLength(1);
     expect(backend.runServer).not.toHaveBeenCalled();
     expect(gemini.ask).not.toHaveBeenCalled();
@@ -120,7 +122,7 @@ describe('useFiscalWatch', () => {
     const { result } = renderHook(() => useFiscalWatch('cle-gemini', DEFAULT_FISCAL_CONFIG, [la], true));
     await waitFor(() => expect(result.current.source).toBe('gemini'));
     expect(backend.getServer).not.toHaveBeenCalled();
-    expect(result.current.proposals.map(p => p.key)).toEqual(['ceiling.livretA']);
+    await waitFor(() => expect(result.current.proposals.map(p => p.key)).toEqual(['ceiling.livretA']));
     expect(result.current.serverReport).toBeUndefined();
   });
 

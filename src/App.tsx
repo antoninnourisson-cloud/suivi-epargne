@@ -31,7 +31,7 @@ import { useLockFlow } from './app/useLockFlow';
 import { useDeepLinks, useViewFocus, useViewState } from './app/useAppNavigation';
 import { useDerivedData } from './app/useDerivedData';
 import { useAccountActions } from './app/useAccountActions';
-import { useAppBadge, useCloudBackup } from './app/useBackgroundTasks';
+import { useAppBadge, useCloudBackup, usePersistentStorage } from './app/useBackgroundTasks';
 import { AppLockScreen, AskPeculeSheet, Lazy, QuickAddModal, WhatsNewModal, usePreloadScreens } from './app/screens';
 import { openSettingsSection } from './components/settings/sections';
 import { ScreenRouter, useAccountForm, useScreenData } from './app/ScreenRouter';
@@ -98,6 +98,7 @@ const AppRoot: React.FC = () => {
   // Veille fiscale hebdomadaire (serveur + Workers AI, sinon Gemini) : propositions à valider.
   const fiscalWatch = useFiscalWatch(data.geminiApiKey, data.fiscalConfig, data.accounts, isAuthenticated && data.dataShown && !data.isLoadingData && !locked);
   useAppBadge(fullData, isAuthenticated && !data.isLoadingData && data.dataShown);
+  usePersistentStorage(isAuthenticated && data.dataShown);
   useCloudBackup(fullData, isAuthenticated && !locked && isSettledOnDrive(data.syncStatus, {
     dataShown: data.dataShown, offlineCopyShown: !!data.offlineDataAt, conflictOpen: data.syncConflict, hasLocalBackup: !!data.localBackup,
   }));

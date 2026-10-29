@@ -4,7 +4,13 @@ import App from './App';
 import { watchForAppUpdates, createSafeReload } from './services/swUpdates';
 import { cleanUpStorage } from './lib/storageKeys';
 import { localTodayISO } from './lib/dates';
+import { installErrorJournal } from './lib/errorJournal';
+import { RootErrorBoundary } from './components/ErrorBoundary';
 import './index.css';
+
+// Journal des erreurs de l'appareil (lib/errorJournal) : scripts et promesses que rien n'a
+// rattrapés. Les erreurs d'affichage y sont notées par les ErrorBoundary.
+installErrorJournal();
 
 // La PWA (vite-plugin-pwa, registerType 'autoUpdate') met à jour son service worker en
 // arrière-plan dès qu'un nouveau déploiement est disponible — mais un onglet déjà ouvert
@@ -49,6 +55,9 @@ if (!rootElement) {
 const root = ReactDOM.createRoot(rootElement);
 root.render(
   <React.StrictMode>
-    <App />
+    {/* Filet de toute l'app : un écran « Recharger » au lieu d'une page blanche. */}
+    <RootErrorBoundary>
+      <App />
+    </RootErrorBoundary>
   </React.StrictMode>
 );

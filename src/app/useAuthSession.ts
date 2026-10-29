@@ -8,8 +8,7 @@ import { initGoogleApi, handleAuthClick, handleSignOut, resumeSession, hasStored
 import { isBackendEnabled } from '../services/backendService';
 import { disablePush } from '../services/pushService';
 import { setGeminiModelOverride } from '../services/geminiModel';
-import { clearStoredDrafts } from '../components/update/draft';
-import { clearTraces } from '../lib/storageKeys';
+import { clearTraces, storageKey } from '../lib/storageKeys';
 import type { PortfolioData } from '../hooks/usePortfolioData';
 import { preloadStartView } from './screens';
 import type { AddToast, DialogApi } from './UiProviders';
@@ -154,7 +153,9 @@ export const useAuthSession = ({ isAuthenticated, setIsAuthenticated, data, lock
     // Sauf « Se déconnecter sans envoyer », les modifications pas encore sur Drive restent en
     // copie locale chiffrée, proposée à la prochaine connexion (voir resetData).
     resetData({ discardUnsynced: opts?.discardUnsynced === true });
-    clearStoredDrafts(); // brouillons d'« Actualiser » de cet onglet
+    // Brouillons d'« Actualiser » de cet onglet (comme clearStoredDrafts de components/update/draft,
+    // sans charger tout ce module au démarrage).
+    try { sessionStorage.removeItem(storageKey('updateDrafts')); } catch { /* stockage bloqué */ }
     forgetGemini();
     // Traces d'usage liées aux données (dernière vue, identifiants de compte ou de fichier,
     // choix de l'Accueil… : registre lib/storageKeys) : elles ne passent pas au compte Google

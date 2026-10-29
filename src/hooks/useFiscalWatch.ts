@@ -6,12 +6,21 @@
 // « Vérifier maintenant » passe par Gemini si une clé existe, sinon par le serveur.
 // Dans tous les cas, les écarts avec les paramètres de l'app sont PROPOSÉS, jamais appliqués
 // d'office (diffFiscalWatch).
+// Le moteur (lecture, comparaison, détail du relevé : hooks/fiscalWatchEngine) est chargé à
+// part, une fois l'app prête : il ne pèse pas sur le démarrage.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { lsGetJSON, lsSetJSON } from '../lib/storage';
-import { FiscalConfig, SavingsAccount, TaxBracket } from '../types';
-import { diffFiscalWatch, FiscalProposal, FiscalWatchResult, isWatchDue, parseFiscalWatch } from '../lib/fiscalWatch';
-import { getFiscalSources, getServerFiscalWatch, hasBackendSession, isBackendEnabled, runServerFiscalWatch, ServerFiscalWatch } from '../services/backendService';
-import { formatRate, plainEUR } from '../lib/format';
+import type { FiscalConfig, SavingsAccount } from '../types';
+import type { FiscalProposal, FiscalWatchResult } from '../lib/fiscalWatch';
+import { getFiscalSources, getServerFiscalWatch, hasBackendSession, isBackendEnabled, runServerFiscalWatch, type ServerFiscalWatch } from '../services/backendService';
+import { recordError } from '../lib/errorJournal';
+
+export type { ServerWatchReport, ServerWatchRow } from './fiscalWatchEngine';
+type Engine = typeof import('./fiscalWatchEngine');
+let engine: Promise<Engine> | null = null;
+/** Moteur de la veille, chargé une fois (un échec est retenté au prochain appel). */
+export const loadFiscalWatchEngine = (): Promise<Engine> =>
+  (engine ??= import('./fiscalWatchEngine').catch((e: unknown) => { engine = null; throw e; }));
 
 const KEY = 'fiscal_watch';
 export type WatchSource = 'server' | 'gemini';
@@ -29,6 +38,7 @@ const signature = (p: FiscalProposal) => `${p.key}=${p.proposed}`;
 const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 const SERVER_RESULT_MAX_AGE_DAYS = 8;
+const NO_PROPOSALS: FiscalProposal[] = [];
 
 /** Résultat du serveur utilisable : réussi et vieux de 8 jours au plus. */
 export const isServerResultFresh = (s: Pick<ServerFiscalWatch, 'checkedAt' | 'ok'> | null | undefined, now: Date = new Date()): s is ServerFiscalWatch => {
@@ -49,64 +59,23 @@ export const pickWatchResult = (s: StoredWatch, now: Date = new Date()): { resul
   return {};
 };
 
-// ---------- Détail du relevé du serveur (contrôle de qualité visible dans l'app) ----------
-
-const pct = formatRate;
-const eur = plainEUR;
-const brackets = (v: unknown) => (Array.isArray(v) ? (v as TaxBracket[]).map(b => `${b.limit === null || b.limit === undefined ? '…' : eur(b.limit as number)} : ${pct(b.rate * 100)}`).join(' · ') : '?');
-
-/** Champ du relevé → libellé, mise en forme et clé de la proposition correspondante (diffFiscalWatch). */
-const FIELDS: Record<string, { label: string; fmt: (v: unknown) => string; proposal: string }> = {
-  livretARate: { label: 'Taux du Livret A', fmt: v => pct(v as number), proposal: 'rate.livretA' },
-  lepRate: { label: 'Taux du LEP', fmt: v => pct(v as number), proposal: 'rate.lep' },
-  livretACeiling: { label: 'Plafond du Livret A', fmt: v => eur(v as number), proposal: 'ceiling.livretA' },
-  lddsCeiling: { label: 'Plafond du LDDS', fmt: v => eur(v as number), proposal: 'ceiling.ldds' },
-  lepCeiling: { label: 'Plafond du LEP', fmt: v => eur(v as number), proposal: 'ceiling.lep' },
-  lepIncomeCeilingOnePart: { label: 'Plafond de revenus LEP (1 part)', fmt: v => eur(v as number), proposal: 'lepIncomeCeiling' },
-  lepPerHalfPart: { label: 'Plafond LEP : ajout par demi-part', fmt: v => eur(v as number), proposal: 'lepCeilingPerHalfPart' },
-  socialChargesGeneral: { label: 'Prélèvements sociaux (placements)', fmt: v => pct((v as number) * 100), proposal: 'socialChargesCapital' },
-  socialChargesLifeInsurance: { label: 'Prélèvements sociaux (assurance vie, PEL, CEL)', fmt: v => pct((v as number) * 100), proposal: 'socialChargesLifeInsurance' },
-  allowanceCap: { label: "Plafond de l'abattement de 10 %", fmt: v => eur(v as number), proposal: 'standardAllowanceCap' },
-  allowanceMin: { label: "Minimum de l'abattement de 10 %", fmt: v => eur(v as number), proposal: 'standardAllowanceMin' },
-  decoteSingle: { label: 'Décote (personne seule)', fmt: v => eur(v as number), proposal: 'decote.single' },
-  decoteThreshold: { label: 'Seuil de la décote', fmt: v => eur(v as number), proposal: 'decote.threshold' },
-  donation75Ceiling: { label: 'Plafond des dons à 75 %', fmt: v => eur(v as number), proposal: 'donation75Ceiling' },
-  transportExemptUntil: { label: 'Remboursement transport exonéré jusqu\'à 75 %', fmt: v => `revenus ${String(v)}`, proposal: 'transportExemptUntil' },
-  taxBrackets: { label: "Barème de l'impôt", fmt: brackets, proposal: 'taxBrackets' },
-  inflationAnnual: { label: 'Inflation annuelle (INSEE)', fmt: v => pct(v as number), proposal: 'inflation' },
-  inflationYear: { label: "Année de l'inflation (INSEE)", fmt: v => String(v), proposal: 'inflation' },
-};
-
-const STATUS_LABEL: Record<string, string> = {
-  fetch_failed: 'page injoignable', invalid_json: 'réponse illisible', ai_error: "erreur de l'IA", skipped_budget: 'sautée (budget)', no_fields: 'rien à relever',
-};
-
-export interface ServerWatchRow { key: string; label: string; value: string; sameAsApp: boolean; quote?: string; source?: string }
-export interface ServerWatchReport { rows: ServerWatchRow[]; issues: string[]; model: string; neurons?: number; checkedAt: string }
-
-/** Chaque valeur relevée par le serveur, comparée aux paramètres de l'app, et les pages en défaut. */
-export const describeServerWatch = (s: ServerFiscalWatch, fiscal: FiscalConfig, accounts: SavingsAccount[]): ServerWatchReport => {
-  const differing = new Set(diffFiscalWatch(s.values as FiscalWatchResult, fiscal, accounts).map(p => p.key));
-  const rows: ServerWatchRow[] = [];
-  for (const [key, meta] of Object.entries(FIELDS)) {
-    const w = (s.values as Record<string, { value?: unknown; quote?: string; source?: string } | undefined>)[key];
-    if (!w || w.value === undefined) continue;
-    rows.push({ key, label: meta.label, value: meta.fmt(w.value), sameAsApp: !differing.has(meta.proposal), quote: w.quote, source: w.source });
-  }
-  const issues: string[] = [];
-  for (const src of s.sources || []) {
-    if (src.status !== 'ok' && src.status !== 'no_fields') issues.push(`${src.topic} : ${STATUS_LABEL[src.status] || src.status}`);
-    for (const r of src.rejected || []) issues.push(`${FIELDS[r.field]?.label || r.field} écarté : ${r.reason}`);
-  }
-  return { rows, issues, model: s.model, neurons: s.neuronsUsed ?? s.neuronsEstimate, checkedAt: s.checkedAt };
-};
-
 // ---------- Hook ----------
 
 const serverAvailable = () => isBackendEnabled() && hasBackendSession();
 
 export const useFiscalWatch = (geminiApiKey: string, fiscal: FiscalConfig | undefined, accounts: SavingsAccount[], enabled: boolean) => {
   const [stored, setStored] = useState<StoredWatch>(read);
+  // Moteur chargé une fois l'app prête : avant, ni proposition ni détail (rien n'est affiché).
+  const [eng, setEng] = useState<Engine | null>(null);
+  useEffect(() => {
+    if (!enabled || eng) return;
+    let alive = true;
+    loadFiscalWatchEngine().then(m => { if (alive) setEng(m); }).catch((e: unknown) => {
+      console.warn('Veille fiscale : module indisponible', e);
+      recordError('chargement', e);
+    });
+    return () => { alive = false; };
+  }, [enabled, eng]);
   const [runningVia, setRunningVia] = useState<WatchSource | undefined>();
   const running = runningVia !== undefined;
 
@@ -117,7 +86,7 @@ export const useFiscalWatch = (geminiApiKey: string, fiscal: FiscalConfig | unde
     setRunningVia('gemini');
     try {
       // Chargé seulement quand la veille passe par Gemini : rien de plus au démarrage.
-      const { askFiscalWatch } = await import('../services/fiscalWatchGemini');
+      const [{ askFiscalWatch }, { parseFiscalWatch }] = await Promise.all([import('../services/fiscalWatchGemini'), loadFiscalWatchEngine()]);
       const sources = isBackendEnabled() ? await getFiscalSources().catch(() => []) : [];
       const text = await askFiscalWatch(geminiApiKey, sources.filter(x => x.ok && x.text));
       const result = parseFiscalWatch(text);
@@ -182,7 +151,9 @@ export const useFiscalWatch = (geminiApiKey: string, fiscal: FiscalConfig | unde
     let cancelled = false;
     void (async () => {
       const fresh = serverDone.current ? await serverDone.current : isServerResultFresh(read().server);
-      if (!cancelled && !fresh && !isServerResultFresh(read().server) && isWatchDue(read().checkedAt)) void runGemini();
+      if (cancelled || fresh || isServerResultFresh(read().server)) return;
+      const { isWatchDue } = await loadFiscalWatchEngine();
+      if (!cancelled && isWatchDue(read().checkedAt)) void runGemini();
     })();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- runGemini change avec la clé, déjà dans les dépendances
@@ -191,14 +162,14 @@ export const useFiscalWatch = (geminiApiKey: string, fiscal: FiscalConfig | unde
   const picked = useMemo(() => pickWatchResult(stored), [stored]);
 
   const proposals = useMemo(() => {
-    if (!picked.result || !fiscal) return [];
+    if (!eng || !picked.result || !fiscal) return NO_PROPOSALS;
     const dismissed = new Set(stored.dismissed || []);
-    return diffFiscalWatch(picked.result, fiscal, accounts).filter(p => !dismissed.has(signature(p)));
-  }, [picked.result, stored.dismissed, fiscal, accounts]);
+    return eng.diffFiscalWatch(picked.result, fiscal, accounts).filter(p => !dismissed.has(signature(p)));
+  }, [eng, picked.result, stored.dismissed, fiscal, accounts]);
 
   const serverReport = useMemo(
-    () => (picked.source === 'server' && stored.server && fiscal ? describeServerWatch(stored.server, fiscal, accounts) : undefined),
-    [picked.source, stored.server, fiscal, accounts],
+    () => (eng && picked.source === 'server' && stored.server && fiscal ? eng.describeServerWatch(stored.server, fiscal, accounts) : undefined),
+    [eng, picked.source, stored.server, fiscal, accounts],
   );
 
   const dismiss = useCallback((p: FiscalProposal) => setStored(prev => {

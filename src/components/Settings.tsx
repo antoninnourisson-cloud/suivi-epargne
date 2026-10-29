@@ -8,7 +8,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { FiscalConfig, PayslipRecord, WorkBenefits } from '../types';
 import {
   AlertTriangle, Download, Upload, Database, KeyRound, Fingerprint, Building2, Scale, FileSearch, Radar, Sprout, Bell,
-  Smartphone, Info, Save, Palette,
+  Smartphone, Info, Save, Palette, HardDrive,
 } from 'lucide-react';
 import { DisplaySection, displaySummary } from './settings/DisplaySection';
 import { useTheme } from '../hooks/useTheme';
@@ -22,6 +22,7 @@ import { SettingsCard, Hint, Notice } from './settings/SettingsCard';
 import { BenefitsFields, FiscalFields, benefitsSummary, fiscalSummary } from './settings/SalarySections';
 import { LockSection } from './settings/LockSection';
 import { AboutSection } from './settings/AboutSection';
+import { DeviceSection } from './settings/DeviceSection';
 import {
   OPEN_SECTION_EVENT, clearRequestedSection, isSettingsSection, peekRequestedSection, readOpenSections, sectionAnchor,
   writeOpenSections, type SettingsSection,
@@ -285,6 +286,7 @@ export const Settings: React.FC<SettingsProps> = ({ payslips = [], config, workB
             </div>
           )),
           securitySlot && card('account', 'Compte et appareils', Smartphone, securitySlot),
+          card('device', 'Appareil', HardDrive, <DeviceSection />),
         ])}
 
         {card('about', 'À propos', Info, <AboutSection />, `Version ${LATEST_VERSION}`)}

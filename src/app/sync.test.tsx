@@ -8,7 +8,7 @@ import { migrate } from '../lib/schema';
 import { DEMO_DATA } from '../dev/demoData';
 import { SyncBanners, useSyncToasts } from './SyncBanners';
 import { SyncDialogsHost, useSyncDialogs } from './SyncDialogs';
-import { useDerivedData } from './useDerivedData';
+import { loadSeasonal, useDerivedData } from './useDerivedData';
 import { computeIncome } from '../lib/finance';
 
 afterEach(() => cleanup());
@@ -195,6 +195,29 @@ describe('valeurs calculées pour les écrans', () => {
       const input = { grossAnnual: 32_000, taxRateManual: 0, extraMonthlyIncome: 0 };
       expect(taxEstimates![2026].beforeAllowance).toBeCloseTo(computeIncome(input, d.fiscalConfig, d.workBenefits, 2026).netTaxableBeforeAllowance, 9);
       expect(taxEstimates![2027].beforeAllowance - taxEstimates![2026].beforeAllowance).toBeCloseTo(187.85, 2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('agenda, déclaration et clôture : chargés à part, puis recalculés au passage de minuit sans changement des données', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2027, 0, 14, 23, 58));
+    try {
+      const doc = migrate(DEMO_DATA);
+      // Avant le chargement du module : rien (les cartes attendent), sans erreur.
+      const { result } = renderHook(() => useDerivedData(doc, doc));
+      expect(result.current.agendaNext).toEqual([]);
+      expect(result.current.yearClosing).toBeNull();
+      await act(async () => { await loadSeasonal(); });
+      await vi.waitFor(() => expect(result.current.agendaNext.length).toBeGreaterThan(0));
+      const before = result.current.agendaNext;
+      expect(before.every(e => e.date >= '2027-01-14')).toBe(true);
+      // Clôture de l'année écoulée : une tâche en janvier.
+      expect(result.current.yearClosing?.year).toBe(2026);
+      act(() => { vi.advanceTimersByTime(3 * 60_000); });
+      expect(result.current.agendaNext).not.toBe(before);
+      expect(result.current.agendaNext.every(e => e.date >= '2027-01-15')).toBe(true);
     } finally {
       vi.useRealTimers();
     }

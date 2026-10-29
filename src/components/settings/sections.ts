@@ -8,7 +8,7 @@ import { storageKey } from '../../lib/storageKeys';
 const SETTINGS_SECTIONS = [
   'benefits', 'fiscal', 'tax-notice', 'fiscal-watch',
   'display', 'motivation', 'notifications', 'keys',
-  'lock', 'data', 'account',
+  'lock', 'data', 'account', 'device',
   'about',
 ] as const;
 export type SettingsSection = typeof SETTINGS_SECTIONS[number];

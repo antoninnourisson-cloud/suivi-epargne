@@ -18,7 +18,8 @@ import {
   computeUnlockCost, findFiscalReview, applyTaxScale, findAvRateUpdatesDue, confirmRatesUnchanged, findDueRecurring,
   findStaleRegulatedRates, computeAccountBalanceAtDate, suggestedRestitutionDate, computeAvailabilityBreakdown, ownedAmountAt,
 } from '../lib/finance';
-import { parseISODate, localTodayISO } from '../lib/dates';
+import { parseISODate } from '../lib/dates';
+import { useToday } from '../hooks/useToday';
 import { DeltaBadge, MoneyText, PageHeader, Sparkline, StatTile, Card } from './ui';
 import { AvailabilityBar, type AvailabilitySegment } from './dashboard/AvailabilityBar';
 import { SavingsCard } from './dashboard/SavingsCard';
@@ -117,7 +118,8 @@ const SLICE_STYLE: Record<'available' | 'tax' | 'locked', Pick<AvailabilitySegme
 };
 
 export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalConfig, onDeleteAccount, recurringMovements = [], onRecordRecurring, monthPlan, monthGoal, monthlyPay = 0, paydayDay, trackingStartDate, subscriptions = [], onUpdateFiscalConfig, onOpenSettings, onUpdateAccounts, payRaise, onAcceptPayRaise, onDismissPayRaise, onNavigate, onAddAccount, lastExportAt, onExport, emergency, onSetEmergencyMonths, agendaNext = [], lepTimeline, taxReturnAlert, payslips = [], gamification, goodMonthThreshold, milestonesSeen, payReviewsDone, rfrByYear, restitutionDoneOn, restitutionPlannedDate, onMarkMilestonesSeen, onValidatePayReview, yearClosing, askSlot }) => {
-  const today = localTodayISO();
+  // Date du jour partagée (useToday) : l'Accueil resté ouvert passe au lendemain à minuit.
+  const today = useToday();
   const choices = useHomeChoices(today);
   const backupCodeCheckDue = useBackupCodeCheckDue();
   const [ratesEditorOpen, setRatesEditorOpen] = useState(false);
@@ -139,8 +141,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalC
     () => payPeriodSavings({ accounts, today, paydayDay, payslips, monthlyPay, trackingStartISO: trackingStartDate }),
     [accounts, today, paydayDay, payslips, monthlyPay, trackingStartDate]
   );
-  const projection = useMemo(() => savingsProjection(accounts, new Date()), [accounts]);
-  const debits = useMemo(() => findUpcomingDebits(subscriptions, new Date()), [subscriptions]);
+  // Midi du jour : une fenêtre de 90 jours comptée depuis minuit pouvait, au changement d'heure,
+  // déborder d'un jour.
+  const middayToday = useMemo(() => { const d = parseISODate(today); d.setHours(12); return d; }, [today]);
+  const projection = useMemo(() => savingsProjection(accounts, middayToday), [accounts, middayToday]);
+  const debits = useMemo(() => findUpcomingDebits(subscriptions, middayToday), [subscriptions, middayToday]);
   const agenda = useMemo(() => homeAgenda(agendaNext, debits), [agendaNext, debits]);
 
   // --- Motivation : bons mois, jalons, point de paie ---

@@ -72,6 +72,8 @@ export const STORAGE_KEYS = {
   cloudBackupStatus: { key: 'cloud_backup_status', kind: 'device' },
   /** Dernière veille fiscale (valeurs publiques relevées, propositions écartées). */
   fiscalWatch: { key: 'fiscal_watch', kind: 'device' },
+  /** 20 dernières erreurs de l'app, nettoyées de toute donnée (lib/errorJournal). */
+  errorJournal: { key: 'pecule_error_journal', kind: 'device' },
 
   // --- Préférences d'affichage ---
   /** Thème choisi (« Clair » ou « Sombre ») ; absent = « Automatique », comme le système. */

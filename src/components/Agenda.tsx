@@ -9,6 +9,7 @@ import { GlobalAppData } from '../types';
 import { buildAgenda, AgendaEvent, AgendaKind } from '../lib/agenda';
 import { frenchDay } from '../lib/format';
 import { parseISODate, daysBetween } from '../lib/dates';
+import { useTodayDate } from '../hooks/useToday';
 import { CalendarDays, Wallet, CalendarClock, Repeat, Percent, HandCoins, Landmark, FileText, HandHeart, Sparkles, Hourglass, ChevronRight, ShieldAlert } from 'lucide-react';
 import { Card, EmptyState, MoneyText, PageHeader } from './ui';
 
@@ -55,8 +56,9 @@ const amountOf = (e: AgendaEvent) => {
 };
 
 export const Agenda: React.FC<AgendaProps> = ({ data, onOpen }) => {
-  const { events, later } = useMemo(() => buildAgenda(data), [data]);
-  const today = new Date();
+  // Date du jour partagée : l'écran resté ouvert passe au lendemain à minuit (« dans N jours »).
+  const today = useTodayDate();
+  const { events, later } = useMemo(() => buildAgenda(data, today), [data, today]);
 
   const groups = useMemo(() => {
     const map = new Map<string, AgendaEvent[]>();

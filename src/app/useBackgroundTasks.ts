@@ -1,9 +1,19 @@
-// Tâches de fond qui suivent les données : pastille sur l'icône de l'app installée et
-// sauvegarde de secours chiffrée sur le serveur.
+// Tâches de fond qui suivent les données : pastille sur l'icône de l'app installée,
+// sauvegarde de secours chiffrée sur le serveur et stockage « persistant » de l'appareil.
 import { useEffect } from 'react';
 import { computeBadgeCount } from '../lib/projection';
 import { isBackendEnabled } from '../services/backendService';
+import { requestPersistOnce } from '../services/persistentStorage';
 import type { AppDoc } from '../types';
+
+/**
+ * Stockage protégé (services/persistentStorage) demandé une fois les données affichées après
+ * la connexion : la clé des copies locales et les saisies pas encore envoyées existent alors.
+ * Jamais bloquant, une fois par session.
+ */
+export const usePersistentStorage = (enabled: boolean) => {
+  useEffect(() => { if (enabled) requestPersistOnce(); }, [enabled]);
+};
 
 /** Pastille sur l'icône de l'app installée : nombre de choses à faire (`enabled` : données affichées). */
 export const useAppBadge = (fullData: AppDoc, enabled: boolean) => {

@@ -86,6 +86,11 @@ jobs:
         # de reconstruire. Ce qui part en ligne est donc exactement ce qui est testé ici.
         run: npm run build
 
+      - name: Plafond du fichier principal (500 kB)
+        # Vite ne fait qu'avertir au-delà de 500 kB : ce contrôle fait échouer la CI (donc le
+        # déploiement) si le JS chargé au démarrage dépasse le plafond. Voir le script.
+        run: node scripts/check-bundle-size.mjs dist
+
       - name: Test du build publié (dossier dist exact)
         # Le parcours sans démo d'e2e/production.spec.ts, contre le dossier qui sera publié :
         # l'app démarre, aucune violation CSP ni fichier manquant, le service worker s'installe
