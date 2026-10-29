@@ -133,7 +133,7 @@ describe('indicateur de synchronisation', () => {
     expect(syncLabel({ kind: 'error' }, 'full')).toBe('Erreur sync');
     expect(syncLabel({ kind: 'error' }, 'short')).toBe('Erreur');
     expect(syncLabel({ kind: 'idle' }, 'full')).toBe('Synchronisé');
-    expect(syncLabel({ kind: 'idle' }, 'short')).toBe('Sync');
+    expect(syncLabel({ kind: 'idle' }, 'short')).toBe('À jour');
     for (const variant of ['full', 'short'] as const) {
       expect(syncLabel({ kind: 'offline' }, variant)).toBe('Hors ligne');
       expect(syncLabel({ kind: 'saving' }, variant)).toBe('Sauvegarde...');
@@ -367,7 +367,7 @@ describe('écran mémoïsé', () => {
       return <>
         <button onClick={() => setN(n + 1)}>etat-app {n}</button>
         <button onClick={() => setD({ ...data, doc: { ...doc } })}>donnees</button>
-        <ScreenRouter view="dashboard" setView={setView} data={d} derived={derived} actions={actions} fiscalWatch={fiscalWatch} accountForm={accountForm} onSignedOutEverywhere={onSignedOut} onQuickAdd={onQuickAdd} shareMarker={null} shareReady onShareDone={onShareDone} />
+        <ScreenRouter view="dashboard" setView={setView} data={d} derived={derived} actions={actions} fiscalWatch={fiscalWatch} accountForm={accountForm} onSignedOutEverywhere={onSignedOut} onRequestLogout={onSignedOut} onQuickAdd={onQuickAdd} shareMarker={null} shareReady onShareDone={onShareDone} />
       </>;
     };
     render(<UiProviders><Parent /></UiProviders>);
@@ -390,7 +390,7 @@ describe('partage vers Pécule (aiguillage)', () => {
       const [view, setView] = useState<'dashboard' | 'payslips'>('dashboard');
       const [marker, setMarker] = useState<string | null>('1');
       return <ScreenRouter view={view} setView={v => setView(v as 'payslips')} data={data} derived={{} as DerivedData} actions={{ importStatement: () => null } as unknown as AccountActions}
-        fiscalWatch={{ proposals: [] } as unknown as FiscalWatch} accountForm={accountForm} onSignedOutEverywhere={() => {}} onQuickAdd={() => {}}
+        fiscalWatch={{ proposals: [] } as unknown as FiscalWatch} accountForm={accountForm} onSignedOutEverywhere={() => {}} onRequestLogout={() => {}} onQuickAdd={() => {}}
         shareMarker={marker} shareReady onShareDone={() => { onShareDone(); setMarker(null); }} />;
     };
     render(<UiProviders><Parent /></UiProviders>);

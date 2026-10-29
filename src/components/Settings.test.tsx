@@ -142,3 +142,18 @@ describe('Paramètres : affichage des taux et du thème', () => {
     expect(within(group).getByRole('button', { name: /Automatique/ }).getAttribute('aria-pressed')).toBe('true');
   });
 });
+
+describe('Paramètres : déconnexion', () => {
+  it('« Se déconnecter » est dans Paramètres (hors de l’en-tête mobile) et passe par la confirmation d’App', () => {
+    const onRequestLogout = vi.fn();
+    render(
+      <ToastContext.Provider value={vi.fn()}>
+        <Settings config={DEFAULT_FISCAL_CONFIG} workBenefits={DEFAULT_WORK_BENEFITS} geminiApiKey="" pickerApiKey=""
+          onUpdateFiscal={() => {}} onUpdateBenefits={() => {}} onSaveGeminiKey={() => {}} onSavePickerKey={() => {}}
+          onExport={() => {}} onImport={async () => ({ ok: true })} onRequestLogout={onRequestLogout} />
+      </ToastContext.Provider>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Se déconnecter' }));
+    expect(onRequestLogout).toHaveBeenCalledTimes(1);
+  });
+});

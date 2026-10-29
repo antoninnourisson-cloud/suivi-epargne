@@ -10,7 +10,7 @@ vi.mock('../services/googleDriveService', () => ({ hasStoredSession: () => sessi
 
 import { useAppLock, LockResetError, shouldCompleteLockReset, useLockResetCompletion } from './useAppLock';
 import {
-  isLockEnabled, isLockResetPending, getLastLockReset, getLockResetRequest, requestLockReset, LOCK_RESET_DELAY_MS,
+  isLockEnabled, isLockResetPending, setLockDelayMs, getLastLockReset, getLockResetRequest, requestLockReset, LOCK_RESET_DELAY_MS,
 } from '../services/appLockService';
 
 const setPin = () => {
@@ -42,8 +42,9 @@ describe('useAppLock', () => {
     expect(result.current.locked).toBe(false);
   });
 
-  it('verrouillé à l’ouverture, et de nouveau à chaque passage en arrière-plan', () => {
+  it('verrouillé à l’ouverture, et « Immédiatement » : de nouveau dès le passage en arrière-plan', () => {
     setPin();
+    setLockDelayMs(0);
     const { result } = renderHook(() => useAppLock());
     expect(result.current.locked).toBe(true);
     act(() => { result.current.unlock(); });
@@ -54,6 +55,7 @@ describe('useAppLock', () => {
 
   it('« Code oublié » : session fermée d’abord, puis verrou suspendu (pas retiré)', async () => {
     setPin();
+    setLockDelayMs(0);
     readyRequest();
     const order: string[] = [];
     const { result } = renderHook(() => useAppLock());

@@ -174,3 +174,7 @@ body { background: var(--md-surface); color: var(--md-on-surface); }
 
 /* Libellés : Material les écrit en minuscules (casse de phrase), pas en capitales. */
 .uppercase { text-transform: none; letter-spacing: 0.01em; }
+
+/* Verrou posé par-dessus l'app (App.tsx) : le Google Picker, ajouté par Google à la fin de la
+   page et au-dessus de tout, est masqué tant que le verrou est affiché (noms de fichiers). */
+body:has([data-app-lock]) :is(.picker-dialog, .picker-dialog-bg) { visibility: hidden !important; }

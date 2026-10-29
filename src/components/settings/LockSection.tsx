@@ -3,13 +3,27 @@
 // empreinte ou un code enregistrés sur ce téléphone n'ont aucun sens sur un autre appareil.
 import React, { useEffect, useState } from 'react';
 import { Fingerprint, Hash } from 'lucide-react';
-import { isLockAvailable, isBiometricEnabled, isPinEnabled, enableLock, disableBiometric, enablePin, disablePin, getLastLockReset } from '../../services/appLockService';
-import { Button } from '../ui';
+import {
+  isLockAvailable, isBiometricEnabled, isPinEnabled, enableLock, disableBiometric, enablePin, disablePin, getLastLockReset,
+  getLockDelayMs, setLockDelayMs, LOCK_DELAYS_MS, type LockDelayMs,
+} from '../../services/appLockService';
+import { Button, TextField } from '../ui';
 import { Hint, useCardSummary } from './SettingsCard';
 import { SwitchRow } from './fields';
 import { fieldClass } from '../ui/TextField';
 
+// Délai avant verrouillage : mesuré depuis le passage en arrière-plan (voir useAppLock).
+const DELAY_LABEL: Record<LockDelayMs, string> = {
+  0: 'Immédiatement',
+  60_000: 'Après 1 minute',
+  300_000: 'Après 5 minutes',
+  900_000: 'Après 15 minutes',
+};
+
 export const LockSection: React.FC = () => {
+  const [delay, setDelay] = useState<LockDelayMs>(getLockDelayMs);
+  const changeDelay = (ms: LockDelayMs) => { setLockDelayMs(ms); setDelay(getLockDelayMs()); };
+
   const [lockAvailable, setLockAvailable] = useState(false);
   const [biometricOn, setBiometricOn] = useState(isBiometricEnabled());
   const [lockError, setLockError] = useState<string | null>(null);
@@ -71,7 +85,8 @@ export const LockSection: React.FC = () => {
     ? lastResetDate.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })
     : null;
 
-  useCardSummary('lock',biometricOn && pinOn ? 'Biométrie et code PIN' : biometricOn ? 'Biométrie activée' : pinOn ? 'Code PIN activé' : 'Aucun verrou');
+  const method = biometricOn && pinOn ? 'Biométrie et code PIN' : biometricOn ? 'Biométrie activée' : pinOn ? 'Code PIN activé' : null;
+  useCardSummary('lock', method ? `${method} · ${DELAY_LABEL[delay].toLowerCase()}` : 'Aucun verrou');
 
   return (
     <div className="space-y-5">
@@ -133,6 +148,19 @@ export const LockSection: React.FC = () => {
           {pinError && <p role="alert" className="text-xs font-medium text-error mt-2">{pinError}</p>}
         </SwitchRow>
       </div>
+
+      {(biometricOn || pinOn) && (
+        <div className="pt-5 border-t border-outline-variant">
+          <TextField id="lock-delay" label="Verrouiller" className="max-w-xs"
+            supporting="Après un passage en arrière-plan (autre appli, écran éteint). À l'ouverture de Pécule, le verrou est toujours demandé ; choisir un fichier depuis Pécule ne verrouille pas."
+            render={({ id, className, describedBy }) => (
+              <select id={id} aria-describedby={describedBy} className={className} value={delay}
+                onChange={e => changeDelay(Number(e.target.value) as LockDelayMs)}>
+                {LOCK_DELAYS_MS.map(ms => <option key={ms} value={ms}>{DELAY_LABEL[ms]}</option>)}
+              </select>
+            )} />
+        </div>
+      )}
     </div>
   );
 };

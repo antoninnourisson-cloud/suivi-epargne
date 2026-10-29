@@ -38,6 +38,9 @@ export const Modal: React.FC<ModalProps> = ({ open, onClose, label, children, va
     document.body.style.overflow = 'hidden';
 
     const onKey = (e: KeyboardEvent) => {
+      // Verrou posé par-dessus l'app (App.tsx) : la fenêtre, restée ouverte derrière, ne
+      // réagit pas aux touches (Échap ou Tab tapés sur l'écran de verrouillage).
+      if (panel?.closest('[inert]')) return;
       if (e.key === 'Escape') { e.stopPropagation(); onCloseRef.current(); return; }
       if (e.key !== 'Tab' || !panel) return;
       const items = Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(el => el.offsetParent !== null);

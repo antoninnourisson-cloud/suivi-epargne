@@ -8,7 +8,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { FiscalConfig, PayslipRecord, WorkBenefits } from '../types';
 import {
   AlertTriangle, Download, Upload, Database, KeyRound, Fingerprint, Building2, Scale, FileSearch, Radar, Sprout, Bell,
-  Smartphone, Info, Save, Palette, HardDrive,
+  Smartphone, Info, Save, Palette, HardDrive, LogOut,
 } from 'lucide-react';
 import { DisplaySection, displaySummary } from './settings/DisplaySection';
 import { useTheme } from '../hooks/useTheme';
@@ -55,6 +55,8 @@ interface SettingsProps {
   hasParental?: boolean;
   paydayDay?: number;
   onOpenPayday?: () => void;
+  /** « Se déconnecter » (confirmation par App) : sa place sur mobile, hors de l'en-tête. */
+  onRequestLogout?: () => void;
 }
 
 const prefersReducedMotion = () => {
@@ -64,7 +66,7 @@ const prefersReducedMotion = () => {
 type Edit<T> = (prev: T) => T;
 const applyEdits = <T,>(base: T, edits: Edit<T>[]): T => edits.reduce((acc, edit) => edit(acc), base);
 
-export const Settings: React.FC<SettingsProps> = ({ payslips = [], config, workBenefits, geminiApiKey, pickerApiKey, onUpdateFiscal, onUpdateBenefits, onSaveGeminiKey, onSavePickerKey, onExport, onImport, onUndoImport, paydayDay, onOpenPayday, backupSlot, fiscalWatchSlot, securitySlot, taxNoticeSlot, motivationSlot, notificationPrefs, onChangeNotificationPrefs, hasParental }) => {
+export const Settings: React.FC<SettingsProps> = ({ payslips = [], config, workBenefits, geminiApiKey, pickerApiKey, onUpdateFiscal, onUpdateBenefits, onSaveGeminiKey, onSavePickerKey, onExport, onImport, onUndoImport, paydayDay, onOpenPayday, backupSlot, fiscalWatchSlot, securitySlot, taxNoticeSlot, motivationSlot, notificationPrefs, onChangeNotificationPrefs, hasParental, onRequestLogout }) => {
   const toast = useToast();
   const { preference: themePreference } = useTheme();
   const [importMsg, setImportMsg] = useState<string | null>(null);
@@ -287,6 +289,14 @@ export const Settings: React.FC<SettingsProps> = ({ payslips = [], config, workB
           )),
           securitySlot && card('account', 'Compte et appareils', Smartphone, securitySlot),
           card('device', 'Appareil', HardDrive, <DeviceSection />),
+          onRequestLogout && (
+            <div key="logout" className="px-1 pt-1">
+              <Button variant="outlined" className="text-error! border-error/40! enabled:hover:bg-error/8!" onClick={onRequestLogout}>
+                <LogOut className="w-4 h-4" aria-hidden="true" /> Se déconnecter
+              </Button>
+              <p className="mt-2 px-1 text-xs text-on-surface-variant">Vos données restent sur votre Drive ; il faudra vous reconnecter avec Google. La clé Gemini de cet appareil est effacée.</p>
+            </div>
+          ),
         ])}
 
         {card('about', 'À propos', Info, <AboutSection />, `Version ${LATEST_VERSION}`)}

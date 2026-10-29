@@ -64,6 +64,8 @@ interface ScreenRouterProps {
   accountForm: AccountFormState;
   /** « Déconnecter tous les appareils » (Paramètres, sécurité). */
   onSignedOutEverywhere: () => void;
+  /** « Se déconnecter » (Paramètres) : toujours confirmé (`alwaysConfirm`). */
+  onRequestLogout: (alwaysConfirm: boolean) => void;
   /** Ouvre l'ajout rapide d'un mouvement (fonction stable d'App). */
   onQuickAdd: () => void;
   /** « Partager vers Pécule » : valeur de `?partage=` (sinon `null`), données prêtes, fin du partage. */
@@ -72,7 +74,7 @@ interface ScreenRouterProps {
   onShareDone: () => void;
 }
 
-export const ScreenRouter = memo(function ScreenRouter({ view, setView, data, derived, actions, fiscalWatch, accountForm, onSignedOutEverywhere, onQuickAdd, shareMarker, shareReady, onShareDone }: ScreenRouterProps) {
+export const ScreenRouter = memo(function ScreenRouter({ view, setView, data, derived, actions, fiscalWatch, accountForm, onSignedOutEverywhere, onRequestLogout, onQuickAdd, shareMarker, shareReady, onShareDone }: ScreenRouterProps) {
   const addToast = useAddToast();
   const dialog = useDialog();
   const { doc } = data;
@@ -195,7 +197,8 @@ export const ScreenRouter = memo(function ScreenRouter({ view, setView, data, de
           onUpdateFiscal={update => data.setFiscalConfig(update)}
           onUpdateBenefits={data.updateWorkBenefits}
           onSaveGeminiKey={data.setGeminiApiKey}
-          onSavePickerKey={key => data.patchConfig({ pickerApiKey: key })} />}
+          onSavePickerKey={key => data.patchConfig({ pickerApiKey: key })}
+          onRequestLogout={() => onRequestLogout(true)} />}
 
         {view === 'accounts' && <AccountsView
           accounts={doc.accounts} fiscalConfig={doc.fiscalConfig} onUpdateAccounts={data.setAccounts}

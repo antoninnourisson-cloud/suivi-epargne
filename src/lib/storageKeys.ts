@@ -74,6 +74,8 @@ export const STORAGE_KEYS = {
   fiscalWatch: { key: 'fiscal_watch', kind: 'device' },
   /** 20 dernières erreurs de l'app, nettoyées de toute donnée (lib/errorJournal). */
   errorJournal: { key: 'pecule_error_journal', kind: 'device' },
+  /** Délai avant le verrouillage après un passage en arrière-plan (réglage de cet appareil). */
+  lockDelay: { key: 'app_lock_delay', kind: 'device' },
 
   // --- Préférences d'affichage ---
   /** Thème choisi (« Clair » ou « Sombre ») ; absent = « Automatique », comme le système. */

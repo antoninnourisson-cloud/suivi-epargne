@@ -364,3 +364,30 @@ export const completeLockReset = (now: Date = new Date()): boolean => {
 
 /** Date (ISO) du dernier retrait du verrou par « Code oublié », ou `null`. */
 export const getLastLockReset = (): string | null => lsGet(LAST_RESET_KEY);
+
+// ================================================
+// Délai avant verrouillage (propre à cet appareil)
+// ================================================
+// Le verrou revient après un passage en arrière-plan plus long que ce délai : un aller-retour
+// court (vérifier un montant dans l'app de la banque) ne redemande pas le code. Le temps est
+// mesuré entre la mise en arrière-plan et le retour (horodatages), jamais par une minuterie,
+// qui ne tourne pas quand le système met la page en pause. L'ouverture, le rechargement et un
+// nouvel onglet sont toujours verrouillés.
+const LOCK_DELAY_KEY = 'app_lock_delay';
+const MINUTE_MS = 60 * 1000;
+
+/** Délais proposés dans Paramètres (0 : dès le passage en arrière-plan). */
+export const LOCK_DELAYS_MS = [0, MINUTE_MS, 5 * MINUTE_MS, 15 * MINUTE_MS] as const;
+export type LockDelayMs = typeof LOCK_DELAYS_MS[number];
+export const DEFAULT_LOCK_DELAY_MS: LockDelayMs = 5 * MINUTE_MS;
+
+const isLockDelay = (v: number): v is LockDelayMs => (LOCK_DELAYS_MS as readonly number[]).includes(v);
+
+/** Délai choisi sur cet appareil ; 5 minutes par défaut (ou si la valeur est illisible). */
+export const getLockDelayMs = (): LockDelayMs => {
+  const raw = lsGet(LOCK_DELAY_KEY);
+  const n = raw === null ? NaN : Number(raw);
+  return isLockDelay(n) ? n : DEFAULT_LOCK_DELAY_MS;
+};
+
+export const setLockDelayMs = (ms: LockDelayMs): void => lsSet(LOCK_DELAY_KEY, String(ms));

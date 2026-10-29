@@ -1,6 +1,12 @@
 // État du verrou de l'appareil (biométrie et/ou code PIN, voir src/services/appLockService.ts) :
-// verrouillé à l'ouverture et à chaque passage en arrière-plan, et réinitialisation sûre en
-// cas de code oublié.
+// verrouillé à l'ouverture (rechargement et nouvel onglet compris), et au retour d'un passage
+// en arrière-plan plus long que le délai choisi sur l'appareil (« Immédiatement » : dès la mise
+// en arrière-plan). Un choix de fichier lancé par l'app ne verrouille pas (suspension bornée).
+// Réinitialisation sûre en cas de code oublié.
+//
+// Une fois l'app affichée, le verrou se pose PAR-DESSUS (App.tsx) sans rien démonter : saisies,
+// fenêtres et imports en cours sont retrouvés au déverrouillage. `revealed` dit si l'app a
+// déjà été affichée dans cette page ; avant (ouverture), rien d'autre que le verrou n'est rendu.
 //
 // « Code oublié » ne déverrouille jamais. D'abord une DEMANDE de retrait, utilisable 24 heures
 // plus tard seulement : le verrou reste affiché entre-temps, et tout déverrouillage réussi
@@ -15,7 +21,7 @@
 // fermée, le verrou reste affiché.
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import {
-  isLockActive, isLockResetPending, markLockResetPending, cancelLockReset, completeLockReset,
+  isLockActive, getLockDelayMs, isLockResetPending, markLockResetPending, cancelLockReset, completeLockReset,
   getLockResetRequest, requestLockReset, cancelLockResetRequest, isLockResetAlertSent, markLockResetAlertSent,
   getPendingLockResetAlert, clearPendingLockResetAlert,
   type LockResetRequest,
@@ -80,6 +86,34 @@ const usePendingLockResetAlert = (pending: boolean): void => {
   }, [pending]);
 };
 
+/** Durée maximale de la suspension du verrou pendant un choix de fichier lancé par l'app. */
+export const FILE_PICKER_GRACE_MS = 3 * 60 * 1000;
+
+/** Instant noté au passage en arrière-plan : horloge du système et horloge monotone de la page. */
+export interface HiddenStamp { wall: number; mono: number }
+
+/**
+ * Règle du retour au premier plan : verrouiller si l'app est restée en arrière-plan au moins
+ * `delayMs`, sauf pendant un choix de fichier lancé par l'app (suspension bornée, encore
+ * valable au retour). Durée : la plus longue des deux horloges (l'horloge monotone ne peut pas
+ * être reculée ; celle du système compte aussi la mise en veille). Une horloge du système
+ * reculée pendant l'absence verrouille.
+ */
+export const shouldLockOnReturn = (
+  { hidden, now, delayMs, suspendedUntil }: { hidden: HiddenStamp | null; now: HiddenStamp; delayMs: number; suspendedUntil: number },
+): boolean => {
+  if (hidden === null) return false;
+  if (now.wall <= suspendedUntil) return false;
+  if (now.wall < hidden.wall) return true;
+  return Math.max(now.wall - hidden.wall, now.mono - hidden.mono) >= delayMs;
+};
+
+const stampNow = (): HiddenStamp => ({ wall: Date.now(), mono: performance.now() });
+
+/** Élément focalisable à retrouver au déverrouillage (encore dans la page, hors du verrou). */
+const restorableFocus = (el: Element | null): HTMLElement | null =>
+  el instanceof HTMLElement && el !== document.body && el.isConnected ? el : null;
+
 export class LockResetError extends Error {
   constructor(readonly reason: 'SESSION_STILL_OPEN' | 'NOT_READY' | 'ALERT_NOT_SENT' = 'SESSION_STILL_OPEN') {
     super(reason);
@@ -91,6 +125,14 @@ export const useAppLock = () => {
   // Verrouillé dès l'ouverture si une méthode est configurée sur CET appareil (jamais
   // synchronisé) et qu'aucune réinitialisation n'attend la reconnexion Google.
   const [locked, setLocked] = useState<boolean>(() => isLockActive());
+  // L'app a déjà été affichée déverrouillée dans cette page : le verrou se pose alors
+  // par-dessus, sans démonter les écrans (voir App.tsx).
+  const [revealed, setRevealed] = useState(!locked);
+  if (!locked && !revealed) setRevealed(true);
+  // Élément qui avait le focus au verrouillage : il le retrouve au déverrouillage.
+  const returnFocusRef = useRef<HTMLElement | null>(null);
+  const lockedRef = useRef(locked);
+  lockedRef.current = locked;
   // La réinitialisation en attente et la demande de retrait sont relues à chaque rendu (des
   // lectures locales) : définir un nouveau verrou dans Paramètres termine aussi la première
   // (voir appLockService.enablePin).
@@ -110,17 +152,68 @@ export const useAppLock = () => {
     return () => clearTimeout(timer);
   }, [nextChange]);
 
-  // Re-verrouille dès que l'app passe en arrière-plan (bouton Home, changement d'appli,
-  // écran éteint...). Sur mobile, quitter l'app ne recharge pas la page — le process JS
-  // reste vivant tant que l'OS ne le tue pas — donc sans ceci, un simple aller-retour
-  // laisserait l'app déverrouillée indéfiniment.
+  // Re-verrouille après un passage en arrière-plan (bouton Home, changement d'appli, écran
+  // éteint...). Sur mobile, quitter l'app ne recharge pas la page — le process JS reste vivant
+  // tant que l'OS ne le tue pas — donc sans ceci, un simple aller-retour laisserait l'app
+  // déverrouillée indéfiniment. Délai lu à chaque fois (un changement dans Paramètres compte
+  // tout de suite). « Immédiatement » verrouille dès la mise en arrière-plan, comme avant.
+  //
+  // Choix de fichier lancé par l'app (tout <input type="file"> de la page : relevé, fiche de
+  // paie, avis d'imposition, import d'une sauvegarde…) : sur Android, le sélecteur met la page
+  // en arrière-plan. Le verrou est suspendu du clic jusqu'au choix ou à l'annulation, ou au
+  // retour de la page, et 3 minutes au plus (FILE_PICKER_GRACE_MS).
   useEffect(() => {
+    let hidden: HiddenStamp | null = null;
+    let suspendedUntil = 0;
+    const lockNow = () => {
+      if (lockedRef.current) return;
+      lockedRef.current = true;
+      returnFocusRef.current = restorableFocus(document.activeElement);
+      setLocked(true);
+    };
+    const endSuspension = () => {
+      // Le choix peut être signalé avant le retour au premier plan : la suspension couvre
+      // alors ce retour, qui la termine.
+      if (document.visibilityState === 'visible') suspendedUntil = 0;
+    };
     const onVisibility = () => {
-      if (document.visibilityState === 'hidden' && isLockActive()) setLocked(true);
+      if (document.visibilityState === 'hidden') {
+        hidden ??= stampNow();
+        if (isLockActive() && getLockDelayMs() === 0 && Date.now() > suspendedUntil) lockNow();
+        return;
+      }
+      const now = stampNow();
+      const lock = isLockActive() && shouldLockOnReturn({ hidden, now, delayMs: getLockDelayMs(), suspendedUntil });
+      hidden = null;
+      suspendedUntil = 0;
+      if (lock) lockNow();
+    };
+    // Page rendue depuis le cache de navigation (retour arrière) : même règle qu'un retour.
+    const onPageShow = (e: PageTransitionEvent) => { if (e.persisted) onVisibility(); };
+    const onClick = (e: MouseEvent) => {
+      const input = e.target;
+      if (!(input instanceof HTMLInputElement) || input.type !== 'file') return;
+      suspendedUntil = Date.now() + FILE_PICKER_GRACE_MS;
+      input.addEventListener('change', endSuspension, { once: true });
+      input.addEventListener('cancel', endSuspension, { once: true });
     };
     document.addEventListener('visibilitychange', onVisibility);
-    return () => document.removeEventListener('visibilitychange', onVisibility);
+    window.addEventListener('pageshow', onPageShow);
+    document.addEventListener('click', onClick, true);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('pageshow', onPageShow);
+      document.removeEventListener('click', onClick, true);
+    };
   }, []);
+
+  // Déverrouillé : le focus revient là où il était (champ en cours de saisie, fenêtre ouverte).
+  useEffect(() => {
+    if (locked) return;
+    const el = returnFocusRef.current;
+    returnFocusRef.current = null;
+    if (el?.isConnected) el.focus({ preventScroll: true });
+  }, [locked]);
 
   /**
    * Déverrouillage réussi (code ou biométrie) : le propriétaire est là, une demande de
@@ -188,7 +281,7 @@ export const useAppLock = () => {
   }, []);
 
   return {
-    locked, resetPending, resetRequest, unlock, requestReset, cancelResetRequest, forgetCode, cancelReset, completeReset,
+    locked, revealed, resetPending, resetRequest, unlock, requestReset, cancelResetRequest, forgetCode, cancelReset, completeReset,
   };
 };
 
