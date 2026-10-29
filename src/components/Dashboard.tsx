@@ -13,7 +13,7 @@ import type { EmergencyFund } from '../lib/planning';
 import type { AgendaEvent } from '../lib/agenda';
 import type { TaxReturnAlert } from '../lib/taxReturn';
 import { revealElementById } from './revealElement';
-import type { SavingsAccount, PortfolioSnapshot, FiscalConfig, RecurringMovement, Subscription, PayslipRecord } from '../types';
+import type { SavingsAccount, PortfolioSnapshot, FiscalConfig, RecurringMovement, Subscription, PayslipRecord, PayChecklist } from '../types';
 import {
   computeUnlockCost, findFiscalReview, applyTaxScale, findAvRateUpdatesDue, confirmRatesUnchanged, findDueRecurring,
   findStaleRegulatedRates, computeAccountBalanceAtDate, suggestedRestitutionDate, computeAvailabilityBreakdown, ownedAmountAt,
@@ -44,6 +44,8 @@ import {
 import type { YearClosingStatus } from '../lib/yearClosing';
 import { GoodMonthsCard } from './motivation/GoodMonthsCard';
 import { PayReviewCard } from './motivation/PayReviewCard';
+import { MonthRoutineCard } from './dashboard/MonthRoutineCard';
+import { computeMonthRoutine, type RoutineStepKey } from '../lib/monthRoutine';
 
 interface DashboardProps {
   accounts: SavingsAccount[];
@@ -99,6 +101,8 @@ interface DashboardProps {
   onValidatePayReview?: (key: string) => void;
   // Clôture de l'année écoulée (lib/yearClosing) : une tâche en janvier-février.
   yearClosing?: YearClosingStatus | null;
+  /** Virements de la paie cochés dans le Pilotage : une étape de la routine du mois. */
+  payChecklist?: PayChecklist;
   /** « Demander à Pécule » (entrée et fenêtre chargées à part), sous l'épargne nette. */
   askSlot?: React.ReactNode;
 }
@@ -117,7 +121,7 @@ const SLICE_STYLE: Record<'available' | 'tax' | 'locked', Pick<AvailabilitySegme
   locked: { color: 'bg-outline', hatch: 'dense' },
 };
 
-export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalConfig, onDeleteAccount, recurringMovements = [], onRecordRecurring, monthPlan, monthGoal, monthlyPay = 0, paydayDay, trackingStartDate, subscriptions = [], onUpdateFiscalConfig, onOpenSettings, onUpdateAccounts, payRaise, onAcceptPayRaise, onDismissPayRaise, onNavigate, onAddAccount, lastExportAt, onExport, emergency, onSetEmergencyMonths, agendaNext = [], lepTimeline, taxReturnAlert, payslips = [], gamification, goodMonthThreshold, milestonesSeen, payReviewsDone, rfrByYear, restitutionDoneOn, restitutionPlannedDate, onMarkMilestonesSeen, onValidatePayReview, yearClosing, askSlot }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalConfig, onDeleteAccount, recurringMovements = [], onRecordRecurring, monthPlan, monthGoal, monthlyPay = 0, paydayDay, trackingStartDate, subscriptions = [], onUpdateFiscalConfig, onOpenSettings, onUpdateAccounts, payRaise, onAcceptPayRaise, onDismissPayRaise, onNavigate, onAddAccount, lastExportAt, onExport, emergency, onSetEmergencyMonths, agendaNext = [], lepTimeline, taxReturnAlert, payslips = [], gamification, goodMonthThreshold, milestonesSeen, payReviewsDone, rfrByYear, restitutionDoneOn, restitutionPlannedDate, onMarkMilestonesSeen, onValidatePayReview, yearClosing, payChecklist, askSlot }) => {
   // Date du jour partagée (useToday) : l'Accueil resté ouvert passe au lendemain à minuit.
   const today = useToday();
   const choices = useHomeChoices(today);
@@ -172,6 +176,22 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalC
     [goodMonths, accounts, today, monthPlan, trackingStartDate]
   );
   const showPayReview = !!payReview && !(payReviewsDone || []).includes(payReview.key);
+
+  // --- Routine du mois : fiche, virements, soldes, point de paie, déduits des données ---
+  const routine = useMemo(
+    () => computeMonthRoutine({ accounts, payslips, payChecklist, monthlyPay, paydayDay, now: middayToday, payReviewKey: payReview?.key, payReviewsDone }),
+    [accounts, payslips, payChecklist, monthlyPay, paydayDay, middayToday, payReview?.key, payReviewsDone]
+  );
+  const openRoutineStep = (step: RoutineStepKey) => {
+    switch (step) {
+      case 'payslip': onNavigate?.('payslips'); break;
+      // « Où le placer » est sous l'en-tête du Pilotage : on l'amène à l'écran.
+      case 'transfers': onNavigate?.('pilot'); revealElementById('pay-checklist'); break;
+      case 'balances': onNavigate?.('update'); break;
+      // Le point de paie est sur l'Accueil, juste sous la routine.
+      case 'review': revealElementById('pay-review', { delayMs: 0 }); break;
+    }
+  };
 
   // --- À faire ---
   // Alertes chiffrées en euros (lib/alerts) : compte courant dormant, meilleur taux, livret
@@ -298,6 +318,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalC
       </Card>
 
       {askSlot}
+
+      {/* Routine de la paie en cours, étape par étape ; repliée en une ligne une fois faite. */}
+      {routine && <MonthRoutineCard routine={routine} onOpen={openRoutineStep} />}
 
       {/* Bilan de la paie précédente, une fois, jusqu'à validation. */}
       {showPayReview && payReview && (

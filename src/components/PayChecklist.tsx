@@ -173,7 +173,7 @@ export const PayChecklist: React.FC<PayChecklistProps> = ({
     </span>
   );
   return (
-    <Card title="Où le placer" icon={PiggyBank} action={progress}>
+    <Card id="pay-checklist" title="Où le placer" icon={PiggyBank} action={progress}>
       <p className="text-sm text-on-surface-variant -mt-2 mb-4">
         Paie {elideDe(periodLabel)} : <MoneyText value={superNet} />. Cochez chaque virement une fois fait ; si le montant réel diffère, corrigez-le avant de cocher.
       </p>
