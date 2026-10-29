@@ -7,6 +7,19 @@ const EUR_CENTS = new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 
 const EUR_ROUND = new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 });
 
 /**
+ * Mode discret (réglage de cet appareil, hooks/useDiscreetMode) : tous les montants affichés
+ * deviennent « •••• € ». Appliqué ici, au formatage, pour couvrir d'un coup les écrans, les
+ * phrases générées, les graphiques et les alertes. Ces formateurs ne servent qu'à l'affichage :
+ * rien de ce qui part sur Drive ou vers Gemini n'en sort, et les champs de saisie gardent
+ * leurs chiffres (NumberInput a son propre format).
+ */
+// Espace insécable : jamais « •••• » en fin de ligne et « € » à la suivante.
+export const DISCREET_AMOUNT = '•••• €';
+let discreetAmounts = false;
+export const setDiscreetAmounts = (on: boolean): void => { discreetAmounts = on; };
+export const isDiscreetAmounts = (): boolean => discreetAmounts;
+
+/**
  * Montant en euros, format français.
  * - 'auto' (défaut) : centimes affichés sur deux chiffres seulement s'il y en a
  *   (13,50 € mais 250 €) — jamais « 13,5 € » ;
@@ -15,12 +28,13 @@ const EUR_ROUND = new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 
  */
 export const formatEUR = (n: number, decimals: 'auto' | 0 | 2 = 'auto'): string => {
   if (!Number.isFinite(n)) return '—';
+  if (discreetAmounts) return DISCREET_AMOUNT;
   if (decimals === 0) return EUR_ROUND.format(n);
   if (decimals === 2) return EUR_CENTS.format(n);
   return Math.round(n * 100) % 100 === 0 ? EUR_ROUND.format(n) : EUR_CENTS.format(n);
 };
 
-/** Idem avec un signe explicite : « +13,50 € », « −250 € ». */
+/** Idem avec un signe explicite : « +13,50 € », « −250 € » (« +•••• € » en mode discret). */
 export const formatSignedEUR = (n: number, decimals: 'auto' | 0 | 2 = 'auto'): string =>
   `${n > 0 ? '+' : n < 0 ? '−' : ''}${formatEUR(Math.abs(n), decimals)}`;
 
@@ -28,7 +42,7 @@ export const formatSignedEUR = (n: number, decimals: 'auto' | 0 | 2 = 'auto'): s
  * Arrondi à l'euro, en texte simple (« 1 250 € », espace ordinaire avant le symbole) :
  * phrases générées par les calculs (conseils, propositions de la veille fiscale).
  */
-export const plainEUR = (n: number): string => `${Math.round(n).toLocaleString('fr-FR')} €`;
+export const plainEUR = (n: number): string => (discreetAmounts ? DISCREET_AMOUNT : `${Math.round(n).toLocaleString('fr-FR')} €`);
 
 /** Valeur éditable dans un champ texte, à la française : « 410,80 », « 250 ». */
 export const toInputAmount = (n: number): string =>

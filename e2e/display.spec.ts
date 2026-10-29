@@ -96,6 +96,46 @@ test.describe('Affichage (démo)', () => {
     });
   }
 
+  test('le mode discret masque les montants partout, est gardé sur l’appareil et se coupe dans Paramètres', async ({ page }) => {
+    await openDemo(page);
+    const main = page.locator('main');
+    // Désactivé par défaut : les montants sont lisibles.
+    await expect(main.getByText('Mon épargne nette').first()).toBeVisible();
+    expect(await main.innerText()).not.toContain('••••');
+
+    const eye = page.getByRole('button', { name: 'Masquer les montants' }).filter({ visible: true });
+    await expect(eye).toHaveAttribute('aria-pressed', 'false');
+    await eye.click();
+    await expect(eye).toHaveAttribute('aria-pressed', 'true');
+    await expect(eye).toBeFocused();
+    // Plus aucun montant en chiffres sur l'Accueil (« 1 250 € », « 12,5 k€ »).
+    const amountInDigits = /\d[\d\s  ,]*\s?k?€/;
+    await expect.poll(async () => amountInDigits.test(await main.innerText())).toBe(false);
+    await expect(main.getByText(/••••/).first()).toBeVisible();
+
+    // Gardé au rechargement, et appliqué aux autres écrans (Pilotage, graduations des graphiques).
+    await page.reload();
+    await expect(page.locator('main h2').first()).toBeAttached();
+    await expect(page.getByRole('button', { name: 'Masquer les montants' }).filter({ visible: true })).toHaveAttribute('aria-pressed', 'true');
+    for (const view of ['pilot', 'history']) {
+      await page.goto(`/?demo=1&view=${view}`);
+      await expect(page.locator('main h2').first()).toBeAttached();
+      await page.waitForTimeout(500); // écran et graphiques chargés à la demande
+      expect(amountInDigits.test(await main.innerText()), view).toBe(false);
+    }
+
+    // Coupé depuis Paramètres › Affichage : les montants reviennent.
+    await page.goto('/?demo=1&view=settings');
+    await openDisplayCard(page);
+    const toggle = page.getByRole('switch', { name: 'Mode discret' });
+    await expect(toggle).toHaveAttribute('aria-checked', 'true');
+    await toggle.click();
+    await expect(page.getByRole('switch', { name: 'Mode discret' })).toHaveAttribute('aria-checked', 'false');
+    await expect(page.getByRole('switch', { name: 'Mode discret' })).toBeFocused();
+    await page.goto('/?demo=1');
+    await expect.poll(async () => amountInDigits.test(await main.innerText())).toBe(true);
+  });
+
   test('sur téléphone, chaque contrôle de l’Accueil et des Paramètres a un nom et une zone de toucher de 48 px', async ({ page, isMobile }) => {
     test.skip(!isMobile, 'écran tactile seulement');
     for (const view of ['dashboard', 'settings']) {

@@ -11,6 +11,7 @@
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePortfolioData } from './hooks/usePortfolioData';
 import { useTheme } from './hooks/useTheme';
+import { useDiscreetMode } from './hooks/useDiscreetMode';
 import { useAppLock } from './hooks/useAppLock';
 import { useFiscalWatch } from './hooks/useFiscalWatch';
 import { LastSavedAtContext } from './hooks/useSaveFeedback';
@@ -58,6 +59,9 @@ const AppRoot: React.FC = () => {
   const { hasPendingEdits, buildData } = data;
   useEffect(() => registerReloadBlocker(hasPendingEdits), [hasPendingEdits]);
   const { isDark, toggleTheme } = useTheme();
+  // Mode discret (montants en « •••• € ») : au basculement, l'écran courant est reconstruit
+  // (clé ci-dessous) pour que tout montant déjà formaté, même mémoïsé, soit réécrit.
+  const { discreet, toggleDiscreet } = useDiscreetMode();
   // « Quoi de neuf » (et tout l'historique) n'est chargé que s'il a quelque chose à montrer.
   const [showWhatsNew] = useState(whatsNewPending);
   // « Partager vers Pécule » : l'app a été ouverte par un partage (`?partage=`, laissé par
@@ -93,7 +97,7 @@ const AppRoot: React.FC = () => {
   // Instantané complet des données (agenda, bilan annuel, projections) : recalculé seulement
   // quand le document change, jamais pour un changement de l'état de synchronisation.
   const fullData = useMemo(() => buildData(), [buildData]);
-  const derived = useDerivedData(data.doc, fullData);
+  const derived = useDerivedData(data.doc, fullData, discreet);
   const screenData = useScreenData(data);
   const actions = useAccountActions(data.doc, data, addToast, dialog);
   const accountForm = useAccountForm();
@@ -152,7 +156,7 @@ const AppRoot: React.FC = () => {
           view={view} setView={setView} showParentalScreen={derived.showParentalScreen}
           syncPhase={syncPhase(data.syncStatus, data.syncConflict, data.lastSavedAt)} lastSavedAt={data.lastSavedAt}
           hasPendingEdits={hasPendingEdits()} onRetrySync={data.retrySync} onReconnect={() => void auth.reconnect()}
-          isDark={isDark} onToggleTheme={toggleTheme} onRequestLogout={auth.requestLogout} mainRef={mainRef}
+          isDark={isDark} onToggleTheme={toggleTheme} discreet={discreet} onToggleDiscreet={toggleDiscreet} onRequestLogout={auth.requestLogout} mainRef={mainRef}
           navAction={<>{data.accounts.length > 0 && <QuickAddNavButton onClick={openQuickAdd} />}<AskNavButton onClick={openAsk} className={data.accounts.length > 0 ? 'mt-3' : ''} /></>}
           overlays={<>
             {/* Ajout rapide flottant (téléphone), masqué là où l'écran a déjà son propre ajout ou
@@ -172,7 +176,7 @@ const AppRoot: React.FC = () => {
         >
           <SyncBanners data={data} onReconnect={() => void auth.reconnect()} onOpenConflict={syncDialogs.openConflict} />
           <BackupDeletionNotice active={data.dataShown && !data.isLoadingData} onOpenSettings={() => setView('settings')} />
-          <ScreenRouter view={view} setView={setView} data={screenData} derived={derived} actions={actions}
+          <ScreenRouter key={discreet ? 'montants-masques' : 'montants'} view={view} setView={setView} data={screenData} derived={derived} actions={actions}
             fiscalWatch={fiscalWatch} accountForm={accountForm} onSignedOutEverywhere={auth.signedOutEverywhere} onRequestLogout={auth.requestLogout} onQuickAdd={openQuickAdd}
             shareMarker={shareMarker} shareReady={data.dataShown && !data.isLoadingData} onShareDone={endShare} />
         </AppShell>

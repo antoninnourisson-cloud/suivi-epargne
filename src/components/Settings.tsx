@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { DisplaySection, displaySummary } from './settings/DisplaySection';
 import { useTheme } from '../hooks/useTheme';
+import { useDiscreetMode } from '../hooks/useDiscreetMode';
 import { NotificationSettings } from './NotificationSettings';
 import { useToast } from './Toast';
 import { GeminiModelField } from './SettingsPanels';
@@ -69,6 +70,7 @@ const applyEdits = <T,>(base: T, edits: Edit<T>[]): T => edits.reduce((acc, edit
 export const Settings: React.FC<SettingsProps> = ({ payslips = [], config, workBenefits, geminiApiKey, pickerApiKey, onUpdateFiscal, onUpdateBenefits, onSaveGeminiKey, onSavePickerKey, onExport, onImport, onUndoImport, paydayDay, onOpenPayday, backupSlot, fiscalWatchSlot, securitySlot, taxNoticeSlot, motivationSlot, notificationPrefs, onChangeNotificationPrefs, hasParental, onRequestLogout }) => {
   const toast = useToast();
   const { preference: themePreference } = useTheme();
+  const { discreet } = useDiscreetMode();
   const [importMsg, setImportMsg] = useState<string | null>(null);
   // L'import écrase TOUT (comptes, mouvements, fiches de paie, réglages) puis
   // resynchronise sur Drive : il faut une confirmation explicite, la boîte de sélection de
@@ -234,7 +236,7 @@ export const Settings: React.FC<SettingsProps> = ({ payslips = [], config, workB
         ])}
 
         {group('Préférences', [
-          card('display', 'Affichage', Palette, <DisplaySection />, displaySummary(themePreference)),
+          card('display', 'Affichage', Palette, <DisplaySection />, displaySummary(themePreference, discreet)),
           motivationSlot && card('motivation', 'Motivation', Sprout, motivationSlot),
           backend && card('notifications', 'Notifications', Bell,
             <NotificationSettings paydayDay={paydayDay} onOpenPayday={onOpenPayday} prefs={notificationPrefs} onChangePrefs={onChangeNotificationPrefs} hasParental={hasParental} />),

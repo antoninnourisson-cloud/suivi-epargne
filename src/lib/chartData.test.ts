@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { DISCREET_AMOUNT, setDiscreetAmounts } from './format';
 import { formatAxisEUR, maxAbs, durationLabel, describeEvolution, lastPointPerMonth, groupByInstitution, niceTicks } from './chartData';
 
 const norm = (s: string) => s.replace(/[  ]/g, ' ');
@@ -6,6 +7,13 @@ const norm = (s: string) => s.replace(/[  ]/g, ' ');
 describe('formatAxisEUR', () => {
   it('écrit les euros en entier sous 10 000 €', () => {
     expect(norm(formatAxisEUR(1200, 2000))).toBe('1 200 €');
+  });
+  it('masque aussi les graduations en mode discret, k€ compris', () => {
+    setDiscreetAmounts(true);
+    try {
+      expect(formatAxisEUR(1200, 2000)).toBe(DISCREET_AMOUNT);
+      expect(formatAxisEUR(12500, 30000)).toBe(DISCREET_AMOUNT);
+    } finally { setDiscreetAmounts(false); }
   });
   it('passe en k€ sur une grande échelle', () => {
     expect(norm(formatAxisEUR(12500, 30000))).toBe('12,5 k€');

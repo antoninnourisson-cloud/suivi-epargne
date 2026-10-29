@@ -4,7 +4,7 @@
 // (action rare) est dans Paramètres ; l'en-tête garde l'état de la synchronisation, touchable
 // pour le détail (feuille rendue ici, hors de l'en-tête collant).
 import React, { useState } from 'react';
-import { LogOut, Moon, Settings as SettingsIcon, Sun } from 'lucide-react';
+import { Eye, EyeOff, LogOut, Moon, Settings as SettingsIcon, Sun } from 'lucide-react';
 import { Logo } from '../components/Logo';
 import { openSettingsSection } from '../components/settings/sections';
 import { NAV_ITEMS, NAV_SECTIONS, type View } from '../navigation';
@@ -16,6 +16,13 @@ import { IconButton } from '../components/ui';
 // Bouton rapide du thème : choix explicite du thème inverse. « Automatique » (comme le
 // système) se règle dans Paramètres, carte « Affichage ».
 const themeLabel = (isDark: boolean) => (isDark ? 'Passer en thème clair' : 'Passer en thème sombre');
+
+// Mode discret : un bouton à bascule (aria-pressed), libellé fixe ; l'icône montre l'état
+// (œil barré quand les montants sont masqués). Aussi dans Paramètres › Affichage.
+const DiscreetButton = ({ discreet, onToggle }: { discreet: boolean; onToggle: () => void }) => (
+  <IconButton onClick={onToggle} label="Masquer les montants" aria-pressed={discreet} icon={discreet ? EyeOff : Eye}
+    title={discreet ? 'Montants masqués : cliquer pour les afficher' : 'Masquer les montants'} />
+);
 
 const NavButton = ({ active, onClick, icon: Icon, label }: { active: boolean; onClick: () => void; icon: React.ComponentType<{ className?: string }>; label: string }) => (
   <button
@@ -61,6 +68,9 @@ interface AppShellProps {
   onReconnect: () => void;
   isDark: boolean;
   onToggleTheme: () => void;
+  /** Mode discret : montants affichés en « •••• € » (réglage de cet appareil). */
+  discreet: boolean;
+  onToggleDiscreet: () => void;
   /** Déconnexion du menu latéral (ordinateur) ; confirmée si des modifications attendent. */
   onRequestLogout: (alwaysConfirm: boolean) => void;
   mainRef: React.RefObject<HTMLElement | null>;
@@ -71,7 +81,7 @@ interface AppShellProps {
   navAction?: React.ReactNode;
 }
 
-export const AppShell: React.FC<AppShellProps> = ({ view, setView, showParentalScreen, syncPhase, lastSavedAt, hasPendingEdits, onRetrySync, onReconnect, isDark, onToggleTheme, onRequestLogout, mainRef, children, overlays, navAction }) => {
+export const AppShell: React.FC<AppShellProps> = ({ view, setView, showParentalScreen, syncPhase, lastSavedAt, hasPendingEdits, onRetrySync, onReconnect, isDark, onToggleTheme, discreet, onToggleDiscreet, onRequestLogout, mainRef, children, overlays, navAction }) => {
   const [syncOpen, setSyncOpen] = useState(false);
   const openSync = () => setSyncOpen(true);
   return (
@@ -87,7 +97,10 @@ export const AppShell: React.FC<AppShellProps> = ({ view, setView, showParentalS
           <h1 className="text-2xl font-bold text-primary dark:text-on-surface flex items-center gap-3"><Logo className="w-9 h-9" /> Pécule</h1>
           <div className="mt-3 text-xs text-on-surface-variant font-medium flex items-center justify-between gap-2">
             <SyncStatus phase={syncPhase} lastSavedAt={lastSavedAt} variant="full" onOpen={openSync} />
-            <IconButton onClick={onToggleTheme} label={themeLabel(isDark)} icon={isDark ? Sun : Moon} className="-my-3 -mr-3" />
+            <div className="flex items-center -my-3 -mr-3">
+              <DiscreetButton discreet={discreet} onToggle={onToggleDiscreet} />
+              <IconButton onClick={onToggleTheme} label={themeLabel(isDark)} icon={isDark ? Sun : Moon} />
+            </div>
           </div>
         </div>
         {navAction && <div className="px-3 pt-1 pb-4">{navAction}</div>}
@@ -103,6 +116,7 @@ export const AppShell: React.FC<AppShellProps> = ({ view, setView, showParentalS
         <h1 className="text-[22px] font-bold text-primary dark:text-on-surface flex items-center gap-2"><Logo className="w-8 h-8" /> Pécule</h1>
         <div className="flex items-center gap-1 -mr-3">
           <SyncStatus phase={syncPhase} lastSavedAt={lastSavedAt} variant="short" onOpen={openSync} />
+          <DiscreetButton discreet={discreet} onToggle={onToggleDiscreet} />
           <IconButton onClick={onToggleTheme} label={themeLabel(isDark)} icon={isDark ? Sun : Moon} />
         </div>
       </header>

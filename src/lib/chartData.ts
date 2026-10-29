@@ -1,16 +1,17 @@
 // Aides pures pour les graphiques : graduations en euros, phrases de synthèse lues par
 // tous (et par les lecteurs d'écran), échantillonnage des tableaux de données.
-import { formatEUR, formatSignedEUR } from './format';
+import { formatEUR, formatSignedEUR, isDiscreetAmounts } from './format';
 import { parseISODate } from './dates';
 
 const K_FMT = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 1 });
 
 /**
  * Graduation d'axe en euros : « 1 200 € », ou « 12,5 k€ » dès que l'échelle atteint
- * 10 000 € (les libellés longs mangeaient la largeur du graphique sur mobile).
+ * 10 000 € (les libellés longs mangeaient la largeur du graphique sur mobile). En mode
+ * discret, « •••• € » comme tout montant.
  */
 export const formatAxisEUR = (value: number, scaleMax: number): string =>
-  Math.abs(scaleMax) >= 10_000 ? `${K_FMT.format(value / 1000)} k€` : formatEUR(value, 0);
+  Math.abs(scaleMax) >= 10_000 && !isDiscreetAmounts() ? `${K_FMT.format(value / 1000)} k€` : formatEUR(value, 0);
 
 /** Plus grande valeur absolue d'une série de points, pour choisir le format des graduations. */
 export const maxAbs = (values: number[]): number => values.reduce((m, v) => (Number.isFinite(v) ? Math.max(m, Math.abs(v)) : m), 0);

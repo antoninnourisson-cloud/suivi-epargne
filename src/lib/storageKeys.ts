@@ -82,6 +82,8 @@ export const STORAGE_KEYS = {
   themeChoice: { key: 'theme_choice', kind: 'preference' },
   /** Ancienne clé du thème, écrite même sans choix : reprise une fois par useTheme, puis effacée. */
   theme: { key: 'theme', kind: 'preference' },
+  /** Mode discret (« 1 ») : montants affichés en « •••• € » ; absent = montants visibles. */
+  discreetAmounts: { key: 'discreet_amounts', kind: 'preference' },
   dashboardDateRange: { key: 'dashboard_date_range', kind: 'preference' },
   homeMoreOpen: { key: 'home_more_open', kind: 'preference' },
   todoOpen: { key: 'todo_open', kind: 'preference' },

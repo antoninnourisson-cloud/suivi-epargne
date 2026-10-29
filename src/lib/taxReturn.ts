@@ -40,7 +40,7 @@
 // ================================================
 import { AccountMovement, AccountType, GlobalAppData, SavingsAccount } from '../types';
 import { computeAccruedInterest, computeDonationSummary, cryptoDisposalsOfYear, CRYPTO_EXEMPT_DISPOSALS, hasTaxableYearlyInterest, isInitialBalance } from './finance';
-import { elideDe, formatEUR } from './format';
+import { elideDe, formatEUR, plainEUR } from './format';
 import { countedPayslips } from './payslipChecks';
 
 export type TaxReturnSection = 'income' | 'savings' | 'deductions' | 'abroad' | 'crypto';
@@ -157,7 +157,7 @@ export const buildTaxReturnChecklist = (
   if (base && opts.allowanceRate) {
     const allowance = Math.min(base * opts.allowanceRate, opts.allowanceCap ?? Infinity);
     lines.push({ id: 'real-expenses', section: 'income', box: '1AK', label: 'Frais réels (facultatif)', confidence: 'info',
-      note: `L'abattement automatique de 10 % vaut environ ${Math.round(allowance).toLocaleString('fr-FR')} €. Déclarez vos frais réels (trajets, repas…) seulement s'ils dépassent ce montant.`,
+      note: `L'abattement automatique de 10 % vaut environ ${plainEUR(allowance)}. Déclarez vos frais réels (trajets, repas…) seulement s'ils dépassent ce montant.`,
       link: TAX_LINKS.realExpenses });
   }
 

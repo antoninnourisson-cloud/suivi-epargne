@@ -12,6 +12,7 @@ import type { FiscalProposal } from '../lib/fiscalWatch';
 import type { CancellingGroup } from '../lib/accountOps';
 import { isRestitutionMovement } from '../lib/accountOps';
 import { localTodayISO, parseISODate } from '../lib/dates';
+import { plainEUR } from '../lib/format';
 import {
   type CommandError, type CommandOk, type CommandPatch, type CommandState,
   saveAccount, deleteAccount, quickAdd, planMovementDeletion, deleteMovement, cancelDeposit, removeCancellingMovements,
@@ -184,7 +185,7 @@ export const useAccountActions = (doc: AppDoc, setters: Setters, addToast: AddTo
         deps.current.dialog.open({
           kind: 'confirm', confirmLabel: 'Appliquer',
           title: 'Utiliser les chiffres réels de cette fiche',
-          message: `Le Pilotage budgétaire affichera les montants exacts de la fiche de ${p.extracted.period || 'cette fiche'} (brut, charges, impôt réellement prélevé...) à la place de la formule théorique. Le brut annuel sera aussi mis à jour (${estimate.toLocaleString('fr-FR')} €, extrapolé), à la place de ${Math.round(docRef.current.config.grossAnnual).toLocaleString('fr-FR')} € actuellement.`,
+          message: `Le Pilotage budgétaire affichera les montants exacts de la fiche de ${p.extracted.period || 'cette fiche'} (brut, charges, impôt réellement prélevé...) à la place de la formule théorique. Le brut annuel sera aussi mis à jour (${plainEUR(estimate)}, extrapolé), à la place de ${plainEUR(docRef.current.config.grossAnnual)} actuellement.`,
           onConfirm: () => {
             s().patchConfig({ grossAnnual: estimate });
             s().setActivePayslipId(p.id);

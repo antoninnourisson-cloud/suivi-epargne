@@ -46,9 +46,10 @@ const useSeasonal = (): Seasonal | null => {
 
 /**
  * `doc` : le document affiché ; `fullData` : le même tel qu'il part sur Drive (avec l'écran
- * courant), recalculé seulement quand le document change.
+ * courant), recalculé seulement quand le document change. `discreet` : mode discret (montants
+ * masqués) ; les valeurs qui contiennent des montants en texte sont recalculées à son changement.
  */
-export const useDerivedData = (doc: AppDoc, fullData: AppDoc) => {
+export const useDerivedData = (doc: AppDoc, fullData: AppDoc, discreet = false) => {
   const c = doc.config;
   const today = useTodayDate();
   const seasonalMod = useSeasonal();
@@ -62,10 +63,12 @@ export const useDerivedData = (doc: AppDoc, fullData: AppDoc) => {
   const monthGoal = useMemo(() => computeMonthTarget(fullData, today).total, [fullData, today]);
   const monthlyPay = useMemo(() => computeMonthlyPay(fullData), [fullData]);
   // Événements à venir ; l'Accueil n'en montre que les premiers (homeAgenda, lib/home).
-  const agendaNext = useMemo(() => (seasonalMod ? seasonalMod.buildAgenda(fullData, today).events : NO_EVENTS), [seasonalMod, fullData, today]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- textes avec des montants : réécrits au passage en mode discret
+  const agendaNext = useMemo(() => (seasonalMod ? seasonalMod.buildAgenda(fullData, today).events : NO_EVENTS), [seasonalMod, fullData, today, discreet]);
   const lepTimeline = useMemo(() => lepTimelineFromData(fullData, today), [fullData, today]);
   // Saison de la déclaration de revenus (avril à début juin) : rappel dans « À faire ».
-  const taxReturnAlert = useMemo(() => (seasonalMod ? seasonalMod.buildTaxReturnAlert(fullData, today) : null), [seasonalMod, fullData, today]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- textes avec des montants : réécrits au passage en mode discret
+  const taxReturnAlert = useMemo(() => (seasonalMod ? seasonalMod.buildTaxReturnAlert(fullData, today) : null), [seasonalMod, fullData, today, discreet]);
   // Épargne de précaution : charges fixes + argent plaisir, multipliés par le nombre de mois choisi.
   const emergency = useMemo(
     () => computeEmergencyFund(doc.accounts, totalFixedCharges(doc.expenses, doc.subscriptions) + (c.leisureBudget || 0), c.emergencyMonths ?? DEFAULT_EMERGENCY_MONTHS),
@@ -99,7 +102,8 @@ export const useDerivedData = (doc: AppDoc, fullData: AppDoc) => {
   const hasParental = useMemo(() => doc.accounts.some(a => a.parentalCapital > 0), [doc.accounts]);
   const showParentalScreen = hasParental || !!doc.parentalRestitution?.done;
   // Clôture de l'année écoulée (lib/yearClosing) : la tâche de janvier-février de l'Accueil.
-  const yearClosing = useMemo(() => (seasonalMod ? seasonalMod.yearClosingStatus(fullData, today) : null), [seasonalMod, fullData, today]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- textes avec des montants : réécrits au passage en mode discret
+  const yearClosing = useMemo(() => (seasonalMod ? seasonalMod.yearClosingStatus(fullData, today) : null), [seasonalMod, fullData, today, discreet]);
   // Rendement supposé des placements sans taux saisi (performance observée, prudente) : le
   // même pour le Rendement, le simulateur « Et si… » et le plan solo (lib/performance).
   const projectionHypotheses = useMemo(() => withAssumedRates(doc.accounts), [doc.accounts]);
