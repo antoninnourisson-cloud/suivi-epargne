@@ -32,6 +32,8 @@
 //   sent:<sub>:<k>    rappels déjà envoyés (dédoublonnage, ~400 jours)
 //   health:cron       compte rendu de la dernière tâche quotidienne
 //   health:site       dernier contrôle des pages publiques (GET /status, 15 min)
+//   health:fiscal-watch, health:cron-log  dernier succès/échec de la veille du lundi et
+//                     10 derniers passages des crons, sans donnée personnelle (cronLog.ts)
 //   backup:<sub>:<date>  sauvegarde de secours CHIFFRÉE PAR L'APP (illisible ici), conservation
 //                     échelonnée (backupRetention.ts : 24 au plus), 1 an chacune
 //   backup-deletion:<sub>  effacement des copies programmé (7 jours, annulable)
@@ -55,6 +57,7 @@ import {
 import { sendPush, PushMessage } from './webpush';
 import { fetchFiscalSources, FiscalSource } from './fiscalSources';
 import { cachedSiteCheck } from './siteCheck';
+import { CronErrors, appendCronLog, readCronLog, readFiscalWatchHealth, recordFiscalWatchCron } from './cronLog';
 import { AiRunner, FISCAL_WATCH_CRON, LATEST_KEY, FAILURE_KEY, FiscalWatchRun, runAndStoreFiscalWatch, canRunOnDemand } from './fiscalWatchJob';
 import { isReminderEnabled } from '../../src/lib/notificationPrefs';
 import { computeReminders, applyDiscreetMode, isDiscreet, parisCivilDate } from './reminders';
@@ -736,15 +739,30 @@ const handleHealth = async (req: Request, env: Env): Promise<Response> => {
 
 /**
  * Sonde publique de la surveillance quotidienne (.github/workflows/monitor.yml) : le serveur
- * répond, et la dernière tâche quotidienne a-t-elle réussi ? Volontairement sans session et
- * sans détail (ni message d'erreur, ni nombre d'utilisateurs) : rien sur les utilisateurs.
+ * répond, la dernière tâche quotidienne a-t-elle réussi, à quand remonte la dernière veille
+ * fiscale réussie ? Volontairement sans session et sans détail (ni message d'erreur, ni nombre
+ * d'utilisateurs, seulement des catégories d'erreur) : rien sur les utilisateurs.
  */
 const handleStatus = async (req: Request, env: Env): Promise<Response> => {
-  const health = await env.STORE.get<CronHealth>('health:cron', 'json');
+  const [health, watch, history] = await Promise.all([
+    env.STORE.get<CronHealth>('health:cron', 'json'),
+    readFiscalWatchHealth(env.STORE),
+    readCronLog(env.STORE),
+  ]);
+  // Avant le premier passage suivi du cron, le dernier relevé réussi tient lieu de dernier succès.
+  const latest = watch ? null : await env.STORE.get<FiscalWatchRun>(LATEST_KEY, 'json').catch(() => null);
+  const fiscalWatch = watch
+    ? { lastSuccessAt: watch.lastSuccessAt, lastFailureAt: watch.lastFailureAt, ok: watch.ok }
+    : { lastSuccessAt: latest?.checkedAt ?? null, lastFailureAt: null, ok: latest ? true : null };
   // Contrôle du site publié par le serveur (la surveillance GitHub est bloquée par la
   // protection anti-robots de Cloudflare) ; résultat réutilisé 15 min.
   const site = await cachedSiteCheck(env.STORE, env.APP_URL).catch(() => null);
-  return json(req, env, { ok: true, cron: { lastRunAt: health?.lastRunAt ?? null, ok: health?.ok ?? null }, site });
+  return json(req, env, {
+    ok: true, cron: { lastRunAt: health?.lastRunAt ?? null, ok: health?.ok ?? null }, site,
+    // Veille fiscale du lundi et derniers passages des deux crons (heure, tâche, résultat,
+    // catégorie d'erreur) : worker/src/cronLog.ts.
+    fiscalWatch, history,
+  });
 };
 
 // ---------- Routes : sauvegarde de secours chiffrée ----------
@@ -846,7 +864,7 @@ const scheduleBackupDeletion = async (env: Env, sub: string, nowMs = Date.now())
 };
 
 /** Tâche quotidienne : efface les copies dont l'effacement programmé est arrivé à échéance. */
-const purgeDueBackupDeletions = async (env: Env, nowMs: number, errors: string[]): Promise<void> => {
+const purgeDueBackupDeletions = async (env: Env, nowMs: number, errors: CronErrors): Promise<void> => {
   let cursor: string | undefined;
   do {
     const page = await env.STORE.list({ prefix: 'backup-deletion:', cursor });
@@ -865,7 +883,7 @@ const purgeDueBackupDeletions = async (env: Env, nowMs: number, errors: string[]
         if (changed) await writeBackupDeletion(env, sub, { ...deletion, due: left }, nowMs);
       } catch (e) {
         console.error('backup deletion failed', e);
-        errors.push(e instanceof Error ? e.message : String(e));
+        errors.add(e);
       }
     }
     cursor = page.list_complete ? undefined : page.cursor;
@@ -1003,7 +1021,7 @@ const remindUser = async (env: Env, sub: string, now: Date): Promise<void> => {
  * constate un accès retiré chez Google, et tout est alors effacé comme dans /token. Une
  * panne passagère de Google ne purge rien.
  */
-const sweepUserRecords = async (env: Env, now: Date, errors: string[]): Promise<void> => {
+const sweepUserRecords = async (env: Env, now: Date, errors: CronErrors): Promise<void> => {
   let cursor: string | undefined;
   do {
     const page = await env.STORE.list({ prefix: USER_PREFIX, cursor });
@@ -1022,7 +1040,7 @@ const sweepUserRecords = async (env: Env, now: Date, errors: string[]): Promise<
         }
       } catch (e) {
         console.error('retention check failed', e);
-        errors.push(e instanceof Error ? e.message : String(e));
+        errors.add(e);
       }
     }
     cursor = page.list_complete ? undefined : page.cursor;
@@ -1032,7 +1050,7 @@ const sweepUserRecords = async (env: Env, now: Date, errors: string[]): Promise<
 const runDailyReminders = async (env: Env): Promise<void> => {
   const now = new Date();
   let usersProcessed = 0;
-  const errors: string[] = [];
+  const errors = new CronErrors();
   try {
     let cursor: string | undefined;
     do {
@@ -1040,21 +1058,41 @@ const runDailyReminders = async (env: Env): Promise<void> => {
       for (const k of page.keys) {
         usersProcessed++;
         try { await remindUser(env, k.name.slice('push:'.length), now); }
-        catch (e) { console.error('reminders failed', e); errors.push(e instanceof Error ? e.message : String(e)); }
+        catch (e) { console.error('reminders failed', e); errors.add(e); }
       }
       cursor = page.list_complete ? undefined : page.cursor;
     } while (cursor);
     await sweepUserRecords(env, now, errors);
     await purgeDueBackupDeletions(env, now.getTime(), errors);
   } catch (e) {
-    errors.push(e instanceof Error ? e.message : String(e));
+    errors.add(e);
   } finally {
     const health: CronHealth = {
-      lastRunAt: now.toISOString(), ok: errors.length === 0, usersProcessed,
-      ...(errors.length ? { error: `${errors.length} échec(s) : ${errors[0]}`.slice(0, 300) } : {}),
+      lastRunAt: now.toISOString(), ok: errors.count === 0, usersProcessed,
+      ...(errors.count ? { error: `${errors.count} échec(s) : ${errors.messages[0]}`.slice(0, 300) } : {}),
     };
     await env.STORE.put('health:cron', JSON.stringify(health));
+    // Historique public de /status : catégories d'erreur seulement, jamais le message.
+    await appendCronLog(env.STORE, { at: health.lastRunAt, cron: 'daily', ok: health.ok, errors: errors.categories })
+      .catch(e => console.error('cron log failed', e));
   }
+};
+
+/**
+ * Veille fiscale du lundi (cron) : son dernier succès et son dernier échec sont gardés pour
+ * /status, que la surveillance GitHub lit (alerte au-delà de 8 jours sans succès).
+ */
+const runScheduledFiscalWatch = async (env: Env): Promise<void> => {
+  const startedAt = new Date();
+  let ok = false;
+  try {
+    const r = await runAndStoreFiscalWatch(env.STORE, env.AI);
+    ok = r.ok;
+    console.log('fiscal watch', r.ok, Object.keys(r.values).length, 'values', r.neuronsUsed ?? r.neuronsEstimate, 'neurons');
+  } catch (e) {
+    console.error('fiscal watch failed', e);
+  }
+  await recordFiscalWatchCron(env.STORE, startedAt, ok).catch(e => console.error('fiscal watch health failed', e));
 };
 
 // ---------- Point d'entrée ----------
@@ -1141,10 +1179,7 @@ export default {
   async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
     // Deux crons (wrangler.toml) : la veille fiscale du lundi, et les rappels quotidiens.
     if (event.cron === FISCAL_WATCH_CRON) {
-      ctx.waitUntil(runAndStoreFiscalWatch(env.STORE, env.AI).then(
-        r => console.log('fiscal watch', r.ok, Object.keys(r.values).length, 'values', r.neuronsUsed ?? r.neuronsEstimate, 'neurons'),
-        e => console.error('fiscal watch failed', e),
-      ));
+      ctx.waitUntil(runScheduledFiscalWatch(env));
       return;
     }
     ctx.waitUntil(runDailyReminders(env));

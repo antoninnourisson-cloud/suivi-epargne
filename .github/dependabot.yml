@@ -2,12 +2,18 @@
 # Seules les versions mineures et correctives sont proposées automatiquement : une version
 # majeure demande souvent des changements de code et se fait à la main (calendrier de MAINTENANCE.md § 4, ROADMAP.md).
 # Les correctifs de sécurité restent proposés quelle que soit la version.
+# Délai de refroidissement (`cooldown`, audit du 29/10/2026) : une version n'est proposée
+# qu'une fois publiée depuis 7 jours, le temps qu'un paquet détourné soit repéré et retiré
+# (la CI et wrangler manipulent le jeton Cloudflare). Le délai ne touche que les mises à jour
+# de version : les mises à jour de sécurité de Dependabot restent immédiates.
 version: 2
 updates:
   - package-ecosystem: npm
     directory: /
     schedule:
       interval: monthly
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 5
     groups:
       app-minor-patch:
@@ -20,6 +26,8 @@ updates:
     directory: /worker
     schedule:
       interval: monthly
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 5
     groups:
       worker-minor-patch:
@@ -32,6 +40,8 @@ updates:
     directory: /edge
     schedule:
       interval: monthly
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 5
     groups:
       edge-minor-patch:
@@ -44,6 +54,8 @@ updates:
     directory: /
     schedule:
       interval: monthly
+    cooldown:
+      default-days: 7
     groups:
       actions-minor-patch:
         update-types: [minor, patch]

@@ -1,9 +1,9 @@
 name: Surveillance
 
-# Vérifie chaque matin que Pécule répond : site, pages publiques, serveur (et sa tâche
-# quotidienne), certificat TLS, en-têtes de sécurité. En cas de problème, ouvre (ou complète)
-# une issue « panne » : GitHub envoie alors un e-mail. Quand tout repasse au vert, l'issue
-# est commentée puis fermée. Voir MAINTENANCE.md, « Surveillance ».
+# Vérifie chaque matin que Pécule répond : site, pages publiques, serveur (sa tâche
+# quotidienne et la veille fiscale du lundi), certificat TLS, en-têtes de sécurité. En cas de
+# problème, ouvre (ou complète) une issue « panne » : GitHub envoie alors un e-mail. Quand
+# tout repasse au vert, l'issue est commentée puis fermée. Voir MAINTENANCE.md, « Surveillance ».
 on:
   schedule:
     # 06:30 UTC : avant la tâche quotidienne du serveur (07:00 UTC), dont on vérifie le
@@ -23,6 +23,8 @@ env:
   HOST: pecule-app.com
   # Tâche quotidienne du serveur jugée en retard au-delà de ce délai (elle tourne à 07:00 UTC).
   CRON_MAX_AGE_HOURS: 26
+  # Veille fiscale du serveur (cron du lundi, 05:00 UTC) : alerte au-delà de ce délai sans succès.
+  FISCAL_WATCH_MAX_AGE_DAYS: 8
   CERT_MIN_DAYS: 14
 
 jobs:
@@ -49,6 +51,7 @@ jobs:
           set -uo pipefail
           : > failures.md
           : > notices.md
+          : > history.md
           fail()   { echo "- **Échec** : $1" >> failures.md; echo "::error::$1"; }
           notice() { echo "- $1" >> notices.md; echo "::notice::$1"; }
           ok()     { echo "OK : $1"; }
@@ -73,6 +76,34 @@ jobs:
                 if [ "$cron_ok" = false ]; then fail "Tâche quotidienne du serveur : le dernier passage ($last) a échoué (détail : Cloudflare → Workers → suivi-epargne-api → Logs)"
                 elif [ "$age_h" -gt "$CRON_MAX_AGE_HOURS" ]; then fail "Tâche quotidienne du serveur : dernier passage il y a ${age_h} h ($last)"
                 else ok "Tâche quotidienne ($last)"; fi
+              fi
+
+              # Veille fiscale du lundi : un échec ne se voit pas dans l'app (elle retombe sur
+              # Gemini), d'où l'alerte si aucun succès depuis FISCAL_WATCH_MAX_AGE_DAYS jours.
+              # Champ absent (serveur antérieur au 29/10/2026) : rien à vérifier.
+              if jq -e '(.fiscalWatch | type) == "object"' status.json > /dev/null 2>&1; then
+                watch_last=$(jq -r '.fiscalWatch.lastSuccessAt // empty' status.json)
+                if [ -z "$watch_last" ]; then
+                  fail "Veille fiscale du serveur : aucun passage réussi enregistré (cron du lundi ; détail : Cloudflare → Workers → suivi-epargne-api → Logs)"
+                else
+                  watch_age_d=$(( ($(date -u +%s) - $(date -u -d "$watch_last" +%s)) / 86400 ))
+                  if [ "$watch_age_d" -gt "$FISCAL_WATCH_MAX_AGE_DAYS" ]; then fail "Veille fiscale du serveur : dernier succès il y a ${watch_age_d} jours ($watch_last)"
+                  else ok "Veille fiscale ($watch_last)"; fi
+                fi
+              fi
+
+              # Derniers passages des crons (heure, tâche, résultat, catégorie d'erreur : jamais
+              # de donnée personnelle), recopiés dans l'issue « panne ».
+              jq -r '
+                {drive: "lecture Drive", notification: "envoi de notification", token: "jeton", watch: "veille", other: "autre"} as $label
+                | (.history // [])[]
+                | "| " + (.at | tostring)
+                  + " | " + (if .cron == "fiscal-watch" then "veille fiscale" else "rappels quotidiens" end)
+                  + " | " + (if .ok == true then "réussi" else "échec" end)
+                  + " | " + (if .ok == true then "" else ((.errors // []) | map($label[tostring] // "autre") | join(", ")) end)
+                  + " |"' status.json > history.rows 2>/dev/null || : > history.rows
+              if [ -s history.rows ]; then
+                { echo '| Heure (UTC) | Tâche | Résultat | Erreur |'; echo '|---|---|---|---|'; cat history.rows; } > history.md
               fi
             fi
           fi
@@ -153,6 +184,7 @@ jobs:
             echo
             if [ -s failures.md ]; then cat failures.md; else echo 'Tout va bien.'; fi
             cat notices.md
+            if [ -s history.md ]; then echo; echo '#### Derniers passages des tâches du serveur'; echo; cat history.md; fi
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Issue « panne »
@@ -172,6 +204,7 @@ jobs:
               echo
               cat failures.md
               if [ -s notices.md ]; then echo; echo "Pour information :"; echo; cat notices.md; fi
+              if [ -s history.md ]; then echo; echo "Derniers passages des tâches du serveur :"; echo; cat history.md; fi
               echo
               echo "Journal complet : $RUN_URL"
               echo

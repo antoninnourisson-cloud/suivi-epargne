@@ -6,8 +6,9 @@ import viteConfig from './vite.config';
 const CORE = '{src/lib,worker/src,edge/src}/**/*.ts';
 // Ce qui protège les données : synchronisation Drive (façade usePortfolioData et ses morceaux
 // dans src/hooks/portfolio), copies locales, sauvegarde de secours, session serveur, verrou
-// de l'appareil.
-const DATA_SAFETY = '{src/hooks/usePortfolioData,src/hooks/portfolio/*,src/services/{googleDriveService,localVault,cloudBackup,backendService,setAsideVersions,appLockService}}.ts';
+// de l'appareil, et autour d'eux dans src/app : les actions qui écrivent les comptes et les
+// mouvements (useAccountActions) et la session Google de l'appareil (useAuthSession).
+const DATA_SAFETY = '{src/hooks/usePortfolioData,src/hooks/portfolio/*,src/services/{googleDriveService,localVault,cloudBackup,backendService,setAsideVersions,appLockService},src/app/{useAccountActions,useAuthSession}}.ts';
 
 // Les tests de bout en bout (Playwright) ont leur propre lanceur.
 const EXCLUDE = ['node_modules/**', 'dist/**', 'dist-e2e/**', 'e2e/**', 'worker/node_modules/**', 'edge/node_modules/**'];

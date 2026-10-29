@@ -57,7 +57,13 @@ jobs:
   worker:
     name: Déploiement du serveur
     needs: [checks, cloudflare]
-    if: ${{ needs.cloudflare.outputs.ok == 'true' }}
+    # Le jeton Cloudflare ne sert qu'à main (push ou lancement manuel) et aux retours arrière
+    # depuis un tag v* : un « Run workflow » lancé sur une branche de travail ne met plus en
+    # production un serveur ou des en-têtes non fusionnés (audit du 29/10/2026, SEC-06).
+    # L'environnement « cloudflare » est limité à main et aux tags v* dans Settings →
+    # Environments (MAINTENANCE.md) : double verrou si la condition venait à être modifiée.
+    if: ${{ needs.cloudflare.outputs.ok == 'true' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) }}
+    environment: cloudflare
     runs-on: ubuntu-latest
     timeout-minutes: 10
     concurrency:
@@ -91,7 +97,9 @@ jobs:
   edge:
     name: Déploiement des en-têtes de sécurité
     needs: [checks, cloudflare]
-    if: ${{ needs.cloudflare.outputs.ok == 'true' }}
+    # Même garde que le job worker (main ou tag v*, environnement « cloudflare »).
+    if: ${{ needs.cloudflare.outputs.ok == 'true' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) }}
+    environment: cloudflare
     runs-on: ubuntu-latest
     timeout-minutes: 10
     concurrency:

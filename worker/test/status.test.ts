@@ -19,13 +19,34 @@ describe('GET /status', () => {
   it("répond sans session, même avant la première tâche quotidienne", async () => {
     const res = await status(makeEnv(await withSite(new MemoryKV())));
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ ok: true, cron: { lastRunAt: null, ok: null }, site: SITE });
+    expect(await res.json()).toEqual({
+      ok: true, cron: { lastRunAt: null, ok: null }, site: SITE,
+      fiscalWatch: { lastSuccessAt: null, lastFailureAt: null, ok: null }, history: [],
+    });
   });
 
   it("ne rend que l'heure et le résultat de la tâche, sans détail", async () => {
     const kv = await withSite(new MemoryKV());
     await kv.put('health:cron', JSON.stringify({ lastRunAt: '2026-10-07T07:00:00.000Z', ok: false, error: 'détail interne', usersProcessed: 3 }));
     const body = await (await status(makeEnv(kv))).json();
-    expect(body).toEqual({ ok: true, cron: { lastRunAt: '2026-10-07T07:00:00.000Z', ok: false }, site: SITE });
+    expect(body).toEqual({
+      ok: true, cron: { lastRunAt: '2026-10-07T07:00:00.000Z', ok: false }, site: SITE,
+      fiscalWatch: { lastSuccessAt: null, lastFailureAt: null, ok: null }, history: [],
+    });
+  });
+
+  it('rend la veille fiscale du lundi et les derniers passages des crons, sans détail', async () => {
+    const kv = await withSite(new MemoryKV());
+    await kv.put('health:fiscal-watch', JSON.stringify({ lastSuccessAt: '2026-10-19T05:00:00.000Z', lastFailureAt: '2026-10-26T05:00:00.000Z', ok: false }));
+    const history = [
+      { at: '2026-10-28T07:00:00.000Z', cron: 'daily', ok: false, errors: ['drive', 'token'] },
+      { at: '2026-10-26T05:00:00.000Z', cron: 'fiscal-watch', ok: false, errors: ['watch'] },
+    ];
+    await kv.put('health:cron-log', JSON.stringify(history));
+    const body = await (await status(makeEnv(kv))).json();
+    expect(body).toMatchObject({
+      fiscalWatch: { lastSuccessAt: '2026-10-19T05:00:00.000Z', lastFailureAt: '2026-10-26T05:00:00.000Z', ok: false },
+      history,
+    });
   });
 });
