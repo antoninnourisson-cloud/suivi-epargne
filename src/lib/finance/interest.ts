@@ -344,7 +344,7 @@ export const computeExpectedYearInterest = (
 };
 
 /** Libellé qui désigne des intérêts (« Intérêts », « intérêts 2026 », « Interets »…). */
-const isInterestLabel = (label: string | undefined) => /(^|[^\p{L}])int[ée]r[êe]ts?($|[^\p{L}])/iu.test(label || '');
+export const isInterestLabel =(label: string | undefined) => /(^|[^\p{L}])int[ée]r[êe]ts?($|[^\p{L}])/iu.test(label || '');
 
 /**
  * Intérêts à proposer quand un solde remonte (« Actualiser ») : ceux de l'année précédente,

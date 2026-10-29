@@ -162,6 +162,23 @@ describe('rythme et projection', () => {
     expect(savingsProjection([acc('b', AccountType.LIVRET_A, 100)], now)).toBeNull();
   });
 
+  it("une baisse de la bourse ne se lit pas comme une épargne ralentie (rythme = versements − retraits)", () => {
+    const now = new Date(2026, 9, 20);
+    const day = (n: number) => { const d = new Date(now); d.setDate(d.getDate() - n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+    // 300 € versés chaque mois sur les deux trimestres ; le PEA perd 2 000 € au dernier, et le
+    // livret reçoit 150 € d'intérêts (hors épargne).
+    const pea = acc('pea', AccountType.PEA, 8000, { movements: [
+      ...[170, 140, 110, 80, 50, 20].map(n => mv(day(n), 300)),
+      mv(day(10), 2000, 'OUT', { kind: 'valuation', label: 'Valorisation (-)' }),
+    ] });
+    const livret = acc('la', AccountType.LIVRET_A, 5000, { movements: [mv(day(5), 150, 'IN', { kind: 'adjustment', label: 'Intérêts' })] });
+    const p = savingsProjection([pea, livret], now)!;
+    expect(p.monthlyRate).toBeCloseTo(300, 6);
+    expect(p.drift).toBeNull();
+    expect(p.totalNow).toBe(13000);
+    expect(p.in6).toBeCloseTo(13000 + 1800, 6);
+  });
+
   it('averages full months that moved, never the current one', () => {
     expect(averageFullMonthRate([{ month: '2026-08', saved: 100, rate: 10 }, { month: '2026-09', saved: 0, rate: 0 }, { month: '2026-10', saved: 900, rate: 90 }])).toBe(10);
     expect(averageFullMonthRate([{ month: '2026-10', saved: 1, rate: 5 }])).toBeNull();

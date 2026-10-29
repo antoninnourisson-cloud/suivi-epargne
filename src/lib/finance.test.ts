@@ -651,6 +651,23 @@ describe('computeRecentSavingsRate', () => {
     // Fenêtre se terminant aujourd'hui (bien après) ne contient plus ce dépôt isolé.
     expect(computeRecentSavingsRate(accounts, 90, new Date('2026-06-01'))).toBeNull();
   });
+
+  it('ne compte que les versements et retraits : ni intérêts, ni valorisation, ni parents, ni compte courant', () => {
+    const now = new Date('2026-01-10T00:00:00');
+    const accounts = [
+      { type: AccountType.LIVRET_A, movements: [
+        { id: '1', date: '2025-12-31', amount: 120, label: 'Intérêts 2025', type: 'IN' as const, kind: 'adjustment' as const },
+        { id: '2', date: '2025-12-05', amount: 400, label: 'Versement', type: 'IN' as const },
+        { id: '3', date: '2025-12-06', amount: 1000, label: 'Part des parents (+)', type: 'IN' as const, kind: 'parental' as const },
+        { id: '4', date: '2025-11-20', amount: 100, label: 'Retrait', type: 'OUT' as const },
+      ] },
+      { type: AccountType.CTO, movements: [{ id: '5', date: '2025-12-15', amount: 900, label: 'Valorisation (+)', type: 'IN' as const, kind: 'valuation' as const }] },
+      { type: AccountType.COMPTE_COURANT, movements: [{ id: '6', date: '2025-12-01', amount: 3000, label: 'Paie', type: 'IN' as const }] },
+    ];
+    expect(computeRecentSavingsRate(accounts, 90, now)).toBeCloseTo(100, 5); // (400 − 100) / 3
+    // Rien que des intérêts et une valorisation : pas de rythme à extrapoler.
+    expect(computeRecentSavingsRate([accounts[1], { movements: [accounts[0].movements[0]] }], 90, now)).toBeNull();
+  });
 });
 
 describe('payslipSuperNet', () => {

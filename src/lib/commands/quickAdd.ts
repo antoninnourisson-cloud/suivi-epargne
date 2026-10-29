@@ -2,6 +2,7 @@
 // paie, mouvements récurrents).
 import type { AccountMovement } from '../../types';
 import { applyMovement, canWithdrawOwn, restoreBalances, round2, snapshotBalances } from '../accountOps';
+import { isInterestLabel } from '../finance/interest';
 import { formatEUR, formatSignedEUR } from '../format';
 import { CommandResult, CommandState, fail } from './types';
 
@@ -16,9 +17,16 @@ export interface QuickAddInput {
 }
 
 /**
+ * Dépôt dont le libellé parle d'intérêts (puce « Intérêts », « Intérêts 2026 »…) : rangé en
+ * `adjustment`, comme dans Actualiser et la lecture d'un relevé. Sans cela, il comptait comme
+ * de l'épargne (« Placé », taux d'épargne, bons mois).
+ */
+export const isQuickAddInterest = (input: Pick<QuickAddInput, 'type' | 'label'>) => input.type === 'IN' && isInterestLabel(input.label);
+
+/**
  * Enregistre le mouvement (arrondi au centime) et met à jour les versements cumulés d'un
- * placement. Refuse un retrait supérieur à la part propre : le capital des parents ne sort
- * jamais par ici.
+ * placement (pas pour des intérêts : ce ne sont pas des versements). Refuse un retrait
+ * supérieur à la part propre : le capital des parents ne sort jamais par ici.
  */
 export const quickAdd = (state: CommandState, input: QuickAddInput): CommandResult<{ movementId: string }> => {
   const account = state.accounts.find(a => a.id === input.accountId);
@@ -28,14 +36,18 @@ export const quickAdd = (state: CommandState, input: QuickAddInput): CommandResu
   if (input.type === 'OUT' && !canWithdrawOwn(account, amount)) {
     return fail('forbidden', `Retrait impossible : votre part sur ${account.name} n'est que de ${formatEUR(account.ownedAmount)}.`);
   }
-  const movement: AccountMovement = { id: input.id ?? crypto.randomUUID(), date: input.date, amount, label: input.label, type: input.type };
+  const interest = isQuickAddInterest(input);
+  const movement: AccountMovement = {
+    id: input.id ?? crypto.randomUUID(), date: input.date, amount, label: input.label, type: input.type,
+    ...(interest ? { kind: 'adjustment' as const } : {}),
+  };
   const snap = snapshotBalances(state.accounts, [account.id]);
   return {
     ok: true,
     movementId: movement.id,
     next: { accounts: state.accounts.map(a => (a.id === account.id ? applyMovement(a, movement, 1, { trackDeposits: true }) : a)) },
     // Le montant figure dans le message : une faute de frappe se voit (et s'annule) tout de suite.
-    message: `${input.label} : ${formatSignedEUR(input.type === 'IN' ? amount : -amount)} sur ${account.name}`,
+    message: `${input.label} : ${formatSignedEUR(input.type === 'IN' ? amount : -amount)} sur ${account.name}${interest ? ', comptés comme intérêts (hors épargne)' : ''}`,
     undo: current => ({ accounts: restoreBalances(current.accounts, snap, [movement.id]) }),
   };
 };

@@ -18,9 +18,20 @@ const acc = (over: Partial<SavingsAccount>): SavingsAccount => ({
 });
 
 describe('prélèvements sociaux 2026 par produit', () => {
-  it('17,2 % : assurance vie, PEL, CEL ; 18,6 % : le reste', () => {
-    for (const t of [AccountType.ASSURANCE_VIE, AccountType.PEL, AccountType.CEL]) expect(socialChargesRateFor(t, CFG)).toBe(0.172);
-    for (const t of [AccountType.LIVRET_BANCAIRE, AccountType.COMPTE_A_TERME, AccountType.CTO, AccountType.PEA, AccountType.AUTRE]) expect(socialChargesRateFor(t, CFG)).toBe(0.186);
+  // Ce test figeait l'erreur (tout PEL et tout CEL à 17,2 %) : corrigé d'après
+  // impots.gouv.fr « Les revenus mobiliers » et l'art. L136-8 IV du code de la sécurité sociale.
+  it('17,2 % : assurance vie, CEL ouvert avant 2018, PEL ouvert avant 2018 (12 premières années) ; 18,6 % : le reste', () => {
+    const rate = (type: AccountType, openingDate?: string) => socialChargesRateFor({ type, openingDate }, CFG, NOW);
+    expect(rate(AccountType.ASSURANCE_VIE)).toBe(0.172);
+    expect(rate(AccountType.PEL, '2015-03-01')).toBe(0.172);
+    expect(rate(AccountType.CEL, '2016-06-01')).toBe(0.172);
+    expect(rate(AccountType.CEL, '2017-12-31')).toBe(0.172);
+    expect(rate(AccountType.PEL, '2019-05-01')).toBe(0.186);
+    expect(rate(AccountType.PEL, '2018-01-01')).toBe(0.186);
+    expect(rate(AccountType.CEL, '2020-02-01')).toBe(0.186);
+    expect(rate(AccountType.PEL, '2014-10-21')).toBe(0.186); // ouvert avant 2018, mais 12 ans pile
+    expect(rate(AccountType.PEL)).toBe(0.186); // date inconnue : pas d'exception non prouvée
+    for (const t of [AccountType.LIVRET_BANCAIRE, AccountType.COMPTE_A_TERME, AccountType.CTO, AccountType.PEA, AccountType.AUTRE]) expect(rate(t, '2010-01-01')).toBe(0.186);
   });
 });
 
@@ -55,17 +66,21 @@ describe('net des gains', () => {
     }
   });
 
-  it('PEL ancien : sans impôt sur le revenu, 17,2 % sociaux ; PEL récent : PFU à 30 %', () => {
-    expect(computeCapitalGainsTax({ type: AccountType.PEL, openingDate: '2016-01-01' }, 100, CFG, NOW)).toMatchObject({ regime: 'EXONERE_IR', incomeTax: 0 });
+  // L'ancienne version attendait 70 € (PFU à 30 %) pour le PEL récent : c'était l'erreur.
+  it('PEL ancien : sans impôt sur le revenu, 17,2 % sociaux ; PEL récent : PFU à 31,4 %', () => {
+    const old = computeCapitalGainsTax({ type: AccountType.PEL, openingDate: '2016-01-01' }, 100, CFG, NOW);
+    expect(old).toMatchObject({ regime: 'EXONERE_IR', incomeTax: 0 });
+    expect(old.socialCharges).toBeCloseTo(17.2, 9);
     const recent = computeCapitalGainsTax({ type: AccountType.PEL, openingDate: '2020-01-01' }, 100, CFG, NOW);
     expect(recent.regime).toBe('PFU');
-    expect(recent.netInterest).toBeCloseTo(70, 9);
+    expect(recent.netInterest).toBeCloseTo(68.6, 9);
+    expect(computeCapitalGainsTax({ type: AccountType.CEL, openingDate: '2020-01-01' }, 100, CFG, NOW).socialCharges).toBeCloseTo(18.6, 9);
   });
 
   it('taux net de la projection : livret bancaire 3 % → 3 × (1 − 31,4 %) ; PEL ancien 2 % → 2 × (1 − 17,2 %)', () => {
     expect(netAnnualRate({ type: AccountType.LIVRET_BANCAIRE, interestRate: 3 }, CFG, NOW)).toBeCloseTo(3 * (1 - 0.186 - 0.128), 9);
     expect(netAnnualRate({ type: AccountType.PEL, interestRate: 2, openingDate: '2016-01-01' }, CFG, NOW)).toBeCloseTo(2 * (1 - 0.172), 9);
-    expect(netAnnualRate({ type: AccountType.CEL, interestRate: 1.25, openingDate: '2020-01-01' }, CFG, NOW)).toBeCloseTo(1.25 * (1 - 0.172 - 0.128), 9);
+    expect(netAnnualRate({ type: AccountType.CEL, interestRate: 1.25, openingDate: '2020-01-01' }, CFG, NOW)).toBeCloseTo(1.25 * (1 - 0.186 - 0.128), 9);
   });
 
   it('compte-titres : versements suivis, plus-value imposée au PFU au retrait', () => {

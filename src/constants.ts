@@ -43,7 +43,7 @@ export const LATEST_TAX_SCALE = TAX_SCALES[TAX_SCALES.length - 1];
 export const DEFAULT_STANDARD_ALLOWANCE_CAP = 14555;
 export const DEFAULT_STANDARD_ALLOWANCE_MIN = 509;
 export const DEFAULT_DECOTE = { single: 897, rate: 0.4525, threshold: 1982 };
-// Prélèvements sociaux 2026 (LFSS 2026) : 18,6 % en général, 17,2 % sur l'assurance vie.
+// Prélèvements sociaux 2026 (LFSS 2026) : 18,6 % en général, 17,2 % sur l'assurance vie et l'épargne logement d'avant 2018 (voir socialChargesRateFor).
 const SOCIAL_CHARGES_2026 = 0.186;
 export const SOCIAL_CHARGES_LIFE_INSURANCE = 0.172;
 

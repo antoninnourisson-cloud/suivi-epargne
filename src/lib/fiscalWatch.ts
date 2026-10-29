@@ -143,7 +143,7 @@ export const diffFiscalWatch = (r: FiscalWatchResult, fiscal: FiscalConfig, acco
   field('lepIncomeCeiling', 'Plafond de revenus LEP (1 part)', r.lepIncomeCeilingOnePart, 15000, 40000, fiscal.lepIncomeCeiling, eur, 0.5, true);
   field('lepCeilingPerHalfPart', 'Plafond LEP : ajout par demi-part', r.lepPerHalfPart, 2000, 15000, fiscal.lepCeilingPerHalfPart, eur, 0.5, true);
   field('socialChargesCapital', 'Prélèvements sociaux (placements)', r.socialChargesGeneral, 0.1, 0.3, fiscal.socialChargesCapital, n => pct(n * 100), 0.0005);
-  field('socialChargesLifeInsurance', 'Prélèvements sociaux (assurance vie, PEL, CEL)', r.socialChargesLifeInsurance, 0.1, 0.3, fiscal.socialChargesLifeInsurance, n => pct(n * 100), 0.0005);
+  field('socialChargesLifeInsurance', 'Prélèvements sociaux (assurance vie, PEL et CEL d\'avant 2018)', r.socialChargesLifeInsurance, 0.1, 0.3, fiscal.socialChargesLifeInsurance, n => pct(n * 100), 0.0005);
   field('standardAllowanceCap', 'Plafond de l\'abattement de 10 %', r.allowanceCap, 10000, 25000, fiscal.standardAllowanceCap, eur, 0.5, true);
   field('standardAllowanceMin', 'Minimum de l\'abattement de 10 %', r.allowanceMin, 300, 1000, fiscal.standardAllowanceMin, eur, 0.5, true);
   // Dons à 75 % : les pages officielles citent encore l'ancien plafond (1 000 € pour les dons

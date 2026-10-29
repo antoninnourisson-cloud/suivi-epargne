@@ -30,6 +30,13 @@ export interface BalanceUpdate {
   interest?: number;
   /** Libellé du mouvement d'intérêts (« Intérêts 2026 »). */
   interestLabel?: string;
+  /**
+   * Date du mouvement d'intérêts quand elle diffère du relevé : les intérêts d'une année,
+   * crédités au 31 décembre et vus en janvier, sont datés `AAAA-12-31` (sinon ils tombaient
+   * dans l'année suivante : patrimoine de fin d'année et « Votre année » sous-estimés).
+   * Jamais après la date du relevé.
+   */
+  interestDate?: string;
   /** Placements suivis : argent réellement versé (+) ou retiré (−) ; le reste de l'écart est une valorisation. */
   cashFlow?: number;
 }
@@ -60,15 +67,16 @@ export const planBalanceUpdate = (acc: SavingsAccount, u: BalanceUpdate): { acco
   if (cash < 0 && -cash > acc.ownedAmount + EPS) return { error: `${name} : retrait supérieur à votre part (${formatEUR(acc.ownedAmount, 2)}).` };
 
   const created: AccountMovement[] = [];
-  const push = (amount: number, label: string, kind?: AccountMovement['kind'], signed = true) => {
+  const push = (amount: number, label: string, kind?: AccountMovement['kind'], signed = true, date = u.date) => {
     const a = round2(amount);
     if (Math.abs(a) <= 0.001) return;
     created.push({
-      id: crypto.randomUUID(), date: u.date, amount: Math.abs(a), type: a > 0 ? 'IN' : 'OUT',
+      id: crypto.randomUUID(), date, amount: Math.abs(a), type: a > 0 ? 'IN' : 'OUT',
       label: signed ? `${label} (${a > 0 ? '+' : '-'})` : label, ...(kind ? { kind } : {}),
     });
   };
-  push(interest, u.interestLabel?.trim() || 'Intérêts', 'adjustment', false);
+  const interestDate = u.interestDate && ISO_DAY.test(u.interestDate) && u.interestDate < u.date ? u.interestDate : u.date;
+  push(interest, u.interestLabel?.trim() || 'Intérêts', 'adjustment', false, interestDate);
   if (tracked) {
     push(cash, cash > 0 ? 'Versement' : 'Retrait');
     push(ownDiff - interest - cash, 'Valorisation', 'valuation');

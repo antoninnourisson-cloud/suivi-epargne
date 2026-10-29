@@ -54,7 +54,7 @@ const incomeTaxShare = (account: { type: AccountType; openingDate?: string }, fi
  * - Livret A, LDDS, LEP : le taux affiché, sans impôt ni frais.
  * - Autres : taux − frais de gestion éventuels (le taux servi d'un fonds euros est publié
  *   NET de frais : les frais ne concernent que les unités de compte), puis − prélèvements
- *   sociaux (17,2 % sur l'assurance vie, 18,6 % ailleurs en 2026) − impôt sur le revenu
+ *   sociaux (17,2 % sur l'assurance vie et l'épargne logement d'avant 2018, 18,6 % ailleurs en 2026) − impôt sur le revenu
  *   de 12,8 % (PFU) quand il est dû : crypto, compte-titres, livret bancaire, compte à terme,
  *   « Autre » et compte courant toujours, PEL et CEL ouverts depuis 2018 (ou PEL ancien de
  *   plus de 12 ans), PEA de moins de 5 ans, assurance vie de moins de 8 ans. Une assurance vie plus ancienne est
@@ -70,7 +70,7 @@ export const netAnnualRate = (
   const rate = account.interestRate || 0;
   if (TAX_FREE.includes(account.type)) return rate;
   const afterFees = Math.max(0, rate - (account.managementFee || 0));
-  return afterFees * (1 - socialChargesRateFor(account.type, fiscalConfig) - incomeTaxShare(account, fiscalConfig, asOfDate));
+  return afterFees * (1 - socialChargesRateFor(account, fiscalConfig, asOfDate) - incomeTaxShare(account, fiscalConfig, asOfDate));
 };
 
 /**

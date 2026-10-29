@@ -1,7 +1,7 @@
 // Revenus : impôt par tranches, décote, super net.
 // Partie de src/lib/finance.ts (qui réexporte tout) : importez depuis '../finance'.
-import { FiscalConfig, TaxBracket, WorkBenefits, AccountType } from '../../types';
-import { DEFAULT_STANDARD_ALLOWANCE_CAP, DEFAULT_STANDARD_ALLOWANCE_MIN, DEFAULT_DECOTE, SOCIAL_CHARGES_LIFE_INSURANCE } from '../../constants';
+import { FiscalConfig, TaxBracket, WorkBenefits } from '../../types';
+import { DEFAULT_STANDARD_ALLOWANCE_CAP, DEFAULT_STANDARD_ALLOWANCE_MIN, DEFAULT_DECOTE } from '../../constants';
 
 export interface IncomeInput {
   grossAnnual: number;
@@ -80,16 +80,6 @@ export const applyDecote = (grossTax: number, cfg: Pick<FiscalConfig, 'decote'>)
   if (!(grossTax > 0) || grossTax >= d.threshold) return Math.max(0, grossTax);
   return Math.max(0, grossTax - Math.max(0, d.single - d.rate * grossTax));
 };
-
-/**
- * Prélèvements sociaux applicables aux gains d'un compte. En 2026, l'assurance vie, le PEL et
- * le CEL restent à 17,2 % (`socialChargesLifeInsurance`) ; le reste passe à 18,6 % (livrets
- * bancaires, comptes à terme, PEA, compte-titres…). Vérifié le 2026-10-21 :
- * https://www.service-public.gouv.fr/particuliers/vosdroits/F2329
- */
-export const socialChargesRateFor = (type: AccountType, cfg: FiscalConfig): number =>
-  type === AccountType.ASSURANCE_VIE || type === AccountType.PEL || type === AccountType.CEL
-    ? (cfg.socialChargesLifeInsurance ?? SOCIAL_CHARGES_LIFE_INSURANCE) : cfg.socialChargesCapital;
 
 // Part de la CSG/CRDS non déductible (2,4 % + 0,5 % sur 98,25 % du brut) : retenue sur le
 // salaire, mais imposable. L'oublier sous-estime le net imposable d'environ 2,85 % du brut.

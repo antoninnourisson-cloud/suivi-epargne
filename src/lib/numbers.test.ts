@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { fractionToPercent, parseFrenchNumber, percentToFraction, safeNumber } from './numbers';
+import fc from 'fast-check';
+import { fractionToPercent, isAmbiguousThousands, parseFrenchNumber, percentToFraction, safeNumber } from './numbers';
 
 describe('parseFrenchNumber', () => {
   it('accepte la virgule décimale française', () => {
@@ -47,6 +48,53 @@ describe('parseFrenchNumber', () => {
   it('accepte zéro et les négatifs (le clamp éventuel est la responsabilité de l’appelant)', () => {
     expect(parseFrenchNumber('0')).toBe(0);
     expect(parseFrenchNumber('-5,5')).toBe(-5.5);
+  });
+});
+
+describe('formats ambigus ou exotiques refusés (FIN-06)', () => {
+  it('« 12.500 » : point des milliers ou décimales ? refusé au lieu de lire 12,5', () => {
+    for (const t of ['12.500', '1.250', '-1.250', '999.000', '12.500 €', '+12.500']) {
+      expect(parseFrenchNumber(t)).toBeNull();
+      expect(isAmbiguousThousands(t)).toBe(true);
+    }
+  });
+
+  it('les formats sans ambiguïté restent lisibles', () => {
+    expect(parseFrenchNumber('12 500')).toBe(12500);
+    expect(parseFrenchNumber('12500')).toBe(12500);
+    expect(parseFrenchNumber('12 500,50')).toBe(12500.5);
+    expect(parseFrenchNumber('12500,5')).toBe(12500.5);
+    expect(parseFrenchNumber('12.5')).toBe(12.5);
+    expect(parseFrenchNumber('12.50')).toBe(12.5);
+    expect(parseFrenchNumber('1234.567')).toBe(1234.567); // 4 chiffres avant le point : pas des milliers
+    expect(parseFrenchNumber('0.125')).toBe(0.125);        // un groupe de milliers ne suit jamais « 0 »
+    expect(parseFrenchNumber('1,725')).toBe(1.725);        // la virgule est toujours décimale (taux)
+    expect(parseFrenchNumber('0,2232')).toBe(0.2232);
+    expect(parseFrenchNumber(',5')).toBe(0.5);
+    expect(parseFrenchNumber('+5')).toBe(5);
+    expect(isAmbiguousThousands('12,500')).toBe(false);
+    expect(isAmbiguousThousands('12.5')).toBe(false);
+  });
+
+  it('exposant, hexadécimal, binaire, séparateurs multiples : refusés', () => {
+    for (const t of ['2,5e3', '1e5', '0x10', '0b11', '0o7', '1.234,56', '1,234.56', '1.2.3', '1_000', '.', ',', '-', '12-3']) {
+      expect(parseFrenchNumber(t)).toBeNull();
+    }
+  });
+
+  it('propriété : tout montant réaffiché à la française (toLocaleString) se relit à l’identique', () => {
+    fc.assert(fc.property(fc.integer({ min: -100_000_000, max: 100_000_000 }), cents => {
+      const n = cents / 100;
+      const shown = n.toLocaleString('fr-FR', { maximumFractionDigits: 2 });
+      expect(parseFrenchNumber(shown)).toBe(n);
+      expect(parseFrenchNumber(`${shown} €`)).toBe(n);
+    }), { numRuns: 300 });
+  });
+
+  it('propriété : jamais de lecture 1 000 fois trop petite d’un nombre « à milliers pointés »', () => {
+    fc.assert(fc.property(fc.integer({ min: 1, max: 999 }), fc.integer({ min: 0, max: 999 }), (head, tail) => {
+      expect(parseFrenchNumber(`${head}.${String(tail).padStart(3, '0')}`)).toBeNull();
+    }), { numRuns: 300 });
   });
 });
 

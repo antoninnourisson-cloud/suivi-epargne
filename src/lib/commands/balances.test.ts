@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { AccountType, SavingsAccount } from '../../types';
 import { computeGoodMonths, computePayReview } from '../motivation';
-import { computeMonthSavedAmount, suggestCreditedInterest } from '../finance';
+import { computeAccountBalanceAtDate, computeMonthSavedAmount, suggestCreditedInterest } from '../finance';
 import { breakdownDraft, draftToUpdate, type Draft } from '../../components/update/draft';
 import { applyPatch, CommandState, quickAdd, updateBalances } from './index';
 
@@ -62,6 +62,24 @@ describe('intérêts crédités proposés à part', () => {
     // Sans la ventilation, le même relevé compterait 540 € d'épargne (un « bon mois »).
     const legacy = applyPatch({ accounts: [livretA()] }, ok(updateBalances({ accounts: [livretA()] }, { updates: [{ accountId: 'la', date: '2027-01-05', owned: 10540, parental: 0 }] })).next);
     expect(computeMonthSavedAmount(legacy.accounts, new Date(2027, 0, 28))).toBe(540);
+  });
+
+  it("intérêts de l'année proposés en janvier : datés du 31/12 de leur année, le reste à la date du relevé", () => {
+    const d = draft({ owned: '10540' });
+    const b = breakdownDraft(livretA(), d);
+    const u = draftToUpdate(livretA(), d, b);
+    expect(u.interestDate).toBe('2026-12-31');
+    const s = applyPatch({ accounts: [livretA()] }, ok(updateBalances({ accounts: [livretA()] }, { updates: [u] })).next);
+    const created = acc(s, 'la').movements!.slice(1).map(m => [m.label, m.amount, m.date, m.kind]);
+    expect(created).toEqual([['Intérêts 2026', 240, '2026-12-31', 'adjustment'], ['Actualisation (+)', 300, '2027-01-05', undefined]]);
+    // Patrimoine au 31 décembre : intérêts compris ; pas le versement de janvier.
+    expect(computeAccountBalanceAtDate(s.accounts, '2026-12-31')).toBe(10240);
+    // Déjà enregistrés : plus rien à proposer.
+    expect(suggestCreditedInterest(acc(s, 'la'), '2027-01-20')).toBeNull();
+    // Sans proposition (intérêts saisis en cours d'année) ou date incohérente : date du relevé.
+    expect(draftToUpdate(livretA(), draft({ owned: '10300', date: '2026-10-14' })).interestDate).toBeUndefined();
+    const odd = applyPatch({ accounts: [livretA()] }, ok(updateBalances({ accounts: [livretA()] }, { updates: [{ accountId: 'la', date: '2027-01-05', owned: 10240, parental: 0, interest: 240, interestDate: '2027-02-01' }] })).next);
+    expect(acc(odd, 'la').movements!.slice(-1)[0].date).toBe('2027-01-05');
   });
 
   it("l'utilisateur corrige la proposition ; au-delà de la hausse, refus", () => {

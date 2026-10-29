@@ -159,7 +159,7 @@ export const FiscalFields: React.FC<{ fiscal: FiscalConfig; setFiscal: SetState<
   ];
   const social: [NumericFiscalField, string, number, Unit, string?][] = [
     ['socialChargesCapital', 'Prélèvements sociaux', fiscal.socialChargesCapital, '%', 'Revenus du capital'],
-    ['socialChargesLifeInsurance', 'Prélèvements sociaux (assurance vie, PEL, CEL)', fiscal.socialChargesLifeInsurance ?? 0.172, '%'],
+    ['socialChargesLifeInsurance', 'Prélèvements sociaux (assurance vie, PEL et CEL d\'avant 2018)', fiscal.socialChargesLifeInsurance ?? 0.172, '%'],
   ];
   const field = ([field, label, value, unit, help]: [NumericFiscalField, string, number, Unit, string?]) => (
     <NumberField key={field} label={label} supporting={help} value={value} percent={unit === '%'} suffix={unit === '€' ? '€' : undefined}

@@ -2,7 +2,7 @@
 // Partie de src/lib/finance.ts (qui réexporte tout) : importez depuis '../finance'.
 import { FiscalConfig, RateChange, AccountType, SavingsAccount, AccountMovement } from '../../types';
 import { MS_PER_DAY, formatISODay, parseISODate } from '../dates';
-import { socialChargesRateFor } from './income';
+import { SOCIAL_CHARGES_LIFE_INSURANCE } from '../../constants';
 import { isSavingsFlow } from './savings';
 
 // --- FISCALITÉ DU CAPITAL (PFU / prélèvements sociaux) ---
@@ -79,6 +79,26 @@ export const isHousingSavingsIncomeTaxExempt = (account: { type: AccountType; op
 };
 
 /**
+ * Prélèvements sociaux applicables aux gains d'un compte à `asOfDate`. Depuis 2026, restent à
+ * 17,2 % (`socialChargesLifeInsurance`) : l'assurance vie, les CEL ouverts jusqu'au 31/12/2017
+ * et les PEL ouverts avant 2018 pendant leurs 12 premières années (exactement l'épargne
+ * logement encore exonérée d'impôt sur le revenu) ; tout le reste passe à 18,6 %, dont les
+ * PEL et CEL ouverts depuis 2018 et les PEL d'avant 2018 de plus de 12 ans. Date d'ouverture
+ * inconnue : 18,6 % (même prudence que pour l'impôt). Vérifié le 2026-10-29 :
+ * https://www.impots.gouv.fr/particulier/les-revenus-mobiliers et art. L136-8 IV du code de la
+ * sécurité sociale (9,2 % de CSG pour les revenus du 1° et du 2° du II de l'art. L136-7 : CEL
+ * ouverts jusqu'au 31/12/2017, intérêts de PEL exonérés d'impôt au titre du 9° bis de
+ * l'art. 157 du CGI) : https://www.legifrance.gouv.fr/codes/article_lc/LEGIARTI000051287395
+ */
+export const socialChargesRateFor = (
+  account: { type: AccountType; openingDate?: string },
+  cfg: FiscalConfig,
+  asOfDate: Date = new Date()
+): number =>
+  account.type === AccountType.ASSURANCE_VIE || isHousingSavingsIncomeTaxExempt(account, asOfDate)
+    ? (cfg.socialChargesLifeInsurance ?? SOCIAL_CHARGES_LIFE_INSURANCE) : cfg.socialChargesCapital;
+
+/**
  * Comptes dont les intérêts sont imposés CHAQUE ANNÉE (et non au retrait) : livret bancaire,
  * compte à terme, épargne logement, compte courant rémunéré, « Autre ». La banque retient
  * l'acompte de 12,8 % au versement des intérêts.
@@ -120,7 +140,7 @@ export const computeCapitalGainsTax = (
     : 0;
 
   // Assurance vie : les prélèvements sociaux du fonds euros sont déjà payés chaque année.
-  const socialCharges = grossInterest * socialChargesShareAtWithdrawal(account) * socialChargesRateFor(account.type, fiscalConfig);
+  const socialCharges = grossInterest * socialChargesShareAtWithdrawal(account) * socialChargesRateFor(account, fiscalConfig, asOfDate);
 
   const withMaturity = (maturityYears: number, reducedRate: number, regimeIfMature: CapitalTaxRegime): CapitalTaxBreakdown => {
     const mature = ageYears >= maturityYears;
@@ -255,7 +275,7 @@ export const describeMaturity = (
   fiscalConfig: FiscalConfig
 ): { short: string; detail: string } => {
   const months = `${maturity.monthsRemaining} mois`;
-  const social = percentFr(socialChargesRateFor(account.type, fiscalConfig));
+  const social = percentFr(socialChargesRateFor(account, fiscalConfig));
   if (maturity.regimeAfter === 'EXONERE_IR') {
     return {
       short: `Sans impôt sur le revenu dans ${months}`,
@@ -453,7 +473,7 @@ export const computeWithdrawalTax = (
   const threshold: { cryptoThreshold?: CryptoThreshold } = earlierCrypto > CRYPTO_EXEMPT_DISPOSALS
     ? { cryptoThreshold: 'already-past' }
     : earlierCrypto > 0 ? { cryptoThreshold: 'with-this-sale' } : {};
-  const socialCharges = gainPart * psShare * socialChargesRateFor(account.type, fiscalConfig);
+  const socialCharges = gainPart * psShare * socialChargesRateFor(account, fiscalConfig, asOfDate);
   let incomeTax: number;
   let taxableGain = gainPart;
   switch (account.type) {

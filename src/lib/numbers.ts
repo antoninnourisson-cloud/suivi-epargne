@@ -13,17 +13,34 @@
  * séparateur décimal du clavier français (et celui que l'app affiche elle-même via
  * `toLocaleString('fr-FR')`), un montant relu à l'écran puis retapé donnerait `''` →
  * `parseFloat('')` = NaN → `0` enregistré sans rien dire. C'est donc à nous de parser.
+ *
+ * Formats acceptés : chiffres, un seul séparateur décimal (virgule, ou point), espaces de
+ * milliers, signe, « € ». Refusés (`null`) plutôt que devinés : exposant (« 2,5e3 »),
+ * hexadécimal (« 0x10 »), plusieurs séparateurs (« 1.234,56 ») et le point suivi d'un
+ * groupe de 3 chiffres après 1 à 3 chiffres (« 12.500 ») : point des milliers (copié d'un
+ * site) ou décimales ? Il était lu 12,5, mille fois trop peu, sans rien dire. « 12 500 »,
+ * « 12500 », « 12,5 », « 12.5 », « 1,725 » et « 0.125 » restent lisibles.
  */
 export const parseFrenchNumber = (input: string): number | null => {
   // `\s` couvre aussi les espaces insécables (U+00A0 / U+202F) que produit `toLocaleString`
   // comme séparateur de milliers, donc un montant réaffiché puis resoumis reste valide.
-  const cleaned = input.replace(/\s/g, '').replace(/€/g, '').replace(',', '.');
-  if (cleaned === '') return null;
+  const cleaned = input.replace(/\s/g, '').replace(/€/g, '');
+  if (!PLAIN_NUMBER.test(cleaned) || isAmbiguousThousands(input)) return null;
   // `Number()` et non `parseFloat` : ce dernier accepte "12abc" et renvoie 12, ce qui
   // transformerait une faute de frappe en montant plausible.
-  const parsed = Number(cleaned);
+  const parsed = Number(cleaned.replace(',', '.'));
   return Number.isFinite(parsed) ? parsed : null;
 };
+
+/** Signe facultatif, chiffres, au plus un séparateur décimal suivi de chiffres. */
+const PLAIN_NUMBER = /^[+-]?(\d+([.,]\d*)?|[.,]\d+)$/;
+
+/**
+ * « 12.500 », « -1.250 € » : 1 à 3 chiffres (sans zéro en tête), un point, exactement
+ * 3 chiffres. Ambigu (point des milliers ou décimales) : refusé, l'écran peut le dire.
+ */
+export const isAmbiguousThousands = (input: string): boolean =>
+  /^[+-]?[1-9]\d{0,2}\.\d{3}$/.test(input.replace(/\s/g, '').replace(/€/g, ''));
 
 /**
  * Variante avec valeur de repli : un champ vidé ou invalide ne propage JAMAIS `NaN` dans les

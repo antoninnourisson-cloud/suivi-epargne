@@ -1,5 +1,5 @@
-import React, { useEffect, useId, useState } from 'react';
-import { parseFrenchNumber } from '../lib/numbers';
+import React, { useEffect, useId, useRef, useState } from 'react';
+import { isAmbiguousThousands, parseFrenchNumber } from '../lib/numbers';
 
 interface NumberInputProps {
   value: number;
@@ -19,6 +19,12 @@ interface NumberInputProps {
 const fmt = (n: number, decimals: number) => (isNaN(n) ? '' : n.toLocaleString('fr-FR', { maximumFractionDigits: decimals }));
 /** Valeur brute à la française pour la saisie : « 0,186 », jamais « 0.186 ». */
 const rawFrench = (n: number | undefined | null): string => (n === undefined || n === null || isNaN(n) ? '' : String(n).replace('.', ','));
+const UNREADABLE_KEPT = 'Montant non reconnu : la valeur précédente est conservée.';
+/** « 12.500 » : milliers ou décimales ? Les deux lectures sont proposées, aucune n'est devinée. */
+const ambiguousMessage = (text: string) => {
+  const t = text.replace(/\s/g, '').replace(/€/g, '');
+  return `« ${t} » est ambigu : écrivez ${t.replace('.', ' ')} ou ${String(Number(t)).replace('.', ',')}.`;
+};
 
 /**
  * Champ numérique au format français : séparateurs de milliers hors saisie, valeur brute
@@ -31,7 +37,11 @@ const rawFrench = (n: number | undefined | null): string => (n === undefined || 
 export const NumberInput: React.FC<NumberInputProps> = ({ value, onChange, className, placeholder, suffix, min, id, inputRef, describedBy, invalid, decimals = 2 }) => {
   const [focused, setFocused] = useState(false);
   const [raw, setRaw] = useState(rawFrench(value));
-  const [badInput, setBadInput] = useState(false);
+  /** Message d'erreur affiché sous le champ (`null` : saisie reconnue). */
+  const [badInput, setBadInput] = useState<string | null>(null);
+  // Valeur à l'entrée dans le champ : rendue si la saisie devient ambiguë (« 12.50 » avait
+  // déjà transmis 12,5 avant que le dernier « 0 » ne rende « 12.500 » ambigu).
+  const valueAtFocus = useRef(value);
   const errorId = useId();
 
   useEffect(() => {
@@ -47,17 +57,19 @@ export const NumberInput: React.FC<NumberInputProps> = ({ value, onChange, class
         id={id}
         type="text"
         inputMode="decimal"
-        aria-invalid={invalid || badInput || undefined}
+        aria-invalid={invalid || !!badInput || undefined}
         aria-describedby={[describedBy, badInput ? errorId : undefined].filter(Boolean).join(' ') || undefined}
         value={focused ? raw : (value || value === 0 ? fmt(value, decimals) : '')}
         placeholder={placeholder}
-        onFocus={() => { setFocused(true); setRaw(value ? rawFrench(value) : ''); }}
+        onFocus={() => { setFocused(true); valueAtFocus.current = value; setRaw(value ? rawFrench(value) : ''); }}
         onChange={e => {
           const next = e.target.value;
           setRaw(next);
           const parsed = parseFrenchNumber(next);
-          if (parsed !== null) { setBadInput(false); onChange(clamp(parsed)); }
-          else if (next.trim() === '') { setBadInput(false); onChange(0); }
+          if (parsed !== null) { setBadInput(null); onChange(clamp(parsed)); }
+          else if (next.trim() === '') { setBadInput(null); onChange(0); }
+          // « 12.500 » : dit tout de suite, sans attendre la sortie du champ, et rien n'est retenu.
+          else if (isAmbiguousThousands(next)) { setBadInput(ambiguousMessage(next)); onChange(valueAtFocus.current); }
         }}
         onBlur={() => {
           setFocused(false);
@@ -65,11 +77,11 @@ export const NumberInput: React.FC<NumberInputProps> = ({ value, onChange, class
           if (parsed === null) {
             // Champ vidé => 0 ; saisie non interprétable => la valeur précédente est gardée
             // (écraser un solde réel par 0 à cause d'une faute de frappe serait pire).
-            setBadInput(raw.trim() !== '');
+            setBadInput(raw.trim() === '' ? null : isAmbiguousThousands(raw) ? ambiguousMessage(raw) : UNREADABLE_KEPT);
             onChange(raw.trim() === '' ? 0 : value);
             return;
           }
-          setBadInput(false);
+          setBadInput(null);
           onChange(clamp(parsed));
         }}
         className={`${className ?? ''} ${suffix ? 'pr-8' : ''}`}
@@ -77,7 +89,7 @@ export const NumberInput: React.FC<NumberInputProps> = ({ value, onChange, class
       {suffix ? (
         <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-on-surface-variant text-sm font-medium">{suffix}</span>
       ) : null}
-      {badInput && <p id={errorId} role="alert" className="text-xs font-medium text-error mt-1">Montant non reconnu : la valeur précédente est conservée.</p>}
+      {badInput && <p id={errorId} role="alert" className="text-xs font-medium text-error mt-1">{badInput}</p>}
     </div>
   );
 };

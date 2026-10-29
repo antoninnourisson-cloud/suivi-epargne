@@ -62,7 +62,7 @@ export const HomeMore: React.FC<HomeMoreProps> = ({ accounts, projection }) => {
       {projection && (
         <Card title="Projection de trajectoire" icon={TrendingUp}>
           <p className="text-sm text-on-surface-variant -mt-2 mb-4">
-            Extrapolation du rythme réel des 90 derniers jours ({projection.monthlyRate >= 0 ? '+' : ''}{fmtEUR(projection.monthlyRate)} par mois) : une estimation, pas une garantie.
+            Votre part d'aujourd'hui, plus ce que vous avez placé ces 90 derniers jours ({projection.monthlyRate >= 0 ? '+' : ''}{fmtEUR(projection.monthlyRate)} par mois, hors intérêts et variations de valeur) : une estimation, pas une garantie.
           </p>
           <div className="grid grid-cols-2 gap-3">
             <StatTile className="p-4 rounded-xl bg-surface-container" label="Dans 6 mois" value={fmtEUR(projection.in6)} />

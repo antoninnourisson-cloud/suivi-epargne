@@ -11,6 +11,7 @@ import { quinzaineWithdrawalTip } from '../lib/finance';
 import { formatEUR, frenchDay } from '../lib/format';
 import { Modal } from './Modal';
 import { canWithdrawOwn } from '../lib/accountOps';
+import { isQuickAddInterest } from '../lib/commands/quickAdd';
 import { Button, Chip, IconButton, SegmentedButton, TextField } from './ui';
 
 interface QuickAddModalProps {
@@ -122,6 +123,9 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ open, accounts, on
                 <Chip key={sug} selected={label === sug} className={CHIP_TARGET} onClick={() => setLabel(label === sug ? '' : sug)}>{sug}</Chip>
               ))}
             </div>
+            {isQuickAddInterest({ type, label }) && (
+              <p className="mt-2 text-sm text-on-surface-variant">Compté comme intérêts : hors épargne (ni « Placé », ni taux d'épargne).</p>
+            )}
           </div>
 
           <TextField label="Date" type="date" value={date} onChange={e => setDate(e.target.value)} />

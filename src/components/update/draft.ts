@@ -127,7 +127,7 @@ export const draftToUpdate = (account: SavingsAccount, d: Draft, b: DraftBreakdo
   date: d.date,
   owned: b.owned,
   parental: b.parental,
-  ...(b.tracked ? { deposits: b.deposits, cashFlow: b.cash } : { interest: b.interest, interestLabel: b.interestLabel }),
+  ...(b.tracked ? { deposits: b.deposits, cashFlow: b.cash } : { interest: b.interest, interestLabel: b.interestLabel, ...(b.suggestion ? { interestDate: `${b.suggestion.year}-12-31` } : {}) }),
 });
 
 // ---------------------------------------------------------------------------

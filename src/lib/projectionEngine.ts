@@ -4,7 +4,7 @@
 // Rendement (projectSavings), le plan solo (buildSoloPlan) et le simulateur « Et si… »
 // (simulate) font avancer leurs comptes avec ces mêmes fonctions : à données égales, ils
 // donnent le même solde au même mois. La projection de l'Accueil répond à une autre
-// question (le rythme réel des 90 derniers jours, lib/home) et le dit à l'écran.
+// question (ce qui a été placé ces 90 derniers jours, lib/home) et le dit à l'écran.
 //
 // Un mois (étape m, m = 1 pour le mois qui commence) :
 // 1. intérêts nets du mois sur le solde réel (part des parents comprise : leurs intérêts

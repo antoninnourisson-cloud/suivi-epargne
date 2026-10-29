@@ -50,8 +50,14 @@ export const computeAccountBalanceAtDate = (
  * PRÉCÉDENTE, ce que la détection de dérive du Dashboard exploite en rappelant cette
  * fonction avec `asOfDate` décalé d'un trimestre).
  *
- * `null` si la fenêtre ne contient pas assez de mouvements pour extrapoler quoi que ce
- * soit (compte neuf, période creuse) — jamais un chiffre fondé sur du vide.
+ * Même définition que « Placé » (computeMonthSavedAmount) : versements − retraits
+ * (isSavingsFlow), hors compte courant et immobilier. Les intérêts, corrections, variations
+ * de valeur, mouvements des parents et soldes initiaux n'y entrent pas : une baisse de la
+ * bourse ne se lit plus comme « épargne ralentie », ni le crédit d'intérêts du 31/12 comme
+ * un versement (avant, le rythme était une différence de soldes, qui les mélangeait).
+ *
+ * `null` si la fenêtre ne contient aucun versement ni retrait (compte neuf, période
+ * creuse) — jamais un chiffre fondé sur du vide.
  *
  * Division par `windowDays / 30` (mois de 30 jours) et non par `AVG_DAYS_PER_MONTH`
  * (30,4375) : ce calcul reprend tel quel celui déjà livré et vérifié en conditions
@@ -59,7 +65,7 @@ export const computeAccountBalanceAtDate = (
  * déjà montrés à l'utilisateur, pour un gain de précision négligeable.
  */
 export const computeRecentSavingsRate = (
-  accounts: { ownedAmount: number; movements: AccountMovement[] }[],
+  accounts: { type?: AccountType; movements: AccountMovement[] }[],
   windowDays: number = 90,
   asOfDate: Date = new Date()
 ): number | null => {
@@ -69,12 +75,18 @@ export const computeRecentSavingsRate = (
   const nowStr = formatISODay(asOfDate);
   const pastStr = formatISODay(past);
 
-  const hasMovementsInWindow = accounts.some(a => a.movements.some(m => m.date > pastStr && m.date <= nowStr && m.kind !== 'parental' && m.kind !== 'valuation'));
-  if (!hasMovementsInWindow) return null;
-
-  const totalNow = computeAccountBalanceAtDate(accounts, nowStr);
-  const totalPast = computeAccountBalanceAtDate(accounts, pastStr);
-  return (totalNow - totalPast) / (windowDays / 30);
+  let flows = 0;
+  let total = 0;
+  for (const a of accounts) {
+    if (a.type === AccountType.COMPTE_COURANT || a.type === AccountType.IMMOBILIER) continue;
+    for (const m of a.movements) {
+      if (m.date <= pastStr || m.date > nowStr || !isSavingsFlow(m)) continue;
+      flows += 1;
+      total += signedAmount(m);
+    }
+  }
+  if (flows === 0) return null;
+  return total / (windowDays / 30);
 };
 
 // --- MOUVEMENTS RÉCURRENTS ---

@@ -58,7 +58,7 @@ export const describeAccountTax = (
   cfg: FiscalConfig,
   asOf: Date = new Date(),
 ): string => {
-  const ps = pct(socialChargesRateFor(account.type, cfg));
+  const ps = pct(socialChargesRateFor(account, cfg, asOf));
   const ir = pct(PFU_INCOME_TAX_RATE);
   switch (account.type) {
     case AccountType.LIVRET_A:

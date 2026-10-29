@@ -237,7 +237,8 @@ export interface SavingsProjection {
 }
 
 /**
- * Extrapole le rythme réel des 90 derniers jours (indépendant de la période du graphique).
+ * Extrapole ce qui a été placé ces 90 derniers jours (versements − retraits, comme « Placé » :
+ * hors intérêts, corrections et variations de valeur ; indépendant de la période du graphique).
  * null sans historique suffisant ou à rythme quasi nul. La dérive compare au trimestre
  * précédent (jours −180 à −90), seulement si ce rythme-là n'était pas quasi nul.
  */
