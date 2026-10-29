@@ -52,3 +52,16 @@ export const frenchDay = (d: Date, withWeekday = false): string => {
   const weekday = withWeekday ? `${d.toLocaleDateString('fr-FR', { weekday: 'long' })} ` : '';
   return `${weekday}${day} ${month}`;
 };
+
+/**
+ * Élision devant une voyelle, pour les textes assemblés (mois, noms de comptes) :
+ * « d'octobre », « de septembre », « l'Assurance vie », « du Livret A ». Le h n'élide pas
+ * (h muet ou aspiré, on ne peut pas savoir : « de Hello bank »), ni le y (« de Yomoni »).
+ */
+const startsWithVowel = (word: string): boolean => /^[aeiouœæ]/i.test(word.trim().normalize('NFD'));
+/** « d'avril », « de mai ». */
+export const elideDe = (word: string): string => (startsWithVowel(word) ? `d'${word}` : `de ${word}`);
+/** « l'Assurance vie », « le Livret A ». */
+export const elideLe = (word: string): string => (startsWithVowel(word) ? `l'${word}` : `le ${word}`);
+/** « de l'Assurance vie », « du Livret A ». */
+export const elideDu = (word: string): string => (startsWithVowel(word) ? `de l'${word}` : `du ${word}`);

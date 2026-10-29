@@ -65,3 +65,17 @@ describe('PayChecklist', () => {
     expect(screen.getByLabelText(/^Montant réel de Livret A/)).toHaveProperty('value', '300');
   });
 });
+
+describe('PayChecklist : élision du mois', () => {
+  afterEach(() => vi.useRealTimers());
+  it('« Paie d’octobre », « Paie de septembre »', () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 9, 15, 12));
+    render(<Harness onRecord={() => 'm'} />);
+    expect(screen.getByText(/^Paie d'octobre :/)).toBeTruthy();
+    cleanup();
+    vi.setSystemTime(new Date(2026, 8, 15, 12));
+    render(<Harness onRecord={() => 'm'} />);
+    expect(screen.getByText(/^Paie de septembre :/)).toBeTruthy();
+  });
+});

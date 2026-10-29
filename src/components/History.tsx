@@ -7,7 +7,7 @@ import React, { useMemo, useState } from 'react';
 import { PortfolioSnapshot, ExpenseSnapshot } from '../types';
 import { parseISODate } from '../lib/dates';
 import { LineChart as LineChartIcon, Wallet, Receipt } from 'lucide-react';
-import { formatEUR } from '../lib/format';
+import { elideDe, formatEUR } from '../lib/format';
 import { YearInReviewCard } from './year/YearInReviewCard';
 import type { GlobalAppData } from '../types';
 import { useIsDark, chartTheme } from '../lib/chartTheme';
@@ -148,7 +148,7 @@ export const History: React.FC<HistoryProps> = ({ history, expensesHistory, revi
                       {describeEvolution('Votre part', first.ownedAmount, latest.ownedAmount, first.date, latest.date)}
                       {showParents && ` Avec le capital de vos parents, le total atteint ${fmt(latest.totalAmount)}.`}
                     </>}
-                    legend={showParents ? <ChartLegend label={`Valeurs de ${monthLong(latest.date)}`} items={[
+                    legend={showParents ? <ChartLegend label={`Valeurs ${elideDe(monthLong(latest.date))}`} items={[
                       { key: 'owned', label: 'Votre part', color: t.brand, value: fmt(latest.ownedAmount) },
                       { key: 'parents', label: 'Capital de vos parents', color: t.gold, value: fmt(Math.max(0, latest.totalAmount - latest.ownedAmount)) },
                     ]} /> : undefined}

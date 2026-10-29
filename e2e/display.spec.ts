@@ -76,6 +76,26 @@ test.describe('Affichage (démo)', () => {
     expect(await title.evaluate(el => getComputedStyle(el).outlineStyle)).toBe('none');
   });
 
+  for (const height of [800, 720]) {
+    test(`sur ordinateur (1280×${height}), seul le contenu défile : le menu latéral reste en place`, async ({ page, isMobile }) => {
+      test.skip(isMobile, 'menu latéral sur ordinateur seulement');
+      await page.setViewportSize({ width: 1280, height });
+      await openDemo(page);
+      const aside = page.locator('aside');
+      // La page elle-même ne déborde pas : le menu tient dans la fenêtre.
+      const sizes = await page.evaluate(() => ({ doc: document.documentElement.scrollHeight, win: window.innerHeight, aside: document.querySelector('aside')!.getBoundingClientRect().height }));
+      expect(sizes.doc).toBeLessThanOrEqual(sizes.win);
+      expect(sizes.aside).toBeLessThanOrEqual(sizes.win);
+      // Molette sur le contenu : main défile, la page non ; l'action principale et la déconnexion restent visibles.
+      await page.locator('main').hover();
+      await page.mouse.wheel(0, 1500);
+      await expect.poll(() => page.locator('main').evaluate(el => el.scrollTop)).toBeGreaterThan(0);
+      expect(await page.evaluate(() => window.scrollY)).toBe(0);
+      await expect(aside.getByRole('button', { name: 'Ajouter un mouvement' })).toBeInViewport();
+      await expect(aside.getByRole('button', { name: 'Déconnexion' })).toBeInViewport();
+    });
+  }
+
   test('sur téléphone, chaque contrôle de l’Accueil et des Paramètres a un nom et une zone de toucher de 48 px', async ({ page, isMobile }) => {
     test.skip(!isMobile, 'écran tactile seulement');
     for (const view of ['dashboard', 'settings']) {

@@ -10,7 +10,7 @@ import { netAnnualRate, netMonthlyRateSchedule } from './projection';
 import { accrueMonth, placeDeposit, prepareProjection, restituteParentalCapital, startProjection } from './projectionEngine';
 import { detectPayslipAnomalies } from './motivation';
 import { describeAnomaly } from '../components/motivation/text';
-import { formatEUR, formatPeriod, formatRate, frenchDay } from './format';
+import { elideDe, elideDu, elideLe, formatEUR, formatPeriod, formatRate, frenchDay } from './format';
 import { formatISODay, parseISODate } from './dates';
 import { computeIdleCash, describeIdleDestinations, idleDestinations } from './idleCash';
 import { growthView, withAssumedRates } from './performance';
@@ -145,7 +145,7 @@ const betterRate = (input: AlertsInput, room: Map<string, number>): Alert[] => {
       id: `better-rate-${src.id}-${target.id}`,
       kind: 'better-rate',
       tone: 'action',
-      title: `${eur(amount)} du ${src.name} rapporteraient plus sur le ${target.name} (${formatRate(rt)} au lieu de ${formatRate(rs)}) : environ ${eur(gain)} de plus par an.`,
+      title: `${eur(amount)} ${elideDu(src.name)} rapporteraient plus sur ${elideLe(target.name)} (${formatRate(rt)} au lieu de ${formatRate(rs)}) : environ ${eur(gain)} de plus par an.`,
       detail: cost >= 1
         ? `Le virement coûte une quinzaine d'intérêts (environ ${eur(cost)}), rattrapée en ${months} mois.`
         : 'Faites le virement le 15 ou le dernier jour du mois : il rapporte dès la quinzaine suivante.',
@@ -245,7 +245,7 @@ const restitutionRoom = (input: AlertsInput): Alert | null => {
   const fallback = fallbackDestination(input, parseISODate(r.plannedDate));
   const offered = rows.reduce((s, a) => s + a.parentalCapital * (a.interestRate || 0) / 100, 0);
   const gain = rows.reduce((s, a) => s + a.parentalCapital * Math.max(0, (a.interestRate || 0) - fallback.rate) / 100, 0);
-  const parts = rows.map((a, i) => `${eur(a.parentalCapital)} ${i === 0 ? 'de place ' : ''}sur le ${a.name}`);
+  const parts = rows.map((a, i) => `${eur(a.parentalCapital)} ${i === 0 ? 'de place ' : ''}sur ${elideLe(a.name)}`);
   const worth = gain >= MIN_GAIN_PER_YEAR
     ? `environ ${eur(gain)} d'intérêts par an de plus que sur ${fallback.label} (${formatRate(fallback.rate)} net).`
     : `peu ou pas d'intérêts en plus que sur ${fallback.label} (${formatRate(fallback.rate)} net), mais un argent disponible à tout moment.`;
@@ -276,7 +276,7 @@ const payslipAnomaly = (input: AlertsInput): Alert | null => {
     id: `payslip-anomaly-${anomaly.payslipId}`,
     kind: 'payslip-anomaly',
     tone: 'info',
-    title: `Fiche de paie de ${formatPeriod(anomaly.period)} à vérifier.`,
+    title: `Fiche de paie ${elideDe(formatPeriod(anomaly.period))} à vérifier.`,
     detail: describeAnomaly(anomaly),
     action: { label: 'Voir mes fiches', view: 'payslips' },
   };

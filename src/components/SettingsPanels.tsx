@@ -24,6 +24,7 @@ import { DEFAULT_GEMINI_MODEL, getGeminiModelOverride, setGeminiModelOverride } 
 import { useToast } from './Toast';
 import { CardSubheading, Hint, Notice, useCardSummary } from './settings/SettingsCard';
 import { SwitchRow } from './settings/fields';
+import { elideDe } from '../lib/format';
 
 const monthLabel = (m: string) => {
   const [y, mo] = m.split('-').map(Number);
@@ -32,7 +33,7 @@ const monthLabel = (m: string) => {
 const shortDay = (iso: string) => new Date(iso).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
 
 /** « de septembre 2026 », mais « d'août 2026 », « d'octobre 2026 ». */
-const ofMonth = (label: string) => (/^[aeiouyéèêh]/i.test(label) ? `d'${label}` : `de ${label}`);
+const ofMonth = elideDe;
 
 /**
  * Copies mensuelles du fichier sur Drive, restaurables en un clic (après confirmation). Les

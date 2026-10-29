@@ -73,7 +73,7 @@ describe('Fiches de paie', () => {
 
     expect(latest).toHaveLength(1);
     expect(latest[0]).toMatchObject({ fileId: 'file-1', fileName: 'paie-aout.pdf', reviewed: true, extracted: { period: '2026-08', grossAmount: 2230.5, netPaid: 1744.12 } });
-    expect(screen.getByRole('button', { name: 'Retirer la fiche de août 2026 de la liste' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: "Retirer la fiche d'août 2026 de la liste" })).toBeTruthy();
   });
 
   it('une fiche du même mois est signalée avant d’enregistrer', async () => {
@@ -198,7 +198,7 @@ describe('Fiches de paie', () => {
     render(<Harness initial={[slip('a', '2026-09', 1800), slip('b', '2026-08', 1750)]} />);
     fireEvent.click(screen.getByRole('button', { name: 'Retirer la fiche de septembre 2026 de la liste' }));
     expect(screen.queryByText('septembre 2026')).toBeNull();
-    await waitFor(() => expect(document.activeElement?.getAttribute('aria-label')).toBe('Ouvrir la fiche de août 2026 sur Drive (nouvel onglet)'));
+    await waitFor(() => expect(document.activeElement?.getAttribute('aria-label')).toBe("Ouvrir la fiche d'août 2026 sur Drive (nouvel onglet)"));
   });
 
   // « Importer depuis Drive » désactivé sans clé Picker : le focus va sur « Choisir sur

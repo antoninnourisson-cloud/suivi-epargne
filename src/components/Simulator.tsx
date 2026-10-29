@@ -8,7 +8,7 @@ import React, { useDeferredValue, useEffect, useId, useMemo, useRef, useState } 
 import { FlaskConical, Plus, Info, Wallet, Loader2 } from 'lucide-react';
 import type { FiscalConfig, ParentalRestitution, PayslipRecord, SavingsAccount } from '../types';
 import { REGULATED_TYPES, type SavingsSplit } from '../lib/finance';
-import { simulate, pastMonthlySavings, monthDate, Scenario, ScenarioKind, SimulatorResult } from '../lib/simulator';
+import { simulate, pastMonthlySavings, monthDate, positionInBand, Scenario, ScenarioKind, SimulatorResult } from '../lib/simulator';
 import { useBackgroundSimulation } from '../hooks/useBackgroundSimulation';
 import { withAssumedRates, type ProjectionHypotheses } from '../lib/performance';
 import { ProjectionAssumptionsNote } from './ProjectionAssumptionsNote';
@@ -19,7 +19,7 @@ import { NumberInput } from './NumberInput';
 import { ChartFrame } from './charts/ChartFrame';
 import { ChartLegend, type LegendItem } from './charts/ChartParts';
 import { useIsDark } from '../lib/chartTheme';
-import { SimulatorChart, simulatorColors, type SimChartRow } from './simulator/SimulatorChart';
+import { SimulatorChart, simulatorBandOpacity, simulatorColors, type SimChartRow } from './simulator/SimulatorChart';
 import { ScenarioEditor, SCENARIO_META } from './simulator/ScenarioEditor';
 
 interface SimulatorProps {
@@ -172,10 +172,12 @@ export const Simulator: React.FC<SimulatorProps> = ({
   const fromToday = result.scenarioEnd - result.start;
 
   const legend: LegendItem[] = [
-    ...(withScenario ? [{ key: 'scenario', label: 'Scénario', color: colors.scenario, value: eur(result.scenarioEnd) }] : []),
-    { key: 'baseline', label: 'Plan actuel', color: colors.baseline, value: eur(result.baselineEnd) },
+    // Pastilles à l'image du graphique : trait pour les courbes (pointillé pour le plan à
+    // côté d'un scénario), aire pâle pour la fourchette.
+    ...(withScenario ? [{ key: 'scenario', label: 'Scénario', color: colors.scenario, value: eur(result.scenarioEnd), shape: 'line' as const }] : []),
+    { key: 'baseline', label: 'Plan actuel', color: colors.baseline, value: eur(result.baselineEnd), shape: withScenario ? 'dashed' as const : 'line' as const },
     ...(last.p10 !== undefined && last.p90 !== undefined
-      ? [{ key: 'band', label: 'Fourchette (8 cas sur 10)', color: colors.band, value: `${eur(last.p10)} à ${eur(last.p90)}` }]
+      ? [{ key: 'band', label: 'Fourchette (8 cas sur 10)', color: colors.band, value: `${eur(last.p10)} à ${eur(last.p90)}`, shape: 'band' as const, bandOpacity: simulatorBandOpacity(dark) }]
       : []),
   ];
 
@@ -198,6 +200,11 @@ export const Simulator: React.FC<SimulatorProps> = ({
   const bandSentence = last.p10 !== undefined && last.p90 !== undefined
     ? ` Si vos prochains mois ressemblent à vos ${result.band?.historyMonths} derniers, vous seriez plutôt entre ${eur(last.p10)} et ${eur(last.p90)}.`
     : '';
+
+  // Le chiffre mis en avant suit le plan à la lettre ; la fourchette, elle, suit le rythme
+  // réel des mois passés. On dit où il se place par rapport à elle, pour ne pas laisser un
+  // plan optimiste passer pour le résultat probable.
+  const bandPosition = positionInBand(result.scenarioEnd, last);
 
   const goal = result.goal;
   const unavailable = [
@@ -267,6 +274,18 @@ export const Simulator: React.FC<SimulatorProps> = ({
               <StatTile size="hero" label={`Dans ${result.horizon} mois`} value={eur(result.scenarioEnd)}
                 delta={<DeltaBadge value={fromToday} period="par rapport à aujourd'hui" />}
                 hint={withScenario ? `Plan actuel : ${eur(result.baselineEnd)}` : `Plan actuel : ${eur(plan)} par mois`} />
+              {bandPosition && last.p10 !== undefined && last.p90 !== undefined && (
+                <p className="text-sm text-on-surface">
+                  À votre rythme des {result.band?.historyMonths} derniers mois : plutôt{' '}
+                  <span className="font-medium tabular-nums whitespace-nowrap">{eur(last.p50 ?? (last.p10 + last.p90) / 2)}</span>,
+                  entre <span className="tabular-nums whitespace-nowrap">{eur(last.p10)}</span> et <span className="tabular-nums whitespace-nowrap">{eur(last.p90)}</span> dans 8 cas sur 10.
+                  {bandPosition !== 'inside' && (
+                    <span className="block text-on-surface-variant">
+                      {withScenario ? 'Le chiffre ci-dessus suppose que vous suivez ce scénario à la lettre' : `Le chiffre ci-dessus suppose ${eur(plan)} mis de côté chaque mois`} : il est {bandPosition === 'above' ? 'au-dessus' : 'en dessous'} de cette fourchette.
+                    </span>
+                  )}
+                </p>
+              )}
               {withScenario && (
                 <p className="text-sm text-on-surface">
                   Écart avec votre plan actuel : <MoneyText value={Math.round(result.gap)} decimals={0} signed tone="auto" className="font-medium" />

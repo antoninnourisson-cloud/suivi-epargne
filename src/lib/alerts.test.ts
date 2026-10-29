@@ -190,7 +190,7 @@ describe('fiche de paie à vérifier', () => {
     const payslips = [slip('2026-05', 2050), slip('2026-06', 2070), slip('2026-07', 2040), slip('2026-08', 1700)];
     const [a] = byKind(run({ payslips }), 'payslip-anomaly');
     expect(a.id).toBe('payslip-anomaly-ps-2026-08');
-    expect(a.title).toBe('Fiche de paie de août 2026 à vérifier.');
+    expect(a.title).toBe("Fiche de paie d'août 2026 à vérifier.");
     expect(a.detail).toContain('Net payé');
     expect(a.gain).toBeUndefined();
     expect(a.tone).toBe('info');

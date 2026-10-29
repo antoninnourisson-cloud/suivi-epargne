@@ -10,7 +10,7 @@ import { parseFrenchNumber, safeNumber } from '../lib/numbers';
 import { NumberInput } from './NumberInput';
 import { isBackendEnabled } from '../services/backendService';
 import { Calculator, Receipt, Info, Plus, Trash2, Coins, FileCheck2, Wand2, BellRing, PieChart, SlidersHorizontal, Sigma } from 'lucide-react';
-import { formatEUR, formatPeriod, formatRate } from '../lib/format';
+import { elideDe, formatEUR, formatPeriod, formatRate } from '../lib/format';
 import { useUndoableRemove } from './Toast';
 import { focusAfterRemoval } from './focusAfterRemoval';
 import { buildWaterfall, heroContext, AmountSource } from '../lib/pilotView';
@@ -359,6 +359,10 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
   const shortfall = Math.max(0, -budgetData.finalCapacity, -budgetData.theoreticalCapacity, paydayAmount !== undefined && savedCapacity === undefined ? paydayAmount - Math.max(0, budgetData.theoreticalCapacity) : 0);
   const customSplit = activeSavingsSplit({ savingsSplit, savingsSplitFrom }) !== undefined;
   const plannedSpending = budgetData.totalFixed + leisureBudget + projectSavings;
+  // Même précision pour les trois montants de l'en-tête, pour que « paie − dépenses = à placer »
+  // tombe juste de tête : à l'euro si tout est rond, sinon au centime partout.
+  const heroDecimals = [effectiveSuperNetForCalc, plannedSpending, budgetData.totalToInvest]
+    .every((n) => Math.round(n * 100) % 100 === 0) ? 0 : 2;
   const paydaySelectId = useId();
   // Durée de validité des réglages du mois, dite simplement.
   const untilNextPay = paydayDay !== undefined ? "Gardé jusqu'à la prochaine paie." : "Gardé jusqu'à la fin du mois.";
@@ -381,12 +385,17 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
       {/* a. La réponse : combien placer ce mois-ci. */}
       <section aria-label="À placer ce mois" className="rounded-3xl bg-secondary-container p-6 sm:p-8">
         <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-6">
-          <StatTile size="hero" label="À placer ce mois" value={<MoneyText value={budgetData.totalToInvest} />} />
+          <StatTile size="hero" label="À placer ce mois" value={<MoneyText value={budgetData.totalToInvest} decimals={heroDecimals} />} />
+          {/* Une paire dt/dd par montant : le lecteur d'écran annonce chaque libellé avec sa valeur. */}
           <dl className="grid grid-cols-2 gap-x-8 gap-y-1 text-sm">
-            <dt className="text-on-surface-variant">Paie nette après impôt</dt>
-            <dt className="text-on-surface-variant">Dépenses prévues</dt>
-            <dd className="text-lg text-on-surface"><MoneyText value={effectiveSuperNetForCalc} decimals={0} /></dd>
-            <dd className="text-lg text-on-surface"><MoneyText value={plannedSpending} decimals={0} /></dd>
+            <div>
+              <dt className="text-on-surface-variant">Paie nette après impôt</dt>
+              <dd className="text-lg text-on-surface"><MoneyText value={effectiveSuperNetForCalc} decimals={heroDecimals} /></dd>
+            </div>
+            <div>
+              <dt className="text-on-surface-variant">Dépenses prévues</dt>
+              <dd className="text-lg text-on-surface"><MoneyText value={plannedSpending} decimals={heroDecimals} /></dd>
+            </div>
           </dl>
         </div>
         <p className="mt-4 text-sm text-on-surface-variant max-w-2xl">{heroSentence}</p>
@@ -429,7 +438,7 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
               <div className="mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl bg-tertiary-container text-on-tertiary-container p-3">
                 <p className="flex items-start gap-2 text-sm">
                   <FileCheck2 className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />
-                  Chiffres exacts de votre fiche de {activePayslip.extracted.period ? formatPeriod(activePayslip.extracted.period) : 'paie'} ({activePayslip.extracted.employer || activePayslip.fileName}) — recopiés tels quels, sans calcul.
+                  Chiffres exacts de votre fiche {elideDe(activePayslip.extracted.period ? formatPeriod(activePayslip.extracted.period) : 'paie')} ({activePayslip.extracted.employer || activePayslip.fileName}) — recopiés tels quels, sans calcul.
                 </p>
                 <Button variant="text" onClick={onClearActivePayslip} className="shrink-0"><Wand2 className="w-4 h-4" aria-hidden="true" /> Repasser en estimation</Button>
               </div>

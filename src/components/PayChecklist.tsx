@@ -8,7 +8,7 @@
 import React, { useEffect, useId, useState } from 'react';
 import { PayChecklist as PayChecklistData, PayChecklistLine } from '../types';
 import { PayTransfer, PlacementStep, buildPayLines, payPeriodOf } from '../lib/finance';
-import { formatEUR, toInputAmount } from '../lib/format';
+import { elideDe, formatEUR, toInputAmount } from '../lib/format';
 import { parseFrenchNumber } from '../lib/numbers';
 import { Info, CheckCircle2, RotateCcw, PiggyBank, ArrowRightLeft } from 'lucide-react';
 import { Button, Card, MoneyText } from './ui';
@@ -140,7 +140,7 @@ export const PayChecklist: React.FC<PayChecklistProps> = ({
             <MoneyText value={entry.amount} className="shrink-0 text-sm font-medium text-on-surface pt-2.5" />
           ) : (
             <label className="flex items-center gap-1 shrink-0">
-              <span className="sr-only">Montant réel de {l.label}</span>
+              <span className="sr-only">Montant réel {elideDe(l.label)}</span>
               <input
                 type="text"
                 inputMode="decimal"
@@ -175,7 +175,7 @@ export const PayChecklist: React.FC<PayChecklistProps> = ({
   return (
     <Card title="Où le placer" icon={PiggyBank} action={progress}>
       <p className="text-sm text-on-surface-variant -mt-2 mb-4">
-        Paie de {periodLabel} : <MoneyText value={superNet} />. Cochez chaque virement une fois fait ; si le montant réel diffère, corrigez-le avant de cocher.
+        Paie {elideDe(periodLabel)} : <MoneyText value={superNet} />. Cochez chaque virement une fois fait ; si le montant réel diffère, corrigez-le avant de cocher.
       </p>
 
       <div className="flex items-baseline justify-between gap-3 border-b border-outline-variant pb-2">
@@ -218,7 +218,7 @@ export const PayChecklist: React.FC<PayChecklistProps> = ({
         </Button>
       )}
       {frozen && doneCount > 0 && (
-        <p className="mt-4 text-xs text-on-surface-variant">Plan figé pour la paie de {periodLabel} depuis le premier virement coché. Il repartira des soldes du moment à la prochaine paie.</p>
+        <p className="mt-4 text-xs text-on-surface-variant">Plan figé pour la paie {elideDe(periodLabel)} depuis le premier virement coché. Il repartira des soldes du moment à la prochaine paie.</p>
       )}
     </Card>
   );

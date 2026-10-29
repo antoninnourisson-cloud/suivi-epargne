@@ -24,3 +24,19 @@ describe('Modal sous le verrou', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('Feuille du bas : poignée', () => {
+  it('posée avant le contenu, avec un espace fixe en dessous (pas de marge négative vers le titre)', () => {
+    const { container } = render(<Modal open onClose={() => {}} label="Feuille" variant="sheet" className="p-4"><h2>Titre</h2></Modal>);
+    const dialog = container.ownerDocument.querySelector('[role="dialog"]')!;
+    const handle = dialog.querySelector('[data-sheet-handle]')!;
+    expect(handle).toBe(dialog.firstElementChild);
+    expect(handle.className).toMatch(/(^| )mb-2( |$)/);
+    expect(handle.className).not.toMatch(/-mb-/);
+  });
+
+  it('une boîte de dialogue n’a pas de poignée', () => {
+    render(<Modal open onClose={() => {}} label="Boîte"><p>Contenu</p></Modal>);
+    expect(document.querySelector('[data-sheet-handle]')).toBeNull();
+  });
+});

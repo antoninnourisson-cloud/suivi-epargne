@@ -75,7 +75,9 @@ export const Modal: React.FC<ModalProps> = ({ open, onClose, label, children, va
         // feuille du bas, avec sa poignée.
         className={`bg-surface-container-high text-on-surface shadow-xl w-full outline-hidden rounded-3xl max-h-[90vh] overflow-y-auto ${sheet ? 'max-sm:rounded-b-none max-sm:max-h-[85vh] pb-[env(safe-area-inset-bottom)]' : ''} ${className}`}
       >
-        {sheet && <div className="sm:hidden flex justify-center pt-3 -mb-1" aria-hidden="true"><span className="h-1 w-8 rounded-full bg-on-surface-variant/40" /></div>}
+        {/* Poignée remontée dans le rembourrage du haut, puis 8 px fixes avant le contenu,
+            quel que soit le rembourrage passé (p-4 ou p-6) : elle ne touche jamais le titre. */}
+        {sheet && <div data-sheet-handle className="sm:hidden flex justify-center -mt-2 mb-2" aria-hidden="true"><span className="h-1 w-8 rounded-full bg-on-surface-variant/40" /></div>}
         {children}
       </div>
     </div>

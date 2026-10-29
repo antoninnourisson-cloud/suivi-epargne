@@ -36,6 +36,13 @@ test.describe('Demander à Pécule (démo)', () => {
     await expect(sheet.getByText(/ne sont pas un conseil financier/)).toBeVisible();
     // Largeur de 320 px : rien ne déborde.
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
+    // La poignée de la feuille ne touche pas le titre : au moins 6 px d'écart.
+    const gap = await sheet.evaluate(el => {
+      const bar = el.querySelector('[data-sheet-handle] span')!.getBoundingClientRect();
+      const title = el.querySelector('h2')!.getBoundingClientRect();
+      return title.top - bar.bottom;
+    });
+    expect(gap).toBeGreaterThanOrEqual(6);
 
     await sheet.getByRole('button', { name: 'Combien ai-je épargné ce trimestre ?' }).click();
     await expect(sheet.getByText('Ce trimestre, vous avez mis de côté 1 234,56 €.')).toBeVisible();

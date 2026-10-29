@@ -21,7 +21,7 @@ const NavButton = ({ active, onClick, icon: Icon, label }: { active: boolean; on
   <button
     onClick={onClick}
     aria-current={active ? 'page' : undefined}
-    className={`w-full h-12 flex items-center gap-3 px-4 text-sm transition-colors rounded-full ${active ? 'bg-secondary-container text-on-secondary-container font-bold' : 'font-medium text-on-surface-variant hover:bg-on-surface/8 hover:text-on-surface'}`}
+    className={`w-full h-12 [@media(max-height:899px)]:h-10 flex items-center gap-3 px-4 text-sm transition-colors rounded-full ${active ? 'bg-secondary-container text-on-secondary-container font-bold' : 'font-medium text-on-surface-variant hover:bg-on-surface/8 hover:text-on-surface'}`}
   >
     <Icon className="w-5 h-5 shrink-0" aria-hidden="true" />
     {label}
@@ -34,7 +34,7 @@ const NavButton = ({ active, onClick, icon: Icon, label }: { active: boolean; on
  */
 const SideNav = React.memo(function SideNav({ view, setView, showParentalScreen }: { view: View; setView: (v: View) => void; showParentalScreen: boolean }) {
   return (
-    <nav aria-label="Navigation principale" className="flex-1 px-3 pb-3 overflow-y-auto space-y-0.5">
+    <nav aria-label="Navigation principale" className="flex-1 min-h-0 px-3 pb-3 overflow-y-auto space-y-0.5">
       {NAV_ITEMS.filter(i => !i.section && i.key !== 'settings').map(i => <NavButton key={i.key} active={view === i.key} onClick={() => setView(i.key)} icon={i.icon} label={i.label} />)}
       {NAV_SECTIONS.map(section => (
         <React.Fragment key={section}>
@@ -80,7 +80,9 @@ export const AppShell: React.FC<AppShellProps> = ({ view, setView, showParentalS
         className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-100 focus:px-4 focus:py-2 focus:rounded-lg focus:bg-surface-container-lowest focus:text-on-surface focus:font-medium focus:shadow-lg">
         Aller au contenu
       </a>
-      <aside className="hidden md:flex bg-surface-container-low text-on-surface w-full md:w-72 shrink-0 flex-col">
+      {/* Menu collé à l'écran, à hauteur de fenêtre : seul le contenu (main) défile, et la liste
+          des écrans défile à part si la fenêtre est basse. Entrées resserrées sous 900 px de haut. */}
+      <aside className="hidden md:flex md:sticky md:top-0 md:h-dvh bg-surface-container-low text-on-surface w-full md:w-72 shrink-0 flex-col">
         <div className="px-7 pt-6 pb-3">
           <h1 className="text-2xl font-bold text-primary dark:text-on-surface flex items-center gap-3"><Logo className="w-9 h-9" /> Pécule</h1>
           <div className="mt-3 text-xs text-on-surface-variant font-medium flex items-center justify-between gap-2">

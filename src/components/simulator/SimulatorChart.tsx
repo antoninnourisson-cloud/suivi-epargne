@@ -29,6 +29,9 @@ export const simulatorColors = (dark: boolean, showScenario: boolean) => {
   return { scenario: t.brand, baseline: showScenario ? t.cursor : t.brand, band: t.brand };
 };
 
+/** Opacité de l'aire de la fourchette, reprise par la pastille de la légende. */
+export const simulatorBandOpacity = (dark: boolean) => (dark ? 0.22 : 0.16);
+
 /** Mêmes valeurs ligne à ligne (un objectif saisi, par exemple, ne change pas les courbes). */
 const sameRows = (a: SimChartRow[], b: SimChartRow[]) => a === b || (a.length === b.length && a.every((r, i) => {
   const s = b[i];
@@ -74,7 +77,7 @@ export const SimulatorChart = React.memo(function SimulatorChart({ data, showSce
             return <ChartTooltipCard title={row.title} rows={rows} />;
           }}
         />
-        <Area type="monotone" dataKey="band" name="Fourchette" stroke="none" fill={c.band} fillOpacity={dark ? 0.22 : 0.16} activeDot={false} {...anim} />
+        <Area type="monotone" dataKey="band" name="Fourchette" stroke="none" fill={c.band} fillOpacity={simulatorBandOpacity(dark)} activeDot={false} {...anim} />
         <Line type="monotone" dataKey="baseline" name="Plan actuel" stroke={c.baseline} strokeWidth={2} strokeDasharray={showScenario ? '6 4' : undefined} dot={false}
           activeDot={{ r: 5, fill: c.baseline, stroke: t.surface, strokeWidth: 2 }} {...anim} />
         {showScenario && (

@@ -11,7 +11,7 @@ import { parseFrenchNumber } from '../../lib/numbers';
 import { quinzaineWithdrawalTip } from '../../lib/finance';
 import { parseISODate } from '../../lib/dates';
 import { balanceFreshness, describeCheckAge, offersBalanceCheck } from '../../lib/freshness';
-import { formatEUR, toInputAmount, frenchDay } from '../../lib/format';
+import { elideDe, formatEUR, toInputAmount, frenchDay } from '../../lib/format';
 import type { Adjust, Draft, DraftBreakdown, EntryMode } from './draft';
 
 interface AccountUpdateRowProps {
@@ -143,7 +143,7 @@ export const AccountUpdateRow: React.FC<AccountUpdateRowProps> = ({
       </h3>
       {offerConfirm && (
         <div className="px-4 sm:px-6 pb-3 -mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
-          <Chip selected={confirmed} onClick={onToggleConfirmed} className="max-sm:h-12" aria-label={`Solde de ${account.name} inchangé`}>
+          <Chip selected={confirmed} onClick={onToggleConfirmed} className="max-sm:h-12" aria-label={`Solde ${elideDe(account.name)} inchangé`}>
             Inchangé
           </Chip>
           <span className="text-xs text-on-surface-variant">
@@ -154,7 +154,7 @@ export const AccountUpdateRow: React.FC<AccountUpdateRowProps> = ({
 
       <div id={panelId} hidden={!expanded} className="px-4 sm:px-6 pb-5 pt-1 space-y-5">
         <SegmentedButton<EntryMode>
-          label={`Façon de saisir le solde de ${account.name}`}
+          label={`Façon de saisir le solde ${elideDe(account.name)}`}
           options={modes}
           value={activeMode}
           onChange={setMode}
@@ -332,7 +332,7 @@ export const AccountUpdateRow: React.FC<AccountUpdateRowProps> = ({
             label="Date du relevé"
             type="date"
             value={u.date}
-            aria-label={`Date du relevé de ${account.name}`}
+            aria-label={`Date du relevé ${elideDe(account.name)}`}
             onChange={e => onDateChange(e.target.value)}
           />
         </div>

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { simulate, mulberry32, pastMonthlySavings, monthIndex, Scenario } from './simulator';
+import { simulate, mulberry32, pastMonthlySavings, monthIndex, positionInBand, Scenario } from './simulator';
 import { buildSoloPlan } from './planning';
 import { projectSavings } from './projection';
 import { parseISODate } from './dates';
@@ -343,5 +343,20 @@ describe('simulateur : argent bloqué, impôt et surplus non placé', () => {
     ];
     const r = simulate({ ...base, accounts, monthlyPlan: 500 });
     expect(r.baselineEnd).toBeCloseTo(22950 + 12000 + 1000 + 500 * 6, 2);
+  });
+});
+
+describe('positionInBand : le chiffre mis en avant face à la fourchette', () => {
+  const point = { p10: 35753, p90: 39543 };
+  it('au-dessus, dedans, en dessous (à 50 centimes près)', () => {
+    expect(positionInBand(46658, point)).toBe('above');
+    expect(positionInBand(37000, point)).toBe('inside');
+    expect(positionInBand(39543.4, point)).toBe('inside');
+    expect(positionInBand(35753.2, point)).toBe('inside');
+    expect(positionInBand(30000, point)).toBe('below');
+  });
+  it('sans fourchette, rien à dire', () => {
+    expect(positionInBand(1000, {})).toBeNull();
+    expect(positionInBand(1000, { p10: 10 })).toBeNull();
   });
 });

@@ -54,3 +54,33 @@ describe('Pilotage : réglages', () => {
     expect(patch).toHaveBeenLastCalledWith({ grossAnnual: 40000 });
   });
 });
+
+describe('Pilotage : en-tête « À placer ce mois »', () => {
+  const amountsOf = () => {
+    const hero = screen.getByRole('region', { name: 'À placer ce mois' });
+    const pairs = Array.from(hero.querySelectorAll('dl > div'));
+    return { hero, pairs };
+  };
+
+  it('chaque libellé est suivi de sa propre valeur (une paire dt/dd par montant)', () => {
+    renderPilot();
+    const { pairs } = amountsOf();
+    expect(pairs).toHaveLength(2);
+    expect(pairs.map((p) => p.querySelector('dt')?.textContent)).toEqual(['Paie nette après impôt', 'Dépenses prévues']);
+    for (const p of pairs) expect(p.querySelectorAll('dd')).toHaveLength(1);
+  });
+
+  it('les trois montants ont la même précision : paie − dépenses = à placer, au centime près', () => {
+    renderPilot();
+    const { hero, pairs } = amountsOf();
+    const parse = (s: string | null | undefined) => Number((s ?? '').replace(/[^\d,-]/g, '').replace(',', '.'));
+    const texts = pairs.map((p) => p.querySelector('dd')?.textContent);
+    const [net, spending] = texts.map(parse);
+    // Même nombre de décimales partout (toutes avec centimes, ou aucune).
+    const withCents = texts.map((t) => /,\d{2}/.test(t ?? ''));
+    expect(new Set(withCents).size).toBe(1);
+    const toInvest = hero.textContent!.match(/À placer ce mois\s*([\d\s ,]+)€/)?.[1];
+    expect(Math.round((net - spending) * 100)).toBe(Math.round(parse(toInvest) * 100));
+    expect(/,\d{2}/.test(toInvest ?? '')).toBe(withCents[0]);
+  });
+});

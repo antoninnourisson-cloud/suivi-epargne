@@ -11,7 +11,7 @@ import { SavingsAccount, AccountType, FiscalConfig } from '../types';
 import { computeWeightedAnnualRate, computeGainsWithdrawal, computeParentalInterest, computeAccruedInterest, CapitalTaxRegime, computeWithdrawalTax, tracksDeposits, PEA_DEPOSIT_CEILING, computeExpectedYearInterest, cryptoDisposalsOfYear, adviseProgressiveOption, CRYPTO_EXEMPT_DISPOSALS, type CryptoThreshold } from '../lib/finance';
 import { computeIdleCash, describeIdleDestinations } from '../lib/idleCash';
 import { Coins, TrendingUp, AlertCircle, PiggyBank, FileDown, Landmark, Info, ExternalLink, LineChart, CheckCircle2 } from 'lucide-react';
-import { formatEUR, formatRate } from '../lib/format';
+import { elideDe, formatEUR, formatRate } from '../lib/format';
 import { netAnnualRate } from '../lib/projection';
 import { SplitProjectionCard } from './SplitProjectionCard';
 import { round2 } from '../lib/money';
@@ -351,7 +351,7 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig, monthPlan,
             </p>
             {onConfirmBalance && (
               <Button type="button" variant="tonal" className="max-sm:h-12" onClick={() => onConfirmBalance(staleCurrent.a)}>
-                <CheckCircle2 className="w-4 h-4" aria-hidden="true" /> Confirmer le solde<span className="sr-only"> de {staleCurrent.a.name} : il est à jour aujourd'hui</span>
+                <CheckCircle2 className="w-4 h-4" aria-hidden="true" /> Confirmer le solde<span className="sr-only"> {elideDe(staleCurrent.a.name)} : il est à jour aujourd'hui</span>
               </Button>
             )}
           </div>

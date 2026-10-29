@@ -3,7 +3,7 @@
 // Seule la part propre circule : le capital des parents ne sort jamais par ici.
 import type { AccountMovement } from '../../types';
 import { applyMovement, canWithdrawOwn, restoreBalances, round2, snapshotBalances } from '../accountOps';
-import { formatEUR } from '../format';
+import { elideDe, formatEUR } from '../format';
 import { CommandResult, CommandState, fail } from './types';
 
 export interface LinkedTransferInput {
@@ -34,7 +34,7 @@ export const linkedTransfer = (state: CommandState, input: LinkedTransferInput):
   }
   const ids = input.ids ?? { linkId: crypto.randomUUID(), out: crypto.randomUUID(), in: crypto.randomUUID() };
   const moveOut: AccountMovement = { id: ids.out, date: input.date, amount, label: `Virement vers ${dest.name}`, type: 'OUT', linkId: ids.linkId };
-  const moveIn: AccountMovement = { id: ids.in, date: input.date, amount, label: `Virement de ${source.name}`, type: 'IN', linkId: ids.linkId };
+  const moveIn: AccountMovement = { id: ids.in, date: input.date, amount, label: `Virement ${elideDe(source.name)}`, type: 'IN', linkId: ids.linkId };
   const snap = snapshotBalances(state.accounts, [source.id, dest.id]);
   return {
     ok: true,

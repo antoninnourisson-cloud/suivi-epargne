@@ -1,6 +1,6 @@
 // Phrases partagées par l'Accueil et les Fiches de paie (motivation, contrôle des fiches).
 import type { PayslipAnomaly } from '../../lib/motivation';
-import { formatEUR } from '../../lib/format';
+import { elideDe, formatEUR } from '../../lib/format';
 
 /** « Net payé 2 400 € : +20 % par rapport à votre médiane de 2 000 €. Prime, … ? Vérifiez la fiche. » */
 export const describeAnomaly = (a: PayslipAnomaly): string => {
@@ -16,5 +16,5 @@ export const payMonthName = (key: string, currentYear?: number): string => {
   return d.toLocaleDateString('fr-FR', y === currentYear ? { month: 'long' } : { month: 'long', year: 'numeric' });
 };
 
-/** « d'août », « de septembre » : élision devant une voyelle. */
-export const deMonth = (name: string): string => (/^[aeiouyéèêàâîôûh]/i.test(name) ? `d'${name}` : `de ${name}`);
+/** « d'août », « de septembre » : élision devant une voyelle (voir elideDe). */
+export const deMonth = elideDe;

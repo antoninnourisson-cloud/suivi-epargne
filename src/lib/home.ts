@@ -28,7 +28,7 @@ import {
 import { MS_PER_DAY, daysBetween, formatISODay, parseISODate } from './dates';
 import { round2, signedAmount } from './money';
 import { csvAmount, type CsvCell } from './csv';
-import { formatEUR, formatPeriod, frenchDay } from './format';
+import { elideDe, formatEUR, formatPeriod, frenchDay } from './format';
 
 // ---------------------------------------------------------------------------
 // Votre épargne à ce jour
@@ -409,7 +409,7 @@ export const availabilitySlices = (stats: AvailabilityBreakdown): AvailabilitySl
     // sans date de versement connue est comptée bloquée par prudence, et on le dit.
     const next = stats.peeNextRelease;
     const hint = (next
-      ? `Retraite, épargne salariale, PEL, placements à terme · ${formatEUR(next.amount, 0)} de ${next.name} libres le ${dayFr(next.date)}`
+      ? `Retraite, épargne salariale, PEL, placements à terme · ${formatEUR(next.amount, 0)} ${elideDe(next.name)} libres le ${dayFr(next.date)}`
       : 'Retraite, épargne salariale, PEL, placements à terme')
       + (stats.peeUndated ? ' · épargne salariale sans date de versement connue comptée bloquée par prudence' : '');
     out.push({ key: 'locked', label: 'Bloqué', hint, amount: stats.hardLocked });
@@ -647,7 +647,7 @@ export const buildHomeTodos = (i: HomeTodoInput): HomeTodo[] => {
   const raise = i.payRaise;
   if (raise) out.push({
     key: `raise-${raise.period}`, icon: 'trending-up', tone: 'action',
-    text: `Votre net a augmenté de ${eur0(raise.delta)} par mois (fiche de ${formatPeriod(raise.period)}).`,
+    text: `Votre net a augmenté de ${eur0(raise.delta)} par mois (fiche ${elideDe(formatPeriod(raise.period))}).`,
     detail: raise.hasFixedAmount
       ? `« Ajouter » augmente votre épargne mensuelle de ${eur0(raise.delta)}. Si c'est une prime ponctuelle, ignorez.`
       : '« Ajouter » base le Pilotage sur cette fiche. Si c\'est une prime ponctuelle, ignorez.',
@@ -656,7 +656,7 @@ export const buildHomeTodos = (i: HomeTodoInput): HomeTodo[] => {
   });
   if (i.avRatesDue.length > 0 && !closingOpen && !closing?.closed) out.push({
     key: `av-rate-${year}`, icon: 'percent', tone: 'action',
-    text: `Taux servi ${year - 1} : reportez le nouveau taux du fonds euros de ${i.avRatesDue.map(a => a.name).join(', ')}, publié par votre assureur en janvier.`,
+    text: `Taux servi ${year - 1} : reportez le nouveau taux du fonds euros ${elideDe(i.avRatesDue.map(a => a.name).join(', '))}, publié par votre assureur en janvier.`,
     primary: go('Mes comptes', 'accounts'),
     secondary: i.can.updateAccounts ? { label: 'Taux inchangé', action: { type: 'confirm-av-rates', accountIds: i.avRatesDue.map(a => a.id) } } : undefined,
   });

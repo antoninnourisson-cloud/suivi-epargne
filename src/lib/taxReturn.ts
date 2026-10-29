@@ -40,7 +40,7 @@
 // ================================================
 import { AccountMovement, AccountType, GlobalAppData, SavingsAccount } from '../types';
 import { computeAccruedInterest, computeDonationSummary, cryptoDisposalsOfYear, CRYPTO_EXEMPT_DISPOSALS, hasTaxableYearlyInterest, isInitialBalance } from './finance';
-import { formatEUR } from './format';
+import { elideDe, formatEUR } from './format';
 import { countedPayslips } from './payslipChecks';
 
 export type TaxReturnSection = 'income' | 'savings' | 'deductions' | 'abroad' | 'crypto';
@@ -176,7 +176,7 @@ export const buildTaxReturnChecklist = (
   if (local.length > 0) {
     lines.push({
       id: 'interest', section: 'savings', box: '2TR', label: 'Intérêts imposables', amount: Math.round(localTotal), confidence: 'estimate',
-      note: `Intérêts ${incomeYear} de ${listFr(local.map(r => r.a.name))}, calculés par Pécule. Votre banque les déclare : le montant est en principe pré-rempli, comparez-le à son relevé fiscal annuel. Un livret jeune est exonéré : ne le comptez pas.`,
+      note: `Intérêts ${incomeYear} ${elideDe(listFr(local.map(r => r.a.name)))}, calculés par Pécule. Votre banque les déclare : le montant est en principe pré-rempli, comparez-le à son relevé fiscal annuel. Un livret jeune est exonéré : ne le comptez pas.`,
       link: TAX_LINKS.savingsIncome, topic: 'les intérêts imposables (2TR)',
     });
     lines.push({

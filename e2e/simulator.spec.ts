@@ -67,6 +67,13 @@ test.describe('Simulateur « Et si… » (démo)', () => {
     // pas encore versés, sont signalés à part.
     if (new Date().getMonth() !== 0) await expect(page.getByText(/d'intérêts déjà gagnés sur ces livrets attendront/)).toBeVisible();
     expect(workers.some(u => /simulator\.worker/.test(u))).toBe(true);
+    // Sous le chiffre du plan, le résultat probable (rythme passé) est dit, avec sa fourchette.
+    await expect(page.getByText(/À votre rythme des \d+ derniers mois : plutôt/)).toBeVisible();
+    await expect(page.getByText(/À votre rythme des \d+ derniers mois/)).toContainText('dans 8 cas sur 10');
+    // Légende : la courbe en trait, la fourchette en aire pâle (plus deux carrés identiques).
+    const swatches = page.getByRole('list', { name: 'Légende' }).locator('[data-shape]');
+    await expect(swatches).toHaveCount(2);
+    expect(await swatches.evaluateAll(els => els.map(e => e.getAttribute('data-shape')))).toEqual(['line', 'band']);
 
     await page.getByRole('group', { name: 'Horizon' }).getByRole('button', { name: '60 mois' }).click();
     await expect(page.getByText('Calcul de la fourchette…')).toBeHidden();

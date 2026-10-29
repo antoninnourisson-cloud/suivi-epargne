@@ -10,7 +10,7 @@ import { RegulatedRatesEditor } from './RegulatedRatesEditor';
 import { AccountMovementList, type DisplayMovement } from './AccountMovementList';
 import { AccountTotal } from './AccountTotal';
 import { computeMaturityCountdown, computePeeAvailability, describeMaturity } from '../lib/finance';
-import { formatEUR, formatRate, formatSignedEUR } from '../lib/format';
+import { elideDe, formatEUR, formatRate, formatSignedEUR } from '../lib/format';
 import { PlusCircle, Pencil, Trash2, Clock, ChevronDown, Tag, CheckCircle2, TrendingUp, FileText } from 'lucide-react';
 import { signedAmount } from '../lib/money';
 import { localTodayISO, parseISODate } from '../lib/dates';
@@ -220,7 +220,7 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
                                 <span className={fresh.stale ? 'font-medium text-tertiary' : 'text-on-surface-variant'}>Solde {describeCheckAge(fresh.days)}</span>
                                 {offersBalanceCheck(acc.type, fresh) && (
                                   <Button type="button" variant="text" size="sm" onClick={() => markChecked(acc)} className="-ml-3 max-md:h-12!">
-                                    <CheckCircle2 className="w-4 h-4" aria-hidden="true" /> Confirmer le solde<span className="sr-only"> de {acc.name} : il est à jour aujourd'hui</span>
+                                    <CheckCircle2 className="w-4 h-4" aria-hidden="true" /> Confirmer le solde<span className="sr-only"> {elideDe(acc.name)} : il est à jour aujourd'hui</span>
                                   </Button>
                                 )}
                               </div>
@@ -254,7 +254,7 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
                             <td colSpan={hasParental ? 4 : 3} className="p-4">
                               <div className="space-y-2">
                                 {onReadStatement && (
-                                  <Button variant="tonal" onClick={() => onReadStatement(acc.id)} aria-label={`Lire un relevé de ${acc.name}`}>
+                                  <Button variant="tonal" onClick={() => onReadStatement(acc.id)} aria-label={`Lire un relevé ${elideDe(acc.name)}`}>
                                     <FileText className="w-4 h-4" aria-hidden="true" /> Lire un relevé
                                   </Button>
                                 )}

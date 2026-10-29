@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatEUR, formatSignedEUR } from './format';
+import { elideDe, elideDu, elideLe, formatEUR, formatSignedEUR } from './format';
 
 // Intl insère des espaces insécables : on les normalise pour comparer.
 const norm = (s: string) => s.replace(/[  ]/g, ' ');
@@ -18,5 +18,20 @@ describe('formatEUR', () => {
     expect(norm(formatSignedEUR(13.5))).toBe('+13,50 €');
     expect(norm(formatSignedEUR(-250))).toBe('−250 €');
     expect(formatEUR(NaN)).toBe('—');
+  });
+});
+
+describe('élision (« d’octobre », « l’Assurance vie »)', () => {
+  it('élide devant une voyelle, accentuée ou en capitale', () => {
+    expect(['avril', 'août', 'octobre', 'Assurance vie', 'Épargne salariale', 'œuvre', 'LDDS', 'Ouragan'].map(elideDe))
+      .toEqual(["d'avril", "d'août", "d'octobre", "d'Assurance vie", "d'Épargne salariale", "d'œuvre", 'de LDDS', "d'Ouragan"]);
+    expect(elideLe('Assurance vie')).toBe("l'Assurance vie");
+    expect(elideDu('Assurance vie')).toBe("de l'Assurance vie");
+  });
+  it('garde « de », « le », « du » devant une consonne, un h ou un y', () => {
+    expect(['septembre', 'mai', 'Livret A', 'Hello bank', 'Yomoni', 'janvier 2027'].map(elideDe))
+      .toEqual(['de septembre', 'de mai', 'de Livret A', 'de Hello bank', 'de Yomoni', 'de janvier 2027']);
+    expect(elideLe('Livret A')).toBe('le Livret A');
+    expect(elideDu('PEA')).toBe('du PEA');
   });
 });

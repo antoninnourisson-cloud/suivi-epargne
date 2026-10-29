@@ -150,6 +150,18 @@ export interface SimPoint {
   p90?: number;
 }
 
+/**
+ * Où se place un montant projeté par rapport à la fourchette P10–P90 du même mois
+ * (à 50 centimes près) ; null sans fourchette. Sert à dire franchement quand le plan
+ * mis en avant sort du résultat probable.
+ */
+export const positionInBand = (value: number, point: Pick<SimPoint, 'p10' | 'p90'>): 'below' | 'inside' | 'above' | null => {
+  if (point.p10 === undefined || point.p90 === undefined) return null;
+  if (value > point.p90 + 0.5) return 'above';
+  if (value < point.p10 - 0.5) return 'below';
+  return 'inside';
+};
+
 export interface PurchaseOutcome {
   id: string;
   month: number;

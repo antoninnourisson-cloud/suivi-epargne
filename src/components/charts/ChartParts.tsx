@@ -4,14 +4,25 @@
 // de la série.
 import React from 'react';
 
+/** Forme de la pastille : carré (aire), trait (courbe), trait pointillé, ou aire pâle (fourchette). */
+export type SwatchShape = 'square' | 'line' | 'dashed' | 'band';
+
+/** Opacité de la pastille « fourchette » : la même que l'aire pâle du graphique. */
+const swatchStyle = (color: string, striped: boolean | undefined, shape: SwatchShape, bandOpacity: number): React.CSSProperties => {
+  if (striped) return { backgroundImage: `repeating-linear-gradient(45deg, ${color} 0 2px, transparent 2px 4px)`, boxShadow: `inset 0 0 0 1.5px ${color}` };
+  if (shape === 'dashed') return { backgroundImage: `repeating-linear-gradient(90deg, ${color} 0 4px, transparent 4px 6px)` };
+  // Aire pâle : la couleur à l'opacité de la bande, cerclée d'un filet plus soutenu pour rester visible.
+  if (shape === 'band') return { backgroundColor: `color-mix(in srgb, ${color} ${Math.round(bandOpacity * 100)}%, transparent)`, boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${color} 45%, transparent)` };
+  return { backgroundColor: color };
+};
+
 /** Pastille de couleur d'une série ; hachurée pour l'épargne bloquée ou fiscalisée. */
-const SeriesSwatch: React.FC<{ color: string; striped?: boolean; shape?: 'square' | 'line' }> = ({ color, striped, shape = 'square' }) => (
+const SeriesSwatch: React.FC<{ color: string; striped?: boolean; shape?: SwatchShape; bandOpacity?: number }> = ({ color, striped, shape = 'square', bandOpacity = 0.2 }) => (
   <span
     aria-hidden="true"
-    className={shape === 'line' ? 'inline-block w-3 h-0.5 rounded-full shrink-0' : 'inline-block w-2.5 h-2.5 rounded-[3px] shrink-0'}
-    style={striped
-      ? { backgroundImage: `repeating-linear-gradient(45deg, ${color} 0 2px, transparent 2px 4px)`, boxShadow: `inset 0 0 0 1.5px ${color}` }
-      : { backgroundColor: color }}
+    data-shape={shape}
+    className={shape === 'line' || shape === 'dashed' ? 'inline-block w-4 h-0.5 rounded-full shrink-0' : 'inline-block w-2.5 h-2.5 rounded-[3px] shrink-0'}
+    style={swatchStyle(color, striped, shape, bandOpacity)}
   />
 );
 
@@ -22,6 +33,10 @@ export interface LegendItem {
   /** Valeur écrite à côté du nom (ex. dernier solde). */
   value?: string;
   striped?: boolean;
+  /** Forme de la pastille : trait pour une courbe, aire pâle pour une fourchette (carré par défaut). */
+  shape?: SwatchShape;
+  /** Opacité de l'aire pâle (forme « band »), la même que dans le graphique. */
+  bandOpacity?: number;
 }
 
 /** Légende HTML : nom + valeur, lisible sans survol ni couleur. */
@@ -29,7 +44,7 @@ export const ChartLegend: React.FC<{ items: LegendItem[]; label?: string }> = ({
   <ul aria-label={label} className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-on-surface-variant">
     {items.map(i => (
       <li key={i.key} className="inline-flex items-center gap-1.5 min-w-0">
-        <SeriesSwatch color={i.color} striped={i.striped} />
+        <SeriesSwatch color={i.color} striped={i.striped} shape={i.shape} bandOpacity={i.bandOpacity} />
         <span className="truncate">{i.label}</span>
         {i.value !== undefined && <span className="font-medium text-on-surface tabular-nums whitespace-nowrap">{i.value}</span>}
       </li>

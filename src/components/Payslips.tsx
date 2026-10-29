@@ -13,7 +13,7 @@ import { openDrivePicker, downloadFileAsBase64 } from '../services/googleDriveSe
 import { extractPayslipData, fileToBase64, GeminiError } from '../services/geminiService';
 import { parseFrenchNumber } from '../lib/numbers';
 import { FileText, Upload, Sparkles, Smartphone, Trash2, ExternalLink, AlertTriangle, Check, X, Loader2, KeyRound, TrendingUp, Wand2, PenLine } from 'lucide-react';
-import { formatEUR, formatPeriod, toInputAmount } from '../lib/format';
+import { elideDe, formatEUR, formatPeriod, toInputAmount } from '../lib/format';
 import { useIsDark, chartTheme } from '../lib/chartTheme';
 import { describeEvolution } from '../lib/chartData';
 import { AreaSeriesChart, type AreaRow } from './charts/AreaSeriesChart';
@@ -297,7 +297,7 @@ export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, 
   // voisine, sinon sur « Importer depuis Drive » (s'il est actif), sinon sur « Choisir sur
   // l'appareil », sinon (bouton absent) sur le titre.
   const removePayslip = (p: PayslipRecord) => {
-    removeWithUndo(payslips, p, onUpdatePayslips, `Fiche de ${periodName(p)} retirée de la liste${p.fileId ? ' (le fichier reste sur votre Drive)' : ''}`);
+    removeWithUndo(payslips, p, onUpdatePayslips, `Fiche ${elideDe(periodName(p))} retirée de la liste${p.fileId ? ' (le fichier reste sur votre Drive)' : ''}`);
     focusAfterRemoval(() => listRef.current, sorted.findIndex(x => x.id === p.id), () => (importRef.current?.disabled ? deviceRef.current : importRef.current));
   };
   const periodLabel = formatPeriod(draftPeriod ?? '');
@@ -509,7 +509,7 @@ export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, 
                       </Button>
                     ) : p.extracted.grossAmount !== undefined && (
                       <Button variant="text" onClick={() => onApplyToPilotage(p)} className="max-sm:h-12">
-                        <Wand2 className="w-4 h-4" aria-hidden="true" /> Utiliser pour le Pilotage{' '}<span className="sr-only">(fiche de {name})</span>
+                        <Wand2 className="w-4 h-4" aria-hidden="true" /> Utiliser pour le Pilotage{' '}<span className="sr-only">(fiche {elideDe(name)})</span>
                       </Button>
                     )}
                     {/* Fiche reçue par partage : pas de fichier sur Drive, donc pas de lien. */}
@@ -518,7 +518,7 @@ export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, 
                         href={driveUrl(p.fileId)}
                         target="_blank"
                         rel="noopener noreferrer"
-                        aria-label={`Ouvrir la fiche de ${name} sur Drive (nouvel onglet)`}
+                        aria-label={`Ouvrir la fiche ${elideDe(name)} sur Drive (nouvel onglet)`}
                         title="Ouvrir sur Drive"
                         className={iconLink}
                         data-focus-after-removal
@@ -526,7 +526,7 @@ export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, 
                         <ExternalLink className="w-5 h-5" aria-hidden="true" />
                       </a>
                     )}
-                    <IconButton icon={Trash2} tone="danger" label={`Retirer la fiche de ${name} de la liste`} onClick={() => removePayslip(p)}
+                    <IconButton icon={Trash2} tone="danger" label={`Retirer la fiche ${elideDe(name)} de la liste`} onClick={() => removePayslip(p)}
                       data-focus-after-removal={p.fileId ? undefined : true} />
                   </>}
                 />

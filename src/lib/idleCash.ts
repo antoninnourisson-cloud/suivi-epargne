@@ -15,6 +15,7 @@
 import { AccountType, FiscalConfig, SavingsAccount } from '../types';
 import { computePlacementStrategy, PlacementStep } from './finance';
 import { CURRENT_ACCOUNT_FRESH_DAYS, isRecentlyChecked } from './freshness';
+import { elideLe } from './format';
 
 /** Coussin gardé sur le compte courant : 1,5 mois de dépenses. */
 const CASH_BUFFER_MONTHS = 1.5;
@@ -65,7 +66,7 @@ export const idleDestinations = (accounts: SavingsAccount[], lepEligible?: boole
 
 /** Où placer l'argent qui dort, en mots (« le Livret A et un LDDS à ouvrir ») : Accueil et Rendement. */
 export const describeIdleDestinations = (idle: Pick<IdleCash, 'steps'>): string => {
-  const names = idle.steps.map(st => (st.accountId ? `le ${st.accountName}` : 'un LDDS à ouvrir'));
+  const names = idle.steps.map(st => (st.accountId ? elideLe(st.accountName) : 'un LDDS à ouvrir'));
   return names.length <= 1 ? names.join('') : `${names.slice(0, -1).join(', ')} et ${names[names.length - 1]}`;
 };
 
