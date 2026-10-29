@@ -41,6 +41,7 @@
 import { AccountMovement, AccountType, GlobalAppData, SavingsAccount } from '../types';
 import { computeAccruedInterest, computeDonationSummary, cryptoDisposalsOfYear, CRYPTO_EXEMPT_DISPOSALS, hasTaxableYearlyInterest, isInitialBalance } from './finance';
 import { formatEUR } from './format';
+import { countedPayslips } from './payslipChecks';
 
 export type TaxReturnSection = 'income' | 'savings' | 'deductions' | 'abroad' | 'crypto';
 
@@ -131,13 +132,14 @@ export const buildTaxReturnChecklist = (
   const accounts = (data.accounts || []).filter(a => existedIn(a, incomeYear));
 
   // --- Salaires ---
-  const slips = (data.payslips || []).filter(p => p.extracted?.period?.startsWith(`${incomeYear}-`));
+  // Une fiche rectificative remplace la précédente du même mois ; « s'ajoute » : comptée en plus.
+  const slips = countedPayslips((data.payslips || []).filter(p => p.extracted?.period?.startsWith(`${incomeYear}-`)));
   const months = new Set(slips.map(p => p.extracted.period));
   const taxable = slips.reduce((s, p) => s + (p.extracted.netTaxable || 0), 0);
   if (months.size > 0 && taxable > 0) {
     lines.push({
       id: 'salary', section: 'income', box: '1AJ', label: 'Salaires', amount: Math.round(taxable), confidence: months.size >= 12 ? 'exact' : 'estimate',
-      note: months.size >= 12 ? 'Somme des nets imposables de vos 12 fiches : comparez au montant pré-rempli.'
+      note: months.size >= 12 ? `Somme des nets imposables de vos ${slips.length > 12 ? `${slips.length} fiches (12 mois)` : '12 fiches'} : comparez au montant pré-rempli.`
         : `Somme de ${months.size} fiche${months.size > 1 ? 's' : ''} sur 12 : le cumul « net imposable » de votre fiche de décembre fait foi.`,
       link: TAX_LINKS.declaration, topic: 'vos salaires (1AJ)',
     });

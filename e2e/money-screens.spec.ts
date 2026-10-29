@@ -68,6 +68,17 @@ test.describe('Fiches de paie (démo)', () => {
     await expect(importer).toHaveCSS('opacity', '1');
   });
 
+  test('« Choisir sur l’appareil » : la fiche choisie s’ouvre en import, sans Drive', async ({ page }) => {
+    await openDemo(page, 'payslips');
+    const chooser = page.waitForEvent('filechooser');
+    await page.getByRole('button', { name: "Choisir sur l'appareil" }).click();
+    await (await chooser).setFiles({ name: 'Paie octobre.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4 fiche fictive') });
+    await expect(page.getByRole('heading', { name: 'Paie octobre.pdf' })).toBeVisible();
+    await expect(page.getByText(/pas copiée sur votre Drive/)).toBeVisible();
+    await page.getByRole('button', { name: 'Saisir à la main' }).click();
+    await expect(page.getByLabel('Net payé')).toBeVisible();
+  });
+
   test('retirer une fiche au clavier : le focus passe à la fiche voisine, « Annuler » la remet', async ({ page }) => {
     await openDemo(page, 'payslips');
     const removes = page.getByRole('button', { name: /^Retirer la fiche de .* de la liste$/ });

@@ -21,7 +21,7 @@ vi.mock('../TaxNoticePanel', () => ({
   TaxNoticePanel: (p: Record<string, unknown>) => { stubProps.TaxNoticePanel = p; return <div data-testid="tax" />; },
 }));
 
-import { ShareTargetHost, type ShareTargetHostProps } from './ShareTargetHost';
+import { ShareTargetHost, describeFileSize, describeReceivedAt, type ShareTargetHostProps } from './ShareTargetHost';
 
 const pdf = new File(['%PDF'], 'Bulletin octobre.pdf', { type: 'application/pdf' });
 
@@ -62,6 +62,33 @@ describe('Partager vers Pécule', () => {
     fireEvent.click(screen.getByRole('button', { name: /Fiche de paie/ }));
     expect(props.onPayslip).toHaveBeenCalledWith(pdf);
     expect(props.onDone).toHaveBeenCalled();
+  });
+
+  it('avant toute lecture : nom, taille, heure de réception et « Vous n’avez rien partagé ? »', async () => {
+    const at = new Date(2026, 9, 29, 14, 32).getTime();
+    take.mockResolvedValue(new File([new Uint8Array(2500)], 'inconnu.pdf', { type: 'application/pdf', lastModified: at }));
+    vi.useFakeTimers({ toFake: ['Date'], now: new Date(2026, 9, 29, 14, 40) });
+    try {
+      const { props } = setup();
+      const dialog = await screen.findByRole('dialog', { name: 'Que voulez-vous importer ?' });
+      expect(dialog.textContent).toContain('inconnu.pdf');
+      expect(dialog.textContent).toMatch(/2 Ko · reçu aujourd'hui à 14:32/);
+      expect(dialog.textContent).toMatch(/Vous n'avez rien partagé \? Annulez/);
+      fireEvent.click(screen.getByRole('button', { name: 'Annuler' }));
+      expect(props.onDone).toHaveBeenCalled();
+      expect(props.onPayslip).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('taille et heure lisibles', () => {
+    expect(describeFileSize(1)).toBe('1 octet');
+    expect(describeFileSize(900)).toBe('900 octets');
+    expect(describeFileSize(820 * 1024)).toBe('820 Ko');
+    expect(describeFileSize(2.44 * 1024 * 1024)).toBe('2,4 Mo');
+    const at = new Date(2026, 9, 28, 23, 50).getTime();
+    expect(describeReceivedAt(at, new Date(2026, 9, 29, 0, 10).getTime())).toBe('reçu le 28 octobre à 23:50');
   });
 
   it('relevé bancaire : « Lire un relevé » reçoit le fichier', async () => {

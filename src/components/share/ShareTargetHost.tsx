@@ -53,6 +53,22 @@ const CHOICES = [
 ] as const;
 type Choice = (typeof CHOICES)[number]['key'];
 
+/** « 820 Ko », « 2,4 Mo » : taille du fichier reçu. */
+export const describeFileSize = (bytes: number): string => {
+  if (bytes < 1024) return `${bytes} octet${bytes > 1 ? 's' : ''}`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} Ko`;
+  return `${(bytes / (1024 * 1024)).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} Mo`;
+};
+
+/** « reçu aujourd'hui à 14:32 », sinon avec la date (l'heure de réception est gardée par share-sw.js). */
+export const describeReceivedAt = (at: number, now = Date.now()): string => {
+  const d = new Date(at);
+  const time = d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+  return d.toDateString() === new Date(now).toDateString()
+    ? `reçu aujourd'hui à ${time}`
+    : `reçu le ${d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })} à ${time}`;
+};
+
 export const ShareTargetHost: React.FC<ShareTargetHostProps> = props => {
   const { marker, ready, data, onDone } = props;
   const { geminiApiKey, doc } = data;
@@ -115,8 +131,15 @@ export const ShareTargetHost: React.FC<ShareTargetHostProps> = props => {
     return (
       <Modal open onClose={onDone} label="Que voulez-vous importer ?" variant="sheet" className="max-w-lg p-6">
         <h2 className="text-2xl font-normal text-on-surface">Que voulez-vous importer ?</h2>
+        {/* N'importe quel site peut envoyer un fichier sur `partager` : nom, taille et heure
+            permettent de reconnaître (ou non) son propre partage avant toute lecture. */}
         <p className="mt-2 text-sm font-medium text-on-surface break-all">{file.name}</p>
-        <p className="mt-1 text-xs text-on-surface-variant">
+        <p className="mt-0.5 text-sm text-on-surface-variant">{describeFileSize(file.size)} · {describeReceivedAt(file.lastModified)}</p>
+        <p className="mt-3 rounded-xl bg-tertiary-container text-on-tertiary-container p-3 text-sm flex items-start gap-2">
+          <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />
+          <span>Vous n'avez rien partagé ? Annulez : le fichier sera effacé sans être lu.</span>
+        </p>
+        <p className="mt-3 text-xs text-on-surface-variant">
           {isDemoSession()
             ? 'Mode démo : rien n\'est envoyé.'
             : 'Le fichier reste sur cet appareil le temps de l\'import. Il n\'est envoyé à Google Gemini, avec votre clé, qu\'après votre choix.'}

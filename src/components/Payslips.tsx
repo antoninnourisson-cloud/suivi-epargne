@@ -3,15 +3,16 @@
 // Import de fiches de paie depuis le Drive de l'utilisateur (Google Picker — le fichier
 // original n'est jamais copié, on ne stocke que sa référence) et extraction des montants
 // via l'API Gemini, à la demande explicite (chaque clic consomme le quota de l'utilisateur).
-// Une fiche reçue par « Partager vers Pécule » est lue depuis l'appareil : elle n'est pas
-// copiée sur Drive, la fiche enregistrée garde seulement son nom (sans lien Drive).
+// Une fiche choisie sur l'appareil (« Choisir sur l'appareil ») ou reçue par « Partager vers
+// Pécule » est lue depuis l'appareil : elle n'est pas copiée sur Drive, la fiche enregistrée
+// garde seulement son nom (sans lien Drive).
 // ================================================
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { PayslipRecord, PayslipExtractedData } from '../types';
 import { openDrivePicker, downloadFileAsBase64 } from '../services/googleDriveService';
 import { extractPayslipData, fileToBase64, GeminiError } from '../services/geminiService';
 import { parseFrenchNumber } from '../lib/numbers';
-import { FileText, Upload, Sparkles, Trash2, ExternalLink, AlertTriangle, Check, X, Loader2, KeyRound, TrendingUp, Wand2, PenLine } from 'lucide-react';
+import { FileText, Upload, Sparkles, Smartphone, Trash2, ExternalLink, AlertTriangle, Check, X, Loader2, KeyRound, TrendingUp, Wand2, PenLine } from 'lucide-react';
 import { formatEUR, formatPeriod, toInputAmount } from '../lib/format';
 import { useIsDark, chartTheme } from '../lib/chartTheme';
 import { describeEvolution } from '../lib/chartData';
@@ -19,7 +20,9 @@ import { AreaSeriesChart, type AreaRow } from './charts/AreaSeriesChart';
 import { ChartFrame } from './charts/ChartFrame';
 import { Button, Card, DataTable, EmptyState, IconButton, ListItem, MoneyText, PageHeader, TextField, type Column } from './ui';
 import { detectPayslipAnomalies } from '../lib/motivation';
-import { describeAnomaly } from './motivation/text';
+import { deMonth, describeAnomaly } from './motivation/text';
+import { payslipConsistency } from '../lib/payslipChecks';
+import { STATEMENT_ACCEPT, STATEMENT_MAX_BYTES, statementMimeType } from '../services/statementReader';
 import { useUndoableRemove } from './Toast';
 import { focusAfterRemoval } from './focusAfterRemoval';
 
@@ -60,7 +63,7 @@ interface DraftPayslip {
   // Échec passager (saturation, réseau) : on propose de relancer l'extraction.
   retryable?: boolean;
   fields: PayslipExtractedData;
-  /** Fichier de l'appareil (partagé vers Pécule), lu sans passer par Drive ; `fileId` vide. */
+  /** Fichier de l'appareil (choisi ou partagé vers Pécule), lu sans passer par Drive ; `fileId` vide. */
   localFile?: File;
 }
 
@@ -140,6 +143,8 @@ export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, 
   const [badFields, setBadFields] = useState<Partial<Record<AmountField, boolean>>>({});
   const listRef = useRef<HTMLUListElement>(null);
   const importRef = useRef<HTMLButtonElement>(null);
+  const deviceRef = useRef<HTMLButtonElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
   const removeWithUndo = useUndoableRemove();
 
   const keysMissing = !geminiApiKey || !pickerApiKey;
@@ -190,6 +195,23 @@ export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, 
     }
   };
 
+  // Fichier de l'appareil : mêmes types et même limite que le partage et « Lire un relevé ».
+  // Rien n'est lu ni envoyé avant « Analyser avec l'IA ».
+  const onDeviceFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setBadFields({});
+    const mimeType = statementMimeType(file);
+    const refused = !mimeType ? 'Pécule ne lit que les PDF et les images (PNG, JPEG, WebP…). Choisissez la fiche au format PDF ou une photo nette.'
+      : file.size > STATEMENT_MAX_BYTES ? 'Ce fichier est trop lourd : 15 Mo au plus.' : null;
+    if (refused || !mimeType) {
+      setDraft({ fileId: '', fileName: file.name, mimeType: '', status: 'error', error: refused ?? undefined, fields: { ...emptyFields } });
+      return;
+    }
+    setDraft({ fileId: '', fileName: file.name, mimeType, status: 'picked', fields: { ...emptyFields }, localFile: file });
+  };
+
   const handleExtract = async () => {
     if (!draft || !geminiApiKey) return;
     setDraft({ ...draft, status: 'extracting', error: undefined, errorDetail: undefined, retryable: false });
@@ -235,12 +257,21 @@ export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, 
   };
   const closeDraft = () => { setDraft(null); setBadFields({}); };
 
-  // Doublon de période : deux fiches du même mois mettent deux points sur le même X du
-  // graphique et rendent ambigu "Utiliser pour le Pilotage". On prévient, sans bloquer
-  // (cas légitimes possibles : fiche rectificative, double contrat).
-  const duplicatePeriod = draft?.fields.period && payslips.some(p => p.extracted.period === draft.fields.period);
+  // Doublon de période : la fiche rectificative (ou la même fiche importée deux fois)
+  // remplace l'ancienne ; un deuxième employeur ou un rappel de salaire s'ajoute. Le choix
+  // est demandé à l'enregistrement : sans lui, la déclaration (1AJ, 8HV) et le revenu estimé
+  // pour le LEP compteraient le mois deux fois (lib/payslipChecks, countedPayslips).
+  const draftPeriod = draft?.fields.period;
+  const samePeriod = useMemo(
+    () => (draftPeriod ? payslips.filter(p => p.extracted.period === draftPeriod) : []),
+    [payslips, draftPeriod]);
+  // Montants qui ne se recoupent pas (net avant impôt − impôt ≠ net payé…) : avertissement,
+  // l'enregistrement reste possible.
+  const reviewFields = draft?.status === 'reviewing' ? draft.fields : null;
+  const warnings = useMemo(() => (reviewFields ? payslipConsistency(reviewFields) : []), [reviewFields]);
+  const suspect = new Set(warnings.flatMap(w => w.fields));
 
-  const saveDraft = () => {
+  const saveDraft = (mode: 'new' | 'replace' | 'add') => {
     if (!draft) return;
     const record: PayslipRecord = {
       id: crypto.randomUUID(),
@@ -249,8 +280,12 @@ export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, 
       addedAt: new Date().toISOString(),
       extracted: draft.fields,
       reviewed: true, // l'utilisateur vient de relire/valider l'écran ci-dessous
+      ...(mode === 'add' ? { addsToPeriod: true } : {}),
     };
-    onUpdatePayslips(prev => [record, ...prev]);
+    const replaced = new Set(mode === 'replace' ? samePeriod.map(p => p.id) : []);
+    onUpdatePayslips(prev => [record, ...prev.filter(p => !replaced.has(p.id))]);
+    // La fiche remplacée servait de référence au Pilotage : il revient à l'estimation.
+    if (activePayslipId && replaced.has(activePayslipId)) onClearActivePayslip();
     closeDraft();
   };
 
@@ -259,24 +294,33 @@ export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, 
     [payslips]
   );
   // Retrait annulable (le fichier reste sur le Drive, s'il y était) ; le focus va sur la fiche
-  // voisine, sinon sur « Importer depuis Drive », sinon (bouton absent ou désactivé) sur le titre.
+  // voisine, sinon sur « Importer depuis Drive » (s'il est actif), sinon sur « Choisir sur
+  // l'appareil », sinon (bouton absent) sur le titre.
   const removePayslip = (p: PayslipRecord) => {
     removeWithUndo(payslips, p, onUpdatePayslips, `Fiche de ${periodName(p)} retirée de la liste${p.fileId ? ' (le fichier reste sur votre Drive)' : ''}`);
-    focusAfterRemoval(() => listRef.current, sorted.findIndex(x => x.id === p.id), () => importRef.current);
+    focusAfterRemoval(() => listRef.current, sorted.findIndex(x => x.id === p.id), () => (importRef.current?.disabled ? deviceRef.current : importRef.current));
   };
+  const periodLabel = formatPeriod(draftPeriod ?? '');
 
 
   return (
     <div className="space-y-6 animate-fade-in pb-20">
       <PageHeader
         title="Fiches de paie"
-        subtitle="Importez une fiche déjà rangée sur votre Drive : l'IA en lit les montants, vous les vérifiez avant d'enregistrer."
+        subtitle="Importez une fiche depuis cet appareil ou depuis votre Drive : l'IA en lit les montants, vous les vérifiez avant d'enregistrer."
         actions={!draft && (
-          // Désactivé sans clé Picker : la raison est écrite juste en dessous (aria-describedby).
-          <Button ref={importRef} onClick={handlePick} disabled={!pickerApiKey || pickerBusy} aria-describedby={!pickerApiKey ? KEYS_NOTE_ID : undefined} className="max-sm:h-12">
-            {pickerBusy ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> : <Upload className="w-4 h-4" aria-hidden="true" />}
-            Importer depuis Drive
-          </Button>
+          <>
+            {/* Fichier lu sur l'appareil : rien n'est copié sur Drive, aucune autorisation Google en plus. */}
+            <input ref={fileRef} type="file" accept={STATEMENT_ACCEPT} onChange={onDeviceFile} className="hidden" tabIndex={-1} aria-hidden="true" data-testid="payslip-file" />
+            <Button ref={deviceRef} variant="tonal" onClick={() => fileRef.current?.click()} className="max-sm:h-12">
+              <Smartphone className="w-4 h-4" aria-hidden="true" /> Choisir sur l'appareil
+            </Button>
+            {/* Désactivé sans clé Picker : la raison est écrite juste en dessous (aria-describedby). */}
+            <Button ref={importRef} onClick={handlePick} disabled={!pickerApiKey || pickerBusy} aria-describedby={!pickerApiKey ? KEYS_NOTE_ID : undefined} className="max-sm:h-12">
+              {pickerBusy ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> : <Upload className="w-4 h-4" aria-hidden="true" />}
+              Importer depuis Drive
+            </Button>
+          </>
         )}
       />
 
@@ -324,7 +368,7 @@ export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, 
                 </div>
                 <p className="text-xs text-on-surface-variant">L'analyse utilise votre quota Gemini, à chaque clic.</p>
                 {draft.localFile && (
-                  <p className="text-xs text-on-surface-variant">Fiche reçue par partage : elle n'est pas copiée sur votre Drive. Seuls son nom et les montants vérifiés sont enregistrés.</p>
+                  <p className="text-xs text-on-surface-variant">Fiche lue sur cet appareil : elle n'est pas copiée sur votre Drive. Seuls son nom et les montants vérifiés sont enregistrés.</p>
                 )}
               </>
             )}
@@ -368,21 +412,43 @@ export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, 
                         inputMode="decimal"
                         defaultValue={v === undefined ? '' : toInputAmount(v)}
                         onBlur={e => patchAmount(f.key, e.target.value)}
-                        supporting={f.supporting}
+                        supporting={suspect.has(f.key) ? 'À relire : voir l\'avertissement ci-dessous.' : f.supporting}
                         error={badFields[f.key] ? 'Montant non reconnu (exemple : 1 234,56) : la valeur précédente est gardée.' : undefined}
                       />
                     );
                   })}
                 </div>
-                {duplicatePeriod && (
+                {warnings.length > 0 && (
+                  <div role="status" className="rounded-xl bg-tertiary-container text-on-tertiary-container p-3 text-sm flex items-start gap-2">
+                    <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />
+                    <div className="min-w-0 space-y-1">
+                      <p className="font-medium">Ces montants ne se recoupent pas : relisez-les sur la fiche.</p>
+                      {warnings.map(w => <p key={w.id}>{w.message}</p>)}
+                      <p className="text-xs">Vous pouvez enregistrer quand même.</p>
+                    </div>
+                  </div>
+                )}
+                {samePeriod.length > 0 && (
                   <p role="status" className="text-sm text-on-surface-variant flex items-start gap-2">
                     <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-tertiary" aria-hidden="true" />
-                    Une fiche existe déjà pour {formatPeriod(draft.fields.period ?? '')} : les deux apparaîtront sur le graphique.
+                    <span>
+                      {samePeriod.length > 1 ? `${samePeriod.length} fiches existent déjà` : 'Une fiche existe déjà'} pour {periodLabel}.
+                      {' '}Fiche rectificative ou déjà importée : remplacez. Deuxième employeur ou rappel de salaire : ajoutez, les montants seront additionnés dans la déclaration et le revenu estimé pour le LEP.
+                    </span>
                   </p>
                 )}
                 <div className="flex flex-wrap justify-end gap-2 pt-2">
                   <Button variant="text" onClick={closeDraft} className="max-sm:h-12">Annuler</Button>
-                  <Button onClick={saveDraft} className="max-sm:h-12"><Check className="w-4 h-4" aria-hidden="true" /> Enregistrer la fiche</Button>
+                  {samePeriod.length > 0 ? (
+                    <>
+                      <Button variant="tonal" onClick={() => saveDraft('add')} className="max-sm:h-12">Ajouter (deux fiches ce mois-ci)</Button>
+                      <Button onClick={() => saveDraft('replace')} className="max-sm:h-12">
+                        <Check className="w-4 h-4" aria-hidden="true" /> Remplacer {samePeriod.length > 1 ? `les ${samePeriod.length} fiches` : 'la fiche'} {deMonth(periodLabel)}
+                      </Button>
+                    </>
+                  ) : (
+                    <Button onClick={() => saveDraft('new')} className="max-sm:h-12"><Check className="w-4 h-4" aria-hidden="true" /> Enregistrer la fiche</Button>
+                  )}
                 </div>
               </>
             )}
@@ -406,7 +472,7 @@ export const Payslips: React.FC<PayslipsProps> = ({ payslips, onUpdatePayslips, 
       {payslips.length === 0 && !draft && (
         <Card variant="filled" padding="none">
           <EmptyState icon={FileText} title="Aucune fiche de paie pour l'instant">
-            Importez une fiche rangée sur votre Drive avec « Importer depuis Drive ». Une fois vérifiée, le Pilotage peut s'en servir à la place de son estimation.
+            Importez une fiche avec « Choisir sur l'appareil » ou « Importer depuis Drive ». Une fois vérifiée, le Pilotage peut s'en servir à la place de son estimation.
           </EmptyState>
         </Card>
       )}

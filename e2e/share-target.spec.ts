@@ -51,7 +51,8 @@ test.describe('Partager vers Pécule (démo)', () => {
     await page.route('https://generativelanguage.googleapis.com/**', route => {
       if (!route.request().postData()?.includes('JVBERi0x')) return route.abort();
       sentToGemini++;
-      return route.fulfill({ json: { candidates: [{ content: { parts: [{ text: JSON.stringify({ employer: 'Entreprise Partage', period: '2026-09', grossAmount: 3000, netPaid: 2345.67 }) }] } }] } });
+      // Mois absent de la démo : pas de choix « Remplacer / Ajouter » à l'enregistrement.
+      return route.fulfill({ json: { candidates: [{ content: { parts: [{ text: JSON.stringify({ employer: 'Entreprise Partage', period: '2019-09', grossAmount: 3000, netPaid: 2345.67 }) }] } }] } });
     });
     await seedSharedFile(page, { name: 'Bulletin partagé.pdf', type: 'application/pdf', body: '%PDF-1.4 fiche fictive' });
     await page.goto('/?demo=1&partage=1');
@@ -77,6 +78,10 @@ test.describe('Partager vers Pécule (démo)', () => {
     await page.goto('/?demo=1&partage=1');
     const sheet = page.getByRole('dialog', { name: 'Que voulez-vous importer ?' });
     await expect(sheet).toBeVisible({ timeout: 20_000 });
+    // Un site tiers peut aussi poster un fichier : nom, taille et heure avant toute lecture.
+    await expect(sheet.getByText('avis.pdf')).toBeVisible();
+    await expect(sheet.getByText(/^4 octets · reçu aujourd'hui à \d{2}:\d{2}$/)).toBeVisible();
+    await expect(sheet.getByText("Vous n'avez rien partagé ? Annulez", { exact: false })).toBeVisible();
     await sheet.getByRole('button', { name: 'Annuler' }).click();
     await expect(sheet).toBeHidden();
     expect(await sharedCount(page)).toBe(0);
@@ -87,6 +92,19 @@ test.describe('Partager vers Pécule (démo)', () => {
 test.describe('Partager vers Pécule (service worker du build)', () => {
   test.skip(!E2E_BUILD, 'Le service worker n’existe que dans le build.');
   test.use({ serviceWorkers: 'allow' });
+
+  // Le filtre d'intention Android (WebAPK) ne connaît que les types MIME ; sans `id`, l'identité
+  // de l'app installée reste `start_url` (en ajouter un mal résolu en ferait une autre app).
+  test('manifeste : partage en types MIME seulement, en français, identité inchangée', async ({ request }) => {
+    const manifest = await (await request.get('/manifest.webmanifest')).json();
+    expect(manifest.lang).toBe('fr');
+    expect(manifest.id).toBeUndefined();
+    expect(manifest.start_url).toBe('./');
+    expect(manifest.share_target).toMatchObject({ action: './partager', method: 'POST', enctype: 'multipart/form-data' });
+    const accept: string[] = manifest.share_target.params.files[0].accept;
+    expect(accept).toContain('application/pdf');
+    expect(accept.every(t => t.includes('/'))).toBe(true);
+  });
 
   test('POST multipart sur « partager » : fichier rangé, redirection, puis choix dans l’app', async ({ page }) => {
     await page.goto('/');

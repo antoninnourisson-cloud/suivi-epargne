@@ -233,6 +233,10 @@ export interface PayslipRecord {
   // L'utilisateur a relu/corrigé l'extraction avant de l'enregistrer : sert à distinguer
   // une extraction encore brute d'une donnée validée, avant tout usage (ex: pré-remplissage).
   reviewed: boolean;
+  // Deuxième fiche du même mois enregistrée avec « Ajouter » (deuxième employeur, rappel
+  // de salaire) : additionnée aux autres. Sans ce marquage, seule la fiche la plus récente
+  // d'un mois compte dans les sommes (lib/payslipChecks, countedPayslips).
+  addsToPeriod?: boolean;
 }
 
 export interface TaxBracket {

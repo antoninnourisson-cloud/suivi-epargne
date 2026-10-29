@@ -108,17 +108,25 @@ export default defineConfig({
         background_color: '#f8faf4',
         display: 'standalone',
         orientation: 'portrait',
-        // Relatifs, comme le `base` ci-dessus.
+        // vite-plugin-pwa annonce « en » par défaut : l'app est en français.
+        lang: 'fr',
+        dir: 'ltr',
+        // Relatifs, comme le `base` ci-dessus. Pas d'`id` : Chrome prend alors `start_url`
+        // résolu, l'identité de l'app installée. Un `id` relatif se résout sur l'origine (pas
+        // sur le dossier du manifeste) : mal choisi, Chrome y verrait une autre app.
         scope: './',
         start_url: './',
         // « Partager vers Pécule » (app installée, Android) : un PDF ou une image partagé
         // depuis une autre app arrive en POST sur `partager`, reçu par public/share-sw.js.
+        // Types MIME seulement : le filtre d'intention Android, fabriqué depuis cette liste
+        // avec le WebAPK, ne connaît pas les extensions (« .pdf » pouvait le faire écarter).
+        // Le type annoncé vide ou générique est rattrapé par l'extension dans share-sw.js.
         share_target: {
           action: './partager',
           method: 'POST',
           enctype: 'multipart/form-data',
           params: {
-            files: [{ name: 'fichiers', accept: ['application/pdf', '.pdf', 'image/png', 'image/jpeg', 'image/webp'] }],
+            files: [{ name: 'fichiers', accept: ['application/pdf', 'image/png', 'image/jpeg', 'image/webp'] }],
           },
         },
         // Appui long sur l'icône de l'app -> action directe, sans repasser par la nav.

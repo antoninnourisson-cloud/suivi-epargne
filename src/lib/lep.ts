@@ -7,6 +7,7 @@ import { AccountType, FiscalConfig, GlobalAppData } from '../types';
 import { computeIncome } from './finance';
 import { DEFAULT_WORK_BENEFITS } from '../constants';
 import { plainEUR } from './format';
+import { countedPayslips } from './payslipChecks';
 
 export interface LepIncomeYear { year: number; rfr: number; source: 'avis' | 'fiches' | 'estimation' }
 
@@ -47,7 +48,9 @@ export const buildLepIncomeYears = (
   for (let y = Y - 3; y <= Y; y++) {
     const fromAvis = avis[String(y)];
     if (typeof fromAvis === 'number' && fromAvis > 0) { out.push({ year: y, rfr: fromAvis, source: 'avis' }); continue; }
-    const slips = (data.payslips || []).filter(p => p.extracted?.period?.startsWith(`${y}-`) && (p.extracted.netTaxable || 0) > 0);
+    // Un mois en double (fiche rectificative) n'est compté qu'une fois, sauf fiche « s'ajoute ».
+    const slips = countedPayslips((data.payslips || []).filter(p => p.extracted?.period?.startsWith(`${y}-`)))
+      .filter(p => (p.extracted.netTaxable || 0) > 0);
     const months = new Set(slips.map(p => p.extracted.period)).size;
     if (months >= 6) {
       const net = slips.reduce((s, p) => s + (p.extracted.netTaxable || 0), 0) * (12 / months);
