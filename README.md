@@ -23,7 +23,7 @@ Sans base de données : vos données restent dans **un seul fichier, sur votre p
 [![Vitest](https://img.shields.io/badge/Vitest-5-6e9f18?logo=vitest&logoColor=white)](https://vitest.dev/)
 [![Playwright](https://img.shields.io/badge/Playwright-1-2ead33?logo=playwright&logoColor=white)](https://playwright.dev/)
 [![Material 3](https://img.shields.io/badge/design-Material%203-14532d?logo=materialdesign&logoColor=white)](https://m3.material.io/)
-[![Node.js](https://img.shields.io/badge/Node.js-22-5fa04e?logo=nodedotjs&logoColor=white)](.nvmrc)
+[![Node.js](https://img.shields.io/badge/Node.js-24-5fa04e?logo=nodedotjs&logoColor=white)](.nvmrc)
 [![Cloudflare Workers](https://img.shields.io/badge/serveur-Cloudflare%20Workers-f38020?logo=cloudflare&logoColor=white)](worker/)
 
 [**Ouvrir l'app**](https://pecule-app.com/) ·
@@ -228,7 +228,7 @@ Signaler une faille : voir [SECURITY.md](SECURITY.md). Contact : [contact@pecule
 
 ## Démarrage rapide
 
-Prérequis : **Node.js 22+** (version de référence dans [`.nvmrc`](.nvmrc)).
+Prérequis : **Node.js 24+** (version de référence dans [`.nvmrc`](.nvmrc)).
 
 ```bash
 npm ci                 # dépendances de l'app

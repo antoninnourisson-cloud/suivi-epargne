@@ -9,7 +9,7 @@
 # le site reste servi directement par GitHub Pages, sans ces en-têtes.
 name = "pecule-edge"
 main = "src/index.ts"
-compatibility_date = "2025-06-01"
+compatibility_date = "2026-10-01"
 
 # Pas d'adresse *.workers.dev : ce Worker n'a de sens que devant le domaine.
 workers_dev = false

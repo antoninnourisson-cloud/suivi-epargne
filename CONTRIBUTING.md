@@ -11,7 +11,7 @@ Merci de votre intérêt ! Pécule est une application personnelle, mais les sig
 
 ## Installer le projet
 
-Prérequis : Node.js 22 ou plus (version de référence dans [`.nvmrc`](.nvmrc)).
+Prérequis : Node.js 24 ou plus (version de référence dans [`.nvmrc`](.nvmrc)).
 
 ```bash
 npm ci

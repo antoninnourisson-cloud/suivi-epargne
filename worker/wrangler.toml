@@ -5,7 +5,7 @@
 # Déploiement automatique : .github/workflows/worker.yml (dès que les secrets GitHub existent).
 name = "suivi-epargne-api"
 main = "src/index.ts"
-compatibility_date = "2025-06-01"
+compatibility_date = "2026-10-01"
 
 [vars]
 # Client OAuth : DOIT être le même que celui de l'app (src/services/googleDriveService.ts),
