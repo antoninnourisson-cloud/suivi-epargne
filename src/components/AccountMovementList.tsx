@@ -13,7 +13,7 @@ import { Button, IconButton, OverflowMenu } from './ui';
 export type DisplayMovement = AccountMovement & { grouped?: boolean };
 
 /** Lignes montrées d'abord, puis à chaque « Voir plus ». */
-export const MOVEMENTS_PAGE = 20;
+const MOVEMENTS_PAGE = 20;
 
 const SHORT_DAY = new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' });
 /** « 28 sept. 2026 ». */

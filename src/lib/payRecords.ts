@@ -18,7 +18,7 @@ export type PayData = Pick<GlobalAppData, 'pays' | 'payslips'> & {
 };
 
 /** Ce que la règle du mois d'épargne lit dans les données. */
-export const payCalendarOf = (data: PayData): PayCalendarData => ({
+const payCalendarOf = (data: PayData): PayCalendarData => ({
   paydayDay: data.config?.paydayDay, payslips: data.payslips, pays: data.pays,
 });
 

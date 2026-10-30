@@ -67,7 +67,7 @@ export interface PayAttribution {
  * paie connue (`payId`) compte dans le mois d'épargne de cette paie, quelle que soit sa date ;
  * les autres (et tous, sans `attribution`) sont rattachés par leur date.
  */
-export const inPayWindow = (m: AccountMovement, start: string, end: string, attribution?: PayAttribution): boolean => {
+const inPayWindow = (m: AccountMovement, start: string, end: string, attribution?: PayAttribution): boolean => {
   const payMonth = attribution && m.payId ? attribution.payMonths.get(m.payId) : undefined;
   if (payMonth !== undefined) return payMonth === attribution!.key;
   return m.date >= start && m.date < end;

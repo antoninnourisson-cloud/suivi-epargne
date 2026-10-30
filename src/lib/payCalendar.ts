@@ -20,7 +20,7 @@ export const PAY_WINDOW_DAYS = 30;
 /** Écart toléré entre la date d'enregistrement d'une fiche et le jour de paie attendu. */
 const PAYSLIP_TOLERANCE_DAYS = 7;
 /** À partir de ce jour du mois, une paie finance l'épargne du mois suivant. */
-export const SAVINGS_MONTH_CUTOFF_DAY = 15;
+const SAVINGS_MONTH_CUTOFF_DAY = 15;
 
 const MONTH_KEY = /^\d{4}-(0[1-9]|1[0-2])$/;
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
@@ -52,7 +52,7 @@ export interface PayWindow {
   payMonth: string;
 }
 
-export const monthKeyOf = (y: number, month0: number) => {
+const monthKeyOf = (y: number, month0: number) => {
   const d = new Date(y, month0, 1);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 };

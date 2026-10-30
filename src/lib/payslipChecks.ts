@@ -23,14 +23,14 @@ export interface PayslipWarning {
  * confusions courantes de la lecture automatique (net imposable pris pour le net à payer,
  * impôt oublié), qui font des dizaines ou des centaines d'euros.
  */
-export const NET_AFTER_TAX_TOLERANCE = 1;
+const NET_AFTER_TAX_TOLERANCE = 1;
 /**
  * « Brut − charges salariales » ne retombe qu'à peu près sur le net à payer : tickets
  * restaurant (part salariale), Navigo, avantages en nature et retenues diverses s'y
  * ajoutent ou s'en retirent. Au-delà de 10 % du brut, ce n'est plus un écart ordinaire :
  * le plus souvent, les charges patronales ont été lues à la place des charges salariales.
  */
-export const GROSS_MINUS_CHARGES_SHARE = 0.1;
+const GROSS_MINUS_CHARGES_SHARE = 0.1;
 
 // Espaces insécables du format monétaire : « 100,00 € » ne se coupe pas en fin de ligne.
 const eur = (n: number) => formatEUR(n, 2);

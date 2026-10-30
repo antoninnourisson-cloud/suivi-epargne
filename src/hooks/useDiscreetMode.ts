@@ -30,7 +30,7 @@ const subscribe = (listener: () => void) => {
 };
 
 /** Active ou coupe le mode discret, et l'enregistre sur cet appareil (rien si le stockage est bloqué). */
-export const setDiscreetMode = (on: boolean) => {
+const setDiscreetMode = (on: boolean) => {
   if (on) lsSet(KEY, '1');
   else lsDel(KEY);
   apply(on);

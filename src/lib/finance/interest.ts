@@ -93,7 +93,7 @@ const accountBalanceBefore = (
 };
 
 /** Bornes de quinzaine de l'année : les 1er et 16 de chaque mois (24 au total). */
-export const quinzaineStarts = (year: number): Date[] => {
+const quinzaineStarts = (year: number): Date[] => {
   const out: Date[] = [];
   for (let m = 0; m < 12; m++) {
     out.push(new Date(year, m, 1));
@@ -109,7 +109,7 @@ export const quinzaineStarts = (year: number): Date[] => {
  * - un RETRAIT cesse d'en produire dès la dernière borne à ou avant lui
  *   (retiré le 3 mars → ne rapporte plus depuis le 1er mars).
  */
-export const quinzaineEffectiveDate = (d: Date, isDeposit: boolean): Date => {
+const quinzaineEffectiveDate = (d: Date, isDeposit: boolean): Date => {
   const y = d.getFullYear(), m = d.getMonth(), day = d.getDate();
   if (isDeposit) return day < 16 ? new Date(y, m, 16) : new Date(y, m + 1, 1);
   return day >= 16 ? new Date(y, m, 16) : new Date(y, m, 1);

@@ -19,7 +19,7 @@ export type { ServerWatchReport, ServerWatchRow } from './fiscalWatchEngine';
 type Engine = typeof import('./fiscalWatchEngine');
 let engine: Promise<Engine> | null = null;
 /** Moteur de la veille, chargé une fois (un échec est retenté au prochain appel). */
-export const loadFiscalWatchEngine = (): Promise<Engine> =>
+const loadFiscalWatchEngine = (): Promise<Engine> =>
   (engine ??= import('./fiscalWatchEngine').catch((e: unknown) => { engine = null; throw e; }));
 
 const KEY = 'fiscal_watch';
