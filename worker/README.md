@@ -7,9 +7,10 @@ Ce que le serveur fait, et seulement ça :
 2. **Notifications push** — chaque jour à 7 h UTC, il relit ton fichier Drive et t'envoie les
    rappels : échéances récurrentes, révision des taux réglementés, intérêts parentaux de
    décembre, soldes à revérifier compte par compte (compte courant après 30 jours, livrets après
-   90, placements à relevé annuel après 400), jour de paie, point de paie (bilan de la
-   paie précédente, replié dans le rappel du jour de paie quand les deux tombent le même
-   jour), clôture de l'année écoulée début janvier (une seule notification, rien une fois
+   90, placements à relevé annuel après 400), jour de paie (« Paie reçue ? », seulement si la paie du
+   mois d'épargne n'est pas déclarée, avec relance à J+3 selon la paie déclarée), point de paie
+   (« Bilan d'octobre », replié dans le rappel du jour de paie quand les deux tombent le même
+   jour, et non envoyé s'il est déjà validé dans l'app ; clés au mois d'épargne), clôture de l'année écoulée début janvier (une seule notification, rien une fois
    l'année clôturée dans l'app ; les paramètres fiscaux de fin janvier en sont une étape et ne
    sont notifiés à part qu'une fois l'année clôturée)… Les dates sont celles de
    Paris (heure d'été comprise). Chaque rappel n'est envoyé qu'une fois.

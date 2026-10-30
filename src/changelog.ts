@@ -15,6 +15,18 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '2026.10.30-4',
+    date: '2026-10-30',
+    title: "« J'ai reçu ma paie »",
+    items: [
+      "Nouveau : dans le Pilotage, « J'ai reçu ma paie » ouvre un rituel en quelques étapes. Vous indiquez le montant reçu et sa date (et la part de prime) ; Pécule vous conseille la répartition pour ce montant exact, ligne par ligne. Vous corrigez ce qui a été réellement fait, puis tout s'enregistre d'un coup, avec un seul « Annuler ».",
+      "La fiche de paie s'importe dans le rituel : le net payé préremplit le montant reçu, et la fiche rejoint l'écran Fiches de paie. Importée plus tard depuis cet écran, elle se rattache à la paie du mois et propose d'ajuster le montant.",
+      "Nouveau : le mois d'épargne. Une paie reçue à partir du 15 compte pour le mois suivant (paie du 27 octobre : « Épargne de novembre »). Vous pouvez le changer paie par paie. La jauge de l'Accueil, les bons mois, « Votre année » et l'Agenda suivent ce mois.",
+      "« Capacité d'épargne du mois » et « Somme en plus » quittent Mes paramètres : ils deviennent « À placer sur cette paie » et « Dont prime » dans le rituel. La routine de l'Accueil passe à trois étapes, et le point de paie s'affiche au début du rituel.",
+      "La notification du jour de paie demande « Paie reçue ? » et ouvre le rituel ; trois jours après, une relance selon l'état de la paie. Le bilan du mois n'est plus envoyé s'il est déjà validé dans l'app.",
+    ],
+  },
+  {
     version: '2026.10.30-3',
     date: '2026-10-30',
     title: 'Mode discret et routine du mois',

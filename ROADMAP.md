@@ -2,6 +2,7 @@
 
 ## Livré
 
+- **Ma paie** (30 octobre 2026, branche `ma-paie`, lots M1 à M5) : la paie reçue devient un objet de données (`PayRecord`, schéma v3, migration de la liste à cocher, de la capacité et de la somme en plus). Rituel « J'ai reçu ma paie » dans le Pilotage (montant, date, prime, fiche de paie importée sur place, répartition conseillée pour le montant reçu, enregistrement en une commande avec un seul « Annuler », modifier ou supprimer la paie, versement en plus). Mois d'épargne (paie reçue à partir du 15 : mois suivant, modifiable) pour la jauge, la routine à trois étapes, les bons mois, « Votre année », « Demander à Pécule » et l'Agenda ; notification « Paie reçue ? » avec relance, clés au mois d'épargne sans doublon à la bascule.
 - **Fiches de paie par IA** : import via Google Picker, extraction Gemini (sortie structurée, nouvelles tentatives et modèles de repli en cas de saturation), relecture obligatoire, graphique du net, mode « chiffres exacts » dans le Pilotage.
 - **Verrou de l'appareil** : biométrie (WebAuthn) ou PIN (PBKDF2), réactivé après le délai choisi dans Paramètres (Immédiatement, 1, 5 ou 15 minutes ; 5 par défaut) en passant en arrière-plan, posé en surcouche sans démonter l'écran en cours (une saisie à moitié remplie survit) et toujours actif à l'ouverture de l'app, avec une porte de sortie en cas de code oublié.
 - **Fiscalité du capital** : net des gains en cas de retrait (PFU, exonérations après maturité), compte à rebours de maturité par compte.
