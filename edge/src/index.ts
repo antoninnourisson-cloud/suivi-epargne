@@ -12,7 +12,8 @@
 // - pages HTML, service worker (sw.js), ses extensions (push-sw.js et share-sw.js, importées
 //   par sw.js, donc servies par le cache HTTP : voir updateViaCache), registerSW.js et le
 //   manifeste : « no-cache », revalidés à chaque fois, pour qu'une mise à jour arrive tout
-//   de suite.
+//   de suite ; le service worker et le manifeste ne passent pas non plus par le cache de
+//   Cloudflare (fetch en « no-store »).
 // Sans ce Worker, Cloudflare imposait 4 heures à tout (réglage « Browser Cache TTL »).
 //
 // La politique de contenu complète (CSP) reste dans la balise <meta> d'index.html, seule
@@ -92,6 +93,10 @@ export default {
     // relayé sans aucune modification.
     if (request.method !== 'GET' && request.method !== 'HEAD') return fetch(request);
 
-    return withSecurityHeaders(await fetch(request), url.pathname);
+    // Service worker et manifeste : jamais pris dans le cache de Cloudflare non plus (il
+    // gardait sw.js 10 minutes, la durée donnée par GitHub Pages, et retardait d'autant la
+    // mise à jour des apps installées, 30 octobre 2026).
+    const upstream = ALWAYS_FRESH.has(url.pathname) ? await fetch(request, { cache: 'no-store' }) : await fetch(request);
+    return withSecurityHeaders(upstream, url.pathname);
   },
 } satisfies ExportedHandler;

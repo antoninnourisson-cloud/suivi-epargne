@@ -104,6 +104,27 @@ describe('en-têtes de cache', () => {
   });
 });
 
+describe('cache de Cloudflare', () => {
+  it('va chercher le service worker et le manifeste sans le cache de Cloudflare', async () => {
+    for (const path of ['/sw.js', '/push-sw.js', '/share-sw.js', '/registerSW.js', '/manifest.webmanifest']) {
+      const f = vi.fn(async () => new Response('x', { status: 200 }));
+      vi.stubGlobal('fetch', f);
+      await call(`https://pecule-app.com${path}`);
+      expect(f, path).toHaveBeenCalledWith(expect.any(Request), { cache: 'no-store' });
+    }
+  });
+
+  it('laisse le cache de Cloudflare servir les fichiers hachés et les pages', async () => {
+    for (const path of ['/assets/index-AbCd1234.js', '/', '/presentation.html']) {
+      const f = vi.fn(async () => new Response('x', { status: 200 }));
+      vi.stubGlobal('fetch', f);
+      await call(`https://pecule-app.com${path}`);
+      expect(f, path).toHaveBeenCalledWith(expect.any(Request));
+      expect(f.mock.calls[0], path).toHaveLength(1);
+    }
+  });
+});
+
 describe('redirection www', () => {
   it('redirige en 301 vers le domaine nu, chemin et paramètres conservés', async () => {
     const f = vi.fn();
