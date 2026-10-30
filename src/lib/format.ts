@@ -79,3 +79,13 @@ export const elideDe = (word: string): string => (startsWithVowel(word) ? `d'${w
 export const elideLe = (word: string): string => (startsWithVowel(word) ? `l'${word}` : `le ${word}`);
 /** « de l'Assurance vie », « du Livret A ». */
 export const elideDu = (word: string): string => (startsWithVowel(word) ? `de l'${word}` : `du ${word}`);
+
+/**
+ * « 2026-11 » → « novembre » (« novembre 2027 » avec `withYear`) : mois d'épargne, mois de
+ * paie. Toute autre valeur est rendue telle quelle.
+ */
+export const formatMonth = (key: string, withYear = false): string => {
+  const m = /^(\d{4})-(\d{2})$/.exec(key.trim());
+  if (!m) return key;
+  return new Date(Number(m[1]), Number(m[2]) - 1, 1).toLocaleDateString('fr-FR', withYear ? { month: 'long', year: 'numeric' } : { month: 'long' });
+};

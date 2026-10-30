@@ -16,7 +16,7 @@ const renderPilot = (patch = vi.fn(), cfg: PilotConfig = config) => {
     config={cfg} onPatchConfig={patch}
     fiscalConfig={DEFAULT_FISCAL_CONFIG} workBenefits={DEFAULT_WORK_BENEFITS}
     onClearActivePayslip={() => {}} subscriptions={[]} onOpenSubscriptions={() => {}}
-    onPayLineCheck={() => true} onPayLineUncheck={() => {}} onPayPlanReset={() => {}} onPayAdjustmentChange={() => {}} />);
+    onPayLineCheck={() => true} onPayLineUncheck={() => {}} onPayPlanReset={() => {}} />);
   return patch;
 };
 
@@ -43,7 +43,7 @@ describe('Pilotage : réglages', () => {
 
   it('chaque réglage part par la même fonction, seul', () => {
     const patch = renderPilot();
-    fireEvent.click(screen.getByRole('button', { name: /^Budgets et montant du mois/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^Budgets/ }));
     // Les champs de saisie (textbox) : la liste de paie a aussi une case « Épargne projets ».
     fireEvent.change(screen.getByRole('textbox', { name: 'Argent plaisir' }), { target: { value: '300' } });
     expect(patch).toHaveBeenLastCalledWith({ leisureBudget: 300 });

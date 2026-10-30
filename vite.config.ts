@@ -148,10 +148,10 @@ export default defineConfig({
             icons: [{ src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png' }]
           },
           {
-            name: 'Virements de paie',
+            name: "J'ai reçu ma paie",
             short_name: 'Paie',
-            description: 'Cocher les virements de la paie du mois',
-            url: './?view=pilot',
+            description: 'Déclarer la paie reçue et la répartir sur vos comptes',
+            url: './?view=pilot&action=pay',
             icons: [{ src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png' }]
           }
         ],

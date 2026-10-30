@@ -12,9 +12,11 @@ import type { FiscalProposal } from '../lib/fiscalWatch';
 import type { CancellingGroup } from '../lib/accountOps';
 import { isRestitutionMovement } from '../lib/accountOps';
 import { localTodayISO, parseISODate } from '../lib/dates';
-import { plainEUR } from '../lib/format';
+import { elideDe, formatMonth, plainEUR } from '../lib/format';
 import { computeMonthlyPay } from '../lib/finance';
-import { liveDone, openPay, payMovements } from '../lib/payRecords';
+import { liveDone, openPay, payForPayslipPeriod, payMovements, payslipPeriodOf, withPayReviewed } from '../lib/payRecords';
+import { recommendPayDistribution } from '../lib/payDistribution';
+import { savingsMonthOfPay } from '../lib/payCalendar';
 import {
   type CommandError, type CommandOk, type CommandPatch, type CommandState,
   saveAccount, deleteAccount, quickAdd, planMovementDeletion, deleteMovement, removeCancellingMovements,
@@ -152,6 +154,40 @@ export const useAccountActions = (doc: AppDoc, setters: Setters, addToast: AddTo
           confirmLabel: count === 1 ? 'Supprimer aussi le versement' : 'Supprimer aussi les versements',
           onConfirm: () => run(true),
           alternative: { label: count === 1 ? 'Garder le versement' : 'Garder les versements', onClick: () => run(false) },
+        });
+      },
+
+      /**
+       * Fiche de paie enregistrée depuis l'écran Fiches de paie : elle se rattache à la paie
+       * déclarée du même mois (payslipId) et, si son net payé diffère du montant reçu
+       * enregistré, propose de l'ajuster (avec « Annuler »). Une fiche qui s'ajoute (deuxième
+       * employeur, rappel) ne remplace pas celle de la paie.
+       */
+      attachPayslip: (record: PayslipRecord) => {
+        if (record.addsToPeriod) return;
+        const pay = payForPayslipPeriod(commandStateRef.current.pays, record.extracted.period);
+        if (!pay) return;
+        const linked = updatePay(commandStateRef.current, { payId: pay.id, payslipId: record.id });
+        if (linked.ok) commit(linked.next);
+        const net = record.extracted.netPaid;
+        if (net === undefined || !Number.isFinite(net) || net < 0 || Math.abs(net - pay.amount) < 0.5) return;
+        const month = savingsMonthOfPay(pay);
+        deps.current.dialog.open({
+          kind: 'confirm', confirmLabel: `Ajuster à ${plainEUR(net)}`,
+          title: 'Ajuster la paie reçue ?',
+          message: `La paie enregistrée pour l'épargne ${elideDe(formatMonth(month))} est de ${plainEUR(pay.amount)} ; la fiche ${elideDe(formatMonth(payslipPeriodOf(month)))} indique un net payé de ${plainEUR(net)}.`,
+          onConfirm: () => {
+            const current = (commandStateRef.current.pays ?? []).find(p => p.id === pay.id);
+            if (!current) return;
+            // Plan pas encore figé : il suit le nouveau montant (updatePay ne le remplace que si rien n'est fait).
+            const lines = current.lines.length > 0
+              ? recommendPayDistribution(docRef.current, { amount: net, bonus: current.bonus, toSave: current.toSave, kind: current.kind, receivedOn: current.receivedOn }).lines
+              : undefined;
+            const r = updatePay(commandStateRef.current, { payId: pay.id, amount: net, ...(lines ? { lines } : {}) });
+            if (!r.ok) { showCommandError(r); return; }
+            commit(r.next);
+            toast({ message: r.message, kind: 'success', action: undoAction(r) });
+          },
         });
       },
 
@@ -307,8 +343,13 @@ export const useAccountActions = (doc: AppDoc, setters: Setters, addToast: AddTo
       markMilestonesSeen: (ids: string[]) =>
         s().patchConfig({ milestonesSeen: [...new Set([...(docRef.current.config.milestonesSeen ?? []), ...ids])] }),
       // Les 24 derniers suffisent : un point de paie ne revient jamais sur une paie plus ancienne.
-      validatePayReview: (key: string) =>
-        s().patchConfig({ payReviewsDone: [...(docRef.current.config.payReviewsDone ?? []).filter(k => k !== key), key].slice(-24) }),
+      // La paie du mois validé, si elle est déclarée, le note aussi (reviewedAt).
+      validatePayReview: (key: string) => {
+        s().patchConfig({ payReviewsDone: [...(docRef.current.config.payReviewsDone ?? []).filter(k => k !== key), key].slice(-24) });
+        const pays = commandStateRef.current.pays ?? [];
+        const next = withPayReviewed(pays, key, localTodayISO());
+        if (next !== pays) commit({ pays: next });
+      },
     };
   }, []);
 };

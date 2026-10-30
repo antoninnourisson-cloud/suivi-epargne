@@ -1,16 +1,15 @@
 // ================================================
 // FILE: src/lib/payRecords.ts
 // Paies reçues (GlobalAppData.pays, schéma v3) : la paie « ouverte » est celle du mois
-// d'épargne en cours (lib/payCalendar). Tant que le rituel « Ma paie » n'existe pas, le
-// Pilotage, la routine, la pastille et le serveur lisent la paie ouverte sous ses anciennes
-// formes : liste à cocher (PayChecklist, modifiée par les commandes de lib/commands/pay) et
-// réglages de la paie en cours (PayAdjustment). Fonctions pures, partagées par l'app et le
-// serveur.
+// d'épargne en cours (lib/payCalendar), déclarée par le rituel « J'ai reçu ma paie ». La
+// routine, la pastille et le serveur la lisent encore sous ses anciennes formes : liste à
+// cocher (PayChecklist, modifiée par les commandes de lib/commands/pay) et réglages de la
+// paie en cours (PayAdjustment). Ici aussi : le lien paie ↔ fiche de paie et le bilan du mois
+// validé. Fonctions pures, partagées par l'app et le serveur.
 // ================================================
-import type { AccountMovement, GlobalAppData, PayAdjustment, PayChecklist, PayRecord, SavingsAccount } from '../types';
-import { currentSavingsMonth, PayCalendarData, PayWindow, savingsMonthOfPay } from './payCalendar';
+import type { AccountMovement, GlobalAppData, PayAdjustment, PayChecklist, PayRecord, PayslipRecord, SavingsAccount } from '../types';
+import { currentSavingsMonth, PayCalendarData, PayWindow, savingsMonthOfPay, shiftMonth } from './payCalendar';
 import { formatISODay } from './dates';
-import { round2 } from './money';
 
 export type PayData = Pick<GlobalAppData, 'pays' | 'payslips'> & {
   config?: Pick<GlobalAppData['config'], 'paydayDay'>;
@@ -76,17 +75,6 @@ export const payMovements = (pay: Pick<PayRecord, 'done'>, accounts: MovementHol
     return found ? [found] : [];
   });
 
-/** Paie à créer pour le mois d'épargne en cours, reçue au début de la fenêtre. */
-const newPay = (pays: PayRecord[], window: PayWindow, amount: number): PayRecord => {
-  const id = newPayId(pays, window.key);
-  return {
-    id, receivedOn: window.start, savingsMonth: window.key,
-    amount: Number.isFinite(amount) ? round2(Math.max(0, amount)) : 0, lines: [], done: {},
-  };
-};
-
-const replacePay = (pays: PayRecord[], next: PayRecord) => pays.map(p => (p.id === next.id ? next : p));
-
 // ---------------------------------------------------------------------------
 // Liste à cocher (Pilotage › Où le placer)
 // ---------------------------------------------------------------------------
@@ -117,23 +105,47 @@ export const payAdjustmentOf = (data: PayData, asOf: Date = new Date()): PayAdju
   };
 };
 
+// ---------------------------------------------------------------------------
+// Fiche de paie de la paie
+// ---------------------------------------------------------------------------
+
 /**
- * Paies après un réglage de la paie en cours (lib/payAdjustment, updatePayAdjustment) :
- * `toSave` et `bonus` de la paie ouverte, créée au besoin. Le montant reçu suit la somme en
- * plus (« prime comprise »).
+ * Mois de la fiche de paie qui correspond à une paie ('YYYY-MM') : le mois qui précède son
+ * mois d'épargne (paie du 27 octobre ou du 3 novembre, épargne de novembre : fiche
+ * d'octobre). Même lien dans les deux sens, quelle que soit la date de réception.
  */
-export const withPayAdjustment = (data: PayData, next: PayAdjustment | undefined, asOf: Date, amount: number): PayRecord[] => {
-  const pays = data.pays ?? [];
-  const { window, pay } = openPay(data, asOf);
-  if (!pay && !next) return pays;
-  const base = pay ?? newPay(pays, window, amount);
-  const { toSave: _t, bonus: _b, ...rest } = base;
-  const bonus = next?.extra ? round2(next.extra) : undefined;
-  const updated: PayRecord = {
-    ...rest,
-    amount: round2(base.amount - (base.bonus ?? 0) + (bonus ?? 0)),
-    ...(next?.capacity !== undefined ? { toSave: round2(next.capacity) } : {}),
-    ...(bonus !== undefined ? { bonus } : {}),
-  };
-  return pay ? replacePay(pays, updated) : [...pays, updated];
+export const payslipPeriodOf = (savingsMonth: string): string => shiftMonth(savingsMonth, -1);
+
+/** Paie déclarée (hors versement en plus) qu'une fiche de la période `period` concerne. */
+export const payForPayslipPeriod = (pays: PayRecord[] = [], period: string | undefined): PayRecord | undefined => {
+  if (!period || !/^\d{4}-(0[1-9]|1[0-2])$/.test(period)) return undefined;
+  const month = shiftMonth(period, 1);
+  return pays.find(p => p.kind !== 'extra' && savingsMonthOfPay(p) === month);
+};
+
+/**
+ * Fiche de paie d'une paie : celle qui lui est liée, sinon la plus récente du mois
+ * correspondant (une fiche « qui s'ajoute », deuxième employeur, ne la remplace pas).
+ */
+export const payslipForMonth = (payslips: PayslipRecord[] = [], savingsMonth: string, payslipId?: string): PayslipRecord | undefined => {
+  const linked = payslipId ? payslips.find(p => p.id === payslipId) : undefined;
+  if (linked) return linked;
+  const period = payslipPeriodOf(savingsMonth);
+  return payslips
+    .filter(p => p.extracted?.period === period && !p.addsToPeriod)
+    .sort((a, b) => String(b.addedAt).localeCompare(String(a.addedAt)))[0];
+};
+
+// ---------------------------------------------------------------------------
+// Bilan du mois d'épargne (point de paie)
+// ---------------------------------------------------------------------------
+
+/** Bilan du mois d'épargne `key` déjà validé : dans le rituel (reviewedAt) ou sur l'Accueil. */
+export const isPayReviewDone = (key: string, payReviewsDone: string[] = [], pays: PayRecord[] = []): boolean =>
+  payReviewsDone.includes(key) || pays.some(p => p.kind !== 'extra' && savingsMonthOfPay(p) === key && !!p.reviewedAt);
+
+/** Paies après la validation du bilan `key` : la paie de ce mois, si elle existe, le note. */
+export const withPayReviewed = (pays: PayRecord[] = [], key: string, today: string): PayRecord[] => {
+  const pay = pays.find(p => p.kind !== 'extra' && savingsMonthOfPay(p) === key);
+  return pay && !pay.reviewedAt ? pays.map(p => (p === pay ? { ...p, reviewedAt: today } : p)) : pays;
 };

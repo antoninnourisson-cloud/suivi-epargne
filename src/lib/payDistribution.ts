@@ -67,7 +67,9 @@ export const recommendPayDistribution = (data: GlobalAppData, input: PayDistribu
   const amount = Math.max(0, finite(input.amount) ?? 0);
   const asOf = input.receivedOn ? parseISODate(input.receivedOn) : new Date();
   const split = activeSavingsSplit(c, asOf);
-  const expectedPay = round2(computeMonthlyPay(data));
+  // Paie estimée jamais négative (salaire encore vide) : comme la paie créée par une coche ou la migration.
+  const estimated = computeMonthlyPay(data);
+  const expectedPay = Number.isFinite(estimated) ? round2(Math.max(0, estimated)) : 0;
   const forced = finite(input.toSave);
   const extra = input.kind === 'extra';
 

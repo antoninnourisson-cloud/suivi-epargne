@@ -3,7 +3,9 @@
 // une fenêtre, une bannière ou l'indicateur de sauvegarde (voir les props stables d'App).
 import { memo, Suspense, useCallback, useMemo, useState } from 'react';
 import type { PortfolioData } from '../hooks/usePortfolioData';
-import { payAdjustmentOf, payChecklistOf } from '../lib/payRecords';
+import { payChecklistOf } from '../lib/payRecords';
+import { withSavedPayslip } from '../components/payslips/usePayslipImport';
+import type { PayRitualProps } from '../components/pilot/PayReceivedSheet';
 import type { FiscalWatch } from '../hooks/useFiscalWatch';
 import type { SavingsAccount } from '../types';
 import { isView, type View } from '../navigation';
@@ -26,17 +28,17 @@ import { useAddToast, useDialog } from './UiProviders';
 export const useScreenData = (data: PortfolioData) => {
   const {
     doc, geminiApiKey, setGeminiApiKey, setAccounts, setExpenses, setPayslips, setRecurringMovements, setSubscriptions,
-    setDonations, setPayAdjustment, setActivePayslipId, setFiscalConfig, updateWorkBenefits, patchConfig,
+    setDonations, setActivePayslipId, setFiscalConfig, updateWorkBenefits, patchConfig,
     importData, recoverSetAside, listDriveBackups,
     restoreDriveBackup, listSetAsideVersions, currentData,
   } = data;
   return useMemo(() => ({
     doc, geminiApiKey, setGeminiApiKey, setAccounts, setExpenses, setPayslips, setRecurringMovements, setSubscriptions,
-    setDonations, setPayAdjustment, setActivePayslipId, setFiscalConfig, updateWorkBenefits, patchConfig,
+    setDonations, setActivePayslipId, setFiscalConfig, updateWorkBenefits, patchConfig,
     importData, recoverSetAside, listDriveBackups,
     restoreDriveBackup, listSetAsideVersions, currentData,
   }), [doc, geminiApiKey, setGeminiApiKey, setAccounts, setExpenses, setPayslips, setRecurringMovements, setSubscriptions,
-    setDonations, setPayAdjustment, setActivePayslipId, setFiscalConfig, updateWorkBenefits, patchConfig,
+    setDonations, setActivePayslipId, setFiscalConfig, updateWorkBenefits, patchConfig,
     importData, recoverSetAside, listDriveBackups,
     restoreDriveBackup, listSetAsideVersions, currentData]);
 };
@@ -80,11 +82,10 @@ export const ScreenRouter = memo(function ScreenRouter({ view, setView, data, de
   const dialog = useDialog();
   const { doc } = data;
   const c = doc.config;
-  // Paie du mois d'épargne en cours, sous ses anciennes formes (lib/payRecords) : liste à
-  // cocher et réglages du Pilotage, routine de l'Accueil.
+  // Paie du mois d'épargne en cours, sous sa forme de liste à cocher (lib/payRecords) :
+  // carte « Ma paie » du Pilotage, routine de l'Accueil.
   const payCalendar = useMemo(() => ({ payslips: doc.payslips, pays: doc.pays }), [doc.payslips, doc.pays]);
   const payChecklist = payChecklistOf(doc);
-  const payAdjustment = payAdjustmentOf(doc);
   const { editingAccount, setEditingAccount, showForm, setShowForm } = accountForm;
   const raise = usePayRaise(doc, data, addToast);
   // « Lire un relevé » (Actualiser, fiche d'un compte) : une seule fenêtre, au-dessus de l'écran.
@@ -99,6 +100,17 @@ export const ScreenRouter = memo(function ScreenRouter({ view, setView, data, de
     if (!actions.saveAccount(acc)) return;
     setShowForm(false);
     setEditingAccount(undefined);
+  };
+  // Le rituel « J'ai reçu ma paie » (carte « Ma paie » du Pilotage) : une fiche de paie relue
+  // sur place rejoint la liste des fiches, comme depuis l'écran Fiches de paie.
+  const payRitual: PayRitualProps = {
+    doc, geminiApiKey: data.geminiApiKey, pickerApiKey: c.pickerApiKey ?? '',
+    onRecordPay: actions.recordPay, onDeletePay: actions.deletePay, onValidateReview: actions.validatePayReview,
+    onSavePayslip: (record, replaced) => {
+      data.setPayslips(prev => withSavedPayslip(prev, record, replaced));
+      if (doc.activePayslipId && replaced.has(doc.activePayslipId)) actions.clearActivePayslip();
+    },
+    onOpenKeys: () => openSettings('keys'),
   };
   const fiscalWatchCard = (compact: boolean) => <Lazy><FiscalWatchCard compact={compact} watch={fiscalWatch} onApply={actions.applyFiscalProposal} /></Lazy>;
 
@@ -132,8 +144,7 @@ export const ScreenRouter = memo(function ScreenRouter({ view, setView, data, de
           activePayslip={derived.activePayslip} onClearActivePayslip={actions.clearActivePayslip}
           subscriptions={doc.subscriptions} onOpenSubscriptions={() => setView('subscriptions')}
           payChecklist={payChecklist} onPayLineCheck={actions.checkPayLine} onPayLineUncheck={actions.uncheckPayLine} onPayPlanReset={actions.resetPayPlan}
-          payAdjustment={payAdjustment} onPayAdjustmentChange={data.setPayAdjustment}
-          payCalendar={payCalendar}
+          payCalendar={payCalendar} payRitual={payRitual}
           />}
 
         {view === 'transfers' && <TransferManager accounts={doc.accounts} onCommit={actions.commit} recurringMovements={doc.recurringMovements} onUpdateRecurring={data.setRecurringMovements} onQuickAdd={onQuickAdd} />}
@@ -170,7 +181,7 @@ export const ScreenRouter = memo(function ScreenRouter({ view, setView, data, de
         {view === 'subscriptions' && <Subscriptions subscriptions={doc.subscriptions} onUpdate={data.setSubscriptions} monthlyPay={derived.monthlyPay} />}
         {view === 'payslips' && <Payslips payslips={doc.payslips} onUpdatePayslips={data.setPayslips} geminiApiKey={data.geminiApiKey} pickerApiKey={c.pickerApiKey ?? ''} onApplyToPilotage={actions.applyPayslip} activePayslipId={doc.activePayslipId} onClearActivePayslip={actions.clearActivePayslip}
           onOpenKeys={() => { openSettingsSection('keys'); setView('settings'); }}
-          sharedFile={sharedPayslip} onSharedFileTaken={sharedPayslipTaken} />}
+          sharedFile={sharedPayslip} onSharedFileTaken={sharedPayslipTaken} onPayslipSaved={actions.attachPayslip} />}
         {shareMarker !== null && <Lazy><ShareTargetHost marker={shareMarker} ready={shareReady} data={data} onImportStatement={actions.importStatement}
           onPayslip={file => { setSharedPayslip(file); setView('payslips'); }} onOpenKeys={() => openSettings('keys')} onDone={onShareDone} /></Lazy>}
 

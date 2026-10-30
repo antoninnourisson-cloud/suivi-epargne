@@ -1,10 +1,13 @@
 // src/components/AssistantPilot.tsx
 import React, { useState, useMemo, useEffect, useId, useRef } from 'react';
-import { SavingsAccount, Expense, AccountType, FiscalConfig, WorkBenefits, PayslipRecord, Subscription, PayChecklist as PayChecklistData, PayChecklistLine, PayAdjustment, AppDoc } from '../types';
+import { SavingsAccount, Expense, AccountType, FiscalConfig, WorkBenefits, PayslipRecord, Subscription, PayChecklist as PayChecklistData, PayChecklistLine, AppDoc } from '../types';
 import { PayChecklist } from './PayChecklist';
 import { SavingsSplitEditor } from './SavingsSplitEditor';
-import { computeIncome, computeMaturityCountdown, computePeeAvailability, describeMaturity, computePlacementStrategy, payslipSuperNet, subscriptionsAsExpenses, computePayTransfers, computeRecentSavingsRate, activeSavingsSplit, payPeriodOf } from '../lib/finance';
-import { combineMonthTarget, updatePayAdjustment } from '../lib/payAdjustment';
+import { computeIncome, computeMaturityCountdown, computePeeAvailability, describeMaturity, computePlacementStrategy, payslipSuperNet, subscriptionsAsExpenses, computePayTransfers, computeRecentSavingsRate, activeSavingsSplit } from '../lib/finance';
+import { combineMonthTarget } from '../lib/payAdjustment';
+import { openPay } from '../lib/payRecords';
+import { recommendPayDistribution } from '../lib/payDistribution';
+import type { PayRitualProps } from './pilot/PayReceivedSheet';
 import type { PayCalendarData } from '../lib/payCalendar';
 import { parseISODate } from '../lib/dates';
 import { parseFrenchNumber, safeNumber } from '../lib/numbers';
@@ -15,7 +18,7 @@ import { elideDe, formatEUR, formatPeriod, formatRate } from '../lib/format';
 import { useUndoableRemove } from './Toast';
 import { focusAfterRemoval } from './focusAfterRemoval';
 import { buildWaterfall, heroContext, AmountSource } from '../lib/pilotView';
-import { Button, IconButton, MoneyText, PageHeader, StatTile, Tabs, TextField, fieldClass } from './ui';
+import { Button, IconButton, MoneyText, PageHeader, Tabs, TextField, fieldClass } from './ui';
 import { Disclosure } from './pilot/Disclosure';
 import { BudgetWaterfall } from './pilot/BudgetWaterfall';
 import { BookletFill } from './pilot/BookletFill';
@@ -52,18 +55,20 @@ interface AssistantPilotProps {
   onPayLineCheck: (lines: PayChecklistLine[], line: PayChecklistLine, amount: number, alreadyRecorded: boolean) => boolean;
   onPayLineUncheck: (line: PayChecklistLine) => void;
   onPayPlanReset: () => void;
-  /** Réglages de la paie en cours (paie du mois d'épargne en cours, lib/payRecords). */
-  payAdjustment?: PayAdjustment;
-  onPayAdjustmentChange: (next: PayAdjustment | undefined) => void;
   /** Fiches et paies déclarées : la paie en cours suit la même fenêtre que l'Accueil. */
   payCalendar?: Omit<PayCalendarData, 'paydayDay'>;
+  /**
+   * Le rituel « J'ai reçu ma paie » (carte « Ma paie ») : données complètes et commandes.
+   * Une paie déclarée remplace l'estimation dans la carte (répartition pour le montant reçu).
+   */
+  payRitual?: PayRitualProps;
 }
 
 export const AssistantPilot: React.FC<AssistantPilotProps> = ({
   accounts, expenses, onUpdateExpenses, config, onPatchConfig,
   fiscalConfig, workBenefits, activePayslip, onClearActivePayslip,
   subscriptions, onOpenSubscriptions, payChecklist, onPayLineCheck, onPayLineUncheck, onPayPlanReset,
-  payAdjustment, onPayAdjustmentChange, payCalendar,
+  payCalendar, payRitual,
 }) => {
   const { grossAnnual, leisureBudget, projectSavings, taxRateManual, extraMonthlyIncome, paydayDay, paydayAmount, savingsSplit, savingsSplitFrom } = config;
   const setGrossAnnual = (grossAnnual: number) => onPatchConfig({ grossAnnual });
@@ -84,25 +89,6 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
     removeWithUndo(expenses, e, onUpdateExpenses, `Charge « ${e.name} » supprimée`);
     focusAfterRemoval(() => expenseListRef.current, index, () => document.getElementById(expensesTitleId));
   };
-  // Réglages de la paie en cours : enregistrés sur la paie du mois d'épargne en cours
-  // (l'Accueil et la relance de paie affichent le même objectif), ignorés dès la paie suivante.
-  const periodKey = payPeriodOf(paydayDay, new Date(), payCalendar).key;
-  const adjustment = payAdjustment;
-  const externalSavings = adjustment?.extra ?? 0;
-  const savedCapacity = adjustment?.capacity;
-  const changeAdjustment = (patch: { capacity?: number | null; extra?: number | null }) =>
-    onPayAdjustmentChange(updatePayAdjustment(payAdjustment, periodKey, patch));
-  // Brouillon de la capacité saisie : affiché tant qu'il correspond à la valeur enregistrée
-  // (sinon la valeur a changé ailleurs, par exemple sur un autre appareil).
-  const [capacityDraft, setCapacityDraft] = useState<{ text: string; saved: number | undefined } | null>(null);
-  const capacityText = capacityDraft && capacityDraft.saved === savedCapacity ? capacityDraft.text : null;
-  const onCapacityInput = (text: string) => {
-    // Saisie vide ou illisible : retour au calcul automatique (le texte reste affiché).
-    const parsed = text.trim() === '' ? null : parseFrenchNumber(text);
-    setCapacityDraft({ text, saved: parsed === null ? undefined : Math.round(parsed * 100) / 100 });
-    changeAdjustment({ capacity: parsed });
-  };
-  const resetCapacity = () => { setCapacityDraft(null); changeAdjustment({ capacity: null }); };
   const [activeTab, setActiveTab] = useState<'budget' | 'fiscal'>('budget');
   
   // UX State pour ajout dépense
@@ -219,13 +205,13 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
     const subscriptionsFixed = subscriptionCharges.reduce((sum, e) => sum + e.amount, 0);
     const totalFixed = manualFixed + subscriptionsFixed;
     const theoreticalCapacity = effectiveSuperNetForCalc - totalFixed - leisureBudget - projectSavings;
-    // Capacité saisie pour cette paie, sinon montant du rappel de paie (même chiffre que la
-    // notification et l'agenda), sinon calcul ; plus la somme en plus. Même règle que la
-    // jauge de l'Accueil et la relance de paie (lib/payAdjustment).
-    const target = combineMonthTarget({ computed: theoreticalCapacity, paydayAmount, adjustment });
+    // Estimation avant la paie : montant du rappel de paie (même chiffre que la notification
+    // et l'agenda), sinon calcul. Même règle que la jauge de l'Accueil et la relance de paie
+    // (lib/payAdjustment) ; une fois la paie déclarée, la carte « Ma paie » suit le montant reçu.
+    const target = combineMonthTarget({ computed: theoreticalCapacity, paydayAmount });
     const source: AmountSource = target.source;
     return { manualFixed, totalFixed, subscriptionsFixed, theoreticalCapacity, finalCapacity: target.capacity, totalToInvest: target.total, source };
-  }, [effectiveSuperNetForCalc, expenses, subscriptionCharges, leisureBudget, projectSavings, adjustment, paydayAmount]);
+  }, [effectiveSuperNetForCalc, expenses, subscriptionCharges, leisureBudget, projectSavings, paydayAmount]);
 
   const payTransfers = useMemo(
     () => computePayTransfers({ expenses, subscriptions, leisureBudget, projectSavings }),
@@ -349,18 +335,18 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
     theoreticalCapacity: budgetData.theoreticalCapacity,
     source: budgetData.source,
     retained: budgetData.finalCapacity,
-    externalSavings,
+    externalSavings: 0,
     totalToInvest: budgetData.totalToInvest,
-  }), [effectiveSuperNetForCalc, payLabel, budgetData, leisureBudget, projectSavings, externalSavings]);
+  }), [effectiveSuperNetForCalc, payLabel, budgetData, leisureBudget, projectSavings]);
   const heroSentence = heroContext({
     pay: effectiveSuperNetForCalc,
     source: budgetData.source,
     theoreticalCapacity: budgetData.theoreticalCapacity,
-    externalSavings,
+    externalSavings: 0,
     totalToInvest: budgetData.totalToInvest,
     finalCapacity: budgetData.finalCapacity,
   });
-  const shortfall = Math.max(0, -budgetData.finalCapacity, -budgetData.theoreticalCapacity, paydayAmount !== undefined && savedCapacity === undefined ? paydayAmount - Math.max(0, budgetData.theoreticalCapacity) : 0);
+  const shortfall = Math.max(0, -budgetData.finalCapacity, -budgetData.theoreticalCapacity, paydayAmount !== undefined ? paydayAmount - Math.max(0, budgetData.theoreticalCapacity) : 0);
   const customSplit = activeSavingsSplit({ savingsSplit, savingsSplitFrom }) !== undefined;
   const plannedSpending = budgetData.totalFixed + leisureBudget + projectSavings;
   // Même précision pour les trois montants de l'en-tête, pour que « paie − dépenses = à placer »
@@ -368,8 +354,15 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
   const heroDecimals = [effectiveSuperNetForCalc, plannedSpending, budgetData.totalToInvest]
     .every((n) => Math.round(n * 100) % 100 === 0) ? 0 : 2;
   const paydaySelectId = useId();
-  // Durée de validité des réglages du mois, dite simplement.
-  const untilNextPay = paydayDay !== undefined ? "Gardé jusqu'à la prochaine paie." : "Gardé jusqu'à la fin du mois.";
+
+  // Paie déclarée du mois d'épargne en cours : la carte « Ma paie » répartit le montant REÇU
+  // (prime et « À placer sur cette paie » compris), plus l'estimation.
+  const declaredPay = payRitual ? openPay(payRitual.doc).pay : undefined;
+  const received = useMemo(
+    () => (declaredPay && payRitual ? recommendPayDistribution(payRitual.doc, {
+      amount: declaredPay.amount, bonus: declaredPay.bonus, toSave: declaredPay.toSave, kind: declaredPay.kind, receivedOn: declaredPay.receivedOn,
+    }) : undefined),
+    [declaredPay, payRitual]);
 
   const readOnlyValue = (label: string, value: React.ReactNode) => (
     <div>
@@ -386,42 +379,25 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
 
   const budgetTab = (
     <div className="space-y-6">
-      {/* a. La réponse : combien placer ce mois-ci. */}
-      <section aria-label="À placer ce mois" className="rounded-3xl bg-secondary-container p-6 sm:p-8">
-        <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-6">
-          <StatTile size="hero" label="À placer ce mois" value={<MoneyText value={budgetData.totalToInvest} decimals={heroDecimals} />} />
-          {/* Une paire dt/dd par montant : le lecteur d'écran annonce chaque libellé avec sa valeur. */}
-          <dl className="grid grid-cols-2 gap-x-8 gap-y-1 text-sm">
-            <div>
-              <dt className="text-on-surface-variant">Paie nette après impôt</dt>
-              <dd className="text-lg text-on-surface"><MoneyText value={effectiveSuperNetForCalc} decimals={heroDecimals} /></dd>
-            </div>
-            <div>
-              <dt className="text-on-surface-variant">Dépenses prévues</dt>
-              <dd className="text-lg text-on-surface"><MoneyText value={plannedSpending} decimals={heroDecimals} /></dd>
-            </div>
-          </dl>
-        </div>
-        <p className="mt-4 text-sm text-on-surface-variant max-w-2xl">{heroSentence}</p>
-      </section>
-
-      {/* b. Où le placer, virement par virement. */}
+      {/* a. Ma paie : la paie attendue ou reçue, ce qu'il y a à placer, et où, virement par virement. */}
       <PayChecklist
-        superNet={effectiveSuperNetForCalc}
-        transfers={payTransfers}
-        steps={strategy}
-        totalToInvest={budgetData.totalToInvest}
-        shortfall={shortfall}
+        estimate={{ pay: effectiveSuperNetForCalc, spending: plannedSpending, toSave: budgetData.totalToInvest, sentence: heroSentence, decimals: heroDecimals }}
+        pay={declaredPay}
+        transfers={received?.transfers ?? payTransfers}
+        steps={received?.steps ?? strategy}
+        totalToInvest={received?.toSave ?? budgetData.totalToInvest}
+        shortfall={received?.shortfall ?? shortfall}
         checklist={payChecklist}
         onCheck={onPayLineCheck}
         onUncheck={onPayLineUncheck}
         onReset={onPayPlanReset}
         paydayDay={paydayDay}
         payCalendar={payCalendar}
-        customSplit={customSplit}
+        customSplit={received?.customSplit ?? customSplit}
+        ritual={payRitual}
       />
 
-      {/* c. D'où vient ce chiffre. */}
+      {/* b. D'où vient ce chiffre (l'estimation). */}
       <Disclosure title="D'où vient ce chiffre" icon={Sigma} summary={<MoneyText value={budgetData.totalToInvest} />}>
         <BudgetWaterfall rows={waterfall} />
         <p className="mt-3 text-xs text-on-surface-variant">Le détail de votre salaire (brut, charges, impôt) et tous les montants se règlent dans « Mes paramètres », plus bas.</p>
@@ -602,34 +578,10 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
             </div>
           </Disclosure>
 
-          <Disclosure appearance="plain" headingLevel={4} title="Budgets et montant du mois" icon={Coins} summary={`${formatEUR(leisureBudget, 0)} plaisir · ${formatEUR(projectSavings, 0)} projets`}>
+          <Disclosure appearance="plain" headingLevel={4} title="Budgets" icon={Coins} summary={`${formatEUR(leisureBudget, 0)} plaisir · ${formatEUR(projectSavings, 0)} projets`}>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <TextField label="Argent plaisir" supporting="Ce qui reste sur le compte courant pour le mois." render={p => <NumberInput id={p.id} describedBy={p.describedBy} invalid={p.invalid} value={leisureBudget} onChange={setLeisureBudget} min={0} suffix="€" className={`${p.className} tabular-nums`} />} />
               <TextField label="Épargne projets" supporting="Argent qui part vers un compte hors de Pécule : il ne compte pas comme épargne. Pour suivre un projet, placez-le plutôt sur un compte de Pécule avec une étiquette (voyage, apport…) : « Mes comptes » en affiche le total." render={p => <NumberInput id={p.id} describedBy={p.describedBy} invalid={p.invalid} value={projectSavings} onChange={setProjectSavings} min={0} suffix="€" className={`${p.className} tabular-nums`} />} />
-              <div>
-                <TextField
-                  id="savings-capacity"
-                  label="Capacité d'épargne du mois"
-                  inputMode="decimal"
-                  suffix="€"
-                  className="tabular-nums"
-                  value={capacityText ?? (savedCapacity !== undefined ? String(savedCapacity).replace('.', ',') : String(Math.round(paydayAmount ?? budgetData.theoreticalCapacity)))}
-                  onChange={e => onCapacityInput(e.target.value)}
-                  supporting={savedCapacity !== undefined
-                    ? `Pour cette paie seulement (calculée : ${formatEUR(budgetData.theoreticalCapacity, 0)}). ${untilNextPay}`
-                    : paydayAmount !== undefined
-                      ? `Montant fixé dans le rappel de paie (capacité calculée : ${formatEUR(budgetData.theoreticalCapacity, 0)}).`
-                      : `Calculée : ${formatEUR(budgetData.theoreticalCapacity, 0)}. Modifiez-la si ce mois est différent.`}
-                />
-                {(savedCapacity !== undefined || capacityText !== null) && (
-                  <Button variant="text" size="sm" onClick={resetCapacity} className="mt-1">Revenir au calcul</Button>
-                )}
-              </div>
-              <TextField
-                label="Somme en plus à placer ce mois-ci"
-                supporting={`Prime, cadeau, remboursement… ajouté au plan de placement. ${untilNextPay}`}
-                render={p => <NumberInput id={p.id} describedBy={p.describedBy} invalid={p.invalid} value={externalSavings} onChange={v => changeAdjustment({ extra: v })} suffix="€" className={`${p.className} tabular-nums`} />}
-              />
             </div>
           </Disclosure>
 

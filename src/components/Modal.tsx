@@ -9,8 +9,11 @@ interface ModalProps {
   /** Intitulé lu par les lecteurs d'écran (le titre visible est dans `children`). */
   label: string;
   children: React.ReactNode;
-  /** 'center' (défaut) ou 'sheet' (panneau ancré en bas sur mobile). */
-  variant?: 'center' | 'sheet';
+  /**
+   * 'center' (défaut), 'sheet' (panneau ancré en bas sur mobile) ou 'page' (plein écran sur
+   * mobile, boîte centrée ailleurs : parcours en plusieurs étapes, comme le rituel de paie).
+   */
+  variant?: 'center' | 'sheet' | 'page';
   className?: string;
   /** Élément à focaliser à l'ouverture (sinon le premier champ ou bouton). */
   initialFocusRef?: React.RefObject<HTMLElement | null>;
@@ -59,9 +62,10 @@ export const Modal: React.FC<ModalProps> = ({ open, onClose, label, children, va
 
   if (!open) return null;
   const sheet = variant === 'sheet';
+  const page = variant === 'page';
   return (
     <div
-      className={`fixed inset-0 z-70 flex ${sheet ? 'items-end sm:items-center' : 'items-center p-4'} justify-center bg-scrim/40 animate-fade-in`}
+      className={`fixed inset-0 z-70 flex ${sheet || page ? 'items-end sm:items-center' : 'items-center p-4'} justify-center bg-scrim/40 animate-fade-in`}
       onClick={closeOnScrim ? onClose : undefined}
     >
       <div
@@ -73,7 +77,7 @@ export const Modal: React.FC<ModalProps> = ({ open, onClose, label, children, va
         onClick={e => e.stopPropagation()}
         // Material 3 : boîte de dialogue (coins de 28 px, surface « container high ») ou
         // feuille du bas, avec sa poignée.
-        className={`bg-surface-container-high text-on-surface shadow-xl w-full outline-hidden rounded-3xl max-h-[90vh] overflow-y-auto ${sheet ? 'max-sm:rounded-b-none max-sm:max-h-[85vh] pb-[env(safe-area-inset-bottom)]' : ''} ${className}`}
+        className={`bg-surface-container-high text-on-surface shadow-xl w-full outline-hidden rounded-3xl max-h-[90vh] overflow-y-auto ${sheet ? 'max-sm:rounded-b-none max-sm:max-h-[85vh] pb-[env(safe-area-inset-bottom)]' : ''} ${page ? 'max-sm:rounded-none max-sm:h-dvh max-sm:max-h-dvh pb-[env(safe-area-inset-bottom)]' : ''} ${className}`}
       >
         {/* Poignée remontée dans le rembourrage du haut, puis 8 px fixes avant le contenu,
             quel que soit le rembourrage passé (p-4 ou p-6) : elle ne touche jamais le titre. */}

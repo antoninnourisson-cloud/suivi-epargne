@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { RefObject } from 'react';
 import { isView, navLabel, type View } from '../navigation';
 import { isSettingsSection, openSettingsSection } from '../components/settings/sections';
+import { requestPaySheet } from '../components/pilot/paySheetRequest';
 
 /** Retire un paramètre de l'adresse sans recharger la page (les autres paramètres restent). */
 export const stripParam = (name: string) => {
@@ -40,6 +41,8 @@ export const useViewState = (lastView: string, setLastView: (v: string) => void)
  * montrer par-dessus l'écran de connexion ou le verrou ; l'adresse est nettoyée ensuite pour
  * qu'un simple rechargement ne les rejoue pas.
  * - `?action=quickadd` : raccourci PWA « Ajouter un mouvement » (appui long sur l'icône) ;
+ * - `?action=pay` (avec ou sans `view=pilot`) : raccourci « J'ai reçu ma paie » et
+ *   notification de paie : le Pilotage s'ouvre directement sur le rituel ;
  * - `?view=update` : écran ouvert par une notification. Un écran inconnu de cette version
  *   (lien d'une version plus récente, encore en cours de mise à jour) reste dans l'adresse
  *   pour que la nouvelle version, chargée juste après, l'ouvre ;
@@ -52,6 +55,11 @@ export const useDeepLinks = (ready: boolean, openLinkedView: (v: View) => void, 
     if (params.get('action') === 'quickadd') {
       openQuickAdd();
       stripParam('action');
+    }
+    if (params.get('action') === 'pay') {
+      requestPaySheet();
+      stripParam('action');
+      if (!params.get('view')) openLinkedView('pilot');
     }
     const target = params.get('view');
     if (isView(target)) {
@@ -75,6 +83,8 @@ export const useDeepLinks = (ready: boolean, openLinkedView: (v: View) => void, 
       // Alertes de sécurité (retrait du verrou, suppression de sauvegarde) : la carte
       // concernée des Paramètres s'ouvre aussi, comme avec `?section=` au démarrage.
       if (target === 'settings' && isSettingsSection(e.data.section)) openSettingsSection(e.data.section);
+      // Notification de paie : le rituel « J'ai reçu ma paie » s'ouvre avec le Pilotage.
+      if (target === 'pilot' && e.data.action === 'pay') requestPaySheet();
       openLinkedView(target);
     };
     navigator.serviceWorker.addEventListener('message', onMessage);

@@ -1,5 +1,5 @@
 import { afterEach, describe, it, expect } from 'vitest';
-import { DISCREET_AMOUNT, elideDe, elideDu, elideLe, formatEUR, formatSignedEUR, isDiscreetAmounts, plainEUR, setDiscreetAmounts } from './format';
+import { DISCREET_AMOUNT, elideDe, elideDu, elideLe, formatEUR, formatSignedEUR, isDiscreetAmounts, plainEUR, setDiscreetAmounts, formatMonth } from './format';
 
 // Intl insère des espaces insécables : on les normalise pour comparer.
 const norm = (s: string) => s.replace(/[  ]/g, ' ');
@@ -51,5 +51,13 @@ describe('mode discret', () => {
     setDiscreetAmounts(false);
     expect(norm(formatEUR(250))).toBe('250 €');
     expect(norm(plainEUR(1250))).toBe('1 250 €');
+  });
+});
+
+describe('formatMonth', () => {
+  it('nom du mois, avec l’année sur demande ; valeur illisible rendue telle quelle', () => {
+    expect(formatMonth('2026-11')).toBe('novembre');
+    expect(formatMonth('2027-01', true)).toBe('janvier 2027');
+    expect(formatMonth('bientôt')).toBe('bientôt');
   });
 });

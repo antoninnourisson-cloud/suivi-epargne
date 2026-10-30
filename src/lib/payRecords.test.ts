@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { findMovement, liveDone, newPayId, openPay, payAdjustmentOf, payChecklistOf, payMovements, suggestedPayKind, withPayAdjustment } from './payRecords';
-import type { PayChecklist, PayRecord } from '../types';
+import { findMovement, isPayReviewDone, liveDone, newPayId, openPay, payAdjustmentOf, payChecklistOf, payForPayslipPeriod, payMovements, payslipForMonth, payslipPeriodOf, suggestedPayKind, withPayReviewed } from './payRecords';
+import type { PayChecklist, PayRecord, PayslipRecord } from '../types';
 
 // Paie le 27 : le 2 novembre 2026, la paie en cours est celle du 27 octobre (épargne de novembre).
 const NOV_2 = new Date(2026, 10, 2, 12);
@@ -60,21 +60,59 @@ describe('nouvelle paie', () => {
 });
 
 describe('réglages de la paie en cours (forme historique)', () => {
-  it('« Capacité » et « Somme en plus » vont sur la paie ouverte ; le montant reçu suit la prime', () => {
-    const a = withPayAdjustment({ pays: [], config }, { period: '2026-10', extra: 300 }, NOV_2, 2500);
-    expect(a).toEqual([{ id: 'pay-2026-11', receivedOn: '2026-10-27', savingsMonth: '2026-11', amount: 2800, bonus: 300, lines: [], done: {} }]);
-    expect(payAdjustmentOf({ pays: a, config }, NOV_2)).toEqual({ period: '2026-10', extra: 300 });
-    const b = withPayAdjustment({ pays: a, config }, { period: '2026-10', capacity: 700.456, extra: 200 }, NOV_2, 0);
-    expect(b[0]).toMatchObject({ amount: 2700, bonus: 200, toSave: 700.46 });
-    const c = withPayAdjustment({ pays: b, config }, undefined, NOV_2, 0);
-    expect(c[0]).toEqual({ id: 'pay-2026-11', receivedOn: '2026-10-27', savingsMonth: '2026-11', amount: 2500, lines: [], done: {} });
-    expect(payAdjustmentOf({ pays: c, config }, NOV_2)).toBeUndefined();
-    // Rien à enregistrer et pas de paie : rien n'est créé.
-    expect(withPayAdjustment({ pays: [], config }, undefined, NOV_2, 2500)).toEqual([]);
-  });
   it('un réglage de la paie précédente ne s\'applique plus', () => {
     const pays: PayRecord[] = [{ id: 'sep', receivedOn: '2026-09-27', savingsMonth: '2026-10', amount: 2400, toSave: 900, lines: [], done: {} }];
     expect(payAdjustmentOf({ pays, config }, new Date(2026, 9, 20))).toEqual({ period: '2026-09', capacity: 900 });
     expect(payAdjustmentOf({ pays, config }, NOV_2)).toBeUndefined();
+  });
+});
+
+describe('fiche de paie de la paie', () => {
+  const pays: PayRecord[] = [
+    { id: 'oct', receivedOn: '2026-10-27', savingsMonth: '2026-11', amount: 2500, lines: [], done: {} },
+    { id: 'prime', receivedOn: '2026-10-29', savingsMonth: '2026-11', amount: 300, kind: 'extra', lines: [], done: {} },
+    // Paie de novembre versée en retard, le 3 décembre : épargne de décembre, fiche de novembre.
+    { id: 'nov', receivedOn: '2026-12-03', savingsMonth: '2026-12', amount: 2450, lines: [], done: {} },
+  ];
+  const slip = (id: string, period: string, addedAt: string, extra: Partial<PayslipRecord> = {}): PayslipRecord =>
+    ({ id, fileId: '', fileName: `${id}.pdf`, addedAt, reviewed: true, extracted: { period, netPaid: 2512 }, ...extra });
+
+  it("fiche du mois qui précède le mois d'épargne, dans les deux sens", () => {
+    expect(payslipPeriodOf('2026-11')).toBe('2026-10');
+    expect(payslipPeriodOf('2027-01')).toBe('2026-12');
+    expect(payForPayslipPeriod(pays, '2026-10')?.id).toBe('oct');
+    expect(payForPayslipPeriod(pays, '2026-11')?.id).toBe('nov');
+    expect(payForPayslipPeriod(pays, '2026-09')).toBeUndefined();
+    expect(payForPayslipPeriod(pays, 'octobre')).toBeUndefined();
+    expect(payForPayslipPeriod(undefined, '2026-10')).toBeUndefined();
+  });
+
+  it("la fiche liée d'abord, sinon la plus récente du mois (pas une fiche qui s'ajoute)", () => {
+    const slips = [
+      slip('a', '2026-10', '2026-10-26T08:00:00Z'),
+      slip('b', '2026-10', '2026-10-28T08:00:00Z'),
+      slip('c', '2026-10', '2026-10-29T08:00:00Z', { addsToPeriod: true }),
+      slip('d', '2026-09', '2026-09-27T08:00:00Z'),
+    ];
+    expect(payslipForMonth(slips, '2026-11')?.id).toBe('b');
+    expect(payslipForMonth(slips, '2026-11', 'a')?.id).toBe('a');
+    expect(payslipForMonth(slips, '2026-11', 'disparue')?.id).toBe('b');
+    expect(payslipForMonth(slips, '2026-12')).toBeUndefined();
+    expect(payslipForMonth(undefined, '2026-11')).toBeUndefined();
+  });
+});
+
+describe("bilan du mois d'épargne", () => {
+  const pays: PayRecord[] = [{ id: 'oct', receivedOn: '2026-10-27', savingsMonth: '2026-11', amount: 2500, lines: [], done: {} }];
+  it("validé sur l'Accueil (payReviewsDone) ou dans le rituel (reviewedAt)", () => {
+    expect(isPayReviewDone('2026-11', [], pays)).toBe(false);
+    expect(isPayReviewDone('2026-11', ['2026-11'], pays)).toBe(true);
+    const reviewed = withPayReviewed(pays, '2026-11', '2026-12-01');
+    expect(reviewed[0].reviewedAt).toBe('2026-12-01');
+    expect(isPayReviewDone('2026-11', undefined, reviewed)).toBe(true);
+    // Déjà noté : rien ne change ; pas de paie ce mois-là : rien à noter.
+    expect(withPayReviewed(reviewed, '2026-11', '2026-12-05')).toBe(reviewed);
+    expect(withPayReviewed(pays, '2026-10', '2026-12-01')).toBe(pays);
+    expect(isPayReviewDone('2026-10', undefined, undefined)).toBe(false);
   });
 });

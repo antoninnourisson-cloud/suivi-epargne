@@ -6,9 +6,10 @@ import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { useState } from 'react';
 import { act, cleanup, fireEvent, render, renderHook, screen } from '@testing-library/react';
 import { emptyData } from '../lib/schema';
-import { AccountType, type AppDoc, type SavingsAccount } from '../types';
+import { AccountType, type AppDoc, type PayRecord, type PayslipRecord, type SavingsAccount } from '../types';
 import { stripParam, useDeepLinks, useViewState } from './useAppNavigation';
 import { clearRequestedSection, OPEN_SECTION_EVENT, peekRequestedSection } from '../components/settings/sections';
+import { OPEN_PAY_SHEET_EVENT, takePaySheetRequest } from '../components/pilot/paySheetRequest';
 import { syncLabel, syncTitle } from './SyncStatus';
 import { useAccountActions } from './useAccountActions';
 import { UiProviders, useAddToast, useDialog, useMainUiShown, type AddToast, type DialogApi } from './UiProviders';
@@ -55,6 +56,27 @@ describe('liens directs', () => {
     expect(window.location.search).toBe('?demo=1');
   });
 
+  it('« J’ai reçu ma paie » (raccourci, notification) : Pilotage et rituel demandés, adresse nettoyée', () => {
+    const onRequest = vi.fn();
+    window.addEventListener(OPEN_PAY_SHEET_EVENT, onRequest);
+    window.history.replaceState({}, '', '/?view=pilot&action=pay');
+    const openView = vi.fn();
+    renderHook(() => useDeepLinks(true, openView, () => {}));
+    expect(openView).toHaveBeenCalledWith('pilot');
+    expect(onRequest).toHaveBeenCalledTimes(1);
+    expect(window.location.search).toBe('');
+    // La demande attend le Pilotage, servie une seule fois.
+    expect(takePaySheetRequest()).toBe(true);
+    expect(takePaySheetRequest()).toBe(false);
+    // Sans écran : le Pilotage s'ouvre quand même.
+    window.history.replaceState({}, '', '/?action=pay');
+    const openView2 = vi.fn();
+    renderHook(() => useDeepLinks(true, openView2, () => {}));
+    expect(openView2).toHaveBeenCalledWith('pilot');
+    expect(takePaySheetRequest()).toBe(true);
+    window.removeEventListener(OPEN_PAY_SHEET_EVENT, onRequest);
+  });
+
   it('écran inconnu de cette version : le lien reste dans l’adresse pour la version suivante', () => {
     window.history.replaceState({}, '', '/?view=ecran-futur');
     const openView = vi.fn();
@@ -99,6 +121,17 @@ describe('liens directs', () => {
       expect(peekRequestedSection()).toBeNull();
       expect(onSection).toHaveBeenCalledTimes(1);
       window.removeEventListener(OPEN_SECTION_EVENT, onSection);
+    });
+
+    it('notification de paie : le Pilotage et le rituel', () => {
+      const openView = vi.fn();
+      renderHook(() => useDeepLinks(false, openView, () => {}));
+      act(() => { sw.dispatchEvent(new MessageEvent('message', { data: { type: 'open-view', view: 'pilot', action: 'pay' } })); });
+      expect(openView).toHaveBeenCalledWith('pilot');
+      expect(takePaySheetRequest()).toBe(true);
+      // Une autre action, ou un autre écran, ne demande rien.
+      act(() => { sw.dispatchEvent(new MessageEvent('message', { data: { type: 'open-view', view: 'history', action: 'pay' } })); });
+      expect(takePaySheetRequest()).toBe(false);
     });
   });
 });
@@ -302,6 +335,38 @@ describe('actions sur les données', () => {
     const done = (setters.patchConfig.mock.calls[1][0] as { payReviewsDone: string[] }).payReviewsDone;
     expect(done).toHaveLength(24);
     expect(done[23]).toBe('k0');
+  });
+
+  it('bilan validé dans le rituel : la paie déclarée de ce mois le note aussi', () => {
+    const pays: PayRecord[] = [{ id: 'pay-2026-11', receivedOn: '2026-10-27', savingsMonth: '2026-11', amount: 2500, lines: [], done: {} }];
+    const { result, setters } = setup({ ...emptyData(), pays });
+    act(() => result.current.validatePayReview('2026-11'));
+    expect(setters.patchConfig).toHaveBeenCalledWith({ payReviewsDone: ['2026-11'] });
+    expect((setters.setPays.mock.calls[0][0] as PayRecord[])[0].reviewedAt).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    // Mois sans paie déclarée : rien d'autre ne change.
+    act(() => result.current.validatePayReview('2026-09'));
+    expect(setters.setPays).toHaveBeenCalledTimes(1);
+  });
+
+  it('fiche importée depuis l’écran des fiches : rattachée à la paie du mois, montant ajusté sur demande, annulable', () => {
+    const pays: PayRecord[] = [{ id: 'pay-2026-11', receivedOn: '2026-10-27', savingsMonth: '2026-11', amount: 2500, lines: [], done: {} }];
+    const { result, setters, addToast, dialog } = setup({ ...emptyData(), pays });
+    const record: PayslipRecord = { id: 'ps', fileId: '', fileName: 'oct.pdf', addedAt: '2026-10-28T08:00:00Z', reviewed: true, extracted: { period: '2026-10', netPaid: 2600 } };
+    act(() => result.current.attachPayslip(record));
+    expect((setters.setPays.mock.calls[0][0] as PayRecord[])[0]).toMatchObject({ payslipId: 'ps', amount: 2500 });
+    const asked = dialog.open.mock.calls[0][0];
+    expect(asked).toMatchObject({ title: 'Ajuster la paie reçue ?' });
+    expect(asked.message).toMatch(/épargne de novembre est de 2\s500 € ; la fiche d'octobre indique un net payé de 2\s600 €/);
+    act(() => asked.onConfirm!());
+    expect((setters.setPays.mock.calls[1][0] as PayRecord[])[0]).toMatchObject({ payslipId: 'ps', amount: 2600 });
+    const toast = addToast.mock.calls[0][0] as { action: { label: string; onClick: () => void } };
+    act(() => toast.action.onClick());
+    expect((setters.setPays.mock.calls[2][0] as PayRecord[])[0]).toMatchObject({ payslipId: 'ps', amount: 2500 });
+    // Même montant, autre période ou fiche qui s'ajoute : pas de question.
+    act(() => result.current.attachPayslip({ ...record, id: 'ps2', extracted: { period: '2026-10', netPaid: 2500.2 } }));
+    act(() => result.current.attachPayslip({ ...record, id: 'ps3', extracted: { period: '2026-08', netPaid: 9 } }));
+    act(() => result.current.attachPayslip({ ...record, id: 'ps4', addsToPeriod: true }));
+    expect(dialog.open).toHaveBeenCalledTimes(1);
   });
 });
 

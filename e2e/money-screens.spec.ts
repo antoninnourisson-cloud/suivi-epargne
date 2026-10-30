@@ -1,4 +1,4 @@
-// Dons et impôts, Part parentale, Fiches de paie et « Où le placer » en mode démo (?demo=1) :
+// Dons et impôts, Part parentale, Fiches de paie et la carte « Ma paie » en mode démo (?demo=1) :
 // champs reliés à leur libellé, focus gardé dans la liste après une suppression au clavier
 // (WCAG 2.4.3), annulation depuis le message, case de paie cochable sur toute la ligne,
 // bouton désactivé qui dit pourquoi, aucun défilement horizontal à 320 px, et passe axe sur
@@ -97,7 +97,7 @@ test.describe('Fiches de paie (démo)', () => {
   });
 });
 
-test.describe('Où le placer (démo)', () => {
+test.describe('Ma paie (démo)', () => {
   test('toucher le nom du compte coche la ligne, et la ligne a une cible d’au moins 48 px', async ({ page, isMobile }) => {
     await openDemo(page, 'pilot');
     const livret = page.getByRole('checkbox', { name: 'Livret A' });

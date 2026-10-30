@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { combineMonthTarget, computeMonthTarget, currentPayAdjustment, sanitizePayAdjustment, updatePayAdjustment } from './payAdjustment';
+import { combineMonthTarget, computeMonthTarget, currentPayAdjustment, sanitizePayAdjustment } from './payAdjustment';
 import { emptyData, migrate } from './schema';
-import { computeMonthlySavingsCapacity } from './finance';
-import type { GlobalAppData } from '../types';
+import { computeMonthlyPay, computeMonthlySavingsCapacity } from './finance';
+import type { GlobalAppData, PayRecord } from '../types';
 
 // Paie le 27 : le 19 octobre 2026, on gère encore la paie de septembre.
 const OCT_19 = new Date(2026, 9, 19);
@@ -51,6 +51,30 @@ describe('combineMonthTarget', () => {
 });
 
 describe('computeMonthTarget', () => {
+  // Paie déclarée dans le rituel : l'objectif suit le montant REÇU (lib/payDistribution).
+  it('paie déclarée : à placer selon le montant reçu, prime et versements en plus du mois compris', () => {
+    const base = withConfig({ paydayDay: 27 });
+    const computed = computeMonthlySavingsCapacity(base);
+    const pay = computeMonthlyPay(base);
+    const received = (patch: Partial<PayRecord>): GlobalAppData => ({
+      ...base,
+      pays: [{ id: 'pay-2026-11', receivedOn: '2026-10-27', savingsMonth: '2026-11', amount: pay, lines: [], done: {}, ...patch }],
+    });
+    // Reçu = estimé : même objectif qu'avant la déclaration.
+    expect(computeMonthTarget(received({}), OCT_28)).toMatchObject({ source: 'calc' });
+    expect(computeMonthTarget(received({}), OCT_28).total).toBeCloseTo(Math.max(0, computed), 2);
+    // 100 € de moins : l'épargne baisse d'autant ; une prime de 300 € s'ajoute en entier.
+    expect(computeMonthTarget(received({ amount: pay - 100 }), OCT_28).total).toBeCloseTo(Math.max(0, computed - 100), 2);
+    expect(computeMonthTarget(received({ amount: pay + 300, bonus: 300 }), OCT_28)).toMatchObject({ extra: 300 });
+    // « À placer sur cette paie » saisi : il remplace le calcul.
+    expect(computeMonthTarget(received({ toSave: 640 }), OCT_28)).toMatchObject({ capacity: 640, total: 640, source: 'manual' });
+    // Versement en plus du même mois (prime à part) : placé en entier, même sans paie déclarée.
+    const extra: PayRecord = { id: 'prime', receivedOn: '2026-10-30', savingsMonth: '2026-11', amount: 250, kind: 'extra', lines: [], done: {} };
+    const withExtra = received({ toSave: 640 });
+    expect(computeMonthTarget({ ...withExtra, pays: [...withExtra.pays!, extra] }, OCT_28)).toMatchObject({ total: 890, extra: 250 });
+    expect(computeMonthTarget({ ...base, pays: [extra] }, OCT_28).total).toBeCloseTo(Math.max(0, computed) + 250, 2);
+  });
+
   it('même objectif que le Pilotage : calcul + réglage de la paie en cours', () => {
     const base = withConfig({ paydayDay: 27 });
     const computed = computeMonthlySavingsCapacity(base);
@@ -63,26 +87,6 @@ describe('computeMonthTarget', () => {
   it('le montant du rappel de paie reste la base quand rien n’est saisi pour cette paie', () => {
     const data = withConfig({ paydayDay: 27, paydayAmount: 650, payAdjustment: { period: '2026-08', capacity: 100 } });
     expect(computeMonthTarget(data, OCT_19)).toMatchObject({ capacity: 650, extra: 0, total: 650, source: 'payday' });
-  });
-});
-
-describe('updatePayAdjustment', () => {
-  it('ajoute, remplace et efface les valeurs de la paie en cours', () => {
-    const a = updatePayAdjustment(undefined, '2026-09', { extra: 500 });
-    expect(a).toEqual({ period: '2026-09', extra: 500 });
-    const b = updatePayAdjustment(a, '2026-09', { capacity: 1200.456 });
-    expect(b).toEqual({ period: '2026-09', extra: 500, capacity: 1200.46 });
-    expect(updatePayAdjustment(b, '2026-09', { capacity: null })).toEqual({ period: '2026-09', extra: 500 });
-    // Somme en plus remise à 0 et plus de capacité : rien à garder.
-    expect(updatePayAdjustment({ period: '2026-09', extra: 500 }, '2026-09', { extra: 0 })).toBeUndefined();
-  });
-
-  it("repart de zéro quand le réglage enregistré date d'une autre paie", () => {
-    expect(updatePayAdjustment({ period: '2026-08', capacity: 100, extra: 40 }, '2026-09', { extra: 300 })).toEqual({ period: '2026-09', extra: 300 });
-  });
-
-  it('ignore une saisie non numérique', () => {
-    expect(updatePayAdjustment({ period: '2026-09', capacity: 100 }, '2026-09', { capacity: Number.NaN })).toBeUndefined();
   });
 });
 

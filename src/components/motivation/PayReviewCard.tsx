@@ -10,9 +10,11 @@ interface PayReviewCardProps {
   review: PayReview;
   onValidate: () => void;
   onAction?: (view: NonNullable<PayReview['action']>['view']) => void;
+  /** Libellé du bouton de validation (« Continuer » dans le rituel de paie). */
+  validateLabel?: string;
 }
 
-export const PayReviewCard: React.FC<PayReviewCardProps> = ({ review, onValidate, onAction }) => {
+export const PayReviewCard: React.FC<PayReviewCardProps> = ({ review, onValidate, onAction, validateLabel = 'Valider' }) => {
   const status = review.good
     ? { label: 'Bon mois', icon: Check, cls: 'bg-secondary-container text-on-secondary-container' }
     : review.joker
@@ -64,7 +66,7 @@ export const PayReviewCard: React.FC<PayReviewCardProps> = ({ review, onValidate
 
       <div className="mt-4 flex flex-wrap justify-end gap-2">
         {review.action && onAction && <Button variant="text" onClick={() => onAction(review.action!.view)}>{review.action.label}</Button>}
-        <Button variant="tonal" onClick={onValidate}>Valider</Button>
+        <Button variant="tonal" onClick={onValidate}>{validateLabel}</Button>
       </div>
     </Card>
   );

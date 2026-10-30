@@ -1,15 +1,18 @@
 // ================================================
 // FILE: src/lib/payAdjustment.ts
-// Objectif d'épargne de la paie en cours. Le Pilotage permet d'ajuster une paie :
-// « Capacité d'épargne du mois » (remplace le calcul) et « Somme en plus à placer » (prime,
-// cadeau, remboursement…). Depuis le schéma v3, ils sont enregistrés sur la paie du mois
-// d'épargne en cours (PayRecord.toSave / bonus, voir lib/payRecords) : ils valent jusqu'à la
-// paie suivante, puis ne s'appliquent plus.
+// Objectif d'épargne du mois d'épargne en cours. Paie pas encore déclarée : la capacité
+// calculée (ou le montant du rappel de paie). Paie déclarée dans le rituel « J'ai reçu ma
+// paie » : la répartition conseillée pour le montant REÇU (lib/payDistribution, « À placer
+// sur cette paie » et prime compris), plus les versements en plus du même mois. Les anciens
+// réglages de la paie en cours (« Capacité d'épargne du mois », « Somme en plus », schéma v2)
+// sont devenus PayRecord.toSave / bonus (lib/schema).
 // Une seule règle pour le Pilotage, la jauge de l'Accueil et la relance de paie du serveur.
 // ================================================
 import type { GlobalAppData, PayAdjustment } from '../types';
 import { computeMonthlySavingsCapacity } from './finance';
-import { payAdjustmentOf, PayData } from './payRecords';
+import { openPay, payAdjustmentOf, PayData } from './payRecords';
+import { recommendPayDistribution } from './payDistribution';
+import { savingsMonthOfPay } from './payCalendar';
 import { round2 } from './money';
 
 /** D'où vient la capacité retenue : saisie pour cette paie, rappel de paie, ou calcul. */
@@ -54,34 +57,30 @@ export const combineMonthTarget = (input: {
   };
 };
 
-/** Objectif de la paie en cours, à partir des données complètes (Accueil, serveur). */
-export const computeMonthTarget = (data: GlobalAppData, asOf: Date = new Date()): MonthTarget =>
-  combineMonthTarget({
-    computed: computeMonthlySavingsCapacity(data),
-    paydayAmount: data.config?.paydayAmount,
-    adjustment: currentPayAdjustment(data, asOf),
-  });
-
 /**
- * Nouveau réglage après une saisie dans le Pilotage, pour la paie `period`. `null` efface la
- * valeur (retour au calcul) ; une somme en plus nulle est effacée ; le réglage d'une paie
- * passée est remplacé. Renvoie `undefined` quand il ne reste rien à garder.
+ * Objectif du mois d'épargne en cours, à partir des données complètes (Pilotage, Accueil,
+ * Agenda, serveur). Paie déclarée : ce qui est conseillé pour le montant reçu ; les
+ * versements en plus du mois (prime à part, deuxième employeur) s'y ajoutent.
  */
-export const updatePayAdjustment = (
-  current: PayAdjustment | undefined,
-  period: string,
-  patch: { capacity?: number | null; extra?: number | null }
-): PayAdjustment | undefined => {
-  const next: PayAdjustment = current && current.period === period ? { ...current } : { period };
-  if (patch.capacity !== undefined) {
-    if (patch.capacity === null || !Number.isFinite(patch.capacity)) delete next.capacity;
-    else next.capacity = round2(patch.capacity);
+export const computeMonthTarget = (data: GlobalAppData, asOf: Date = new Date()): MonthTarget => {
+  const computed = computeMonthlySavingsCapacity(data);
+  const { window, pay } = openPay(data, asOf);
+  const extras = (data.pays ?? [])
+    .filter(p => p.kind === 'extra' && savingsMonthOfPay(p) === window.key)
+    .reduce((sum, p) => sum + recommendPayDistribution(data, { amount: p.amount, toSave: p.toSave, kind: 'extra', receivedOn: p.receivedOn }).toSave, 0);
+  if (!pay) {
+    const base = combineMonthTarget({ computed, paydayAmount: data.config?.paydayAmount });
+    return { ...base, extra: round2(base.extra + extras), total: round2(base.total + extras) };
   }
-  if (patch.extra !== undefined) {
-    if (patch.extra === null || !Number.isFinite(patch.extra) || patch.extra === 0) delete next.extra;
-    else next.extra = round2(patch.extra);
-  }
-  return next.capacity === undefined && next.extra === undefined ? undefined : next;
+  const d = recommendPayDistribution(data, { amount: pay.amount, bonus: pay.bonus, toSave: pay.toSave, receivedOn: pay.receivedOn });
+  const payday = finiteOrUndefined(data.config?.paydayAmount);
+  return {
+    computed,
+    capacity: d.capacity,
+    extra: round2(d.bonus + extras),
+    total: round2(d.toSave + extras),
+    source: finiteOrUndefined(pay.toSave) !== undefined ? 'manual' : payday !== undefined ? 'payday' : 'calc',
+  };
 };
 
 /**

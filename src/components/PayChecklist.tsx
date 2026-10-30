@@ -1,24 +1,52 @@
 // ================================================
 // FILE: src/components/PayChecklist.tsx
-// La paie du mois, virement par virement, à cocher au fur et à mesure. Cocher une ligne
-// d'épargne ENREGISTRE le versement sur le compte (montant modifiable si le virement réel
-// diffère du plan) ; la décocher l'annule. Le plan est figé au premier virement coché :
-// sinon, chaque versement enregistré modifierait les soldes, donc le plan lui-même.
+// Carte « Ma paie », en tête du Pilotage budgétaire : la paie du mois d'épargne en cours.
+//  - Pas encore déclarée : la paie attendue et l'estimation de ce qu'il y aura à placer
+//    (l'ancien en-tête « À placer ce mois »), et « J'ai reçu ma paie », qui ouvre le rituel
+//    (pilot/PayReceivedSheet, chargé à la demande).
+//  - Déclarée : la paie reçue, son mois d'épargne, ce qu'il y a à placer, « 3/5 faits » et
+//    « Modifier la paie ».
+// Dans les deux cas, la répartition se coche ligne à ligne. Cocher une ligne d'épargne
+// ENREGISTRE le versement sur le compte (montant modifiable si le virement réel diffère du
+// plan) ; la décocher l'annule. Le plan est figé au premier virement coché : sinon, chaque
+// versement enregistré modifierait les soldes, donc le plan lui-même.
 // ================================================
-import React, { useId, useState } from 'react';
-import { PayChecklist as PayChecklistData, PayChecklistLine } from '../types';
+import React, { Suspense, useCallback, useEffect, useId, useState } from 'react';
+import { PayChecklist as PayChecklistData, PayChecklistLine, PayRecord } from '../types';
 import { PayTransfer, PlacementStep, buildPayLines, payPeriodOf } from '../lib/finance';
-import type { PayCalendarData } from '../lib/payCalendar';
-import { elideDe, formatEUR, toInputAmount } from '../lib/format';
+import { currentSavingsMonth, savingsMonthOfPay, validPayday, type PayCalendarData } from '../lib/payCalendar';
+import { formatISODay, parseISODate } from '../lib/dates';
+import { elideDe, formatEUR, formatMonth, frenchDay, toInputAmount } from '../lib/format';
 import { parseFrenchNumber } from '../lib/numbers';
-import { Info, CheckCircle2, RotateCcw, PiggyBank, ArrowRightLeft } from 'lucide-react';
-import { Button, Card, MoneyText } from './ui';
+import { Info, CheckCircle2, RotateCcw, Wallet, ArrowRightLeft, PiggyBank, PenLine, Plus } from 'lucide-react';
+import { Button, Card, MoneyText, StatTile } from './ui';
 import { placementReason } from '../lib/pilotView';
+import { lazyWithRetry } from './ErrorBoundary';
+import { OPEN_PAY_SHEET_EVENT, takePaySheetRequest } from './pilot/paySheetRequest';
+import type { PayRitualProps } from './pilot/PayReceivedSheet';
+
+// Le rituel n'est chargé qu'à l'ouverture : le Pilotage reste léger.
+const PayReceivedSheet = lazyWithRetry(() => import('./pilot/PayReceivedSheet'));
+
+/** L'estimation, tant que la paie n'est pas déclarée (Mes paramètres). */
+export interface PayEstimate {
+  pay: number;
+  spending: number;
+  toSave: number;
+  /** La phrase qui explique le montant (pilotView.heroContext). */
+  sentence: string;
+  /** Même précision pour les trois montants : « paie − dépenses = à placer » tombe juste. */
+  decimals: 0 | 2;
+  payLabel?: string;
+}
 
 interface PayChecklistProps {
-  superNet: number;
+  estimate: PayEstimate;
+  /** Paie déclarée du mois d'épargne en cours (lib/payRecords, openPay). */
+  pay?: PayRecord;
   transfers: PayTransfer[];
   steps: PlacementStep[];
+  /** À placer : estimation, ou répartition conseillée pour la paie reçue. */
   totalToInvest: number;
   shortfall: number; // > 0 : les virements dépassent la paie
   checklist?: PayChecklistData;
@@ -32,21 +60,37 @@ interface PayChecklistProps {
   customSplit?: boolean;       // répartition personnalisée : change le « pourquoi » de chaque compte
   paydayDay?: number;          // la liste suit la paie, pas le mois calendaire
   payCalendar?: Omit<PayCalendarData, 'paydayDay'>; // fiches et paies déclarées (même fenêtre que l'Accueil)
+  /** Le rituel « J'ai reçu ma paie » (absent : pas de bouton, la liste seule). */
+  ritual?: PayRitualProps;
 }
 
-const MONTHS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
+const sameYear = (iso: string, today: string) => iso.slice(0, 4) === today.slice(0, 4);
+const dayLabel = (iso: string, today: string) => `${frenchDay(parseISODate(iso))}${sameYear(iso, today) ? '' : ` ${iso.slice(0, 4)}`}`;
 
 export const PayChecklist: React.FC<PayChecklistProps> = ({
-  superNet, transfers, steps, totalToInvest, shortfall, checklist, onCheck, onUncheck, onReset, paydayDay, payCalendar, customSplit = false,
+  estimate, pay, transfers, steps, totalToInvest, shortfall, checklist, onCheck, onUncheck, onReset, paydayDay, payCalendar, customSplit = false, ritual,
 }) => {
   const now = new Date();
+  const today = formatISODay(now);
   const period = payPeriodOf(paydayDay, now, payCalendar);
   const month = period.key;
-  // Mois de versement de la paie (la fiche d'une semaine avant le jour de paie peut ouvrir
-  // la fenêtre le mois d'avant). La liste figée vit sur la paie déclarée (lib/payRecords).
-  const periodLabel = MONTHS[Number(month.slice(5, 7)) - 1];
+  const payWindow = currentSavingsMonth({ ...payCalendar, paydayDay }, today);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const idBase = useId();
+  // Rituel ouvert : nouvelle paie, ou paie déclarée à modifier.
+  const [sheet, setSheet] = useState<{ editPayId?: string } | null>(null);
+
+  // Lien direct (`?action=pay`, notification, routine) : la feuille s'ouvre d'elle-même,
+  // sur la paie déclarée s'il y en a une (pour finir ses virements), sinon sur une nouvelle.
+  const openFromRequest = useCallback(() => {
+    if (!ritual || !takePaySheetRequest()) return;
+    setSheet(pay ? { editPayId: pay.id } : {});
+  }, [ritual, pay]);
+  useEffect(() => {
+    openFromRequest();
+    window.addEventListener(OPEN_PAY_SHEET_EVENT, openFromRequest);
+    return () => window.removeEventListener(OPEN_PAY_SHEET_EVENT, openFromRequest);
+  }, [openFromRequest]);
 
   const liveLines = buildPayLines(transfers, steps);
   const suggestions = steps.filter(st => st.alert && st.hint);
@@ -162,14 +206,65 @@ export const PayChecklist: React.FC<PayChecklistProps> = ({
       {doneCount === totalLines ? <><CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" /> Tout est fait</> : `${doneCount}/${totalLines} faits`}
     </span>
   );
+  const fmt = (n: number) => formatEUR(n, estimate.decimals);
+  // Paie attendue (pas encore déclarée) : date du jour de paie, sinon rien à annoncer.
+  const expectedOn = validPayday(paydayDay) !== undefined && payWindow.source !== 'received' ? payWindow.start : undefined;
+  const savingsMonth = pay ? savingsMonthOfPay(pay) : payWindow.key;
+  const monthName = formatMonth(savingsMonth, !sameYear(`${savingsMonth}-01`, today));
+
   return (
-    <Card id="pay-checklist" title="Où le placer" icon={PiggyBank} action={progress}>
-      <p className="text-sm text-on-surface-variant -mt-2 mb-4">
-        Paie {elideDe(periodLabel)} : <MoneyText value={superNet} />. Cochez chaque virement une fois fait ; si le montant réel diffère, corrigez-le avant de cocher.
+    <Card id="pay-checklist" title="Ma paie" icon={Wallet} action={progress}>
+      {pay ? (
+        // La paie déclarée : reçue quand, combien, pour quel mois d'épargne, et ce qu'il y a à placer.
+        <section aria-label="Paie reçue" className="-mt-1 mb-6 rounded-3xl bg-secondary-container p-5 sm:p-6">
+          <p className="text-sm text-on-secondary-container">
+            Paie reçue le {dayLabel(pay.receivedOn, today)} : <MoneyText value={pay.amount} /> · Épargne {elideDe(monthName)}
+          </p>
+          <StatTile size="hero" className="mt-3" label="À placer sur cette paie" value={<MoneyText value={savingTotal} />} />
+          {!!pay.bonus && <p className="mt-1 text-sm text-on-secondary-container">Dont prime placée en entier : <MoneyText value={pay.bonus} /></p>}
+          {ritual && (
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Button variant="outlined" onClick={() => setSheet({ editPayId: pay.id })} className="max-sm:h-12"><PenLine className="w-4 h-4" aria-hidden="true" /> Modifier la paie</Button>
+              <Button variant="text" onClick={() => setSheet({})} className="max-sm:h-12"><Plus className="w-4 h-4" aria-hidden="true" /> Autre paie ou prime</Button>
+            </div>
+          )}
+        </section>
+      ) : (
+        // La réponse avant la paie : combien placer, d'après l'estimation.
+        <section aria-label="À placer ce mois" className="-mt-1 mb-6 rounded-3xl bg-secondary-container p-5 sm:p-6">
+          <p className="text-sm text-on-secondary-container mb-3">
+            {expectedOn ? `Paie attendue vers le ${dayLabel(expectedOn, today)}` : 'Paie pas encore déclarée'}
+            {' · '}environ {fmt(estimate.pay)} · environ {fmt(estimate.toSave)} à placer
+          </p>
+          <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-6">
+            <StatTile size="hero" label="À placer ce mois" value={<MoneyText value={estimate.toSave} decimals={estimate.decimals} />} />
+            {/* Une paire dt/dd par montant : le lecteur d'écran annonce chaque libellé avec sa valeur. */}
+            <dl className="grid grid-cols-2 gap-x-8 gap-y-1 text-sm">
+              <div>
+                <dt className="text-on-surface-variant">{estimate.payLabel ?? 'Paie nette après impôt'}</dt>
+                <dd className="text-lg text-on-surface"><MoneyText value={estimate.pay} decimals={estimate.decimals} /></dd>
+              </div>
+              <div>
+                <dt className="text-on-surface-variant">Dépenses prévues</dt>
+                <dd className="text-lg text-on-surface"><MoneyText value={estimate.spending} decimals={estimate.decimals} /></dd>
+              </div>
+            </dl>
+          </div>
+          <p className="mt-4 text-sm text-on-surface-variant max-w-2xl">{estimate.sentence}</p>
+          {ritual && (
+            <Button onClick={() => setSheet({})} className="mt-4 max-sm:h-12"><Wallet className="w-4 h-4" aria-hidden="true" /> J'ai reçu ma paie</Button>
+          )}
+        </section>
+      )}
+
+      <p className="text-sm text-on-surface-variant mb-4">
+        {pay
+          ? 'Cochez chaque virement une fois fait ; si le montant réel diffère, corrigez-le avant de cocher.'
+          : 'Répartition prévue sur la paie estimée. Déclarez votre paie pour l\'adapter au montant reçu, ou cochez chaque virement une fois fait.'}
       </p>
 
       <div className="flex items-baseline justify-between gap-3 border-b border-outline-variant pb-2">
-        <h4 className="text-sm font-medium text-on-surface">Sur vos comptes d'épargne</h4>
+        <h4 className="text-sm font-medium text-on-surface flex items-center gap-2"><PiggyBank className="w-4 h-4 text-on-surface-variant" aria-hidden="true" /> Sur vos comptes d'épargne</h4>
         <MoneyText value={savingTotal} className="text-sm font-medium text-on-surface" />
       </div>
       <ul className="divide-y divide-outline-variant">
@@ -208,7 +303,13 @@ export const PayChecklist: React.FC<PayChecklistProps> = ({
         </Button>
       )}
       {frozen && doneCount > 0 && (
-        <p className="mt-4 text-xs text-on-surface-variant">Plan figé pour la paie {elideDe(periodLabel)} depuis le premier virement coché. Il repartira des soldes du moment à la prochaine paie.</p>
+        <p className="mt-4 text-xs text-on-surface-variant">Plan figé pour l'épargne {elideDe(monthName)} depuis le premier virement coché. Il repartira des soldes du moment à la prochaine paie.</p>
+      )}
+
+      {sheet && ritual && (
+        <Suspense fallback={null}>
+          <PayReceivedSheet {...ritual} editPayId={sheet.editPayId} onClose={() => setSheet(null)} />
+        </Suspense>
       )}
     </Card>
   );

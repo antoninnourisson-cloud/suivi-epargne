@@ -33,7 +33,8 @@ export interface PayInput {
   amount?: number;
   bonus?: number;
   kind?: 'extra';
-  toSave?: number;
+  /** « À placer sur cette paie » saisi ; `null` : retour au calcul (« Modifier la paie »). */
+  toSave?: number | null;
   payslipId?: string;
 }
 
@@ -116,7 +117,8 @@ export const recordPay = (state: CommandState, input: RecordPayInput): CommandRe
   const amount = input.pay.amount ?? existing?.amount;
   if (!amountOk(amount)) return fail('invalid', 'Montant reçu invalide.');
   for (const k of ['bonus', 'toSave'] as const) {
-    if (input.pay[k] !== undefined && !amountOk(input.pay[k])) return fail('invalid', k === 'bonus' ? 'Prime invalide.' : 'Montant à placer invalide.');
+    const v = input.pay[k];
+    if (v !== undefined && v !== null && !amountOk(v)) return fail('invalid', k === 'bonus' ? 'Prime invalide.' : 'Montant à placer invalide.');
   }
   if (input.pay.savingsMonth !== undefined && !MONTH_KEY.test(input.pay.savingsMonth)) return fail('invalid', 'Mois d\'épargne invalide.');
 
@@ -164,7 +166,7 @@ export const recordPay = (state: CommandState, input: RecordPayInput): CommandRe
   const base: Partial<PayRecord> = existing ?? {};
   const { bonus: _b, toSave: _t, kind: _k, ...rest } = base;
   const bonus = input.pay.bonus !== undefined ? input.pay.bonus : base.bonus;
-  const toSave = input.pay.toSave !== undefined ? input.pay.toSave : base.toSave;
+  const toSave = input.pay.toSave !== undefined ? input.pay.toSave ?? undefined : base.toSave;
   const kind = input.pay.kind ?? base.kind;
   // Mois d'épargne : celui choisi, sinon celui déjà retenu pour cette date, sinon la règle du 15.
   const savingsMonth = input.pay.savingsMonth
@@ -247,6 +249,8 @@ export interface UpdatePayInput {
   bonus?: number | null;
   /** Nouveau plan conseillé : appliqué seulement si rien n'est fait (règle du gel). */
   lines?: PayChecklistLine[];
+  /** Fiche de paie liée ; `null` : plus de lien. */
+  payslipId?: string | null;
 }
 
 /**
@@ -268,8 +272,9 @@ export const updatePay = (state: CommandState, input: UpdatePayInput): CommandRe
   const receivedOn = input.receivedOn ?? pay.receivedOn;
   const chosenByHand = savingsMonthOfPay(pay) !== savingsMonthOf(pay.receivedOn);
   const savingsMonth = input.savingsMonth ?? (chosenByHand ? savingsMonthOfPay(pay) : savingsMonthOf(receivedOn));
-  const { bonus: _b, toSave: _t, ...rest } = pay;
+  const { bonus: _b, toSave: _t, payslipId: _s, ...rest } = pay;
   const bonus = input.bonus === undefined ? pay.bonus : input.bonus || undefined;
+  const payslipId = input.payslipId === undefined ? pay.payslipId : input.payslipId ?? undefined;
   const toSave = input.toSave === undefined ? pay.toSave : input.toSave ?? undefined;
   const nothingDone = Object.keys(liveDone(pay.done, state.accounts)).length === 0;
   const updated: PayRecord = {
@@ -278,6 +283,7 @@ export const updatePay = (state: CommandState, input: UpdatePayInput): CommandRe
     amount: input.amount !== undefined ? round2(input.amount) : pay.amount,
     ...(bonus ? { bonus: round2(bonus) } : {}),
     ...(toSave !== undefined ? { toSave: round2(toSave) } : {}),
+    ...(payslipId ? { payslipId } : {}),
     ...(input.lines && nothingDone ? { lines: input.lines, done: {} } : {}),
   };
   const nextPays = pays.map(p => (p.id === pay.id ? updated : p));

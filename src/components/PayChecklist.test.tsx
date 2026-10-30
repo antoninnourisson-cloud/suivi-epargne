@@ -1,11 +1,15 @@
 // @vitest-environment jsdom
-// Liste de la paie : toute la ligne se coche (cible tactile), l'état est relié à la case,
-// un montant illisible empêche de cocher et le dit, le plan figé se recalcule par un bouton.
+// Carte « Ma paie » : paie attendue (estimation, « J'ai reçu ma paie ») ou reçue (montant,
+// mois d'épargne, « Modifier la paie ») ; la liste : toute la ligne se coche (cible tactile),
+// l'état est relié à la case, un montant illisible empêche de cocher et le dit, le plan figé
+// se recalcule par un bouton.
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import React, { useState } from 'react';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { PayChecklist } from './PayChecklist';
-import { AccountType, type PayChecklist as PayChecklistData, type PayChecklistLine } from '../types';
+import { AccountType, type PayChecklist as PayChecklistData, type PayChecklistLine, type PayRecord } from '../types';
+import { emptyData } from '../lib/schema';
+import type { PayRitualProps } from './pilot/PayReceivedSheet';
 import type { PlacementStep } from '../lib/finance';
 
 afterEach(cleanup);
@@ -14,6 +18,7 @@ const steps: PlacementStep[] = [
   { accountId: 'la', accountName: 'Livret A', type: AccountType.LIVRET_A, rate: 1.7, fillAmount: 300, isFullAfter: false, isLiquid: true },
 ];
 const transfers = [{ key: 't:loyer', label: 'Revolut commun', amount: 800 }];
+const EST = { pay: 2000, spending: 1700, toSave: 300, sentence: 'Votre paie moins vos dépenses prévues.', decimals: 0 as const };
 
 // Les commandes de la paie (lib/commands/pay) sont testées à part : ici, une liste en mémoire
 // qui fait la même chose (fige les lignes, coche, décoche, défige).
@@ -35,7 +40,7 @@ const Harness: React.FC<{ onRecord: (id: string, amount: number) => string | und
     setList(prev => prev && ({ ...prev, done: Object.fromEntries(Object.entries(prev.done).filter(([k]) => k !== l.key)) }));
   };
   return (
-    <PayChecklist superNet={2000} transfers={transfers} steps={steps} totalToInvest={300} shortfall={0}
+    <PayChecklist estimate={EST} transfers={transfers} steps={steps} totalToInvest={300} shortfall={0}
       checklist={list} onCheck={onCheck} onUncheck={onUncheck} onReset={() => setList(undefined)} />
   );
 };
@@ -89,7 +94,7 @@ describe('PayChecklist : branchement des commandes', () => {
     const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
     const frozenLines = [{ key: 's:la', label: 'Livret A', amount: 250, kind: 'saving' as const, accountId: 'la' }];
     const onCheck = vi.fn(() => false);
-    render(<PayChecklist superNet={2000} transfers={transfers} steps={steps} totalToInvest={300} shortfall={0}
+    render(<PayChecklist estimate={EST} transfers={transfers} steps={steps} totalToInvest={300} shortfall={0}
       checklist={{ month, lines: frozenLines, done: {} }} onCheck={onCheck} onUncheck={vi.fn()} onReset={vi.fn()} />);
     fireEvent.change(screen.getByLabelText(/^Montant réel de Livret A/), { target: { value: '240,5' } });
     fireEvent.click(screen.getByRole('checkbox', { name: 'Livret A' }));
@@ -102,26 +107,63 @@ describe('PayChecklist : branchement des commandes', () => {
     const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
     const lines = [{ key: 's:la', label: 'Livret A', amount: 250, kind: 'saving' as const, accountId: 'la' }];
     const onUncheck = vi.fn();
-    const { rerender } = render(<PayChecklist superNet={2000} transfers={transfers} steps={steps} totalToInvest={300} shortfall={0}
+    const { rerender } = render(<PayChecklist estimate={EST} transfers={transfers} steps={steps} totalToInvest={300} shortfall={0}
       checklist={{ month, lines, done: { 's:la': { amount: 240, movementId: 'm' } } }} onCheck={vi.fn(() => true)} onUncheck={onUncheck} onReset={vi.fn()} />);
     fireEvent.click(screen.getByRole('checkbox', { name: 'Livret A' }));
     expect(onUncheck).toHaveBeenCalledWith(lines[0]);
-    rerender(<PayChecklist superNet={2000} transfers={transfers} steps={steps} totalToInvest={300} shortfall={0}
+    rerender(<PayChecklist estimate={EST} transfers={transfers} steps={steps} totalToInvest={300} shortfall={0}
       checklist={{ month, lines, done: {} }} onCheck={vi.fn(() => true)} onUncheck={onUncheck} onReset={vi.fn()} />);
     expect(screen.getByLabelText(/^Montant réel de Livret A/)).toHaveProperty('value', '240');
   });
 });
 
-describe('PayChecklist : élision du mois', () => {
+describe('Carte « Ma paie »', () => {
   afterEach(() => vi.useRealTimers());
-  it('« Paie d’octobre », « Paie de septembre »', () => {
+  const ritual = (patch: Partial<PayRitualProps> = {}): PayRitualProps => ({
+    doc: emptyData(), geminiApiKey: '', pickerApiKey: '',
+    onRecordPay: vi.fn(() => null), onDeletePay: vi.fn(), onValidateReview: vi.fn(), onSavePayslip: vi.fn(), ...patch,
+  });
+  const base = { transfers, steps, totalToInvest: 300, shortfall: 0, onCheck: vi.fn(() => true), onUncheck: vi.fn(), onReset: vi.fn() };
+
+  it('avant la paie : paie attendue, estimation et « J’ai reçu ma paie » (seulement avec le rituel)', () => {
     vi.useFakeTimers({ toFake: ['Date'] });
-    vi.setSystemTime(new Date(2026, 9, 15, 12));
-    render(<Harness onRecord={() => 'm'} />);
-    expect(screen.getByText(/^Paie d'octobre :/)).toBeTruthy();
+    vi.setSystemTime(new Date(2026, 9, 30, 12));
+    render(<PayChecklist {...base} estimate={EST} paydayDay={27} ritual={ritual()} />);
+    const hero = screen.getByRole('region', { name: 'À placer ce mois' });
+    expect(hero.textContent).toMatch(/Paie attendue vers le 27 octobre · environ 2\s000\s€ · environ 300\s€ à placer/);
+    expect(screen.getByRole('heading', { name: 'Ma paie' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: "J'ai reçu ma paie" })).toBeTruthy();
     cleanup();
-    vi.setSystemTime(new Date(2026, 8, 15, 12));
-    render(<Harness onRecord={() => 'm'} />);
-    expect(screen.getByText(/^Paie de septembre :/)).toBeTruthy();
+    render(<PayChecklist {...base} estimate={EST} />);
+    expect(screen.queryByRole('button', { name: "J'ai reçu ma paie" })).toBeNull();
+    expect(screen.getByText(/Paie pas encore déclarée/)).toBeTruthy();
+  });
+
+  it('paie déclarée : reçue le…, épargne du mois (élision), à placer, « Modifier la paie »', () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 9, 30, 12));
+    const pay: PayRecord = { id: 'p', receivedOn: '2026-10-27', savingsMonth: '2026-11', amount: 2512, bonus: 200, lines: [], done: {} };
+    render(<PayChecklist {...base} estimate={EST} paydayDay={27} pay={pay} ritual={ritual()} totalToInvest={962} />);
+    const hero = screen.getByRole('region', { name: 'Paie reçue' });
+    expect(hero.textContent).toMatch(/Paie reçue le 27 octobre : 2\s512\s€ · Épargne de novembre/);
+    expect(hero.textContent).toMatch(/À placer sur cette paie\s*962\s€/);
+    expect(hero.textContent).toMatch(/Dont prime placée en entier : 200\s€/);
+    expect(screen.getByRole('button', { name: 'Modifier la paie' })).toBeTruthy();
+    expect(screen.queryByRole('region', { name: 'À placer ce mois' })).toBeNull();
+    cleanup();
+    vi.setSystemTime(new Date(2026, 2, 30, 12));
+    render(<PayChecklist {...base} estimate={EST} paydayDay={27} pay={{ ...pay, receivedOn: '2026-03-27', savingsMonth: '2026-04' }} />);
+    expect(screen.getByText(/Épargne d'avril/)).toBeTruthy();
+  });
+
+  it('« J’ai reçu ma paie » ouvre le rituel (chargé à la demande) ; Échap le ferme', async () => {
+    render(<PayChecklist {...base} estimate={EST} paydayDay={27} ritual={ritual()} />);
+    fireEvent.click(screen.getByRole('button', { name: "J'ai reçu ma paie" }));
+    // Module chargé à la demande : le premier import peut être lent sous charge.
+    const dialog = await screen.findByRole('dialog', { name: "J'ai reçu ma paie" }, { timeout: 8000 });
+    // Le focus entre dans la fenêtre (ses écouteurs, Échap compris, sont posés).
+    await waitFor(() => expect(dialog.contains(document.activeElement)).toBe(true));
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('dialog')).toBeNull();
   });
 });

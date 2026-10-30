@@ -7,9 +7,7 @@ import { lsDel, lsGet, lsSet } from '../../lib/storage';
 import { migrate, emptyData, withoutDeviceOnlyFields, APP_SCHEMA_VERSION } from '../../lib/schema';
 import { downloadJSON } from '../../services/fileDownload';
 import { localTodayISO } from '../../lib/dates';
-import type { AppDoc, PayAdjustment, WorkBenefits } from '../../types';
-import { computeMonthlyPay } from '../../lib/finance';
-import { withPayAdjustment } from '../../lib/payRecords';
+import type { AppDoc, WorkBenefits } from '../../types';
 import { GEMINI_KEY, LAST_VIEW_KEY } from './keys';
 
 type Config = AppDoc['config'];
@@ -70,9 +68,6 @@ export const useDocument = () => {
       setSubscriptions: top('subscriptions'),
       setDonations: top('donations'),
       setPays: top('pays'),
-      /** Réglages de la paie en cours (« Capacité d'épargne du mois », « Somme en plus à placer »). */
-      setPayAdjustment: (next: PayAdjustment | undefined) =>
-        setDoc(d => ({ ...d, pays: withPayAdjustment(d, next, new Date(), computeMonthlyPay(d)) })),
       setParentalRestitution: top('parentalRestitution'),
       setActivePayslipId: top('activePayslipId'),
       setFiscalConfig: top('fiscalConfig'),
