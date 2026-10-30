@@ -81,9 +81,10 @@
     "interestRate": 3.2,
     "insuranceRate": 0.3
   },
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "expensesHistory": [],
   "payslips": [],
+  "pays": [],
   "recurringMovements": [],
   "subscriptions": [],
   "donations": [],

@@ -4,7 +4,9 @@
 // - migrate(migrate(x)) = migrate(x) ;
 // - aucun NaN ni infini dans le résultat (hors borne de la dernière tranche du barème) ;
 // - chaque compte : total = part propre + part des parents au centime, parts des parents ≥ 0 ;
-// - les champs inconnus (d'une version plus récente) sont gardés tels quels.
+// - les champs inconnus (d'une version plus récente) sont gardés tels quels ;
+// - schéma v3 : la liste et les réglages de la paie (v2) deviennent des paies sans rien perdre,
+//   les points de paie validés gardent leur nombre, chaque paie a un mois d'épargne lisible.
 // En cas d'échec, fast-check réduit le fichier fautif au plus petit exemple et l'affiche.
 import { describe, it, expect } from 'vitest';
 import fc from 'fast-check';
@@ -31,6 +33,7 @@ const movement = fc.oneof(
     id: fc.uuid(), date: looseDate, amount: looseNumber, label: fc.string({ maxLength: 12 }),
     type: fc.constantFrom('IN', 'OUT', 'x'),
     kind: fc.constantFrom(undefined, 'valuation', 'parental', 'adjustment'),
+    payId: fc.constantFrom(undefined, 'pay-2026-10', '', 12),
   }, { requiredKeys: ['id', 'date', 'amount', 'type'] }) },
   { weight: 1, arbitrary: fc.constantFrom(null, 'abîmé', 42) },
 );
@@ -47,15 +50,42 @@ const account = fc.tuple(fc.record({
 
 const snapshot = fc.record({ date: looseDate, totalAmount: looseNumber, ownedAmount: looseNumber });
 
+const monthKey = fc.tuple(fc.integer({ min: 2024, max: 2028 }), fc.integer({ min: 1, max: 12 })).map(([y, m]) => `${y}-${String(m).padStart(2, '0')}`);
+const looseMonth = fc.oneof(monthKey, fc.constantFrom('2026-13', 'octobre', '', null));
+const payLine = fc.oneof(
+  { weight: 6, arbitrary: fc.record({
+    key: fc.constantFrom('t:e:1', 't:leisure', 's:la', 's:av'), label: fc.string({ maxLength: 8 }), amount: looseNumber,
+    kind: fc.constantFrom('transfer', 'saving'), accountId: fc.constantFrom(undefined, 'la'),
+  }, { requiredKeys: ['key', 'label', 'amount', 'kind'] }) },
+  { weight: 1, arbitrary: fc.constantFrom(null, 'abîmé') },
+);
+const payDone = fc.dictionary(fc.constantFrom('t:e:1', 't:leisure', 's:la', 's:av'),
+  fc.oneof(fc.record({ amount: looseNumber, movementId: fc.constantFrom(undefined, 'm1') }, { requiredKeys: ['amount'] }), fc.constant(null)), { maxKeys: 3 });
+/** Liste de la paie au format v2 (payChecklist). */
+const checklist = fc.record({ month: looseMonth, lines: fc.array(payLine, { maxLength: 4 }), done: fc.oneof(payDone, fc.constant(undefined)) }, { requiredKeys: ['month'] });
+/** Paie reçue (schéma v3), plus ou moins abîmée. */
+const pay = fc.oneof(
+  { weight: 6, arbitrary: fc.tuple(fc.record({
+    id: fc.oneof(fc.constantFrom('pay-2026-10', 'p2', 'p3'), fc.constant(undefined), fc.constant(7)),
+    receivedOn: looseDate, savingsMonth: looseMonth, amount: looseNumber, bonus: looseNumber, toSave: looseNumber,
+    kind: fc.constantFrom(undefined, 'extra', 'autre'), lines: fc.oneof(fc.array(payLine, { maxLength: 3 }), fc.constant(undefined)),
+    done: fc.oneof(payDone, fc.constant('abîmé')), reviewedAt: fc.constantFrom(undefined, '2026-11-02', 3),
+  }, { requiredKeys: ['id', 'receivedOn'] }), unknownFields).map(([p, extra]) => ({ ...extra, ...p })) },
+  { weight: 1, arbitrary: fc.constantFrom(null, 'abîmé') },
+);
+
 const file = fc.tuple(fc.record({
-  schemaVersion: fc.constantFrom(undefined, 1, 2),
+  schemaVersion: fc.constantFrom(undefined, 1, 2, 3),
   accounts: fc.oneof(fc.array(account, { maxLength: 5 }), fc.constant(undefined)),
   expenses: fc.array(fc.oneof(fc.record({ id: fc.uuid(), name: fc.string(), amount: looseNumber }), fc.constant(null)), { maxLength: 3 }),
   history: fc.array(snapshot, { maxLength: 6 }),
   expensesHistory: fc.array(fc.record({ date: looseDate, total: looseNumber }), { maxLength: 3 }),
   config: fc.oneof(fc.record({
     grossAnnual: looseNumber, leisureBudget: looseNumber, projectSavings: looseNumber, taxRateManual: looseNumber,
-    extraMonthlyIncome: looseNumber, navigoBase: looseNumber, navigoRate: looseNumber, paydayDay: looseNumber,
+    extraMonthlyIncome: looseNumber, navigoBase: looseNumber, navigoRate: looseNumber,
+    paydayDay: fc.oneof(looseNumber, fc.integer({ min: 1, max: 31 })),
+    payAdjustment: fc.oneof(fc.record({ period: looseMonth, capacity: looseNumber, extra: looseNumber }, { requiredKeys: ['period'] }), fc.constant('abîmé')),
+    payReviewsDone: fc.oneof(fc.uniqueArray(fc.oneof(monthKey, fc.constant('vu')), { maxLength: 4 }), fc.constant('abîmé')),
   }, { requiredKeys: [] }), fc.constant(null)),
   fiscalConfig: fc.oneof(fc.record({
     salaryChargesRate: looseNumber, socialChargesCapital: fc.oneof(looseNumber, fc.constant(0.172)), standardAllowance: looseNumber,
@@ -67,6 +97,8 @@ const file = fc.tuple(fc.record({
     navigo: fc.record({ active: fc.boolean(), basePrice: looseNumber, refundRate: looseNumber }, { requiredKeys: [] }),
   }, { requiredKeys: [] })),
   lastView: fc.constantFrom(undefined, 'dashboard'),
+  payChecklist: fc.oneof(checklist, fc.constant(undefined), fc.constant('abîmé')),
+  pays: fc.oneof(fc.array(pay, { maxLength: 4 }), fc.constant(undefined), fc.constant('abîmé')),
 }, { requiredKeys: [] }), unknownFields).map(([f, extra]) => ({ ...extra, ...f }));
 
 /** Chemins des nombres non finis (NaN, ±Infinity) d'un objet. */
@@ -78,6 +110,43 @@ const nonFinite = (v: unknown, path = ''): string[] => {
 };
 
 describe('migrate() : propriétés', () => {
+  it('schéma v3 : paies lisibles, liste et réglages de la paie convertis sans rien perdre', () => {
+    const MONTH = /^\d{4}-(0[1-9]|1[0-2])$/;
+    fc.assert(fc.property(file, raw => {
+      const m = migrate(raw);
+      for (const p of m.pays) {
+        expect(typeof p.id).toBe('string');
+        expect(p.receivedOn).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+        expect(p.savingsMonth).toMatch(MONTH);
+        expect(Number.isFinite(p.amount)).toBe(true);
+        expect(Array.isArray(p.lines)).toBe(true);
+        expect(p.done && typeof p.done === 'object').toBe(true);
+      }
+      // Paies lisibles (identifiant, date de réception) : toutes gardées, dans l'ordre, avec
+      // leurs champs inconnus ; la conversion de la v2 n'en ajoute qu'après.
+      const readable = (Array.isArray(raw.pays) ? raw.pays as unknown[] : [])
+        .filter((p): p is Record<string, unknown> => !!p && typeof p === 'object')
+        .filter(p => typeof p.id === 'string' && p.id !== '' && typeof p.receivedOn === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(p.receivedOn));
+      readable.forEach((p, i) => {
+        const out = m.pays[i] as unknown as Record<string, unknown>;
+        expect(out.id).toBe(p.id);
+        for (const [k, v] of Object.entries(p)) if (k.startsWith('futur_')) expect(out[k]).toEqual(v);
+      });
+      // Liste v2 au mois lisible : retirée, convertie en paie (ou reprise par celle de son mois).
+      const cl = raw.payChecklist as { month?: unknown; lines?: unknown[] } | undefined;
+      if (cl && typeof cl === 'object' && typeof cl.month === 'string' && MONTH.test(cl.month)) {
+        expect((m as unknown as Record<string, unknown>).payChecklist).toBeUndefined();
+        expect(m.pays.length).toBeGreaterThan(0);
+      }
+      expect(m.config.payAdjustment).toBeUndefined();
+      // Les mouvements gardent une paie de rattachement lisible ou n'en ont pas.
+      for (const a of m.accounts) for (const mv of a.movements!) expect(mv.payId === undefined || (typeof mv.payId === 'string' && mv.payId !== '')).toBe(true);
+      // Points de paie validés : même nombre (mois de versement → mois d'épargne, sans fusion).
+      const before = (raw.config as { payReviewsDone?: unknown } | null)?.payReviewsDone;
+      if (Array.isArray(before)) expect((m.config.payReviewsDone as unknown[]).length).toBe(new Set(before).size);
+    }), RUNS);
+  });
+
   it('idempotente, sur des fichiers plausibles comme sur n\'importe quel JSON', () => {
     fc.assert(fc.property(file, raw => { const m = migrate(raw); expect(migrate(m)).toEqual(m); }), RUNS);
     fc.assert(fc.property(fc.jsonValue({ maxDepth: 4 }), raw => { const m = migrate(raw); expect(migrate(m)).toEqual(m); }), RUNS);

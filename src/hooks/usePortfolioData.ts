@@ -35,7 +35,7 @@ export const usePortfolioData = (isAuthenticated: boolean) => {
     recurringMovements: doc.recurringMovements,
     subscriptions: doc.subscriptions,
     donations: doc.donations,
-    payChecklist: doc.payChecklist,
+    pays: doc.pays,
     parentalRestitution: doc.parentalRestitution,
     activePayslipId: doc.activePayslipId,
     fiscalConfig: doc.fiscalConfig,

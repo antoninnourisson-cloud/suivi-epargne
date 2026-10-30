@@ -13,7 +13,7 @@ import type { EmergencyFund } from '../lib/planning';
 import type { AgendaEvent } from '../lib/agenda';
 import type { TaxReturnAlert } from '../lib/taxReturn';
 import { revealElementById } from './revealElement';
-import type { SavingsAccount, PortfolioSnapshot, FiscalConfig, RecurringMovement, Subscription, PayslipRecord, PayChecklist } from '../types';
+import type { SavingsAccount, PortfolioSnapshot, FiscalConfig, RecurringMovement, Subscription, PayslipRecord, PayChecklist, PayRecord } from '../types';
 import {
   computeUnlockCost, findFiscalReview, applyTaxScale, findAvRateUpdatesDue, confirmRatesUnchanged, findDueRecurring,
   findStaleRegulatedRates, computeAccountBalanceAtDate, suggestedRestitutionDate, computeAvailabilityBreakdown, ownedAmountAt,
@@ -103,6 +103,8 @@ interface DashboardProps {
   yearClosing?: YearClosingStatus | null;
   /** Virements de la paie cochés dans le Pilotage : une étape de la routine du mois. */
   payChecklist?: PayChecklist;
+  /** Paies déclarées (lib/payCalendar) : début des mois d'épargne, versements rattachés. */
+  pays?: PayRecord[];
   /** « Demander à Pécule » (entrée et fenêtre chargées à part), sous l'épargne nette. */
   askSlot?: React.ReactNode;
 }
@@ -121,7 +123,7 @@ const SLICE_STYLE: Record<'available' | 'tax' | 'locked', Pick<AvailabilitySegme
   locked: { color: 'bg-outline', hatch: 'dense' },
 };
 
-export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalConfig, onDeleteAccount, recurringMovements = [], onRecordRecurring, monthPlan, monthGoal, monthlyPay = 0, paydayDay, trackingStartDate, subscriptions = [], onUpdateFiscalConfig, onOpenSettings, onUpdateAccounts, payRaise, onAcceptPayRaise, onDismissPayRaise, onNavigate, onAddAccount, lastExportAt, onExport, emergency, onSetEmergencyMonths, agendaNext = [], lepTimeline, taxReturnAlert, payslips = [], gamification, goodMonthThreshold, milestonesSeen, payReviewsDone, rfrByYear, restitutionDoneOn, restitutionPlannedDate, onMarkMilestonesSeen, onValidatePayReview, yearClosing, payChecklist, askSlot }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalConfig, onDeleteAccount, recurringMovements = [], onRecordRecurring, monthPlan, monthGoal, monthlyPay = 0, paydayDay, trackingStartDate, subscriptions = [], onUpdateFiscalConfig, onOpenSettings, onUpdateAccounts, payRaise, onAcceptPayRaise, onDismissPayRaise, onNavigate, onAddAccount, lastExportAt, onExport, emergency, onSetEmergencyMonths, agendaNext = [], lepTimeline, taxReturnAlert, payslips = [], gamification, goodMonthThreshold, milestonesSeen, payReviewsDone, rfrByYear, restitutionDoneOn, restitutionPlannedDate, onMarkMilestonesSeen, onValidatePayReview, yearClosing, payChecklist, pays, askSlot }) => {
   // Date du jour partagée (useToday) : l'Accueil resté ouvert passe au lendemain à minuit.
   const today = useToday();
   const choices = useHomeChoices(today);
@@ -142,8 +144,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalC
   // UNE fenêtre pour tous les chiffres « ce mois-ci » : la paie en cours (du 27 au 26 suivant),
   // sinon le mois civil. Jauge, seuil « bon mois » et taux d'épargne la partagent.
   const period = useMemo(
-    () => payPeriodSavings({ accounts, today, paydayDay, payslips, monthlyPay, trackingStartISO: trackingStartDate }),
-    [accounts, today, paydayDay, payslips, monthlyPay, trackingStartDate]
+    () => payPeriodSavings({ accounts, today, paydayDay, payslips, pays, monthlyPay, trackingStartISO: trackingStartDate }),
+    [accounts, today, paydayDay, payslips, pays, monthlyPay, trackingStartDate]
   );
   // Midi du jour : une fenêtre de 90 jours comptée depuis minuit pouvait, au changement d'heure,
   // déborder d'un jour.
@@ -155,8 +157,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalC
   // --- Motivation : bons mois, jalons, point de paie ---
   const motivation = useMemo(() => motivationSettings({ gamification, goodMonthThreshold }), [gamification, goodMonthThreshold]);
   const goodMonths = useMemo(
-    () => (motivation.enabled ? computeGoodMonths({ accounts, today, paydayDay, payslips, threshold: motivation.threshold, trackingStartISO: trackingStartDate }) : null),
-    [motivation, accounts, today, paydayDay, payslips, trackingStartDate]
+    () => (motivation.enabled ? computeGoodMonths({ accounts, today, paydayDay, payslips, pays, threshold: motivation.threshold, trackingStartISO: trackingStartDate }) : null),
+    [motivation, accounts, today, paydayDay, payslips, pays, trackingStartDate]
   );
   const monthlySpending = emergency?.monthlySpending ?? 0;
   const milestones = useMemo(
@@ -172,15 +174,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalC
     onMarkMilestonesSeen(milestones.filter(m => m.achieved).map(m => m.id));
   }, [goodMonths, milestones, milestonesSeen, onMarkMilestonesSeen]);
   const payReview = useMemo(
-    () => (goodMonths ? computePayReview({ accounts, goodMonths, today, plan: monthPlan, trackingStartISO: trackingStartDate }) : undefined),
-    [goodMonths, accounts, today, monthPlan, trackingStartDate]
+    () => (goodMonths ? computePayReview({ accounts, goodMonths, today, plan: monthPlan, trackingStartISO: trackingStartDate, pays }) : undefined),
+    [goodMonths, accounts, today, monthPlan, trackingStartDate, pays]
   );
   const showPayReview = !!payReview && !(payReviewsDone || []).includes(payReview.key);
 
   // --- Routine du mois : fiche, virements, soldes, point de paie, déduits des données ---
   const routine = useMemo(
-    () => computeMonthRoutine({ accounts, payslips, payChecklist, monthlyPay, paydayDay, now: middayToday, payReviewKey: payReview?.key, payReviewsDone }),
-    [accounts, payslips, payChecklist, monthlyPay, paydayDay, middayToday, payReview?.key, payReviewsDone]
+    () => computeMonthRoutine({ accounts, payslips, pays, payChecklist, monthlyPay, paydayDay, now: middayToday, payReviewKey: payReview?.key, payReviewMonth: payReview?.payMonth, payReviewsDone }),
+    [accounts, payslips, pays, payChecklist, monthlyPay, paydayDay, middayToday, payReview?.key, payReview?.payMonth, payReviewsDone]
   );
   const openRoutineStep = (step: RoutineStepKey) => {
     switch (step) {

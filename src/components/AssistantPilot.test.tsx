@@ -16,7 +16,7 @@ const renderPilot = (patch = vi.fn(), cfg: PilotConfig = config) => {
     config={cfg} onPatchConfig={patch}
     fiscalConfig={DEFAULT_FISCAL_CONFIG} workBenefits={DEFAULT_WORK_BENEFITS}
     onClearActivePayslip={() => {}} subscriptions={[]} onOpenSubscriptions={() => {}}
-    onPayChecklistChange={() => {}} onRecordPayDeposit={() => undefined} onCancelPayDeposit={() => {}} />);
+    onPayChecklistChange={() => {}} onPayAdjustmentChange={() => {}} onRecordPayDeposit={() => undefined} onCancelPayDeposit={() => {}} />);
   return patch;
 };
 

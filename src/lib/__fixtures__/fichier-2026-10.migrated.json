@@ -1,0 +1,171 @@
+{
+  "schemaVersion": 3,
+  "accounts": [
+    {
+      "id": "acc-la",
+      "name": "Livret A",
+      "type": "Livret A",
+      "institution": "Banque Exemple",
+      "totalAmount": 9700,
+      "ownedAmount": 9700,
+      "parentalCapital": 0,
+      "interestRate": 2.4,
+      "movements": [
+        {
+          "id": "m1",
+          "date": "2026-01-21",
+          "amount": 8000,
+          "label": "Solde initial",
+          "type": "IN",
+          "tag": "initial"
+        },
+        {
+          "id": "m2",
+          "date": "2026-09-28",
+          "amount": 600,
+          "label": "Virement de paie",
+          "type": "IN"
+        },
+        {
+          "id": "m3",
+          "date": "2026-10-28",
+          "amount": 1100,
+          "label": "Virement de paie",
+          "type": "IN"
+        }
+      ]
+    }
+  ],
+  "expenses": [
+    {
+      "id": "e1",
+      "name": "Compte commun",
+      "amount": 900
+    }
+  ],
+  "history": [],
+  "payslips": [],
+  "config": {
+    "grossAnnual": 42000,
+    "leisureBudget": 250,
+    "projectSavings": 100,
+    "taxRateManual": 0,
+    "extraMonthlyIncome": 0,
+    "paydayDay": 27,
+    "gamification": true,
+    "payReviewsDone": [
+      "2026-09",
+      "2026-10"
+    ]
+  },
+  "futureField": {
+    "kept": true
+  },
+  "expensesHistory": [],
+  "pays": [
+    {
+      "id": "pay-2026-11",
+      "receivedOn": "2026-10-27",
+      "savingsMonth": "2026-11",
+      "amount": 2631.77,
+      "lines": [
+        {
+          "key": "t:e:e1",
+          "label": "Compte commun",
+          "amount": 900,
+          "kind": "transfer"
+        },
+        {
+          "key": "s:acc-la",
+          "label": "Livret A",
+          "amount": 1100,
+          "kind": "saving",
+          "accountId": "acc-la",
+          "detail": "Livret A · 2,4 %"
+        }
+      ],
+      "done": {
+        "t:e:e1": {
+          "amount": 900
+        },
+        "s:acc-la": {
+          "amount": 1100,
+          "movementId": "m3"
+        }
+      },
+      "toSave": 950,
+      "bonus": 150
+    }
+  ],
+  "recurringMovements": [],
+  "subscriptions": [],
+  "donations": [],
+  "fiscalConfig": {
+    "salaryChargesRate": 0.2232,
+    "socialChargesCapital": 0.186,
+    "socialChargesLifeInsurance": 0.172,
+    "standardAllowance": 0.1,
+    "standardAllowanceCap": 14555,
+    "standardAllowanceMin": 509,
+    "decote": {
+      "single": 897,
+      "rate": 0.4525,
+      "threshold": 1982
+    },
+    "donation75Ceiling": 2000,
+    "ceilings": {
+      "livretA": 22950,
+      "ldds": 12000,
+      "lep": 10000
+    },
+    "legalMaturity": {
+      "pea": 5,
+      "assuranceVie": 8,
+      "pee": 5
+    },
+    "lepIncomeCeiling": 23028,
+    "lepCeilingPerHalfPart": 6149,
+    "lepHouseholdParts": 1,
+    "taxBrackets": [
+      {
+        "limit": 11600,
+        "rate": 0
+      },
+      {
+        "limit": 29579,
+        "rate": 0.11
+      },
+      {
+        "limit": 84577,
+        "rate": 0.3
+      },
+      {
+        "limit": 181917,
+        "rate": 0.41
+      },
+      {
+        "limit": null,
+        "rate": 0.45
+      }
+    ],
+    "taxScaleYear": 2026
+  },
+  "workBenefits": {
+    "navigo": {
+      "active": true,
+      "basePrice": 90.8,
+      "refundRate": 67.24
+    },
+    "mutuelle": {
+      "active": true,
+      "totalCost": 50,
+      "employerRate": 50
+    },
+    "mealVouchers": {
+      "active": true,
+      "faceValue": 10,
+      "employerRate": 60,
+      "daysPerMonth": 20
+    }
+  }
+}

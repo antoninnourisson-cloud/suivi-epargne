@@ -8,23 +8,32 @@ import type { GlobalAppData } from '../types';
 const OCT_19 = new Date(2026, 9, 19);
 const OCT_28 = new Date(2026, 9, 28);
 
+// Réglages écrits par l'app d'avant le schéma v3 (config.payAdjustment), passés par migrate()
+// comme à l'ouverture du fichier : ils vivent ensuite sur la paie de leur mois d'épargne, et
+// l'objectif doit rester exactement le même.
 const withConfig = (patch: Partial<GlobalAppData['config']>): GlobalAppData => {
   const d = emptyData();
-  return { ...d, config: { ...d.config, ...patch } };
+  return migrate({ ...d, schemaVersion: 2, config: { ...d.config, ...patch } });
 };
 
 describe('currentPayAdjustment', () => {
   it('ne garde que le réglage de la paie en cours', () => {
-    const config = { paydayDay: 27, payAdjustment: { period: '2026-09', extra: 500 } };
-    expect(currentPayAdjustment(config, OCT_19)).toEqual({ period: '2026-09', extra: 500 });
+    const data = withConfig({ paydayDay: 27, payAdjustment: { period: '2026-09', extra: 500 } });
+    expect(currentPayAdjustment(data, OCT_19)).toEqual({ period: '2026-09', extra: 500 });
     // Paie suivante (27 octobre) : le réglage de septembre ne vaut plus.
-    expect(currentPayAdjustment(config, OCT_28)).toBeUndefined();
+    expect(currentPayAdjustment(data, OCT_28)).toBeUndefined();
   });
 
   it('sans jour de paie, la période est le mois calendaire', () => {
-    expect(currentPayAdjustment({ payAdjustment: { period: '2026-10', capacity: 900 } }, OCT_19)).toEqual({ period: '2026-10', capacity: 900 });
-    expect(currentPayAdjustment({ payAdjustment: { period: '2026-09', capacity: 900 } }, OCT_19)).toBeUndefined();
-    expect(currentPayAdjustment(undefined, OCT_19)).toBeUndefined();
+    expect(currentPayAdjustment(withConfig({ payAdjustment: { period: '2026-10', capacity: 900 } }), OCT_19)).toEqual({ period: '2026-10', capacity: 900 });
+    expect(currentPayAdjustment(withConfig({ payAdjustment: { period: '2026-09', capacity: 900 } }), OCT_19)).toBeUndefined();
+    expect(currentPayAdjustment({}, OCT_19)).toBeUndefined();
+  });
+
+  it("se lit sur la paie du mois d'épargne en cours", () => {
+    const pays = [{ id: 'p', receivedOn: '2026-09-27', savingsMonth: '2026-10', amount: 2500, toSave: 700, bonus: 300, lines: [], done: {} }];
+    expect(currentPayAdjustment({ pays, config: { paydayDay: 27 } }, OCT_19)).toEqual({ period: '2026-09', capacity: 700, extra: 300 });
+    expect(currentPayAdjustment({ pays, config: { paydayDay: 27 } }, OCT_28)).toBeUndefined();
   });
 });
 
@@ -85,11 +94,13 @@ describe('sanitizePayAdjustment et migrate', () => {
     expect(sanitizePayAdjustment({ period: '2026-09', capacity: 'beaucoup', extra: 200, note: 'prime' })).toEqual({ period: '2026-09', extra: 200, note: 'prime' });
   });
 
-  it('migrate() garde un réglage valide et retire un réglage abîmé', () => {
+  it('migrate() reporte un réglage valide sur sa paie et retire un réglage abîmé', () => {
     const ok = migrate({ config: { payAdjustment: { period: '2026-09', capacity: 900, extra: 500 } } });
-    expect(ok.config.payAdjustment).toEqual({ period: '2026-09', capacity: 900, extra: 500 });
+    expect(ok.config.payAdjustment).toBeUndefined();
+    expect(ok.pays).toEqual([expect.objectContaining({ savingsMonth: '2026-09', toSave: 900, bonus: 500 })]);
     const broken = migrate({ config: { payAdjustment: 'prime' } });
     expect('payAdjustment' in broken.config).toBe(false);
+    expect(broken.pays).toEqual([]);
     expect(migrate({ config: {} }).config.payAdjustment).toBeUndefined();
   });
 });

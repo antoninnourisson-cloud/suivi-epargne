@@ -46,6 +46,44 @@ describe('garde-fous', () => {
     expect(isFromNewerApp({ schemaVersion: APP_SCHEMA_VERSION })).toBe(false);
     expect(isFromNewerApp({})).toBe(false);
   });
+  it("schéma v3 : une app d'avant les paies reçues (v2) n'écrit pas ce fichier ; une plus récente ne le défait pas", () => {
+    // L'app v2 déjà installée compare au numéro 2 : un fichier v3 est « plus récent », elle
+    // refuse d'écrire et demande une mise à jour (useDriveSync, état « outdated »).
+    expect(APP_SCHEMA_VERSION).toBe(3);
+    expect((migrate({}).schemaVersion ?? 0) > 2).toBe(true);
+    const pays = [{ id: 'p', receivedOn: '2026-10-27', savingsMonth: '2026-11', amount: 2500, lines: [], done: {}, futur: 1 }];
+    const v4 = { schemaVersion: APP_SCHEMA_VERSION + 1, pays, config: { paydayDay: 27, payReviewsDone: ['2026-11'] }, nouveau: { x: 1 } };
+    expect(isFromNewerApp(v4)).toBe(true);
+    const m = migrate(v4) as unknown as Record<string, unknown> & ReturnType<typeof migrate>;
+    // Lu pour l'affichage sans rien perdre : paies et champs inconnus gardés, points de paie
+    // validés jamais reconvertis (déjà au mois d'épargne).
+    expect(m.pays).toEqual(pays);
+    expect(m.nouveau).toEqual({ x: 1 });
+    expect(m.config.payReviewsDone).toEqual(['2026-11']);
+    // Un fichier v3 relu ne bouge plus.
+    const v3 = { ...v4, schemaVersion: 3 };
+    expect(migrate(migrate(v3))).toEqual(migrate(v3));
+    expect(migrate(v3).config.payReviewsDone).toEqual(['2026-11']);
+  });
+  it("schéma v2 sans liste ni réglage de la paie : rien d'inventé", () => {
+    const m = migrate({ schemaVersion: 2, config: { paydayDay: 27, payReviewsDone: ['2026-09'] } });
+    expect(m.pays).toEqual([]);
+    expect(m.config.payReviewsDone).toEqual(['2026-10']);
+    // Sans jour de paie, mois de versement = mois d'épargne (mois civils).
+    expect(migrate({ schemaVersion: 2, config: { payReviewsDone: ['2026-09', 'vu'] } }).config.payReviewsDone).toEqual(['2026-09', 'vu']);
+    // Paie le 5 : la paie d'octobre finance octobre.
+    expect(migrate({ schemaVersion: 2, config: { paydayDay: 5, payReviewsDone: ['2026-12'] } }).config.payReviewsDone).toEqual(['2026-12']);
+    expect(migrate({ schemaVersion: 2, config: { paydayDay: 27, payReviewsDone: ['2026-12'] } }).config.payReviewsDone).toEqual(['2027-01']);
+  });
+  it('liste de la paie (v2) : reprise par une paie déjà déclarée pour ce mois si elle est vide, sinon la paie gagne', () => {
+    const checklist = { month: '2026-10', lines: [{ key: 's:la', label: 'Livret A', amount: 500, kind: 'saving' }], done: { 's:la': { amount: 500 } } };
+    const empty = { id: 'p', receivedOn: '2026-10-26', savingsMonth: '2026-11', amount: 2500, lines: [], done: {} };
+    expect(migrate({ config: { paydayDay: 27 }, pays: [empty], payChecklist: checklist }).pays).toEqual([{ ...empty, lines: checklist.lines, done: checklist.done }]);
+    const filled = { ...empty, lines: [{ key: 's:av', label: 'AV', amount: 300, kind: 'saving' }] };
+    expect(migrate({ config: { paydayDay: 27 }, pays: [filled], payChecklist: checklist }).pays).toEqual([filled]);
+    // Liste sans mois lisible : laissée telle quelle (rien n'est perdu).
+    expect((migrate({ payChecklist: { lines: [] } }) as unknown as Record<string, unknown>).payChecklist).toEqual({ lines: [] });
+  });
   it("refuse un import invalide et accepte un fichier correct", () => {
     expect(validateImport('x').length).toBeGreaterThan(0);
     expect(validateImport({ accounts: [{ id: 'a', name: 'A', totalAmount: '<script>' }] }).length).toBe(1);

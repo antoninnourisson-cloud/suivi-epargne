@@ -4,7 +4,9 @@
 //   avantage Navigo dans config, champs disparus depuis) ;
 // - fichier-2026-09 : avant le format versionné (pas de schemaVersion, prélèvements sociaux
 //   à 17,2 %, paramètres fiscaux de 2025, ancien écran « Objectifs », adresse des parents,
-//   clé Gemini dans le fichier, lignes abîmées).
+//   clé Gemini dans le fichier, lignes abîmées) ;
+// - fichier-2026-10 : schéma v2, avant les paies reçues (liste de la paie, réglages de la paie
+//   en cours et points de paie validés au mois de versement).
 // Le résultat complet est comparé à un instantané (`*.migrated.json`) : tout changement de la
 // migration d'un ancien fichier se voit dans la revue. Un changement voulu (nouvelle
 // migration, nouvelles valeurs par défaut de src/constants.ts) se valide avec
@@ -14,13 +16,13 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { AccountType } from '../types';
 import { APP_SCHEMA_VERSION, canonicalize, migrate, withoutDeviceOnlyFields } from './schema';
-import { findFiscalReview } from './finance';
+import { computeMonthlyPay, findFiscalReview } from './finance';
 import { round2 } from './money';
 
 const fixture = (name: string): unknown =>
   JSON.parse(readFileSync(fileURLToPath(new URL(`./__fixtures__/${name}.json`, import.meta.url)), 'utf8'));
 
-const ERAS = ['fichier-2026-01', 'fichier-2026-09'] as const;
+const ERAS = ['fichier-2026-01', 'fichier-2026-09', 'fichier-2026-10'] as const;
 
 describe.each(ERAS)('ancien fichier %s', name => {
   const raw = fixture(name);
@@ -99,5 +101,30 @@ describe('format de septembre 2026 (avant le format versionné)', () => {
     expect(withoutDeviceOnlyFields(m).config.geminiApiKey).toBeUndefined();
     expect(canonicalize(m)).not.toContain('cle-factice-de-test');
     expect(m.activePayslipId).toBe('p1');
+  });
+});
+
+describe('schéma v2 (octobre 2026) → v3 : paies reçues', () => {
+  const m = migrate(fixture('fichier-2026-10'));
+
+  it("la liste et les réglages de la paie du 27 octobre deviennent la paie de l'épargne de novembre", () => {
+    expect((m as unknown as Record<string, unknown>).payChecklist).toBeUndefined();
+    expect(m.config.payAdjustment).toBeUndefined();
+    expect(m.pays).toHaveLength(1);
+    const [pay] = m.pays;
+    expect(pay).toMatchObject({ id: 'pay-2026-11', receivedOn: '2026-10-27', savingsMonth: '2026-11', toSave: 950, bonus: 150 });
+    // Montant reçu = paie théorique du moment + somme en plus (« prime comprise »).
+    expect(pay.amount).toBe(round2(computeMonthlyPay({ ...m, pays: [] }) + 150));
+    expect(pay.lines.map(l => l.key)).toEqual(['t:e:e1', 's:acc-la']);
+    expect(pay.done['s:acc-la']).toEqual({ amount: 1100, movementId: 'm3' });
+  });
+
+  it("points de paie validés : mois de versement → mois d'épargne", () => {
+    expect(m.config.payReviewsDone).toEqual(['2026-09', '2026-10']);
+  });
+
+  it("rien d'autre ne bouge : mouvements sans payId, champs inconnus gardés", () => {
+    expect(m.accounts[0].movements.every(mv => mv.payId === undefined)).toBe(true);
+    expect((m as unknown as Record<string, unknown>).futureField).toEqual({ kept: true });
   });
 });

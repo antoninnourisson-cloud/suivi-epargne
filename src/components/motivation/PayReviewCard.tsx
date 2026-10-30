@@ -26,7 +26,7 @@ export const PayReviewCard: React.FC<PayReviewCardProps> = ({ review, onValidate
   ];
 
   return (
-    <Card id="pay-review" variant="elevated" title={`Point de paie : ${formatPeriod(review.key)}`} icon={ClipboardCheck}>
+    <Card id="pay-review" variant="elevated" title={`Point de paie : ${formatPeriod(review.payMonth)}`} icon={ClipboardCheck}>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <p className="text-sm text-on-surface-variant">
           <span className="text-[28px] leading-9 font-normal text-on-surface tabular-nums">{formatEUR(review.saved, 0)}</span>

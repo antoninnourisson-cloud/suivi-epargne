@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { computeReminders, parisCivilDate, applyDiscreetMode, isDiscreet, Reminder } from '../src/reminders';
 import { AccountType, GlobalAppData } from '../../src/types';
+import { migrate } from '../../src/lib/schema';
 import { DEFAULT_FISCAL_CONFIG } from '../../src/constants';
 
 const base = (over: Partial<GlobalAppData> = {}): GlobalAppData => ({
@@ -295,7 +296,9 @@ describe('computeReminders', () => {
         done,
       } : undefined,
     });
-    const at = (d: ReturnType<typeof data>, day: number) => computeReminders(d, new Date(2026, 8, day, 9), APP).find(x => x.key === 'payday-followup:2026-09');
+    // Liste et réglages écrits au format d'avant le schéma v3 : le serveur lit le fichier
+    // passé par migrate() (worker/src/google.ts), qui les reporte sur la paie de septembre.
+    const at = (d: ReturnType<typeof data>, day: number) => computeReminders(migrate(d), new Date(2026, 8, day, 9), APP).find(x => x.key === 'payday-followup:2026-09');
 
     it('relance 3 jours après la paie les virements non cochés', () => {
       const r = at(data({ 't:Revolut commun': { amount: 900 } }), 30);
@@ -320,7 +323,7 @@ describe('computeReminders', () => {
       expect(at(withExtra('2026-09'), 30)?.message.title).toBe('2 virements de paie à faire ou à cocher');
       expect(at(withExtra('2026-08'), 30)?.message.title).toBe('1 virement de paie à faire ou à cocher');
       // Le rappel du jour de paie annonce le même objectif que le Pilotage.
-      const pay = (d: GlobalAppData) => computeReminders(d, new Date(2026, 8, 27, 9), APP).find(x => x.key === 'payday:2026-09')?.message.title;
+      const pay = (d: GlobalAppData) => computeReminders(migrate(d), new Date(2026, 8, 27, 9), APP).find(x => x.key === 'payday:2026-09')?.message.title;
       const d = data();
       expect(pay({ ...d, config: { ...d.config, payAdjustment: { period: '2026-09', extra: 300 } } })).toMatch(/^Salaire versé : 800\s€ à placer$/);
       expect(pay({ ...d, config: { ...d.config, payAdjustment: { period: '2026-08', extra: 300 } } })).toMatch(/^Salaire versé : 500\s€ à placer$/);

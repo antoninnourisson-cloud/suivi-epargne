@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { netAnnualRate, netMonthlyRateSchedule, projectSavings, detectPayRaise, computeBadgeCount, IDLE_ACCOUNT_ID } from './projection';
 import { DEFAULT_FISCAL_CONFIG as CFG } from '../constants';
 import { AccountType, GlobalAppData, SavingsAccount, PayslipRecord } from '../types';
+import { migrate } from './schema';
 
 const acc = (over: Partial<SavingsAccount>): SavingsAccount => ({
   id: 'x', name: 'x', type: AccountType.LIVRET_A, institution: 'B',
@@ -161,7 +162,8 @@ describe('computeBadgeCount', () => {
         { key: 's:la', label: 'Livret A', amount: 500, kind: 'saving', accountId: 'la' },
       ], done: { 't:Commun': { amount: 900 } } },
     };
-    expect(computeBadgeCount(data, new Date(2026, 9, 1))).toBe(1);
+    // Liste au format d'avant le schéma v3 : migrate() la reporte sur la paie de septembre.
+    expect(computeBadgeCount(migrate(data), new Date(2026, 9, 1))).toBe(1);
   });
 });
 

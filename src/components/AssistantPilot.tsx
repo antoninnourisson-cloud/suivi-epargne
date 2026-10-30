@@ -4,7 +4,8 @@ import { SavingsAccount, Expense, AccountType, FiscalConfig, WorkBenefits, Paysl
 import { PayChecklist } from './PayChecklist';
 import { SavingsSplitEditor } from './SavingsSplitEditor';
 import { computeIncome, computeMaturityCountdown, computePeeAvailability, describeMaturity, computePlacementStrategy, payslipSuperNet, subscriptionsAsExpenses, computePayTransfers, computeRecentSavingsRate, activeSavingsSplit, payPeriodOf } from '../lib/finance';
-import { combineMonthTarget, currentPayAdjustment, updatePayAdjustment } from '../lib/payAdjustment';
+import { combineMonthTarget, updatePayAdjustment } from '../lib/payAdjustment';
+import type { PayCalendarData } from '../lib/payCalendar';
 import { parseISODate } from '../lib/dates';
 import { parseFrenchNumber, safeNumber } from '../lib/numbers';
 import { NumberInput } from './NumberInput';
@@ -28,7 +29,7 @@ import { FiscalClock } from './pilot/FiscalClock';
  */
 export type PilotConfig = Pick<AppDoc['config'],
   'grossAnnual' | 'leisureBudget' | 'projectSavings' | 'taxRateManual' | 'extraMonthlyIncome'
-  | 'paydayDay' | 'paydayAmount' | 'savingsSplit' | 'savingsSplitFrom' | 'payAdjustment'>;
+  | 'paydayDay' | 'paydayAmount' | 'savingsSplit' | 'savingsSplitFrom'>;
 
 interface AssistantPilotProps {
   accounts: SavingsAccount[];
@@ -48,6 +49,11 @@ interface AssistantPilotProps {
   onOpenSubscriptions: () => void;
   payChecklist?: PayChecklistData;
   onPayChecklistChange: (next: PayChecklistData | undefined) => void;
+  /** Réglages de la paie en cours (paie du mois d'épargne en cours, lib/payRecords). */
+  payAdjustment?: PayAdjustment;
+  onPayAdjustmentChange: (next: PayAdjustment | undefined) => void;
+  /** Fiches et paies déclarées : la paie en cours suit la même fenêtre que l'Accueil. */
+  payCalendar?: Omit<PayCalendarData, 'paydayDay'>;
   onRecordPayDeposit: (accountId: string, amount: number) => string | undefined;
   onCancelPayDeposit: (accountId: string, movementId: string) => void;
 }
@@ -56,11 +62,9 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
   accounts, expenses, onUpdateExpenses, config, onPatchConfig,
   fiscalConfig, workBenefits, activePayslip, onClearActivePayslip,
   subscriptions, onOpenSubscriptions, payChecklist, onPayChecklistChange, onRecordPayDeposit, onCancelPayDeposit,
+  payAdjustment, onPayAdjustmentChange, payCalendar,
 }) => {
   const { grossAnnual, leisureBudget, projectSavings, taxRateManual, extraMonthlyIncome, paydayDay, paydayAmount, savingsSplit, savingsSplitFrom } = config;
-  // Capacité d'épargne et somme en plus saisies pour la paie en cours (enregistrées dans le
-  // fichier de données, ignorées à la paie suivante : voir lib/payAdjustment).
-  const payAdjustment: PayAdjustment | undefined = config.payAdjustment;
   const setGrossAnnual = (grossAnnual: number) => onPatchConfig({ grossAnnual });
   const setLeisureBudget = (leisureBudget: number) => onPatchConfig({ leisureBudget });
   const setProjectSavings = (projectSavings: number) => onPatchConfig({ projectSavings });
@@ -70,7 +74,6 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
   const setPaydayAmount = (paydayAmount: number | undefined) => onPatchConfig({ paydayAmount });
   const onSavingsSplitChange = (split: { accountId: string; pct: number }[] | undefined, from: string | undefined) =>
     onPatchConfig({ savingsSplit: split, savingsSplitFrom: from });
-  const onPayAdjustmentChange = (next: PayAdjustment | undefined) => onPatchConfig({ payAdjustment: next });
   const [showDetails, setShowDetails] = useState(false);
   const removeWithUndo = useUndoableRemove();
   // Après la suppression d'une charge, le focus va sur la charge voisine (sinon sur le titre).
@@ -80,10 +83,10 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
     removeWithUndo(expenses, e, onUpdateExpenses, `Charge « ${e.name} » supprimée`);
     focusAfterRemoval(() => expenseListRef.current, index, () => document.getElementById(expensesTitleId));
   };
-  // Réglages de la paie en cours : enregistrés (l'Accueil et la relance de paie affichent le
-  // même objectif), ignorés dès la paie suivante.
-  const periodKey = payPeriodOf(paydayDay).key;
-  const adjustment = currentPayAdjustment({ payAdjustment, paydayDay });
+  // Réglages de la paie en cours : enregistrés sur la paie du mois d'épargne en cours
+  // (l'Accueil et la relance de paie affichent le même objectif), ignorés dès la paie suivante.
+  const periodKey = payPeriodOf(paydayDay, new Date(), payCalendar).key;
+  const adjustment = payAdjustment;
   const externalSavings = adjustment?.extra ?? 0;
   const savedCapacity = adjustment?.capacity;
   const changeAdjustment = (patch: { capacity?: number | null; extra?: number | null }) =>
@@ -413,6 +416,7 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
         onRecordDeposit={onRecordPayDeposit}
         onCancelDeposit={onCancelPayDeposit}
         paydayDay={paydayDay}
+        payCalendar={payCalendar}
         customSplit={customSplit}
       />
 

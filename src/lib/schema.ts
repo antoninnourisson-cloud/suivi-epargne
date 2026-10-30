@@ -5,18 +5,22 @@
 // entre dans l'app : chargement Drive, import, restauration locale, synchronisation entre
 // onglets, et lecture par le serveur de notifications.
 // ================================================
-import { AccountType, AppDoc, ExpenseSnapshot, FiscalConfig, GlobalAppData, PortfolioSnapshot, TaxBracket, YearClosingRecord } from '../types';
+import { AccountType, AppDoc, ExpenseSnapshot, FiscalConfig, GlobalAppData, PayChecklist, PayRecord, PortfolioSnapshot, TaxBracket, YearClosingRecord } from '../types';
 import { DEFAULT_DECOTE, DEFAULT_FISCAL_CONFIG, DEFAULT_WORK_BENEFITS } from '../constants';
-import { normalizeAccounts, dedupeMonthlySnapshots, migrateFiscalConfig } from './finance';
+import { normalizeAccounts, dedupeMonthlySnapshots, migrateFiscalConfig, computeMonthlyPay } from './finance';
 import { round2 } from './money';
 import { sanitizePayAdjustment } from './payAdjustment';
+import { expectedPayDate, savingsMonthOf, savingsMonthOfPay } from './payCalendar';
 
 /**
  * Version du format. À augmenter quand un changement rend le fichier illisible pour une
  * ancienne version de l'app : celle-ci refuse alors d'écrire (au lieu d'effacer ce
  * qu'elle ne connaît pas) et demande une mise à jour.
  */
-export const APP_SCHEMA_VERSION = 2;
+export const APP_SCHEMA_VERSION = 3;
+// Historique : 2 = format versionné (octobre 2026) ; 3 = paies reçues (`pays`), qui
+// remplacent `payChecklist` et `config.payAdjustment`, et points de paie validés rangés par
+// mois d'épargne (voir migratePays).
 
 const DEFAULT_CONFIG: GlobalAppData['config'] = {
   grossAnnual: 45000,
@@ -34,6 +38,7 @@ export const emptyData = (): AppDoc => ({
   history: [],
   expensesHistory: [],
   payslips: [],
+  pays: [],
   recurringMovements: [],
   subscriptions: [],
   donations: [],
@@ -98,7 +103,11 @@ const sanitizeAccount = (a: Record<string, unknown>): Record<string, unknown> =>
   out.movements = arr<unknown>(a.movements).flatMap(m => {
     if (!isObj(m) || (m.type !== 'IN' && m.type !== 'OUT') || typeof m.date !== 'string') return [];
     const amount = finite(m.amount);
-    return amount === undefined || amount < 0 ? [] : [{ ...m, amount }];
+    if (amount === undefined || amount < 0) return [];
+    const mv: Record<string, unknown> = { ...m, amount };
+    // Paie de rattachement illisible : le versement est rattaché par sa date.
+    if (mv.payId !== undefined && !(typeof mv.payId === 'string' && mv.payId)) delete mv.payId;
+    return [mv];
   });
   return out;
 };
@@ -212,6 +221,98 @@ const sanitizeYearClosings = (raw: unknown): Record<string, YearClosingRecord> |
   return Object.keys(out).length > 0 ? out : undefined;
 };
 
+const MONTH_KEY = /^\d{4}-(0[1-9]|1[0-2])$/;
+const sanitizeDone = (v: unknown) =>
+  (isObj(v) ? Object.fromEntries(Object.entries(v).filter(([, d]) => isObj(d))) : {}) as PayChecklist['done'];
+const sanitizeLines = (v: unknown) => arr<unknown>(v).filter(l => isObj(l) && typeof l.key === 'string') as unknown as PayRecord['lines'];
+
+/**
+ * Paies reçues remises d'aplomb : une paie sans identifiant ou sans date de réception lisible
+ * est écartée (comme un mouvement illisible) ; un montant illisible vaut 0, un mois d'épargne
+ * illisible est recalculé (règle du 15), les lignes et coches abîmées sont retirées. Les
+ * champs inconnus sont conservés.
+ */
+const sanitizePays = (v: unknown): PayRecord[] => arr<unknown>(v).flatMap(p => {
+  if (!isObj(p) || typeof p.id !== 'string' || !p.id || typeof p.receivedOn !== 'string' || !ISO_DAY.test(p.receivedOn)) return [];
+  const out: Record<string, unknown> = { ...p, amount: finite(p.amount) ?? 0 };
+  out.savingsMonth = savingsMonthOfPay(p as unknown as PayRecord);
+  for (const k of ['bonus', 'toSave'] as const) {
+    if (out[k] === undefined) continue;
+    const n = finite(out[k]);
+    if (n === undefined) delete out[k]; else out[k] = n;
+  }
+  if (out.kind !== undefined && out.kind !== 'extra') delete out.kind;
+  for (const k of ['reviewedAt', 'payslipId'] as const) {
+    if (out[k] !== undefined && typeof out[k] !== 'string') delete out[k];
+  }
+  out.lines = sanitizeLines(p.lines);
+  out.done = sanitizeDone(p.done);
+  return [out as unknown as PayRecord];
+});
+
+/**
+ * Passage au schéma v3 : la paie devient un objet de données (PayRecord).
+ *  - `payChecklist` (liste de la paie versée en `month`) devient la paie de son mois d'épargne,
+ *    reçue à la date attendue, au montant de la paie théorique ; lignes et coches reprises
+ *    (avec leurs mouvements) ;
+ *  - `config.payAdjustment` devient `toSave` (capacité saisie) et `bonus` (somme en plus,
+ *    ajoutée au montant reçu) de la paie de son mois d'épargne ;
+ *  - `config.payReviewsDone` : mois de versement → mois d'épargne, même règle appliquée à la
+ *    date attendue (paie le 27 : '2026-10' → '2026-11'). Seulement pour un fichier d'avant
+ *    la v3 : la conversion ne se refait jamais.
+ * Une paie déjà présente pour ce mois d'épargne garde ses valeurs. Les anciens champs sont
+ * retirés une fois convertis (un ancien champ sans mois lisible reste tel quel).
+ */
+const migratePays = (doc: AppDoc & Record<string, unknown>, fromVersion: number) => {
+  const paydayDay = doc.config.paydayDay;
+  const pays = doc.pays;
+  let theoretical: number | undefined;
+  const payFor = (payMonth: string): PayRecord => {
+    const receivedOn = expectedPayDate(paydayDay, payMonth);
+    const savingsMonth = savingsMonthOf(receivedOn);
+    const existing = pays.find(p => p.kind !== 'extra' && p.savingsMonth === savingsMonth);
+    if (existing) return existing;
+    if (theoretical === undefined) {
+      const pay = computeMonthlyPay(doc);
+      theoretical = Number.isFinite(pay) ? round2(Math.max(0, pay)) : 0;
+    }
+    let id = `pay-${savingsMonth}`;
+    for (let n = 2; pays.some(p => p.id === id); n++) id = `pay-${savingsMonth}-${n}`;
+    const created: PayRecord = { id, receivedOn, savingsMonth, amount: theoretical, lines: [], done: {} };
+    pays.push(created);
+    return created;
+  };
+
+  const checklist: unknown = doc.payChecklist;
+  if (isObj(checklist) && typeof checklist.month === 'string' && MONTH_KEY.test(checklist.month)) {
+    const pay = payFor(checklist.month);
+    if (pay.lines.length === 0) {
+      pay.lines = sanitizeLines(checklist.lines);
+      pay.done = sanitizeDone(checklist.done);
+    }
+    delete doc.payChecklist;
+  }
+
+  const adj = doc.config.payAdjustment;
+  // Réglage vide (ni capacité ni somme en plus) : rien à reporter, pas de paie inventée.
+  if (adj && (adj.capacity !== undefined || (adj.extra !== undefined && adj.extra !== 0))) {
+    const pay = payFor(adj.period);
+    if (pay.toSave === undefined && adj.capacity !== undefined) pay.toSave = round2(adj.capacity);
+    if (pay.bonus === undefined && adj.extra !== undefined && adj.extra !== 0) {
+      pay.bonus = round2(adj.extra);
+      // Montant reçu « prime comprise » : la somme en plus s'ajoutait à la paie.
+      pay.amount = round2(pay.amount + pay.bonus);
+    }
+  }
+  delete doc.config.payAdjustment;
+
+  const reviews = doc.config.payReviewsDone;
+  if (fromVersion < 3 && Array.isArray(reviews)) {
+    doc.config.payReviewsDone = [...new Set(reviews.map(k =>
+      typeof k === 'string' && MONTH_KEY.test(k) ? savingsMonthOf(expectedPayDate(paydayDay, k)) : k))];
+  }
+};
+
 /** Le fichier a été écrit par une version plus récente de l'app que celle-ci. */
 export const isFromNewerApp = (raw: unknown): boolean =>
   isObj(raw) && typeof raw.schemaVersion === 'number' && raw.schemaVersion > APP_SCHEMA_VERSION;
@@ -247,7 +348,7 @@ export const migrate = (raw: unknown): AppDoc => {
   const { lastView: _lastView, lastWrite: _lastWrite, ...rest } = r;
   // Listes d'objets : une entrée qui n'est pas un objet (null, texte…) ferait planter les écrans.
   const objects = <T,>(v: unknown) => arr<unknown>(v).filter(isObj) as unknown as T[];
-  return {
+  const doc = {
     ...rest,
     schemaVersion: APP_SCHEMA_VERSION,
     accounts: normalizeAccounts(arr<unknown>(r.accounts).filter(isObj).map(sanitizeAccount) as unknown as GlobalAppData['accounts']),
@@ -255,6 +356,7 @@ export const migrate = (raw: unknown): AppDoc => {
     history: dedupeMonthlySnapshots(sanitizeSnapshots<PortfolioSnapshot>(r.history, ['totalAmount', 'ownedAmount'])),
     expensesHistory: dedupeMonthlySnapshots(sanitizeSnapshots<ExpenseSnapshot>(r.expensesHistory, ['total'])),
     payslips: objects(r.payslips),
+    pays: sanitizePays(r.pays),
     recurringMovements: objects(r.recurringMovements),
     subscriptions: objects(r.subscriptions),
     donations: objects(r.donations),
@@ -264,7 +366,10 @@ export const migrate = (raw: unknown): AppDoc => {
     fiscalConfig: sanitizeFiscalConfig(r.fiscalConfig),
     workBenefits,
     config,
-  } as AppDoc;
+  } as AppDoc & Record<string, unknown>;
+  migratePays(doc, typeof r.schemaVersion === 'number' ? r.schemaVersion : 0);
+  if (doc.payChecklist === undefined) delete doc.payChecklist;
+  return doc;
 };
 
 /** JSON à clés triées : deux contenus identiques donnent la même chaîne, quel que soit l'ordre. */

@@ -66,7 +66,7 @@ export const GoodMonthsCard: React.FC<GoodMonthsCardProps> = ({ summary, today, 
         <p className="text-on-surface-variant flex items-center gap-1.5">
           <ShieldCheck className="w-4 h-4 shrink-0" aria-hidden="true" />
           {jokersUsed.includes(String(year))
-            ? `Joker ${year} utilisé${jokerMonth ? ` pour la paie ${deMonth(payMonthName(jokerMonth.key, year))}` : ''} : votre série a continué.`
+            ? `Joker ${year} utilisé${jokerMonth ? ` pour la paie ${deMonth(payMonthName(jokerMonth.payMonth, year))}` : ''} : votre série a continué.`
             : `Joker ${year} disponible : un mois plus difficile ne coupe pas la série.`}
         </p>
       </div>
@@ -77,13 +77,13 @@ export const GoodMonthsCard: React.FC<GoodMonthsCardProps> = ({ summary, today, 
             {months.map(m => {
               const s = statusOf(m);
               const { icon: Icon, dot, label } = STATUS[s];
-              const text = `Paie ${deMonth(formatPeriod(m.key))} : ${label}, ${formatEUR(m.saved, 0)}`;
+              const text = `Paie ${deMonth(formatPeriod(m.payMonth))} : ${label}, ${formatEUR(m.saved, 0)}`;
               return (
                 <li key={m.key} className="flex flex-col items-center gap-1 w-9" title={text}>
                   <span className={`w-7 h-7 rounded-full flex items-center justify-center ${dot}`} aria-hidden="true">
                     <Icon className="w-3.5 h-3.5" />
                   </span>
-                  <span className="text-[11px] text-on-surface-variant" aria-hidden="true">{parseISODate(`${m.key}-01`).toLocaleDateString('fr-FR', { month: 'short' })}</span>
+                  <span className="text-[11px] text-on-surface-variant" aria-hidden="true">{parseISODate(`${m.payMonth}-01`).toLocaleDateString('fr-FR', { month: 'short' })}</span>
                   <span className="sr-only">{text}</span>
                 </li>
               );

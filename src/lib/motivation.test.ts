@@ -65,14 +65,15 @@ describe('bons mois et séries', () => {
   });
   it('un joker par an couvre un mois raté ; le second mois raté de l\'année casse la série', () => {
     const r = computeGoodMonths({ accounts: [monthly([600, 100, 600, 100, 600])], today: '2026-06-30', paydayDay: 27 });
-    expect(r.months.find(m => m.key === '2026-02')?.joker).toBe(true);
+    // Clé = mois d'épargne (paie du 27 février → mars) ; payMonth garde le mois de versement.
+    expect(r.months.find(m => m.key === '2026-03')).toMatchObject({ payMonth: '2026-02', joker: true });
     expect(r.jokersUsed).toEqual(['2026']);
     expect(r.bestStreak).toBe(2);
     expect(r.streak).toBe(1);
   });
   it("le mois en cours ne casse rien tant qu'il n'est pas fini, et compte dès qu'il est acquis", () => {
     const pending = computeGoodMonths({ accounts: [account([mv('2026-03-28', 600), mv('2026-04-28', 100)])], today: '2026-05-02', paydayDay: 27 });
-    expect(pending.current?.key).toBe('2026-04');
+    expect(pending.current).toMatchObject({ key: '2026-05', payMonth: '2026-04' });
     expect(pending.current?.good).toBe(false);
     expect(pending.streak).toBe(1);
     const reached = computeGoodMonths({ accounts: [account([mv('2026-03-28', 600), mv('2026-04-28', 600)])], today: '2026-05-02', paydayDay: 27 });
@@ -80,7 +81,7 @@ describe('bons mois et séries', () => {
   });
   it("ne pénalise pas les mois d'avant le début du suivi", () => {
     const r = computeGoodMonths({ accounts: [account([mv('2026-05-28', 600)])], today: '2026-06-20', paydayDay: 27 });
-    expect(r.months.map(m => m.key)).toEqual(['2026-05']);
+    expect(r.months.map(m => m.key)).toEqual(['2026-06']);
     expect(r.jokersUsed).toEqual([]);
   });
   it('respecte un seuil personnalisé', () => {
@@ -123,7 +124,7 @@ describe('point de paie', () => {
     const acc = account([mv('2026-03-28', 700), mv('2026-04-10', 100, 'OUT'), mv('2026-04-01', 40, 'IN', { kind: 'valuation' })]);
     const gm = computeGoodMonths({ accounts: [acc], today: '2026-05-02', paydayDay: 27 });
     const r = computePayReview({ accounts: [acc], goodMonths: gm, today: '2026-05-02', plan: 500 });
-    expect(r).toMatchObject({ key: '2026-03', saved: 600, good: true, deposits: 700, withdrawals: 100, valuation: 40 });
+    expect(r).toMatchObject({ key: '2026-04', payMonth: '2026-03', saved: 600, good: true, deposits: 700, withdrawals: 100, valuation: 40 });
     expect(r?.byAccount).toEqual([{ accountId: 'la', name: 'Livret A', net: 600 }]);
     expect(r?.insight).toBe('Objectif tenu : 100 € de plus que prévu.');
     expect(r?.action).toBeUndefined();
@@ -151,5 +152,37 @@ describe('contrôle des fiches de paie', () => {
     expect(detectPayslipAnomalies(series([2000, 3000]))).toEqual([]);
     const unreviewed = series([2000, 2010, 1990, 2400]).map((p, i) => (i === 3 ? { ...p, reviewed: false } : p));
     expect(detectPayslipAnomalies(unreviewed)).toEqual([]);
+  });
+});
+
+describe('versements rattachés à une paie (payId)', () => {
+  const pays = [
+    { id: 'oct', receivedOn: '2026-10-27', savingsMonth: '2026-11' },
+    { id: 'nov', receivedOn: '2026-11-25', savingsMonth: '2026-12' },
+  ];
+  const attribution = (key: string) => ({ key, payMonths: new Map(pays.map(p => [p.id, p.savingsMonth])) });
+
+  it("sans payId, la date décide (comme avant) ; avec, le mois d'épargne de la paie, quelle que soit la date", () => {
+    // Versement du 30 novembre au titre de la paie d'octobre, après une paie de novembre arrivée tôt.
+    const acc = account([mv('2026-10-28', 400), mv('2026-11-30', 300, 'IN', { payId: 'oct' })]);
+    expect(savedBetween([acc], '2026-10-27', '2026-11-25', '2026-12-05')).toBe(400);
+    expect(savedBetween([acc], '2026-10-27', '2026-11-25', '2026-12-05', undefined, attribution('2026-11'))).toBe(700);
+    expect(savedBetween([acc], '2026-11-25', '2026-12-25', '2026-12-05', undefined, attribution('2026-12'))).toBe(0);
+  });
+  it('une paie inconnue (supprimée) : le versement retombe sur sa date ; un versement futur ne compte pas', () => {
+    const acc = account([mv('2026-11-02', 200, 'IN', { payId: 'disparue' }), mv('2026-12-20', 100, 'IN', { payId: 'oct' })]);
+    expect(savedBetween([acc], '2026-10-27', '2026-11-25', '2026-11-10', undefined, attribution('2026-11'))).toBe(200);
+  });
+  it('bons mois et point de paie suivent le rattachement', () => {
+    const acc = account([mv('2026-10-28', 300), mv('2026-11-27', 250, 'IN', { payId: 'oct' })]);
+    const gm = computeGoodMonths({ accounts: [acc], today: '2026-12-02', paydayDay: 27, pays });
+    const nov = gm.months.find(m => m.key === '2026-11')!;
+    expect(nov).toMatchObject({ start: '2026-10-27', end: '2026-11-25', saved: 550, good: true, payMonth: '2026-10' });
+    expect(gm.months.find(m => m.key === '2026-12')?.saved).toBe(0);
+    const review = computePayReview({ accounts: [acc], goodMonths: gm, today: '2026-12-02', pays });
+    expect(review).toMatchObject({ key: '2026-11', payMonth: '2026-10', saved: 550, deposits: 550 });
+    // Sans les paies, le même versement compte à sa date (décembre).
+    const legacy = computeGoodMonths({ accounts: [acc], today: '2026-12-02', paydayDay: 27 });
+    expect(legacy.months.find(m => m.key === '2026-11')?.saved).toBe(300);
   });
 });

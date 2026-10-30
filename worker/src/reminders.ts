@@ -35,6 +35,7 @@ import { lepTimelineFromData, describeLepTimeline } from '../../src/lib/lep';
 import { computeGoodMonths, computePayReview, motivationSettings } from '../../src/lib/motivation';
 import { isReminderEnabled } from '../../src/lib/notificationPrefs';
 import { computeMonthTarget } from '../../src/lib/payAdjustment';
+import { payChecklistOf } from '../../src/lib/payRecords';
 import { buildTaxReturnReminder } from '../../src/lib/taxReturn';
 import type { PushMessage } from './webpush';
 
@@ -217,7 +218,7 @@ export const computeReminders = (data: GlobalAppData, today: CivilDate | Date, a
     const period = payPeriod;
     const sincePayday = daysSincePay;
     if (sincePayday >= PAYDAY_FOLLOWUP_DELAY_DAYS && sincePayday < PAYDAY_FOLLOWUP_DELAY_DAYS + PAYDAY_WINDOW_DAYS) {
-      const checklist = data.payChecklist && data.payChecklist.month === period.key ? data.payChecklist : undefined;
+      const checklist = payChecklistOf(data, now);
       let lines = checklist?.lines;
       if (!lines) {
         const amount = computeMonthTarget(data, now).total;
@@ -286,10 +287,11 @@ export const computeReminders = (data: GlobalAppData, today: CivilDate | Date, a
     today: todayKey,
     paydayDay: payday && payday >= 1 && payday <= 31 ? payday : undefined,
     payslips: data.payslips,
+    pays: data.pays,
     threshold: motivation.threshold,
     trackingStartISO: data.config?.trackingStartDate,
   });
-  const review = computePayReview({ accounts, goodMonths, today: todayKey, plan, trackingStartISO: data.config?.trackingStartDate });
+  const review = computePayReview({ accounts, goodMonths, today: todayKey, plan, trackingStartISO: data.config?.trackingStartDate, pays: data.pays });
   const reviewWindow = review && goodMonths.months.find(m => m.key === review.key && m.start === review.start);
   if (review && reviewWindow && reviewWindow.source !== 'calendar') {
     const [ey, em, ed] = review.end.split('-').map(Number);
@@ -302,7 +304,7 @@ export const computeReminders = (data: GlobalAppData, today: CivilDate | Date, a
       const ownedStart = computeAccountBalanceAtDate(accounts, formatISODay(beforeStart));
       const pct = ownedStart > 0 ? ((ownedEnd - ownedStart) / ownedStart) * 100 : 0;
       const interest = interestBetween(accounts, beforeStart, lastDay);
-      const month = MONTH_NAMES[Number(review.key.slice(5, 7)) - 1];
+      const month = MONTH_NAMES[Number(review.payMonth.slice(5, 7)) - 1];
       const saved = `${review.saved >= 0 ? '+' : ''}${eur(review.saved)}`;
       // Gamification désactivée : ni « bon mois » ni « série ». Pas de mention d'un mois
       // raté non plus (pas de pression), seulement les chiffres.
@@ -310,7 +312,7 @@ export const computeReminders = (data: GlobalAppData, today: CivilDate | Date, a
       const streak = motivation.enabled && goodMonths.streak >= 2 ? goodMonths.streak : 0;
       const paydayReminder = out.find(r => r.key.startsWith('payday:'));
       const sameDayAsPayday = paydayReminder && payday && review.end === formatISODay(payPeriodOf(payday, now).payDate);
-      if (paydayReminder && sameDayAsPayday && isReminderEnabled(paydayReminder.key, prefs) && isReminderEnabled(`recap:${review.key}`, prefs)) {
+      if (paydayReminder && sameDayAsPayday && isReminderEnabled(paydayReminder.key, prefs) && isReminderEnabled(`recap:${review.payMonth}`, prefs)) {
         paydayReminder.message = {
           ...paydayReminder.message,
           body: `${paydayReminder.message.body} Paie précédente : ${saved} mis de côté${good ? ', bon mois ✓' : ''}${streak ? `, série de ${streak}` : ''}.`,
@@ -326,7 +328,7 @@ export const computeReminders = (data: GlobalAppData, today: CivilDate | Date, a
           ...(interest >= 1 ? [`≈ ${eur(interest)} d'intérêts`] : []),
         ];
         out.push({
-          key: `recap:${review.key}`,
+          key: `recap:${review.payMonth}`,
           message: {
             title: `Point de paie de ${month}`,
             body: parts.join(' · ') + '.',

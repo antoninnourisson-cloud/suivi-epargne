@@ -11,7 +11,7 @@
 // Une étape qui ne concerne pas l'utilisateur est retirée (aucune fiche de paie jamais
 // importée, Pilotage sans paie, motivation coupée). Fonction pure, testée.
 // ================================================
-import type { PayChecklist, PayslipRecord, SavingsAccount } from '../types';
+import type { PayChecklist, PayRecord, PayslipRecord, SavingsAccount } from '../types';
 import { payPeriodOf } from './finance';
 import { findStaleBalances, freshnessLimitDays, lastBalanceCheck } from './freshness';
 import { formatISODay } from './dates';
@@ -30,7 +30,7 @@ export interface RoutineStep {
 }
 
 export interface MonthRoutine {
-  /** Paie concernée ('YYYY-MM', payPeriodOf). */
+  /** Paie concernée ('YYYY-MM', mois de versement : payPeriodOf). */
   periodKey: string;
   /** Mois de la paie, en toutes lettres (« octobre »). */
   monthName: string;
@@ -47,6 +47,8 @@ const plural = (n: number, word: string) => `${n} ${word}${n > 1 ? 's' : ''}`;
 export const computeMonthRoutine = (input: {
   accounts: SavingsAccount[];
   payslips?: PayslipRecord[];
+  /** Paies déclarées : la paie en cours suit le même mois d'épargne que l'Accueil. */
+  pays?: PayRecord[];
   payChecklist?: PayChecklist;
   /** Paie nette mensuelle du Pilotage : sans elle, pas de virements de paie à cocher. */
   monthlyPay?: number;
@@ -54,11 +56,13 @@ export const computeMonthRoutine = (input: {
   now: Date;
   /** Point de paie proposé (lib/motivation) : absent si la motivation est coupée. */
   payReviewKey?: string;
+  /** Mois de versement de la paie du point de paie, pour son libellé (défaut : la clé). */
+  payReviewMonth?: string;
   payReviewsDone?: string[];
 }): MonthRoutine | null => {
   const { accounts, payslips = [], payChecklist, now } = input;
   if (accounts.length === 0) return null;
-  const period = payPeriodOf(input.paydayDay, now);
+  const period = payPeriodOf(input.paydayDay, now, { payslips, pays: input.pays });
   const monthName = period.payDate.toLocaleDateString('fr-FR', { month: 'long' });
   const steps: RoutineStep[] = [];
 
@@ -100,7 +104,7 @@ export const computeMonthRoutine = (input: {
   // 4. Point de paie (bilan de la paie précédente), validé sur l'Accueil.
   if (input.payReviewKey) {
     const done = (input.payReviewsDone ?? []).includes(input.payReviewKey);
-    steps.push({ key: 'review', label: `Point de paie ${elideDe(formatPeriod(input.payReviewKey))}`, detail: done ? 'Validé' : 'À valider', done, action: 'Voir' });
+    steps.push({ key: 'review', label: `Point de paie ${elideDe(formatPeriod(input.payReviewMonth ?? input.payReviewKey))}`, detail: done ? 'Validé' : 'À valider', done, action: 'Voir' });
   }
 
   // Une seule étape : pas une routine, la liste « À faire » suffit.

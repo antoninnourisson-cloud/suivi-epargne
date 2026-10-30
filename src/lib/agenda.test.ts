@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { buildAgenda, computeYearReview } from './agenda';
 import { AccountType, GlobalAppData, SavingsAccount } from '../types';
+import { migrate } from './schema';
 import { DEFAULT_FISCAL_CONFIG } from '../constants';
 
 const acc = (over: Partial<SavingsAccount>): SavingsAccount => ({
@@ -64,18 +65,20 @@ describe('buildAgenda', () => {
 
   it("jour de paie : la ligne reprend l'objectif de la paie en cours (somme en plus comprise), pas les suivantes", () => {
     const payDay = new Date(2026, 9, 27, 9); // 27 octobre 2026, jour de paie
-    const data = base({
+    // Réglages au format d'avant le schéma v3, reportés sur la paie par migrate() comme à
+    // l'ouverture du fichier.
+    const data = migrate(base({
       config: { ...base().config, paydayDay: 27, paydayAmount: 1000, payAdjustment: { period: '2026-10', extra: 300 } },
-    });
+    }));
     const paydays = buildAgenda(data, payDay).events.filter(e => e.kind === 'payday');
     expect(paydays.map(e => [e.date, e.amount])).toEqual([['2026-10-27', 1300], ['2026-11-27', 1000], ['2026-12-27', 1000]]);
 
     // Capacité saisie pour cette paie : elle remplace le montant habituel ce jour-là seulement.
-    const manual = base({ config: { ...base().config, paydayDay: 27, paydayAmount: 1000, payAdjustment: { period: '2026-10', capacity: 800 } } });
+    const manual = migrate(base({ config: { ...base().config, paydayDay: 27, paydayAmount: 1000, payAdjustment: { period: '2026-10', capacity: 800 } } }));
     expect(buildAgenda(manual, payDay).events.find(e => e.kind === 'payday')).toMatchObject({ date: '2026-10-27', amount: 800 });
 
     // Avant la paie, le réglage de la paie précédente ne s'applique pas à la suivante.
-    const before = base({ config: { ...base().config, paydayDay: 27, paydayAmount: 1000, payAdjustment: { period: '2026-09', extra: 300 } } });
+    const before = migrate(base({ config: { ...base().config, paydayDay: 27, paydayAmount: 1000, payAdjustment: { period: '2026-09', extra: 300 } } }));
     expect(buildAgenda(before, NOW).events.find(e => e.kind === 'payday')).toMatchObject({ date: '2026-10-27', amount: 1000 });
   });
 

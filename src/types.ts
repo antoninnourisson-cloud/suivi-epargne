@@ -45,6 +45,9 @@ export interface AccountMovement {
   kind?: 'valuation' | 'parental' | 'adjustment';
   // Marque stable des mouvements spéciaux (le libellé, lui, peut être renommé).
   tag?: 'initial' | 'restitution';
+  // Versement fait au titre d'une paie (PayRecord.id) : il compte dans l'épargne du mois de
+  // cette paie, quelle que soit sa date (lib/payCalendar). Absent = rattaché par sa date.
+  payId?: string;
 }
 
 export interface RateChange {
@@ -189,6 +192,7 @@ export interface PayChecklistLine {
   kind: 'transfer' | 'saving';
   accountId?: string;       // épargne : compte de l'app crédité
   detail?: string;
+  added?: true;             // ligne ajoutée à la main (« Autre compte »), hors plan conseillé
 }
 export interface PayChecklist {
   month: string;            // 'YYYY-MM' : le plan est figé pour ce mois-là
@@ -197,8 +201,26 @@ export interface PayChecklist {
   done: Record<string, { amount: number; movementId?: string; alreadyRecorded?: boolean }>;
 }
 
-// Réglages de la paie en cours, saisis dans le Pilotage (voir lib/payAdjustment) : ils
-// valent jusqu'à la paie suivante, puis sont ignorés.
+// Une paie reçue (ou un versement en plus : prime à part, deuxième employeur) et ce qu'on en
+// a fait. Elle ouvre le « mois d'épargne » `savingsMonth` (lib/payCalendar) : du jour de
+// réception à la paie suivante. Remplace l'ancienne liste unique `payChecklist`, les
+// réglages `config.payAdjustment` et les points de paie validés (schéma v3).
+export interface PayRecord {
+  id: string;
+  receivedOn: string;        // 'YYYY-MM-DD' : arrivée sur le compte
+  savingsMonth: string;      // 'YYYY-MM' : savingsMonthOf(receivedOn), modifiable paie par paie
+  amount: number;            // net reçu, prime comprise
+  bonus?: number;            // dont prime ou exceptionnel (placé en entier par défaut)
+  kind?: 'extra';            // versement en plus : s'ajoute au mois en cours, n'en ouvre pas
+  toSave?: number;           // « À placer sur cette paie » forcé (ex-PayAdjustment.capacity)
+  lines: PayChecklistLine[]; // répartition conseillée, figée (vide : pas encore figée)
+  done: PayChecklist['done']; // ce qui a été fait, lignes ajoutées comprises
+  reviewedAt?: string;       // 'YYYY-MM-DD' : bilan du mois d'épargne validé
+  payslipId?: string;        // fiche de paie liée, si importée
+}
+
+// Ancien format (schéma v2), converti en PayRecord par migrate() puis retiré : réglages de
+// la paie en cours. Reste la forme lue par le Pilotage (lib/payRecords, payAdjustmentOf).
 export interface PayAdjustment {
   period: string;           // 'YYYY-MM' : mois de la paie concernée (payPeriodOf)
   capacity?: number;        // « Capacité d'épargne du mois » saisie (remplace le calcul)
@@ -370,9 +392,11 @@ export interface GlobalAppData {
     goodMonthThreshold?: number;
     // Jalons déjà montrés comme « nouveaux » (célébrés une seule fois, sur tous les appareils).
     milestonesSeen?: string[];
-    // Points de paie validés (clés 'YYYY-MM' de la paie).
+    // Points de paie validés : clés 'YYYY-MM' du mois d'épargne (lib/payCalendar). Avant le
+    // schéma v3, mois de versement de la paie : converties par migrate().
     payReviewsDone?: string[];
-    // Capacité d'épargne et somme en plus de la paie en cours (Pilotage, Accueil, relance).
+    // Ancien format (schéma v2) : capacité d'épargne et somme en plus de la paie en cours.
+    // Converti par migrate() en `toSave` / `bonus` de la paie (PayRecord), puis retiré.
     payAdjustment?: PayAdjustment;
     // « Plafond épargne retraite » imprimé sur l'avis d'impôt : versements PER déductibles
     // l'année `year` (l'avis 2026, sur les revenus 2025, donne le plafond des versements 2026).
@@ -388,6 +412,10 @@ export interface GlobalAppData {
   recurringMovements?: RecurringMovement[];
   subscriptions?: Subscription[];
   donations?: Donation[];
+  // Paies reçues (lib/payRecords) : une par mois d'épargne, plus les versements en plus.
+  pays?: PayRecord[];
+  // Ancien format (schéma v2) : liste unique de la paie en cours. Convertie en PayRecord par
+  // migrate(), puis retirée ; les écrans lisent la paie ouverte (lib/payRecords, payChecklistOf).
   payChecklist?: PayChecklist;
   parentalRestitution?: ParentalRestitution;
   // Fiche de paie actuellement utilisée comme référence exacte dans le Pilotage Budgétaire
@@ -403,4 +431,4 @@ export interface GlobalAppData {
  * `GlobalAppData`, lui, décrit le fichier tel qu'il peut arriver (champs facultatifs).
  */
 export type AppDoc = GlobalAppData & Required<Pick<GlobalAppData,
-  'expensesHistory' | 'fiscalConfig' | 'workBenefits' | 'payslips' | 'recurringMovements' | 'subscriptions' | 'donations'>>;
+  'expensesHistory' | 'fiscalConfig' | 'workBenefits' | 'payslips' | 'recurringMovements' | 'subscriptions' | 'donations' | 'pays'>>;

@@ -175,7 +175,7 @@ export const buildYearInReview = (data: GlobalAppData, year: number, today: Date
     const from = firstFlow && firstFlow < `${Y}-01-01` ? firstFlow : `${Y}-01-01`;
     const count = Math.min(360, Math.max(1, monthsBetween(from, today) + 2));
     goodMonths = computeGoodMonths({
-      accounts, today: formatISODay(today), paydayDay: config.paydayDay, payslips: data.payslips,
+      accounts, today: formatISODay(today), paydayDay: config.paydayDay, payslips: data.payslips, pays: data.pays,
       threshold: motivation.threshold, trackingStartISO: trackingStart, count,
     });
     const inYear = goodMonths.months.filter(m => m.start.startsWith(`${Y}-`));

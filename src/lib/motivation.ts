@@ -7,20 +7,17 @@
 // nombre d'opérations), pas de pression du type « vous allez perdre votre série », pas de
 // classement, et tout se désactive (config.gamification === false).
 // ================================================
-import { AccountMovement, AccountType, PayslipRecord, SavingsAccount } from '../types';
+import { AccountMovement, AccountType, PayRecord, PayslipRecord, SavingsAccount } from '../types';
 import { isSavingsFlow } from './finance/savings';
-import { effectivePayday } from './finance/payPlan';
 import { signedAmount } from './money';
-import { formatISODay, parseISODate, MS_PER_DAY } from './dates';
+import { expectedPayStart, payWindows, paySavingsMonths, PayCalendarData, PayWindow } from './payCalendar';
 import { computeEmergencyFund } from './planning';
 import { plainEUR } from './format';
 import { hasParentalCapital } from './parentalMode';
 
 export const DEFAULT_GOOD_MONTH_THRESHOLD = 500;
 /** Durée d'un « mois » de suivi, compté à partir de la paie (jusqu'à la paie suivante au plus). */
-export const PAY_WINDOW_DAYS = 30;
-/** Écart toléré entre la date d'enregistrement d'une fiche et le jour de paie attendu. */
-const PAYSLIP_TOLERANCE_DAYS = 7;
+export { PAY_WINDOW_DAYS } from './payCalendar';
 
 export interface MotivationConfig {
   gamification?: boolean;
@@ -33,64 +30,30 @@ export const motivationSettings = (config: MotivationConfig | undefined) => ({
 });
 
 // ---------------------------------------------------------------------------
-// Fenêtres de paie : 30 jours à partir de la paie
+// Fenêtres de paie : un mois d'épargne, de la paie à la paie suivante (lib/payCalendar)
 // ---------------------------------------------------------------------------
 
-export interface PayWindow {
-  /** Mois de la paie, 'YYYY-MM'. */
-  key: string;
-  /** Premier jour, 'YYYY-MM-DD'. */
-  start: string;
-  /** Lendemain du dernier jour (exclu), 'YYYY-MM-DD'. */
-  end: string;
-  /** D'où vient la date de départ : fiche de paie enregistrée, jour de paie, ou 1er du mois. */
-  source: 'payslip' | 'payday' | 'calendar';
-}
-
-const addDays = (iso: string, days: number) => formatISODay(new Date(parseISODate(iso).getTime() + days * MS_PER_DAY + MS_PER_DAY / 2));
-const monthKeyOf = (y: number, m: number) => `${y}-${String(m + 1).padStart(2, '0')}`;
-const dayDiff = (a: string, b: string) => Math.round((parseISODate(a).getTime() - parseISODate(b).getTime()) / MS_PER_DAY);
+export type { PayWindow } from './payCalendar';
 
 /**
- * Début du « mois » de la paie `key` : la date d'enregistrement d'une fiche de paie de ce
- * mois si elle tombe à une semaine près du jour de paie attendu ; sinon le jour de paie ;
- * sans jour de paie connu, le 1er du mois.
+ * Début du « mois » de la paie versée en `key` ('YYYY-MM', mois de versement) quand elle n'est
+ * pas déclarée : la date d'enregistrement d'une fiche de paie de ce mois si elle tombe à une
+ * semaine près du jour de paie attendu ; sinon le jour de paie ; sans jour de paie, le 1er.
  */
-export const payWindowStart = (key: string, paydayDay: number | undefined, payslips: Pick<PayslipRecord, 'addedAt' | 'extracted'>[] = []) => {
-  const [y, m] = key.split('-').map(Number);
-  const expected = formatISODay(new Date(y, m - 1, paydayDay ? effectivePayday(paydayDay, y, m - 1) : 1));
-  const recorded = payslips
-    .filter(p => p.extracted?.period === key && p.addedAt)
-    .map(p => p.addedAt.slice(0, 10))
-    .filter(d => Math.abs(dayDiff(d, expected)) <= PAYSLIP_TOLERANCE_DAYS)
-    .sort()[0];
-  if (recorded) return { start: recorded, source: 'payslip' as const };
-  return { start: expected, source: paydayDay ? 'payday' as const : 'calendar' as const };
-};
+export const payWindowStart = (key: string, paydayDay: number | undefined, payslips: Pick<PayslipRecord, 'addedAt' | 'extracted'>[] = []) =>
+  expectedPayStart(key, paydayDay, payslips);
 
-/** Les `count` dernières fenêtres de paie (la plus ancienne d'abord), celle en cours comprise. */
+/**
+ * Les `count` derniers mois d'épargne (le plus ancien d'abord), celui en cours compris : voir
+ * payWindows (lib/payCalendar), dont c'est la forme historique.
+ */
 export const recentPayWindows = (
   today: string,
   paydayDay: number | undefined,
   payslips: Pick<PayslipRecord, 'addedAt' | 'extracted'>[] = [],
   count = 12,
-): PayWindow[] => {
-  const t = parseISODate(today);
-  const out: PayWindow[] = [];
-  // Un mois de plus que demandé : la paie du mois courant peut ne pas être encore tombée.
-  for (let k = count; k >= -1; k--) {
-    const d = new Date(t.getFullYear(), t.getMonth() - k, 1);
-    const key = monthKeyOf(d.getFullYear(), d.getMonth());
-    const { start, source } = payWindowStart(key, paydayDay, payslips);
-    if (start > today) continue;
-    out.push({ key, start, end: addDays(start, PAY_WINDOW_DAYS), source });
-  }
-  // Une fenêtre s'arrête à la paie suivante (environ 30 jours) : pas de chevauchement les
-  // mois de 31 jours (un versement compté deux fois), pas de trou après février. Seule la
-  // fenêtre en cours, sans paie suivante connue, dure 30 jours pile.
-  for (let i = 0; i < out.length - 1; i++) out[i].end = out[i + 1].start;
-  return out.slice(-count);
-};
+  pays: PayCalendarData['pays'] = [],
+): PayWindow[] => payWindows({ paydayDay, payslips, pays }, today, count);
 
 // ---------------------------------------------------------------------------
 // Bons mois
@@ -98,19 +61,48 @@ export const recentPayWindows = (
 
 const SAVINGS_EXCLUDED = new Set([AccountType.COMPTE_COURANT, AccountType.IMMOBILIER]);
 
-/** Argent mis de côté (part propre) entre `start` inclus et `end` exclu, sans dépasser `today`. */
+/**
+ * Rattachement des versements à un mois d'épargne : `key` est le mois de la fenêtre et
+ * `payMonths` le mois d'épargne de chaque paie déclarée (paySavingsMonths).
+ */
+export interface PayAttribution {
+  key: string;
+  payMonths: ReadonlyMap<string, string>;
+}
+
+/**
+ * Le mouvement compte-t-il dans la fenêtre `[start, end)` ? Un versement fait au titre d'une
+ * paie connue (`payId`) compte dans le mois d'épargne de cette paie, quelle que soit sa date ;
+ * les autres (et tous, sans `attribution`) sont rattachés par leur date.
+ */
+export const inPayWindow = (m: AccountMovement, start: string, end: string, attribution?: PayAttribution): boolean => {
+  const payMonth = attribution && m.payId ? attribution.payMonths.get(m.payId) : undefined;
+  if (payMonth !== undefined) return payMonth === attribution!.key;
+  return m.date >= start && m.date < end;
+};
+
+/** Rattachement des versements de `pays` pour la fenêtre `key` (undefined sans paie déclarée). */
+export const payAttribution = (key: string, pays: Pick<PayRecord, 'id' | 'receivedOn' | 'savingsMonth'>[] | undefined): PayAttribution | undefined =>
+  pays && pays.length > 0 ? { key, payMonths: paySavingsMonths(pays) } : undefined;
+
+/**
+ * Argent mis de côté (part propre) entre `start` inclus et `end` exclu, sans dépasser `today`.
+ * Avec `attribution`, les versements faits au titre d'une paie comptent dans son mois
+ * d'épargne (voir inPayWindow).
+ */
 export const savedBetween = (
   accounts: { type: AccountType; movements: AccountMovement[] }[],
   start: string,
   end: string,
   today: string,
   trackingStartISO?: string,
+  attribution?: PayAttribution,
 ): number => {
   let total = 0;
   for (const a of accounts) {
     if (SAVINGS_EXCLUDED.has(a.type)) continue;
     for (const m of a.movements) {
-      if (!isSavingsFlow(m, trackingStartISO) || m.date < start || m.date >= end || m.date > today) continue;
+      if (!isSavingsFlow(m, trackingStartISO) || m.date > today || !inPayWindow(m, start, end, attribution)) continue;
       total += signedAmount(m);
     }
   }
@@ -163,17 +155,19 @@ export const computeGoodMonths = (input: {
   today: string;
   paydayDay?: number;
   payslips?: Pick<PayslipRecord, 'addedAt' | 'extracted'>[];
+  /** Paies déclarées : début des mois d'épargne et rattachement des versements (payId). */
+  pays?: PayCalendarData['pays'];
   threshold?: number;
   trackingStartISO?: string;
   count?: number;
 }): GoodMonthsSummary => {
   const threshold = input.threshold ?? DEFAULT_GOOD_MONTH_THRESHOLD;
   const trackingFrom = savingsTrackingFrom(input.accounts, input.trackingStartISO);
-  const windows = recentPayWindows(input.today, input.paydayDay, input.payslips, input.count ?? 12)
+  const windows = payWindows({ paydayDay: input.paydayDay, payslips: input.payslips, pays: input.pays }, input.today, input.count ?? 12)
     .filter(w => trackingFrom !== undefined && w.end > trackingFrom);
 
   const months: MonthResult[] = windows.map(w => {
-    const saved = savedBetween(input.accounts, w.start, w.end, input.today, input.trackingStartISO);
+    const saved = savedBetween(input.accounts, w.start, w.end, input.today, input.trackingStartISO, payAttribution(w.key, input.pays));
     return { ...w, saved, good: saved >= threshold - 0.004, inProgress: input.today < w.end };
   });
 
@@ -295,7 +289,10 @@ export const nextMilestone = (milestones: Milestone[]): Milestone | undefined =>
 // ---------------------------------------------------------------------------
 
 export interface PayReview {
+  /** Mois d'épargne ('YYYY-MM') : clé des points de paie validés (config.payReviewsDone). */
   key: string;
+  /** Mois de versement de la paie (libellés « Point de paie : octobre »). */
+  payMonth: string;
   start: string;
   end: string;
   saved: number;
@@ -322,19 +319,24 @@ export const computePayReview = (input: {
   today: string;
   plan?: number;
   trackingStartISO?: string;
+  /** Paies déclarées : leurs versements (payId) comptent dans leur mois d'épargne. */
+  pays?: Pick<PayRecord, 'id' | 'receivedOn' | 'savingsMonth'>[];
 }): PayReview | undefined => {
   const done = input.goodMonths.months.filter(m => !m.inProgress);
   const last = done[done.length - 1];
   if (!last) return undefined;
   let deposits = 0, withdrawals = 0, valuation = 0;
   const byAccount: PayReview['byAccount'] = [];
+  const attribution = payAttribution(last.key, input.pays);
   for (const a of input.accounts) {
     if (SAVINGS_EXCLUDED.has(a.type)) continue;
     let net = 0;
     for (const m of a.movements) {
-      if (m.date < last.start || m.date >= last.end) continue;
-      if (m.kind === 'valuation') { valuation += signedAmount(m); continue; }
-      if (!isSavingsFlow(m, input.trackingStartISO)) continue;
+      if (m.kind === 'valuation') {
+        if (m.date >= last.start && m.date < last.end) valuation += signedAmount(m);
+        continue;
+      }
+      if (!isSavingsFlow(m, input.trackingStartISO) || m.date > input.today || !inPayWindow(m, last.start, last.end, attribution)) continue;
       const v = signedAmount(m);
       net += v;
       if (v >= 0) deposits += v; else withdrawals -= v;
@@ -352,7 +354,7 @@ export const computePayReview = (input: {
   else insight = `Il a manqué ${eur(Math.max(0, threshold - last.saved))} pour un bon mois.`;
   if (!last.good) action = { label: 'Voir quoi placer', view: 'pilot' };
   return {
-    key: last.key, start: last.start, end: last.end, saved: last.saved, threshold, good: last.good, joker: !!last.joker, plan,
+    key: last.key, payMonth: last.payMonth, start: last.start, end: last.end, saved: last.saved, threshold, good: last.good, joker: !!last.joker, plan,
     deposits: Math.round(deposits * 100) / 100, withdrawals: Math.round(withdrawals * 100) / 100,
     valuation: Math.round(valuation * 100) / 100, byAccount, insight, action,
   };

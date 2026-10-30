@@ -5,12 +5,13 @@
 // ================================================
 import { AccountType, FiscalConfig, GlobalAppData, SavingsAccount, PayslipRecord } from '../types';
 import {
-  computePlacementStrategy, activeSavingsSplit, SavingsSplit, payslipSuperNet, payPeriodOf,
+  computePlacementStrategy, activeSavingsSplit, SavingsSplit, payslipSuperNet,
   buildPayLines, computePayTransfers, computeMonthlySavingsCapacity, findDueRecurring,
   findStaleRegulatedRates, findFiscalReview, findAvRateUpdatesDue, socialChargesRateFor,
   accountAgeYears, computeMaturityCountdown, PFU_INCOME_TAX_RATE, isHousingSavingsIncomeTaxExempt,
 } from './finance';
 import { parseISODate } from './dates';
+import { payChecklistOf } from './payRecords';
 import { prepareProjection, projectedTotal, runProjection } from './projectionEngine';
 import { growthView } from './performance';
 import { DEFAULT_FISCAL_CONFIG } from '../constants';
@@ -181,8 +182,7 @@ export const computeBadgeCount = (data: GlobalAppData, asOfDate: Date = new Date
   let count = 0;
   const payday = data.config?.paydayDay;
   if (payday) {
-    const period = payPeriodOf(payday, asOfDate);
-    const checklist = data.payChecklist && data.payChecklist.month === period.key ? data.payChecklist : undefined;
+    const checklist = payChecklistOf(data, asOfDate);
     const amount = data.config.paydayAmount ?? computeMonthlySavingsCapacity(data);
     const lines = checklist?.lines ?? buildPayLines(
       computePayTransfers({ expenses: data.expenses || [], subscriptions: data.subscriptions, leisureBudget: data.config.leisureBudget ?? 0, projectSavings: data.config.projectSavings ?? 0 }),

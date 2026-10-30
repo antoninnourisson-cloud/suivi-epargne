@@ -2,12 +2,14 @@
 // FILE: src/lib/payAdjustment.ts
 // Objectif d'épargne de la paie en cours. Le Pilotage permet d'ajuster une paie :
 // « Capacité d'épargne du mois » (remplace le calcul) et « Somme en plus à placer » (prime,
-// cadeau, remboursement…). Ces réglages sont enregistrés dans le fichier de données avec le
-// mois de la paie (payPeriodOf) : ils valent jusqu'à la paie suivante, puis sont ignorés.
+// cadeau, remboursement…). Depuis le schéma v3, ils sont enregistrés sur la paie du mois
+// d'épargne en cours (PayRecord.toSave / bonus, voir lib/payRecords) : ils valent jusqu'à la
+// paie suivante, puis ne s'appliquent plus.
 // Une seule règle pour le Pilotage, la jauge de l'Accueil et la relance de paie du serveur.
 // ================================================
 import type { GlobalAppData, PayAdjustment } from '../types';
-import { computeMonthlySavingsCapacity, payPeriodOf } from './finance';
+import { computeMonthlySavingsCapacity } from './finance';
+import { payAdjustmentOf, PayData } from './payRecords';
 import { round2 } from './money';
 
 /** D'où vient la capacité retenue : saisie pour cette paie, rappel de paie, ou calcul. */
@@ -29,15 +31,9 @@ const PERIOD = /^\d{4}-(0[1-9]|1[0-2])$/;
 const finiteOrUndefined = (v: unknown): number | undefined =>
   typeof v === 'number' && Number.isFinite(v) ? v : undefined;
 
-/** Réglage de la paie en cours, ou `undefined` s'il n'y en a pas ou s'il date d'une autre paie. */
-export const currentPayAdjustment = (
-  config: Pick<GlobalAppData['config'], 'payAdjustment' | 'paydayDay'> | undefined,
-  asOf: Date = new Date()
-): PayAdjustment | undefined => {
-  const adj = config?.payAdjustment;
-  if (!adj || adj.period !== payPeriodOf(config?.paydayDay, asOf).key) return undefined;
-  return adj;
-};
+/** Réglage de la paie en cours (paie du mois d'épargne en cours), ou `undefined`. */
+export const currentPayAdjustment = (data: PayData, asOf: Date = new Date()): PayAdjustment | undefined =>
+  payAdjustmentOf(data, asOf);
 
 /** Combine capacité calculée, montant du rappel de paie et réglage de la paie en cours. */
 export const combineMonthTarget = (input: {
@@ -63,7 +59,7 @@ export const computeMonthTarget = (data: GlobalAppData, asOf: Date = new Date())
   combineMonthTarget({
     computed: computeMonthlySavingsCapacity(data),
     paydayAmount: data.config?.paydayAmount,
-    adjustment: currentPayAdjustment(data.config, asOf),
+    adjustment: currentPayAdjustment(data, asOf),
   });
 
 /**

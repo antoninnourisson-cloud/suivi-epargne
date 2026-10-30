@@ -10,7 +10,8 @@
 // fondée sur la date anniversaire comme Rendement et le compte à rebours : il n'y a plus de
 // calcul de maturité propre à l'Accueil.
 import { AccountType, type FiscalConfig, type PayslipRecord, type PortfolioSnapshot, type SavingsAccount, type Subscription } from '../types';
-import { recentPayWindows, savedBetween, savingsTrackingFrom } from './motivation';
+import { payAttribution, savedBetween, savingsTrackingFrom } from './motivation';
+import { expectedPayDate, payWindows, shiftMonth, type PayCalendarData } from './payCalendar';
 import type { View } from '../navigation';
 import type { Alert, AlertGain, AlertKind } from './alerts';
 import type { LepTimeline } from './lep';
@@ -21,7 +22,7 @@ import { describeStaleBalances, type StaleBalance } from './freshness';
 import type { YearClosingStatus } from './yearClosing';
 import type { AgendaEvent } from './agenda';
 import {
-  computeAccountBalanceAtDate, computeAccruedParentalInterest, computeRecentSavingsRate, effectivePayday, nextSubscriptionDate,
+  computeAccountBalanceAtDate, computeAccruedParentalInterest, computeRecentSavingsRate, nextSubscriptionDate,
   ownedAmountAt,
   type AvailabilityBreakdown, type DueRecurring, type FiscalReview, type MonthSavingsRate,
 } from './finance';
@@ -294,29 +295,29 @@ export const payPeriodSavings = (opts: {
   today: string;
   paydayDay?: number;
   payslips?: Pick<PayslipRecord, 'addedAt' | 'extracted'>[];
+  /** Paies déclarées : début des mois d'épargne et versements rattachés (payId). */
+  pays?: PayCalendarData['pays'];
   /** Paie nette mensuelle, pour le taux (0 = inconnue). */
   monthlyPay: number;
   trackingStartISO?: string;
   count?: number;
 }): PayPeriodSavings => {
   const { accounts, today, paydayDay, monthlyPay, trackingStartISO } = opts;
-  const windows = recentPayWindows(today, paydayDay, opts.payslips, opts.count ?? 12);
+  const windows = payWindows({ paydayDay, payslips: opts.payslips, pays: opts.pays }, today, opts.count ?? 12);
   // Paies d'avant le suivi (premier versement, ou « Repartir de zéro ») : rien n'était
   // enregistré, une barre à 0 % y ferait croire à des mois sans épargne. La paie en cours reste.
   const trackingFrom = savingsTrackingFrom(accounts, trackingStartISO);
   const shown = windows.filter((w, i) => i === windows.length - 1 || (trackingFrom !== undefined && w.end > trackingFrom));
   const history: MonthSavingsRate[] = shown.map(w => {
-    const saved = savedBetween(accounts, w.start, w.end, today, trackingStartISO);
-    return { month: w.key, saved, rate: monthlyPay > 0 ? (saved / monthlyPay) * 100 : 0 };
+    const saved = savedBetween(accounts, w.start, w.end, today, trackingStartISO, payAttribution(w.key, opts.pays));
+    // Libellé « Paie d'octobre » : mois de versement de la paie.
+    return { month: w.payMonth, saved, rate: monthlyPay > 0 ? (saved / monthlyPay) * 100 : 0 };
   });
   const current = windows[windows.length - 1];
   const byPay = current.source !== 'calendar';
   // Fin de la fenêtre en cours : la prochaine paie attendue (bornée au dernier jour du mois),
   // sinon le 1er du mois suivant ; d'après une fiche seule, 30 jours.
-  const [y, m] = current.key.split('-').map(Number);
-  const end = paydayDay ? formatISODay(new Date(y, m, effectivePayday(paydayDay, y, m)))
-    : current.source === 'calendar' ? formatISODay(new Date(y, m, 1))
-    : current.end;
+  const end = paydayDay || current.source === 'calendar' ? expectedPayDate(paydayDay, shiftMonth(current.payMonth, 1)) : current.end;
   const startDay = frenchDay(parseISODate(current.start));
   return {
     start: current.start,

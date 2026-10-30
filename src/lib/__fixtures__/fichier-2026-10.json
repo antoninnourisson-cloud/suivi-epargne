@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 2,
+  "accounts": [
+    {
+      "id": "acc-la",
+      "name": "Livret A",
+      "type": "Livret A",
+      "institution": "Banque Exemple",
+      "totalAmount": 9700,
+      "ownedAmount": 9700,
+      "parentalCapital": 0,
+      "interestRate": 2.4,
+      "movements": [
+        { "id": "m1", "date": "2026-01-21", "amount": 8000, "label": "Solde initial", "type": "IN", "tag": "initial" },
+        { "id": "m2", "date": "2026-09-28", "amount": 600, "label": "Virement de paie", "type": "IN" },
+        { "id": "m3", "date": "2026-10-28", "amount": 1100, "label": "Virement de paie", "type": "IN" }
+      ]
+    }
+  ],
+  "expenses": [{ "id": "e1", "name": "Compte commun", "amount": 900 }],
+  "history": [],
+  "payslips": [],
+  "config": {
+    "grossAnnual": 42000,
+    "leisureBudget": 250,
+    "projectSavings": 100,
+    "taxRateManual": 0,
+    "extraMonthlyIncome": 0,
+    "paydayDay": 27,
+    "gamification": true,
+    "payReviewsDone": ["2026-08", "2026-09"],
+    "payAdjustment": { "period": "2026-10", "capacity": 950, "extra": 150 }
+  },
+  "payChecklist": {
+    "month": "2026-10",
+    "lines": [
+      { "key": "t:e:e1", "label": "Compte commun", "amount": 900, "kind": "transfer" },
+      { "key": "s:acc-la", "label": "Livret A", "amount": 1100, "kind": "saving", "accountId": "acc-la", "detail": "Livret A · 2,4 %" }
+    ],
+    "done": {
+      "t:e:e1": { "amount": 900 },
+      "s:acc-la": { "amount": 1100, "movementId": "m3" }
+    }
+  },
+  "futureField": { "kept": true }
+}

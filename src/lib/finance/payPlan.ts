@@ -4,6 +4,8 @@ import { Subscription, Expense, PayChecklistLine } from '../../types';
 import { round2 } from '../money';
 import { PlacementStep } from './placement';
 import { subscriptionsAsExpenses } from './subscriptions';
+import { currentSavingsMonth, PayCalendarData } from '../payCalendar';
+import { formatISODay, parseISODate } from '../dates';
 
 // ---------------------------------------------------------------------------
 // Répartition de la paie, virement par virement
@@ -60,20 +62,23 @@ export const buildPayLines = (transfers: PayTransfer[], steps: PlacementStep[]):
 // Période de paie
 // ---------------------------------------------------------------------------
 
-/** Jour de paie effectif d'un mois (le 31 devient le 30 ou le 28). */
-export const effectivePayday = (paydayDay: number, year: number, month: number) =>
-  Math.min(paydayDay, new Date(year, month + 1, 0).getDate());
+export { effectivePayday } from '../payCalendar';
 
 /**
- * Mois de la paie en cours : avec une paie le 27, le 1er octobre on gère encore la paie
- * de septembre (versée le 27 septembre). Sans jour de paie connu : le mois calendaire.
+ * Paie en cours, d'après la règle unique de lib/payCalendar (façade, en attendant que chaque
+ * écran lise directement le mois d'épargne) : avec une paie le 27, le 1er octobre on gère
+ * encore la paie de septembre, versée le 27 septembre, qui finance l'épargne d'octobre.
+ *  - `key` : mois de VERSEMENT de la paie ('2026-09'), clé historique des écrans et des
+ *    rappels ; `savingsMonth` : mois d'épargne qu'elle finance ('2026-10') ;
+ *  - `payDate` : début de la fenêtre (paie déclarée, fiche de paie, jour de paie ou 1er).
+ * Sans `cal` (fiches, paies déclarées), seul le jour de paie compte ; sans jour de paie
+ * connu, le mois calendaire.
  */
-export const payPeriodOf = (paydayDay: number | undefined, asOfDate: Date = new Date()): { key: string; payDate: Date } => {
-  let y = asOfDate.getFullYear(), m = asOfDate.getMonth();
-  if (paydayDay && asOfDate.getDate() < effectivePayday(paydayDay, y, m)) {
-    m -= 1;
-    if (m < 0) { m = 11; y -= 1; }
-  }
-  const payDate = new Date(y, m, paydayDay ? effectivePayday(paydayDay, y, m) : 1);
-  return { key: `${y}-${String(m + 1).padStart(2, '0')}`, payDate };
+export const payPeriodOf = (
+  paydayDay: number | undefined,
+  asOfDate: Date = new Date(),
+  cal: Omit<PayCalendarData, 'paydayDay'> = {},
+): { key: string; savingsMonth: string; payDate: Date } => {
+  const w = currentSavingsMonth({ ...cal, paydayDay }, formatISODay(asOfDate));
+  return { key: w.payMonth, savingsMonth: w.key, payDate: parseISODate(w.start) };
 };

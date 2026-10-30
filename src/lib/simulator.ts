@@ -22,10 +22,10 @@
 // La fourchette ne tire au sort que vos montants mis de côté : elle ne reflète PAS les
 // variations des marchés (PEA, crypto, unités de compte gardent leur taux net fixe).
 // ================================================
-import { AccountType, FiscalConfig, PayslipRecord, SavingsAccount, AccountMovement } from '../types';
+import { AccountType, FiscalConfig, PayRecord, PayslipRecord, SavingsAccount, AccountMovement } from '../types';
 import { computeWithdrawalTax, cryptoDisposalsOfYear, depositsAfterWithdrawal, SavingsSplit } from './finance';
 import { netAnnualRate, netMonthlyRateSchedule } from './projection';
-import { recentPayWindows, savedBetween } from './motivation';
+import { payAttribution, recentPayWindows, savedBetween } from './motivation';
 import { parseISODate, formatISODay } from './dates';
 import { pendingInterest } from './yearlyInterest';
 import { growthView } from './performance';
@@ -91,16 +91,18 @@ export const pastMonthlySavings = (input: {
   today: string;
   paydayDay?: number;
   payslips?: Pick<PayslipRecord, 'addedAt' | 'extracted'>[];
+  /** Paies déclarées : début des mois d'épargne et versements rattachés (payId). */
+  pays?: Pick<PayRecord, 'id' | 'receivedOn' | 'savingsMonth' | 'kind'>[];
   trackingStartDate?: string;
   count?: number;
 }): PastSavings => {
-  const { accounts, today, paydayDay, payslips = [], trackingStartDate, count = 12 } = input;
-  const windows = recentPayWindows(today, paydayDay, payslips, count + 1)
+  const { accounts, today, paydayDay, payslips = [], pays, trackingStartDate, count = 12 } = input;
+  const windows = recentPayWindows(today, paydayDay, payslips, count + 1, pays)
     .filter(w => w.end <= today)
     .filter(w => !trackingStartDate || w.start >= trackingStartDate)
     .slice(-count);
   return {
-    amounts: windows.map(w => savedBetween(accounts, w.start, w.end, today, trackingStartDate)),
+    amounts: windows.map(w => savedBetween(accounts, w.start, w.end, today, trackingStartDate, payAttribution(w.key, pays))),
     source: paydayDay ? 'payday' : 'calendar',
   };
 };

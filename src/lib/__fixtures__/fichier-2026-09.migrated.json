@@ -227,7 +227,8 @@
     }
   ],
   "activePayslipId": "p1",
-  "schemaVersion": 2,
+  "schemaVersion": 3,
+  "pays": [],
   "subscriptions": [],
   "donations": []
 }

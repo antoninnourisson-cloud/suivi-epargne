@@ -62,6 +62,7 @@ const SECTION_LABELS: [keyof GlobalAppData, string][] = [
   ['recurringMovements', 'Mouvements réguliers'],
   ['payslips', 'Fiches de paie'],
   ['activePayslipId', 'Fiche de paie de référence'],
+  ['pays', 'Paies reçues'],
   ['payChecklist', 'Liste de la paie'],
   ['donations', 'Dons'],
   ['parentalRestitution', 'Restitution aux parents'],

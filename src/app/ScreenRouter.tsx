@@ -3,6 +3,7 @@
 // une fenêtre, une bannière ou l'indicateur de sauvegarde (voir les props stables d'App).
 import { memo, Suspense, useCallback, useMemo, useState } from 'react';
 import type { PortfolioData } from '../hooks/usePortfolioData';
+import { payAdjustmentOf, payChecklistOf } from '../lib/payRecords';
 import type { FiscalWatch } from '../hooks/useFiscalWatch';
 import type { SavingsAccount } from '../types';
 import { isView, type View } from '../navigation';
@@ -25,17 +26,17 @@ import { useAddToast, useDialog } from './UiProviders';
 export const useScreenData = (data: PortfolioData) => {
   const {
     doc, geminiApiKey, setGeminiApiKey, setAccounts, setExpenses, setPayslips, setRecurringMovements, setSubscriptions,
-    setDonations, setPayChecklist, setActivePayslipId, setFiscalConfig, updateWorkBenefits, patchConfig,
+    setDonations, setPayChecklist, setPayAdjustment, setActivePayslipId, setFiscalConfig, updateWorkBenefits, patchConfig,
     importData, recoverSetAside, listDriveBackups,
     restoreDriveBackup, listSetAsideVersions, currentData,
   } = data;
   return useMemo(() => ({
     doc, geminiApiKey, setGeminiApiKey, setAccounts, setExpenses, setPayslips, setRecurringMovements, setSubscriptions,
-    setDonations, setPayChecklist, setActivePayslipId, setFiscalConfig, updateWorkBenefits, patchConfig,
+    setDonations, setPayChecklist, setPayAdjustment, setActivePayslipId, setFiscalConfig, updateWorkBenefits, patchConfig,
     importData, recoverSetAside, listDriveBackups,
     restoreDriveBackup, listSetAsideVersions, currentData,
   }), [doc, geminiApiKey, setGeminiApiKey, setAccounts, setExpenses, setPayslips, setRecurringMovements, setSubscriptions,
-    setDonations, setPayChecklist, setActivePayslipId, setFiscalConfig, updateWorkBenefits, patchConfig,
+    setDonations, setPayChecklist, setPayAdjustment, setActivePayslipId, setFiscalConfig, updateWorkBenefits, patchConfig,
     importData, recoverSetAside, listDriveBackups,
     restoreDriveBackup, listSetAsideVersions, currentData]);
 };
@@ -79,6 +80,11 @@ export const ScreenRouter = memo(function ScreenRouter({ view, setView, data, de
   const dialog = useDialog();
   const { doc } = data;
   const c = doc.config;
+  // Paie du mois d'épargne en cours, sous ses anciennes formes (lib/payRecords) : liste à
+  // cocher et réglages du Pilotage, routine de l'Accueil.
+  const payCalendar = useMemo(() => ({ payslips: doc.payslips, pays: doc.pays }), [doc.payslips, doc.pays]);
+  const payChecklist = payChecklistOf(doc);
+  const payAdjustment = payAdjustmentOf(doc);
   const { editingAccount, setEditingAccount, showForm, setShowForm } = accountForm;
   const raise = usePayRaise(doc, data, addToast);
   // « Lire un relevé » (Actualiser, fiche d'un compte) : une seule fenêtre, au-dessus de l'écran.
@@ -115,7 +121,7 @@ export const ScreenRouter = memo(function ScreenRouter({ view, setView, data, de
           payslips={doc.payslips} gamification={c.gamification} goodMonthThreshold={c.goodMonthThreshold}
           milestonesSeen={c.milestonesSeen} payReviewsDone={c.payReviewsDone} rfrByYear={c.rfrByYear}
           restitutionDoneOn={doc.parentalRestitution?.done?.date} restitutionPlannedDate={doc.parentalRestitution?.plannedDate}
-          yearClosing={derived.yearClosing} payChecklist={doc.payChecklist}
+          yearClosing={derived.yearClosing} payChecklist={payChecklist} pays={doc.pays}
           askSlot={<Lazy><AskPeculeEntry data={derived.fullData} geminiApiKey={data.geminiApiKey} taxEstimate={derived.taxEstimate} monthPlan={derived.monthPlan} onOpenSettings={openSettings} /></Lazy>}
           onMarkMilestonesSeen={actions.markMilestonesSeen} onValidatePayReview={actions.validatePayReview} />}
 
@@ -125,7 +131,9 @@ export const ScreenRouter = memo(function ScreenRouter({ view, setView, data, de
           fiscalConfig={doc.fiscalConfig} workBenefits={doc.workBenefits}
           activePayslip={derived.activePayslip} onClearActivePayslip={actions.clearActivePayslip}
           subscriptions={doc.subscriptions} onOpenSubscriptions={() => setView('subscriptions')}
-          payChecklist={doc.payChecklist} onPayChecklistChange={data.setPayChecklist}
+          payChecklist={payChecklist} onPayChecklistChange={data.setPayChecklist}
+          payAdjustment={payAdjustment} onPayAdjustmentChange={data.setPayAdjustment}
+          payCalendar={payCalendar}
           onRecordPayDeposit={actions.recordPayDeposit} onCancelPayDeposit={actions.cancelPayDeposit} />}
 
         {view === 'transfers' && <TransferManager accounts={doc.accounts} onCommit={actions.commit} recurringMovements={doc.recurringMovements} onUpdateRecurring={data.setRecurringMovements} onQuickAdd={onQuickAdd} />}

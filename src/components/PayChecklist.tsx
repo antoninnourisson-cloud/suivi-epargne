@@ -5,9 +5,10 @@
 // diffère du plan) ; la décocher l'annule. Le plan est figé au premier virement coché :
 // sinon, chaque versement enregistré modifierait les soldes, donc le plan lui-même.
 // ================================================
-import React, { useEffect, useId, useState } from 'react';
+import React, { useId, useState } from 'react';
 import { PayChecklist as PayChecklistData, PayChecklistLine } from '../types';
 import { PayTransfer, PlacementStep, buildPayLines, payPeriodOf } from '../lib/finance';
+import type { PayCalendarData } from '../lib/payCalendar';
 import { elideDe, formatEUR, toInputAmount } from '../lib/format';
 import { parseFrenchNumber } from '../lib/numbers';
 import { Info, CheckCircle2, RotateCcw, PiggyBank, ArrowRightLeft } from 'lucide-react';
@@ -27,26 +28,20 @@ interface PayChecklistProps {
   onCancelDeposit: (accountId: string, movementId: string) => void;
   customSplit?: boolean;       // répartition personnalisée : change le « pourquoi » de chaque compte
   paydayDay?: number;          // la liste suit la paie, pas le mois calendaire
+  payCalendar?: Omit<PayCalendarData, 'paydayDay'>; // fiches et paies déclarées (même fenêtre que l'Accueil)
 }
 
 const MONTHS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
 
 export const PayChecklist: React.FC<PayChecklistProps> = ({
-  superNet, transfers, steps, totalToInvest, shortfall, checklist, onChange, onRecordDeposit, onCancelDeposit, paydayDay, customSplit = false,
+  superNet, transfers, steps, totalToInvest, shortfall, checklist, onChange, onRecordDeposit, onCancelDeposit, paydayDay, payCalendar, customSplit = false,
 }) => {
   const now = new Date();
-  const period = payPeriodOf(paydayDay, now);
+  const period = payPeriodOf(paydayDay, now, payCalendar);
   const month = period.key;
-  const periodLabel = MONTHS[period.payDate.getMonth()];
-
-  // Liste créée avant ce correctif, au 1er du mois calendaire suivant (ex. « octobre »
-  // pour la paie du 27 septembre) : on la rattache à la bonne paie, une seule fois.
-  useEffect(() => {
-    const [y, m] = month.split('-').map(Number);
-    const nextKey = `${m === 12 ? y + 1 : y}-${String(m === 12 ? 1 : m + 1).padStart(2, '0')}`;
-    if (checklist && checklist.month === nextKey) onChange({ ...checklist, month });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [checklist?.month, month]);
+  // Mois de versement de la paie (la fiche d'une semaine avant le jour de paie peut ouvrir
+  // la fenêtre le mois d'avant). La liste figée vit sur la paie déclarée (lib/payRecords).
+  const periodLabel = MONTHS[Number(month.slice(5, 7)) - 1];
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const idBase = useId();
 
