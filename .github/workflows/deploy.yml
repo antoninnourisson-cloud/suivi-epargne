@@ -77,7 +77,7 @@ jobs:
           persist-credentials: false
 
       - name: Installation de Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version-file: .nvmrc
           cache: npm
@@ -113,7 +113,7 @@ jobs:
           persist-credentials: false
 
       - name: Installation de Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version-file: .nvmrc
           cache: npm
@@ -141,7 +141,7 @@ jobs:
       - name: Récupération du build vérifié par ci.yml
         # Le dossier `dist` de l'étape « Build de production » de ci.yml (même commit, même
         # GITHUB_SHA lu par vite.config.ts), déjà passé par e2e/production.spec.ts.
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: site-dist
           path: dist
@@ -172,7 +172,7 @@ jobs:
           sparse-checkout-cone-mode: false
 
       - name: Installation de Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version-file: .nvmrc
 
@@ -212,7 +212,7 @@ jobs:
           persist-credentials: false
 
       - name: Installation de Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version-file: .nvmrc
 
