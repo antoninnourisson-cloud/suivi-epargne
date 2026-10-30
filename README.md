@@ -271,7 +271,7 @@ VITE_BACKEND_URL=http://localhost:8787
 
 **Configuration Google Cloud** (client OAuth « Application Web », identifiant dans `src/services/googleDriveService.ts`) :
 - origines JavaScript : `https://pecule-app.com` et `http://localhost:5173` ;
-- URI de redirection (mode serveur) : `https://<worker>.workers.dev/auth/callback` ;
+- URI de redirection (mode serveur) : `https://<adresse du serveur>/auth/callback` (déploiement actuel : `https://api.pecule-app.com/auth/callback`) ;
 - API activées : Google Drive, Google Picker ;
 - écran de consentement **« En production »** (en mode test, les sessions expirent après 7 jours) ;
 - deux clés API de navigateur : « Picker » (saisie dans Paramètres) et « Gemini API Key ». **Les deux** limitent leurs sites autorisés (référents HTTP) à `https://pecule-app.com/*` : sans cela, le sélecteur de fichiers Drive affiche « The API developer key is invalid » (voir [MAINTENANCE.md § 8](MAINTENANCE.md#8-nom-de-domaine)) ;

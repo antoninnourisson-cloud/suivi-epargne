@@ -61,6 +61,13 @@ npx wrangler deploy
 ```
 Note l'adresse affichée, du type `https://suivi-epargne-api.<ton-sous-domaine>.workers.dev`.
 
+**Adresse sur le domaine (déploiement actuel : `https://api.pecule-app.com`)** : tableau de bord
+Cloudflare → Workers & Pages → `suivi-epargne-api` → *Settings* → *Domains & Routes* → *Add* →
+*Custom domain*. Sur le domaine, les règles de sécurité de la zone (dont la limitation de débit,
+MAINTENANCE.md § 6) s'appliquent **avant** le Worker, ce qui n'est pas le cas sur workers.dev.
+Ne pas le déclarer dans `wrangler.toml` (voir le commentaire en tête du fichier). Utilise alors
+cette adresse, au lieu de celle en workers.dev, aux étapes 4 et 6 ci-dessous.
+
 ### 4. Google Cloud Console
 Sur <https://console.cloud.google.com/apis/credentials>, ouvre le client OAuth dont
 l'identifiant commence par `763862877733-` :

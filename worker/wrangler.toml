@@ -7,6 +7,16 @@ name = "suivi-epargne-api"
 main = "src/index.ts"
 compatibility_date = "2026-10-01"
 
+# Adresse publique : https://api.pecule-app.com, « domaine personnalisé » ajouté dans le
+# tableau de bord (Workers & Pages → suivi-epargne-api → Settings → Domains & Routes), pour que
+# la règle de limitation de débit de la zone pecule-app.com s'applique AVANT le Worker
+# (MAINTENANCE.md § 6). Volontairement AUCUNE ligne `routes` ici : sans elle, `wrangler deploy`
+# ne touche pas aux domaines du Worker (vérifié dans le code de wrangler 4.148) ; avec
+# `custom_domain = true`, il les remplacerait et exigerait des droits DNS que le jeton du
+# déploiement automatique n'a pas forcément.
+# L'ancienne adresse *.workers.dev reste ouverte pendant la transition (apps installées pas
+# encore à jour, connexions en cours) ; à fermer ensuite par `workers_dev = false` (ROADMAP.md).
+
 [vars]
 # Client OAuth : DOIT être le même que celui de l'app (src/services/googleDriveService.ts),
 # sinon le scope drive.file ne donne pas accès au fichier de données déjà créé.

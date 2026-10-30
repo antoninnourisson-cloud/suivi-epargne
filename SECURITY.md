@@ -55,7 +55,7 @@ Résumé ici, détail dans le README (section *Sécurité et confidentialité*) 
 
 - réservé à une liste d'adresses e-mail, revérifiée à chaque requête (retirer une adresse ferme ses sessions) ; origines autorisées limitées à l'app ;
 - sessions stockées hachées, expirées après 30 jours d'inactivité (60 jours au plus), liées à la clé publique de l'appareil (preuve signée exigée) ; state OAuth signé et lié au navigateur ; `id_token` vérifié ;
-- jeton Google chiffré (AES-256-GCM), gardé seulement tant qu'une session ou une notification s'en sert (61 jours au plus sans usage) ; limitation du débit par IP ; taille des requêtes bornée, lue en flux (abandon dès la limite dépassée) ;
+- jeton Google chiffré (AES-256-GCM), gardé seulement tant qu'une session ou une notification s'en sert (61 jours au plus sans usage) ; limitation du débit par IP, dans le serveur et, sur `api.pecule-app.com`, par une règle de Cloudflare appliquée avant lui (MAINTENANCE.md § 6) ; taille des requêtes bornée, lue en flux (abandon dès la limite dépassée) ;
 - notifications chiffrées de bout en bout (RFC 8291) ;
 - **sauvegarde de secours chiffrée de bout en bout** : chiffrée dans l'app (AES-256-GCM, clé dérivée d'un code de secours de 128 bits jamais transmis), illisible pour le serveur ; jamais effacée sur-le-champ (7 jours, annulable, annoncé par notification), conservation échelonnée (copies récentes, hebdomadaires et mensuelles) qu'une série d'envois ne peut pas chasser, envois plafonnés par jour ;
 - journaux d'appels Cloudflare désactivés : aucune adresse IP enregistrée, seuls les messages d'erreur du serveur ;

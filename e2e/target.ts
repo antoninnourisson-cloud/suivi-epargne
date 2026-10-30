@@ -8,8 +8,23 @@
 //   La CI s'en sert pour passer e2e/production.spec.ts sur `dist`, le dossier exact que
 //   deploy.yml publie. Ce build n'a pas le mode démo : seuls les parcours sans démo y ont un sens.
 // - En local par défaut (ou E2E_TARGET=dev) : le serveur de développement (port 5173).
+import { readFileSync } from 'node:fs';
+
 export const E2E_DIST = process.env.E2E_DIST || '';
 export const E2E_BUILD = !!E2E_DIST || (process.env.E2E_TARGET ? process.env.E2E_TARGET === 'build' : !!process.env.CI);
 
-/** Origine du serveur (Worker) : celle du build publié (.env.production), absente en développement. */
-export const WORKER_ORIGIN = /^https:\/\/[^/]+\.workers\.dev\//;
+/**
+ * Origine du serveur (Worker) : celle du build publié, lue dans .env.production (la même que
+ * celle que vite.config.ts met dans la CSP), absente en développement. Toute adresse
+ * *.workers.dev est interceptée en plus (ancienne adresse du serveur) : les tests ne doivent
+ * jamais joindre le vrai serveur, quelle que soit son adresse.
+ */
+const backendOrigin = (): string => {
+  try {
+    const raw = /^VITE_BACKEND_URL=(.*)$/m.exec(readFileSync(new URL('../.env.production', import.meta.url), 'utf8'))?.[1]?.trim();
+    return raw ? new URL(raw).origin : '';
+  } catch { return ''; }
+};
+const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const configured = backendOrigin();
+export const WORKER_ORIGIN = new RegExp(`^(?:https://[^/]+\\.workers\\.dev${configured ? `|${escapeRegExp(configured)}` : ''})/`);
