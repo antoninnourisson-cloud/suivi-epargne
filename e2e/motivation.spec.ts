@@ -1,25 +1,13 @@
 // Motivation en mode démo (?demo=1) : bons mois, point de paie, jalons et leur réglage.
 import { test, expect, type Page } from './fixtures';
 import { LATEST_VERSION } from '../src/changelog';
+import { goTo } from './nav';
 
 const openDemo = async (page: Page) => {
   // « Quoi de neuf » déjà vu : la modale ne masque pas l'écran.
   await page.addInitScript(v => { try { localStorage.setItem('last_seen_version', v); } catch { /* ignoré */ } }, LATEST_VERSION);
   await page.goto('/?demo=1');
   await expect(page.getByRole('heading', { name: 'Accueil', level: 2 })).toBeAttached();
-};
-
-/** Ouvre un écran : barre latérale sur ordinateur, menu « Plus » sur mobile. */
-const goTo = async (page: Page, label: string, isMobile: boolean) => {
-  if (!isMobile) {
-    await page.locator('aside').getByRole('button', { name: label, exact: true }).click();
-    return;
-  }
-  const bar = page.getByRole('navigation', { name: 'Navigation principale' });
-  const tab = bar.getByRole('button', { name: label, exact: true });
-  if (await tab.count()) { await tab.click(); return; }
-  await bar.getByRole('button', { name: 'Plus', exact: true }).click();
-  await page.getByRole('dialog', { name: "Plus d'écrans" }).getByRole('button', { name: label, exact: true }).click();
 };
 
 /** Ouvre une carte des Paramètres (repliées par défaut). */

@@ -7,7 +7,7 @@ import React, { useState } from 'react';
 import { Eye, EyeOff, LogOut, Moon, Settings as SettingsIcon, Sun } from 'lucide-react';
 import { Logo } from '../components/Logo';
 import { openSettingsSection } from '../components/settings/sections';
-import { NAV_ITEMS, NAV_SECTIONS, type View } from '../navigation';
+import { activeNavKey, goToNavItem, NAV_ITEMS, NAV_SECTIONS, type Place, type Screen, type View } from '../navigation';
 import { APP_VERSION } from '../appVersion';
 import type { SyncPhase } from '../lib/sync/syncStatus';
 import { SyncDetailSheet, SyncStatus } from './SyncStatus';
@@ -36,28 +36,36 @@ const NavButton = ({ active, onClick, icon: Icon, label }: { active: boolean; on
 );
 
 /**
- * Liste des écrans du menu latéral. Mémoïsée (`setView` est stable) : elle ne se re-rend
- * qu'au changement d'écran, pas pour une fenêtre, un toast ou l'indicateur de sauvegarde.
+ * Liste des écrans du menu latéral. Mémoïsée (fonctions de navigation stables) : elle ne se
+ * re-rend qu'au changement d'endroit, pas pour une fenêtre, un toast ou l'indicateur de
+ * sauvegarde. Une entrée qui nomme un écran rouvre son dernier onglet ; une ancienne entrée
+ * (Journal, Abonnements…) ouvre son onglet.
  */
-const SideNav = React.memo(function SideNav({ view, setView, showParentalScreen }: { view: View; setView: (v: View) => void; showParentalScreen: boolean }) {
+const SideNav = React.memo(function SideNav({ place, onNavigate, onOpenScreen, showParentalScreen }: { place: Place; onNavigate: (v: View) => void; onOpenScreen: (s: Screen) => void; showParentalScreen: boolean }) {
+  const items = NAV_ITEMS.filter(i => i.key !== 'parental' || showParentalScreen);
+  const active = activeNavKey(place, items.map(i => i.key));
+  const button = (i: typeof items[number]) => <NavButton key={i.key} active={active === i.key} onClick={() => goToNavItem(i.key, onNavigate, onOpenScreen)} icon={i.icon} label={i.label} />;
   return (
     <nav aria-label="Navigation principale" className="flex-1 min-h-0 px-3 pb-3 overflow-y-auto space-y-0.5">
-      {NAV_ITEMS.filter(i => !i.section && i.key !== 'settings').map(i => <NavButton key={i.key} active={view === i.key} onClick={() => setView(i.key)} icon={i.icon} label={i.label} />)}
+      {items.filter(i => !i.section && i.key !== 'settings').map(button)}
       {NAV_SECTIONS.map(section => (
         <React.Fragment key={section}>
           <div className="pt-5 pb-2 px-4 text-sm font-medium text-on-surface-variant">{section}</div>
-          {NAV_ITEMS.filter(i => i.section === section && (i.key !== 'parental' || showParentalScreen)).map(i => <NavButton key={i.key} active={view === i.key} onClick={() => setView(i.key)} icon={i.icon} label={i.label} />)}
+          {items.filter(i => i.section === section).map(button)}
         </React.Fragment>
       ))}
       <div className="my-3 border-t border-outline-variant mx-4"></div>
-      <NavButton active={view === 'settings'} onClick={() => setView('settings')} icon={SettingsIcon} label="Paramètres" />
+      <NavButton active={active === 'settings'} onClick={() => onOpenScreen('settings')} icon={SettingsIcon} label="Paramètres" />
     </nav>
   );
 });
 
 interface AppShellProps {
-  view: View;
-  setView: (v: View) => void;
+  place: Place;
+  /** Lien vers une clé d'écran (onglet de l'alias). */
+  onNavigate: (v: View) => void;
+  /** Geste de menu vers un écran (onglet mémorisé). */
+  onOpenScreen: (s: Screen) => void;
   /** Écran « Part parentale » proposé (masqué en mode solo, sans relevé de restitution). */
   showParentalScreen: boolean;
   syncPhase: SyncPhase;
@@ -81,7 +89,7 @@ interface AppShellProps {
   navAction?: React.ReactNode;
 }
 
-export const AppShell: React.FC<AppShellProps> = ({ view, setView, showParentalScreen, syncPhase, lastSavedAt, hasPendingEdits, onRetrySync, onReconnect, isDark, onToggleTheme, discreet, onToggleDiscreet, onRequestLogout, mainRef, children, overlays, navAction }) => {
+export const AppShell: React.FC<AppShellProps> = ({ place, onNavigate, onOpenScreen, showParentalScreen, syncPhase, lastSavedAt, hasPendingEdits, onRetrySync, onReconnect, isDark, onToggleTheme, discreet, onToggleDiscreet, onRequestLogout, mainRef, children, overlays, navAction }) => {
   const [syncOpen, setSyncOpen] = useState(false);
   const openSync = () => setSyncOpen(true);
   return (
@@ -104,10 +112,10 @@ export const AppShell: React.FC<AppShellProps> = ({ view, setView, showParentalS
           </div>
         </div>
         {navAction && <div className="px-3 pt-1 pb-4">{navAction}</div>}
-        <SideNav view={view} setView={setView} showParentalScreen={showParentalScreen} />
+        <SideNav place={place} onNavigate={onNavigate} onOpenScreen={onOpenScreen} showParentalScreen={showParentalScreen} />
         <div className="px-3 py-3 border-t border-outline-variant">
           <button onClick={() => onRequestLogout(false)} className="w-full h-12 flex items-center gap-3 px-4 text-error hover:bg-error/8 rounded-full font-medium text-sm transition-colors"><LogOut className="w-5 h-5" aria-hidden="true" /> Déconnexion</button>
-          <button onClick={() => { openSettingsSection('about'); setView('settings'); }} className="w-full mt-1 px-4 text-left text-[11px] font-medium text-on-surface-variant hover:text-on-surface" title="Historique des mises à jour dans Paramètres">Pécule · version {APP_VERSION}{typeof __BUILD_SHA__ !== "undefined" && __BUILD_SHA__ !== "dev" ? ` · ${__BUILD_SHA__}` : ""}</button>
+          <button onClick={() => { openSettingsSection('about'); onNavigate('settings'); }} className="w-full mt-1 px-4 text-left text-[11px] font-medium text-on-surface-variant hover:text-on-surface" title="Historique des mises à jour dans Paramètres">Pécule · version {APP_VERSION}{typeof __BUILD_SHA__ !== "undefined" && __BUILD_SHA__ !== "dev" ? ` · ${__BUILD_SHA__}` : ""}</button>
         </div>
       </aside>
 

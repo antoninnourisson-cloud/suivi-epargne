@@ -3,13 +3,12 @@ import React, { useState, useMemo, useEffect, useId, useRef } from 'react';
 import { SavingsAccount, Expense, AccountType, FiscalConfig, WorkBenefits, PayslipRecord, Subscription, PayChecklist as PayChecklistData, PayChecklistLine, AppDoc } from '../types';
 import { PayChecklist } from './PayChecklist';
 import { SavingsSplitEditor } from './SavingsSplitEditor';
-import { computeIncome, computeMaturityCountdown, computePeeAvailability, describeMaturity, computePlacementStrategy, payslipSuperNet, subscriptionsAsExpenses, computePayTransfers, computeRecentSavingsRate, activeSavingsSplit } from '../lib/finance';
+import { computeIncome, computePlacementStrategy, payslipSuperNet, subscriptionsAsExpenses, computePayTransfers, computeRecentSavingsRate, activeSavingsSplit } from '../lib/finance';
 import { combineMonthTarget } from '../lib/payAdjustment';
 import { openPay } from '../lib/payRecords';
 import { recommendPayDistribution } from '../lib/payDistribution';
 import type { PayRitualProps } from './pilot/PayReceivedSheet';
 import type { PayCalendarData } from '../lib/payCalendar';
-import { parseISODate } from '../lib/dates';
 import { parseFrenchNumber, safeNumber } from '../lib/numbers';
 import { NumberInput } from './NumberInput';
 import { isBackendEnabled } from '../services/backendService';
@@ -18,12 +17,11 @@ import { elideDe, formatEUR, formatPeriod, formatRate } from '../lib/format';
 import { useUndoableRemove } from './Toast';
 import { focusAfterRemoval } from './focusAfterRemoval';
 import { buildWaterfall, heroContext, AmountSource } from '../lib/pilotView';
-import { Button, IconButton, MoneyText, PageHeader, Tabs, TextField, fieldClass } from './ui';
+import { Button, IconButton, MoneyText, PageHeader, TextField, fieldClass } from './ui';
 import { Disclosure } from './pilot/Disclosure';
 import { BudgetWaterfall } from './pilot/BudgetWaterfall';
 import { BookletFill } from './pilot/BookletFill';
 import { SurvivalCard } from './pilot/SurvivalCard';
-import { FiscalClock } from './pilot/FiscalClock';
 
 
 /**
@@ -89,7 +87,6 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
     removeWithUndo(expenses, e, onUpdateExpenses, `Charge « ${e.name} » supprimée`);
     focusAfterRemoval(() => expenseListRef.current, index, () => document.getElementById(expensesTitleId));
   };
-  const [activeTab, setActiveTab] = useState<'budget' | 'fiscal'>('budget');
   
   // UX State pour ajout dépense
   const [isAddingExpense, setIsAddingExpense] = useState(false);
@@ -272,53 +269,6 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
     return { infinite: false, years, months, days, monthlyBurn, totalMonths };
   }, [accounts, budgetData.totalFixed]);
 
-  const fiscalClock = useMemo(() => {
-    return accounts.filter(a => [AccountType.PEE, AccountType.PEA, AccountType.ASSURANCE_VIE].includes(a.type)).map(acc => {
-        // PEE : chaque versement est bloqué 5 ans (date de fin de contrat passée : tout est
-        // libre). On annonce le prochain déblocage, calculé versement par versement.
-        if (acc.type === AccountType.PEE) {
-          const pee = computePeeAvailability(acc, fiscalConfig);
-          const release = pee.nextRelease;
-          if (pee.blocked < 0.5) return { id: acc.id, name: acc.name, type: acc.type, date: '', timeLeft: 'Disponible', isAvailable: true };
-          const free = pee.available >= 1 ? `${formatEUR(pee.available, 0)} déjà disponibles. ` : '';
-          // Solde initial d'un plan plus ancien, ou solde sans mouvements : dates de versement
-          // inconnues, compté bloqué par prudence (jamais une date de déblocage inventée).
-          const unknown = pee.undated
-            ? 'Une partie de votre solde n\'a pas de date de versement connue (par exemple ce qui était déjà sur le plan quand vous l\'avez ajouté) : elle est comptée bloquée par prudence. Votre relevé d\'épargne salariale donne les dates exactes.'
-            : '';
-          if (!release) {
-            return { id: acc.id, name: acc.name, type: acc.type, date: '', timeLeft: 'Date inconnue', isAvailable: false,
-              note: `${free}${unknown}` };
-          }
-          return {
-            id: acc.id, name: acc.name, type: acc.type,
-            date: parseISODate(release.date).toLocaleDateString('fr-FR'),
-            timeLeft: `${Math.floor(release.monthsRemaining / 12) > 0 ? Math.floor(release.monthsRemaining / 12) + 'a ' : ''}${release.monthsRemaining % 12}m`,
-            isAvailable: false,
-            note: `${free}${release.last ? 'Tout le reste se débloque' : `${formatEUR(release.amount, 0)} se débloquent`} à cette date : chaque versement reste bloqué ${fiscalConfig.legalMaturity.pee} ans.${unknown ? ` ${unknown}` : ''}`,
-          };
-        }
-        // PEA / assurance vie : MÊME calcul que le badge de "Mes comptes"
-        // (computeMaturityCountdown) et le même texte (describeMaturity).
-        if (!acc.openingDate) return null;
-        const countdown = computeMaturityCountdown(acc, fiscalConfig);
-        if (!countdown) {
-          // computeMaturityCountdown renvoie null pour "déjà mature" : ici c'est une info
-          // à afficher, pas à masquer.
-          return { id: acc.id, name: acc.name, type: acc.type, date: '', timeLeft: 'Disponible', isAvailable: true };
-        }
-        const years = Math.floor(countdown.monthsRemaining / 12);
-        const months = countdown.monthsRemaining % 12;
-        return {
-          id: acc.id, name: acc.name, type: acc.type,
-          date: parseISODate(countdown.maturityDate).toLocaleDateString('fr-FR'),
-          timeLeft: `${years > 0 ? years + 'a ' : ''}${months}m`,
-          isAvailable: false,
-          // « Bloqué » jusqu'à l'échéance au sens de l'impôt seulement : on le précise.
-          note: `Retirable avant, avec plus d'impôt${acc.type === AccountType.PEA ? ' (et le plan est clôturé)' : ''}. À l'échéance : ${describeMaturity(acc, countdown, fiscalConfig).detail}.`,
-        };
-    }).filter(item => item !== null);
-  }, [accounts, fiscalConfig]);
 
 
   // Montant à placer : expliqué en une phrase (hero) puis ligne par ligne (D'où vient ce chiffre).
@@ -641,14 +591,7 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
   return (
     <div className="animate-fade-in pb-20">
       <PageHeader title="Pilotage" subtitle="Combien placer ce mois-ci, sur quels comptes, et pourquoi." />
-      <Tabs
-        label="Pilotage"
-        value={activeTab}
-        onChange={setActiveTab}
-        tabs={[{ value: 'budget', label: 'Pilotage budgétaire' }, { value: 'fiscal', label: 'Horloge fiscale' }]}
-      >
-        {activeTab === 'budget' ? budgetTab : <FiscalClock items={fiscalClock} />}
-      </Tabs>
+      {budgetTab}
     </div>
   );
 };

@@ -1,7 +1,8 @@
 // ================================================
 // FILE: src/components/History.tsx
-// Historique : « Votre année » (le seul bilan annuel), puis deux onglets, l'évolution du
-// patrimoine (un relevé par mois) et celle des charges fixes.
+// Analyses › Évolution (ex-Historique) : « Votre année » (le seul bilan annuel), puis, au
+// choix (bouton segmenté, pas d'onglets dans l'onglet), l'évolution du patrimoine (un relevé
+// par mois) ou celle des charges fixes.
 // ================================================
 import React, { useMemo, useState } from 'react';
 import { PortfolioSnapshot, ExpenseSnapshot } from '../types';
@@ -15,7 +16,7 @@ import { describeEvolution } from '../lib/chartData';
 import { AreaSeriesChart, type AreaRow, type AreaSeries } from './charts/AreaSeriesChart';
 import { ChartFrame } from './charts/ChartFrame';
 import { ChartLegend } from './charts/ChartParts';
-import { Card, DataTable, EmptyState, MoneyText, PageHeader, StatTile, Tabs, type Column } from './ui';
+import { Card, DataTable, EmptyState, MoneyText, PageHeader, SegmentedButton, StatTile, type Column } from './ui';
 
 interface HistoryProps {
   history: PortfolioSnapshot[];
@@ -119,7 +120,8 @@ export const History: React.FC<HistoryProps> = ({ history, expensesHistory, revi
           « Bons mois et jalons » est désactivé). */}
       {reviewData && <YearInReviewCard data={reviewData} />}
 
-      <Tabs label="Historique" tabs={TABS} value={tab} onChange={setTab}>
+      <SegmentedButton label="Évolution affichée" options={TABS} value={tab} onChange={setTab} />
+      <div className="space-y-6">
         {tab === 'patrimoine' && (
           <div className="space-y-6">
             {/* Un seul point : les chiffres de synthèse sont déjà justes ; seuls la courbe et
@@ -185,7 +187,7 @@ export const History: React.FC<HistoryProps> = ({ history, expensesHistory, revi
             </Card>
           )
         )}
-      </Tabs>
+      </div>
     </div>
   );
 };

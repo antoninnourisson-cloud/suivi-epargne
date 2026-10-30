@@ -7,7 +7,9 @@ test.describe('Historique (démo)', () => {
   test('courbe du patrimoine, tableau des données et variations mois par mois', async ({ page }) => {
     await page.addInitScript(v => { try { localStorage.setItem('last_seen_version', v); } catch { /* ignoré */ } }, LATEST_VERSION);
     await page.goto('/?demo=1&view=history');
-    await expect(page.getByRole('heading', { name: 'Historique', level: 2 })).toBeVisible();
+    // Ancienne adresse : Analyses › Évolution.
+    await expect(page).toHaveTitle('Analyses · Évolution · Pécule');
+    await expect(page.getByRole('heading', { name: 'Historique', level: 3, exact: true })).toBeVisible();
 
     const card = page.getByRole('region', { name: 'Évolution de votre patrimoine' });
     await expect(card).toBeVisible();

@@ -3,7 +3,7 @@
 import React, { Suspense, useEffect } from 'react';
 import { lazyWithRetry } from '../components/ErrorBoundary';
 import { lsGet } from '../lib/storage';
-import { isView, type View } from '../navigation';
+import { encodePlace, isView, parsePlace, placeOf } from '../navigation';
 import { LAST_VIEW_KEY } from '../hooks/portfolio/keys';
 
 export const Journal = lazyWithRetry(() => import('../components/Journal').then(m => ({ default: m.Journal })));
@@ -21,6 +21,7 @@ export const Simulator = lazyWithRetry(() => import('../components/Simulator').t
 export const ParentalShare = lazyWithRetry(() => import('../components/ParentalShare').then(m => ({ default: m.ParentalShare })));
 export const Payslips = lazyWithRetry(() => import('../components/Payslips').then(m => ({ default: m.Payslips })));
 export const AccountsView = lazyWithRetry(() => import('../components/AccountsView').then(m => ({ default: m.AccountsView })));
+export const FiscalCalendar = lazyWithRetry(() => import('../components/FiscalCalendar').then(m => ({ default: m.FiscalCalendar })));
 // Écrans secondaires et fenêtres rarement ouvertes : hors du code de démarrage, chargés à
 // leur premier affichage (chacun dans son propre <Suspense>, voir `Lazy` ci-dessous).
 export const FiscalWatchCard = lazyWithRetry(() => import('../components/FiscalWatchCard').then(m => ({ default: m.FiscalWatchCard })));
@@ -58,26 +59,32 @@ export const ViewLoader = () => (
   </div>
 );
 
-// Écran affiché au démarrage (lien direct, sinon le dernier ouvert, sinon l'Accueil) : demandé
-// dès que la session est connue, en même temps que le jeton et Drive plutôt qu'après.
-const START_VIEW_LOADERS: Partial<Record<View, () => Promise<unknown>>> = {
+// Endroit affiché au démarrage (lien direct, sinon le dernier ouvert, sinon l'Accueil) : son
+// écran est demandé dès que la session est connue, en même temps que le jeton et Drive plutôt
+// qu'après. Clé : écran, ou « écran/onglet » (voir encodePlace).
+const START_VIEW_LOADERS: Record<string, () => Promise<unknown>> = {
   dashboard: () => import('../components/Dashboard'),
   update: () => import('../components/AccountUpdate'),
-  pilot: () => import('../components/AssistantPilot'),
-  transfers: () => import('../components/TransferManager'),
-  accounts: () => import('../components/AccountsView'),
-  journal: () => import('../components/Journal'),
-  agenda: () => import('../components/agendaQuickAdd'),
-  yield: () => import('../components/Yield'),
-  history: () => import('../components/History'),
-  simulator: () => import('../components/Simulator'),
+  'accounts/balances': () => import('../components/AccountsView'),
+  'accounts/movements': () => import('../components/Journal'),
+  'accounts/parents': () => import('../components/ParentalShare'),
+  'pilot/month': () => import('../components/AssistantPilot'),
+  'pilot/subscriptions': () => import('../components/Subscriptions'),
+  'pilot/payslips': () => import('../components/Payslips'),
+  'analyses/evolution': () => import('../components/History'),
+  'analyses/yield': () => import('../components/Yield'),
+  'analyses/agenda': () => import('../components/agendaQuickAdd'),
+  'analyses/simulator': () => import('../components/Simulator'),
+  'taxes/donations': () => import('../components/Donations'),
+  'taxes/calendar': () => import('../components/FiscalCalendar'),
   settings: () => import('../components/Settings'),
 };
 export const preloadStartView = () => {
-  const linked = new URLSearchParams(window.location.search).get('view');
-  const last = lsGet(LAST_VIEW_KEY);
-  const view = isView(linked) ? linked : isView(last) ? last : 'dashboard';
-  (START_VIEW_LOADERS[view] ?? START_VIEW_LOADERS.dashboard)?.().catch(() => undefined);
+  const params = new URLSearchParams(window.location.search);
+  const linked = params.get('view');
+  const linkedPlace = isView(linked) ? placeOf(linked, params.get('tab')) : null;
+  const place = linkedPlace || parsePlace(lsGet(LAST_VIEW_KEY)) || { screen: 'dashboard' as const };
+  (START_VIEW_LOADERS[encodePlace(place)] ?? START_VIEW_LOADERS.dashboard)().catch(() => undefined);
 };
 
 /**

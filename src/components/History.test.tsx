@@ -27,16 +27,18 @@ describe('History', () => {
     expect(screen.getByText("L'historique se construit au fil des mois")).toBeTruthy();
   });
 
-  it('onglets Patrimoine / Charges fixes ; tableau mois par mois avec l’écart réel en mois', () => {
+  it('Patrimoine / Charges fixes en bouton segmenté (pas d’onglets dans l’onglet) ; tableau mois par mois avec l’écart réel en mois', () => {
     render(<History history={[snap('2026-05-31', 14000, 7000), snap('2026-08-31', 15200, 8200)]} expensesHistory={[]} />);
-    const tabs = screen.getAllByRole('tab');
-    expect(tabs.map(t => t.textContent)).toEqual(['Patrimoine', 'Charges fixes']);
-    expect(tabs[0].getAttribute('aria-selected')).toBe('true');
+    expect(screen.queryByRole('tablist')).toBeNull();
+    const group = screen.getByRole('group', { name: 'Évolution affichée' });
+    const choices = Array.from(group.querySelectorAll('button'));
+    expect(choices.map(t => t.textContent)).toEqual(['Patrimoine', 'Charges fixes']);
+    expect(choices[0].getAttribute('aria-pressed')).toBe('true');
     const table = screen.getByRole('table', { name: 'Variation de votre patrimoine mois par mois' });
     expect(table.textContent).toMatch(/\+1\s200\s€/);
     expect(table.textContent).toContain('sur 3 mois');
-    fireEvent.click(tabs[1]);
-    expect(screen.getByRole('tab', { name: 'Charges fixes' }).getAttribute('aria-selected')).toBe('true');
+    fireEvent.click(choices[1]);
+    expect(screen.getByRole('button', { name: 'Charges fixes' }).getAttribute('aria-pressed')).toBe('true');
     expect(screen.getByText("L'historique des charges se construit au fil des mois")).toBeTruthy();
   });
 

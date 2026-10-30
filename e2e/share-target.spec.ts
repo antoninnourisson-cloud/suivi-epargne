@@ -61,7 +61,8 @@ test.describe('Partager vers Pécule (démo)', () => {
     expect(sentToGemini).toBe(0);
     await sheet.getByRole('button', { name: /Fiche de paie/ }).click();
 
-    await expect(page.getByRole('heading', { name: 'Fiches de paie', level: 2 })).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole('heading', { name: 'Fiches de paie', level: 3, exact: true })).toBeVisible({ timeout: 20_000 });
+    await expect(page).toHaveTitle('Pilotage · Fiches de paie · Pécule');
     await expect(page.getByRole('heading', { name: 'Bulletin partagé.pdf' })).toBeVisible();
     await expect(page.getByText(/pas copiée sur votre Drive/)).toBeVisible();
     const driveLinks = await page.getByRole('link', { name: /sur Drive/ }).count();

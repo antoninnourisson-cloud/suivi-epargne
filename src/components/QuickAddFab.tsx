@@ -6,17 +6,18 @@
 //   d'action d'un tiroir de navigation Material 3. Il ne recouvre ainsi aucun champ.
 import React, { useEffect, useRef, useState } from 'react';
 import { Plus } from 'lucide-react';
-import type { View } from '../navigation';
+import type { Place } from '../navigation';
 
 /**
- * Écrans sans bouton flottant (téléphone) : leur action principale est déjà un ajout ou un
- * enregistrement (Actualiser, Virements, Abonnements, Dons, Fiches de paie), ou un mouvement
- * n'a rien à y faire (Part parentale, Paramètres). Deux boutons « Ajouter » côte à côte
- * laisseraient deviner lequel ajoute quoi.
+ * Endroits sans bouton flottant (téléphone) : leur action principale est déjà un ajout ou un
+ * enregistrement (Actualiser, Abonnements, Dons, Fiches de paie), ou un mouvement n'a rien à
+ * y faire (Comptes › Parents, Paramètres). Deux boutons « Ajouter » côte à côte laisseraient
+ * deviner lequel ajoute quoi. Comptes › Mouvements le garde : c'est là qu'on voit les
+ * mouvements, et le virement s'y fait dans son propre panneau.
  */
-const HIDDEN_ON: ReadonlySet<View> = new Set<View>(['update', 'transfers', 'subscriptions', 'donations', 'payslips', 'parental', 'settings']);
+const HIDDEN_ON: ReadonlySet<string> = new Set(['update', 'settings', 'parents', 'subscriptions', 'payslips', 'donations']);
 
-export const showQuickAddFab = (view: View): boolean => !HIDDEN_ON.has(view);
+export const showQuickAddFab = (place: Place): boolean => !HIDDEN_ON.has(place.tab ?? place.screen);
 
 const LABEL = 'Ajouter un mouvement';
 

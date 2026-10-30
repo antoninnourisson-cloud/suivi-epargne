@@ -5,6 +5,7 @@
 import { test, expect, type Page } from './fixtures';
 import { readFile } from 'node:fs/promises';
 import { LATEST_VERSION } from '../src/changelog';
+import { goTo } from './nav';
 
 // Données de démo (src/dev/demoData.ts) : les deux comptes qui ont une part parentale.
 const WITH_PARENTS = ['Livret A', 'LEP'];
@@ -18,22 +19,6 @@ const openDemo = async (page: Page) => {
   await page.addInitScript(v => { try { localStorage.setItem('last_seen_version', v); } catch { /* ignoré */ } }, LATEST_VERSION);
   await page.goto('/?demo=1');
   await expect(page.getByRole('heading', { name: 'Accueil', level: 2 })).toBeAttached();
-};
-
-const goTo = async (page: Page, label: string, isMobile: boolean) => {
-  if (!isMobile) {
-    await page.locator('aside').getByRole('button', { name: label, exact: true }).click();
-  } else {
-    const short: Record<string, string> = { 'Actualiser les soldes': 'Actualiser', 'Mes comptes': 'Comptes' };
-    const bar = page.getByRole('navigation', { name: 'Navigation principale' });
-    const tab = bar.getByRole('button', { name: short[label] ?? label, exact: true });
-    if (await tab.count()) await tab.click();
-    else {
-      await bar.getByRole('button', { name: 'Plus', exact: true }).click();
-      await page.getByRole('dialog', { name: "Plus d'écrans" }).getByRole('button', { name: label, exact: true }).click();
-    }
-  }
-  await expect(page).toHaveTitle(new RegExp(`^${label}`));
 };
 
 /** « 8 200,00 € » → 8200 */

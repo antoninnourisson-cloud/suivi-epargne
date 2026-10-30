@@ -12,7 +12,7 @@ import { DISCREET_AMOUNT } from '../lib/format';
 const Harness: React.FC = () => {
   const { discreet, toggleDiscreet } = useDiscreetMode();
   return (
-    <AppShell view="dashboard" setView={() => {}} showParentalScreen={false} syncPhase={{ kind: 'idle' }} lastSavedAt={null}
+    <AppShell place={{ screen: 'dashboard' }} onNavigate={() => {}} onOpenScreen={() => {}} showParentalScreen={false} syncPhase={{ kind: 'idle' }} lastSavedAt={null}
       hasPendingEdits={false} onRetrySync={() => {}} onReconnect={() => {}} isDark={false} onToggleTheme={() => {}}
       discreet={discreet} onToggleDiscreet={toggleDiscreet} onRequestLogout={() => {}} mainRef={{ current: null }} overlays={null}>
       {/* Comme App : l'écran est reconstruit à la bascule. */}

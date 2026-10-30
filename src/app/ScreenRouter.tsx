@@ -1,5 +1,7 @@
-// L'écran courant (un seul monté à la fois), chargé à la demande. Composant mémoïsé : il ne
-// se re-rend que si le document, l'écran ou ce qui en dérive change, jamais pour un toast,
+// L'endroit courant (un seul écran, un seul onglet monté à la fois), chargé à la demande.
+// Comptes, Pilotage, Analyses et Impôts ont des onglets (ScreenFrame) : les anciens écrans y
+// sont rendus tels quels, leur en-tête devenu un titre de section. Composant mémoïsé : il ne
+// se re-rend que si le document, l'endroit ou ce qui en dérive change, jamais pour un toast,
 // une fenêtre, une bannière ou l'indicateur de sauvegarde (voir les props stables d'App).
 import { memo, Suspense, useCallback, useMemo, useState } from 'react';
 import type { PortfolioData } from '../hooks/usePortfolioData';
@@ -8,12 +10,12 @@ import { withSavedPayslip } from '../components/payslips/usePayslipImport';
 import type { PayRitualProps } from '../components/pilot/PayReceivedSheet';
 import type { FiscalWatch } from '../hooks/useFiscalWatch';
 import type { SavingsAccount } from '../types';
-import { isView, type View } from '../navigation';
+import { isView, SCREEN_LABELS, tabsOf, type Place, type ScreenTab, type View } from '../navigation';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import { openSettingsSection } from '../components/settings/sections';
 import {
   AccountUpdate, AccountsView, Agenda, AskPeculeEntry, AssistantPilot, CloudBackupPanel, Dashboard, Donations, DriveBackupsPanel,
-  FiscalWatchCard, History, Journal, Lazy, MotivationSettings, ParentalShare, Payslips, ServerSecurityPanel,
+  FiscalCalendar, FiscalWatchCard, History, Journal, Lazy, MotivationSettings, ParentalShare, Payslips, ServerSecurityPanel,
   SetAsideVersionsPanel, Settings, ShareTargetHost, Simulator, SoloPlanCard, StatementImport, Subscriptions, TaxNoticePanel, TaxReturnHelper,
   TransferManager, ViewLoader, Yield, YearClosingCard,
 } from './screens';
@@ -23,6 +25,7 @@ import { localTodayISO } from '../lib/dates';
 import type { AccountActions } from './useAccountActions';
 import { usePayRaise } from './usePayRaise';
 import { useAddToast, useDialog } from './UiProviders';
+import { InTabPanelContext, PageHeader, Tabs } from '../components/ui';
 
 /** Ce que les écrans lisent et modifient : le document et des fonctions stables. */
 export const useScreenData = (data: PortfolioData) => {
@@ -57,9 +60,39 @@ export const useAccountForm = (): AccountFormState => {
   return useMemo(() => ({ editingAccount, setEditingAccount, showForm, setShowForm }), [editingAccount, showForm]);
 };
 
+/**
+ * Cadre d'un écran à onglets : titre de l'écran (h2, cible du focus à chaque changement
+ * d'écran), onglets (tablist, flèches au clavier) et le contenu de l'onglet. Une erreur ou un
+ * chargement dans l'onglet laisse les onglets en place. Écran sans onglets : le contenu seul.
+ */
+const ScreenFrame = ({ place, hiddenTabs, onSelectTab, children }: { place: Place; hiddenTabs: readonly ScreenTab[]; onSelectTab: (t: ScreenTab) => void; children: React.ReactNode }) => {
+  const content = (
+    <ErrorBoundary resetKey={`${place.screen}/${place.tab ?? ''}`}>
+      <Suspense fallback={<ViewLoader />}>{children}</Suspense>
+    </ErrorBoundary>
+  );
+  const tabs = tabsOf(place.screen).filter(t => !hiddenTabs.includes(t.key));
+  if (!place.tab || tabs.length === 0) return content;
+  const label = SCREEN_LABELS[place.screen];
+  return (
+    <div className="animate-fade-in">
+      <PageHeader title={label} />
+      <Tabs fill label={label} tabs={tabs.map(t => ({ value: t.key, label: t.label }))} value={place.tab} onChange={onSelectTab}>
+        <InTabPanelContext.Provider value>{content}</InTabPanelContext.Provider>
+      </Tabs>
+    </div>
+  );
+};
+
 interface ScreenRouterProps {
-  view: View;
+  /** Endroit affiché (onglet masqué déjà écarté, voir visiblePlace). */
+  place: Place;
+  /** Lien interne vers une clé d'écran : toujours l'onglet de l'alias (navigation.ts). */
   setView: (v: View) => void;
+  /** Onglet touché dans l'écran. */
+  onSelectTab: (t: ScreenTab) => void;
+  /** Onglets masqués (mode solo : « Parents »). */
+  hiddenTabs: readonly ScreenTab[];
   data: ScreenData;
   derived: DerivedData;
   actions: AccountActions;
@@ -69,15 +102,13 @@ interface ScreenRouterProps {
   onSignedOutEverywhere: () => void;
   /** « Se déconnecter » (Paramètres) : toujours confirmé (`alwaysConfirm`). */
   onRequestLogout: (alwaysConfirm: boolean) => void;
-  /** Ouvre l'ajout rapide d'un mouvement (fonction stable d'App). */
-  onQuickAdd: () => void;
   /** « Partager vers Pécule » : valeur de `?partage=` (sinon `null`), données prêtes, fin du partage. */
   shareMarker: string | null;
   shareReady: boolean;
   onShareDone: () => void;
 }
 
-export const ScreenRouter = memo(function ScreenRouter({ view, setView, data, derived, actions, fiscalWatch, accountForm, onSignedOutEverywhere, onRequestLogout, onQuickAdd, shareMarker, shareReady, onShareDone }: ScreenRouterProps) {
+export const ScreenRouter = memo(function ScreenRouter({ place, setView, onSelectTab, hiddenTabs, data, derived, actions, fiscalWatch, accountForm, onSignedOutEverywhere, onRequestLogout, shareMarker, shareReady, onShareDone }: ScreenRouterProps) {
   const addToast = useAddToast();
   const dialog = useDialog();
   const { doc } = data;
@@ -112,13 +143,13 @@ export const ScreenRouter = memo(function ScreenRouter({ view, setView, data, de
     },
     onOpenKeys: () => openSettings('keys'),
   };
+  const { screen, tab } = place;
   const fiscalWatchCard = (compact: boolean) => <Lazy><FiscalWatchCard compact={compact} watch={fiscalWatch} onApply={actions.applyFiscalProposal} /></Lazy>;
 
   return (
-    <ErrorBoundary resetKey={view}>
-      <Suspense fallback={<ViewLoader />}>
-        {view === 'dashboard' && fiscalWatch.proposals.length > 0 && <div className="mb-6">{fiscalWatchCard(true)}</div>}
-        {view === 'dashboard' && <Dashboard
+    <ScreenFrame place={place} hiddenTabs={hiddenTabs} onSelectTab={onSelectTab}>
+        {screen === 'dashboard' && fiscalWatch.proposals.length > 0 && <div className="mb-6">{fiscalWatchCard(true)}</div>}
+        {screen === 'dashboard' && <Dashboard
           accounts={doc.accounts} history={doc.history} fiscalConfig={doc.fiscalConfig} onDeleteAccount={actions.deleteAccount}
           monthPlan={derived.monthPlan} monthGoal={derived.monthGoal} monthlyPay={derived.monthlyPay} paydayDay={c.paydayDay} trackingStartDate={c.trackingStartDate}
           payRaise={raise.payRaise} onAcceptPayRaise={raise.accept} onDismissPayRaise={raise.dismiss}
@@ -137,7 +168,7 @@ export const ScreenRouter = memo(function ScreenRouter({ view, setView, data, de
           askSlot={<Lazy><AskPeculeEntry data={derived.fullData} geminiApiKey={data.geminiApiKey} taxEstimate={derived.taxEstimate} monthPlan={derived.monthPlan} onOpenSettings={openSettings} /></Lazy>}
           onMarkMilestonesSeen={actions.markMilestonesSeen} onValidatePayReview={actions.validatePayReview} />}
 
-        {view === 'pilot' && <AssistantPilot
+        {tab === 'month' && <AssistantPilot
           accounts={doc.accounts} expenses={doc.expenses} onUpdateExpenses={data.setExpenses}
           config={c} onPatchConfig={data.patchConfig}
           fiscalConfig={doc.fiscalConfig} workBenefits={doc.workBenefits}
@@ -147,45 +178,46 @@ export const ScreenRouter = memo(function ScreenRouter({ view, setView, data, de
           payCalendar={payCalendar} payRitual={payRitual}
           />}
 
-        {view === 'transfers' && <TransferManager accounts={doc.accounts} onCommit={actions.commit} recurringMovements={doc.recurringMovements} onUpdateRecurring={data.setRecurringMovements} onQuickAdd={onQuickAdd} />}
-        {view === 'update' && <AccountUpdate accounts={doc.accounts} onCommit={actions.commit} onAddAccount={openNewAccount}
+        {screen === 'update' && <AccountUpdate accounts={doc.accounts} onCommit={actions.commit} onAddAccount={openNewAccount}
           onReadStatement={() => setStatementFor({})} />}
         {statementFor && <Lazy><StatementImport accounts={doc.accounts} geminiApiKey={data.geminiApiKey} preferredAccountId={statementFor.accountId}
           onClose={() => setStatementFor(null)} onImport={actions.importStatement} onOpenKeys={() => openSettings('keys')} /></Lazy>}
 
-        {view === 'yield' && <Yield accounts={doc.accounts} hypotheses={derived.projectionHypotheses} fiscalConfig={doc.fiscalConfig} monthPlan={derived.monthPlan} savingsSplit={c.savingsSplit} restitutionInMonths={derived.restitutionInMonths}
+        {tab === 'yield' && <Yield accounts={doc.accounts} hypotheses={derived.projectionHypotheses} fiscalConfig={doc.fiscalConfig} monthPlan={derived.monthPlan} savingsSplit={c.savingsSplit} restitutionInMonths={derived.restitutionInMonths}
           taxableIncome={derived.taxEstimate?.taxableIncome} retirementCeiling={c.retirementCeiling}
           monthlySpending={derived.emergency?.monthlySpending} lepEligible={lepStillEligible(derived.lepTimeline)}
           onSaveRetirementCeiling={retirementCeiling => data.patchConfig({ retirementCeiling })}
           onConfirmBalance={acc => actions.saveAccount({ ...acc, balanceCheckedAt: localTodayISO() })} />}
-        {view === 'simulator' && <Simulator accounts={doc.accounts} hypotheses={derived.projectionHypotheses} fiscalConfig={doc.fiscalConfig} monthPlan={derived.monthPlan} savingsSplit={c.savingsSplit} paydayDay={c.paydayDay} payslips={doc.payslips} trackingStartDate={c.trackingStartDate} parentalRestitution={doc.parentalRestitution} />}
-        {view === 'history' && <History history={doc.history} expensesHistory={doc.expensesHistory} reviewData={derived.fullData}
+        {tab === 'simulator' && <Simulator accounts={doc.accounts} hypotheses={derived.projectionHypotheses} fiscalConfig={doc.fiscalConfig} monthPlan={derived.monthPlan} savingsSplit={c.savingsSplit} paydayDay={c.paydayDay} payslips={doc.payslips} trackingStartDate={c.trackingStartDate} parentalRestitution={doc.parentalRestitution} />}
+        {tab === 'evolution' && <History history={doc.history} expensesHistory={doc.expensesHistory} reviewData={derived.fullData}
           closingSlot={doc.accounts.length > 0 ? <Lazy><YearClosingCard data={derived.fullData} onPatchConfig={data.patchConfig}
             onUpdateAccounts={data.setAccounts} onUpdateFiscalConfig={data.setFiscalConfig}
             onNavigate={v => { if (v === 'settings') openSettingsSection('fiscal'); setView(v); }}
             getArchiveData={data.currentData} confirm={dialog.confirm} /></Lazy> : undefined} />}
-        {view === 'journal' && <Journal
+        {tab === 'movements' && <Journal
           accounts={doc.accounts} restitution={doc.parentalRestitution} onDeleteMovement={actions.deleteMovement}
           trackingStartDate={c.trackingStartDate} onSetTrackingStart={actions.setTrackingStart}
-          onToggleAdjustment={actions.toggleAdjustment} onRemoveCancelling={actions.removeCancelling} onRevertRate={actions.revertRate} />}
-        {view === 'agenda' && <Agenda data={derived.fullData} onOpen={v => { if (!isView(v)) return; if (v === 'settings') openSettingsSection('fiscal'); setView(v); }} />}
-        {view === 'parental' && <ParentalShare
+          onToggleAdjustment={actions.toggleAdjustment} onRemoveCancelling={actions.removeCancelling} onRevertRate={actions.revertRate}
+          toolsSlot={<TransferManager accounts={doc.accounts} onCommit={actions.commit} recurringMovements={doc.recurringMovements} onUpdateRecurring={data.setRecurringMovements} />} />}
+        {tab === 'calendar' && <FiscalCalendar accounts={doc.accounts} fiscalConfig={doc.fiscalConfig} />}
+        {tab === 'agenda' && <Agenda data={derived.fullData} onOpen={v => { if (!isView(v)) return; if (v === 'settings') openSettingsSection('fiscal'); setView(v); }} />}
+        {tab === 'parents' && <ParentalShare
           accounts={doc.accounts} restitution={doc.parentalRestitution} monthPlan={derived.monthPlan} hasCustomSplit={!!c.savingsSplit?.length}
           onPlanRestitution={actions.planRestitution} onRestitute={actions.restitute} onUndoRestitution={actions.undoRestitution}
           onOpenAccounts={() => setView('accounts')}
           soloPlanSlot={doc.parentalRestitution?.plannedDate && !doc.parentalRestitution.done
             ? <Lazy><SoloPlanCard accounts={doc.accounts} hypotheses={derived.projectionHypotheses} fiscalConfig={doc.fiscalConfig} monthPlan={derived.monthPlan} restitutionISO={doc.parentalRestitution.plannedDate} split={c.savingsSplit} emergencyTarget={derived.emergency?.target} cashBuffer={derived.emergency?.cashBuffer} /></Lazy>
             : undefined} />}
-        {view === 'donations' && <Donations donations={doc.donations} onUpdate={data.setDonations} pickerApiKey={c.pickerApiKey ?? ''} taxEstimates={derived.taxEstimates} ceiling75={doc.fiscalConfig.donation75Ceiling}
+        {tab === 'donations' && <Donations donations={doc.donations} onUpdate={data.setDonations} pickerApiKey={c.pickerApiKey ?? ''} taxEstimates={derived.taxEstimates} ceiling75={doc.fiscalConfig.donation75Ceiling}
           taxHelper={<Lazy><TaxReturnHelper data={derived.fullData} taxEstimates={derived.taxEstimates} allowanceRate={doc.fiscalConfig.standardAllowance} allowanceCap={doc.fiscalConfig.standardAllowanceCap} ceiling75={doc.fiscalConfig.donation75Ceiling} /></Lazy>} />}
-        {view === 'subscriptions' && <Subscriptions subscriptions={doc.subscriptions} onUpdate={data.setSubscriptions} monthlyPay={derived.monthlyPay} />}
-        {view === 'payslips' && <Payslips payslips={doc.payslips} onUpdatePayslips={data.setPayslips} geminiApiKey={data.geminiApiKey} pickerApiKey={c.pickerApiKey ?? ''} onApplyToPilotage={actions.applyPayslip} activePayslipId={doc.activePayslipId} onClearActivePayslip={actions.clearActivePayslip}
+        {tab === 'subscriptions' && <Subscriptions subscriptions={doc.subscriptions} onUpdate={data.setSubscriptions} monthlyPay={derived.monthlyPay} />}
+        {tab === 'payslips' && <Payslips payslips={doc.payslips} onUpdatePayslips={data.setPayslips} geminiApiKey={data.geminiApiKey} pickerApiKey={c.pickerApiKey ?? ''} onApplyToPilotage={actions.applyPayslip} activePayslipId={doc.activePayslipId} onClearActivePayslip={actions.clearActivePayslip}
           onOpenKeys={() => { openSettingsSection('keys'); setView('settings'); }}
           sharedFile={sharedPayslip} onSharedFileTaken={sharedPayslipTaken} onPayslipSaved={actions.attachPayslip} />}
         {shareMarker !== null && <Lazy><ShareTargetHost marker={shareMarker} ready={shareReady} data={data} onImportStatement={actions.importStatement}
           onPayslip={file => { setSharedPayslip(file); setView('payslips'); }} onOpenKeys={() => openSettings('keys')} onDone={onShareDone} /></Lazy>}
 
-        {view === 'settings' && <Settings
+        {screen === 'settings' && <Settings
           payslips={doc.payslips}
           notificationPrefs={c.notificationPrefs}
           onChangeNotificationPrefs={p => data.patchConfig({ notificationPrefs: p })}
@@ -219,14 +251,13 @@ export const ScreenRouter = memo(function ScreenRouter({ view, setView, data, de
           onSavePickerKey={key => data.patchConfig({ pickerApiKey: key })}
           onRequestLogout={() => onRequestLogout(true)} />}
 
-        {view === 'accounts' && <AccountsView
+        {tab === 'balances' && <AccountsView
           accounts={doc.accounts} fiscalConfig={doc.fiscalConfig} onUpdateAccounts={data.setAccounts}
           setView={setView} editingAccount={editingAccount} setEditingAccount={setEditingAccount}
           showForm={showForm} setShowForm={setShowForm}
           handleSaveAccount={saveAccount} handleDeleteAccount={actions.deleteAccount}
           handleDeleteMovement={actions.deleteMovement} handleRenameMovement={actions.renameMovement}
           hasParental={derived.hasParental} onReadStatement={accountId => setStatementFor({ accountId })} />}
-      </Suspense>
-    </ErrorBoundary>
+    </ScreenFrame>
   );
 });

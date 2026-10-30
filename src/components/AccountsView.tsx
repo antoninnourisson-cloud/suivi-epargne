@@ -105,7 +105,7 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
     <div className="space-y-6 animate-fade-in pb-20">
       <PageHeader
         title="Mes comptes"
-        subtitle={<>{accounts.length} compte{accounts.length > 1 ? 's' : ''} · <button type="button" onClick={() => setView('journal')} className="underline underline-offset-2 text-primary hover:no-underline">voir le journal</button></>}
+        subtitle={<>{accounts.length} compte{accounts.length > 1 ? 's' : ''} · <button type="button" onClick={() => setView('journal')} className="underline underline-offset-2 text-primary hover:no-underline">voir les mouvements</button></>}
         actions={!showForm ? <Button onClick={() => openForm(undefined)}><PlusCircle className="w-4 h-4" aria-hidden="true" /> Ajouter un compte</Button> : undefined}
       />
       {!showForm && <MovementSearch accounts={accounts} />}

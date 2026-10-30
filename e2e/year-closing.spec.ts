@@ -6,6 +6,7 @@
 import { test, expect, type Page } from './fixtures';
 import { readFile } from 'node:fs/promises';
 import { LATEST_VERSION } from '../src/changelog';
+import { goTo } from './nav';
 
 // 10 janvier 2027 : saison de la clôture de 2026 (les données de démo sont datées à partir
 // de cette date).
@@ -16,23 +17,6 @@ const openDemo = async (page: Page) => {
   await page.addInitScript(v => { try { localStorage.setItem('last_seen_version', v); } catch { /* ignoré */ } }, LATEST_VERSION);
   await page.goto('/?demo=1');
   await expect(page.getByRole('heading', { name: 'Accueil', level: 2 })).toBeAttached();
-};
-
-/** Ouvre un écran : barre latérale sur ordinateur, barre du bas ou menu « Plus » sur mobile. */
-const goTo = async (page: Page, label: string, isMobile: boolean) => {
-  if (!isMobile) {
-    await page.locator('aside').getByRole('button', { name: label, exact: true }).click();
-  } else {
-    const short: Record<string, string> = { 'Mes comptes': 'Comptes' };
-    const bar = page.getByRole('navigation', { name: 'Navigation principale' });
-    const tab = bar.getByRole('button', { name: short[label] ?? label, exact: true });
-    if (await tab.count()) await tab.click();
-    else {
-      await bar.getByRole('button', { name: 'Plus', exact: true }).click();
-      await page.getByRole('dialog', { name: "Plus d'écrans" }).getByRole('button', { name: label, exact: true }).click();
-    }
-  }
-  await expect(page).toHaveTitle(new RegExp(`^${label}`));
 };
 
 /** La tâche « Clôture de l'année 2026 » de l'Accueil (liste dépliée au besoin). */
@@ -61,8 +45,8 @@ test.describe("Clôture de l'année (démo, janvier)", () => {
     await expect(page.locator('#todo-list')).not.toContainText('vérifiez vos paramètres fiscaux');
     await todo.getByRole('button', { name: 'Ouvrir la clôture' }).click();
 
-    // --- Historique : la clôture en tête, ouverte ---
-    await expect(page).toHaveTitle(/^Historique/);
+    // --- Analyses › Évolution (ex-Historique) : la clôture en tête, ouverte ---
+    await expect(page).toHaveTitle('Analyses · Évolution · Pécule');
     const card = page.getByRole('region', { name: "Clôture de l'année 2026" });
     await expect(card).toBeVisible();
     const steps = card.getByRole('list', { name: 'Étapes de la clôture 2026' });

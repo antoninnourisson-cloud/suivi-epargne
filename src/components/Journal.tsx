@@ -3,7 +3,8 @@
 // Journal des modifications : tous les mouvements (votre part, part des parents,
 // valorisations, soldes initiaux), changements de taux et restitution, du plus récent au
 // plus ancien. Un mouvement se supprime (avec annulation), le dernier changement de taux
-// d'un compte s'annule.
+// d'un compte s'annule. Dans Comptes › Mouvements, le virement et les échéances récurrentes
+// (toolsSlot) viennent avant la liste.
 // ================================================
 import React, { useMemo, useState } from 'react';
 import { SavingsAccount, ParentalRestitution } from '../types';
@@ -39,6 +40,8 @@ interface Props {
   trackingStartDate?: string;
   onSetTrackingStart: (date: string | undefined) => void;
   onToggleAdjustment: (accountId: string, movementId: string) => void;
+  /** Comptes › Mouvements : virement et échéances récurrentes, entre l’en-tête et le journal. */
+  toolsSlot?: React.ReactNode;
 }
 
 // Pastilles de nature : parents en « tertiary » (ocre), comme sur l'Accueil et le Pilotage.
@@ -68,7 +71,7 @@ const day = (iso: string) => DAY.format(parseISODate(iso));
 
 const PAGE = 150;
 
-export const Journal: React.FC<Props> = ({ accounts, restitution, onDeleteMovement, onRevertRate, onRemoveCancelling, trackingStartDate, onSetTrackingStart, onToggleAdjustment }) => {
+export const Journal: React.FC<Props> = ({ accounts, restitution, onDeleteMovement, onRevertRate, onRemoveCancelling, trackingStartDate, onSetTrackingStart, onToggleAdjustment, toolsSlot }) => {
   // Les parents n'apparaissent (filtre, sous-titre) que s'ils ont compté : capital, mouvements ou restitution.
   const withParents = useMemo(() => hasParentalHistory(accounts, restitution), [accounts, restitution]);
   const [filter, setFilter] = useState<Filter>('all');
@@ -127,6 +130,8 @@ export const Journal: React.FC<Props> = ({ accounts, restitution, onDeleteMoveme
         title="Journal"
         subtitle={`Tout ce qui a changé sur vos comptes : versements et retraits, ${withParents ? 'part des parents, ' : ''}variations de valeur, taux. Chaque mouvement peut être supprimé, avec annulation possible.`}
       />
+
+      {toolsSlot}
 
       <details className="group rounded-2xl border border-outline-variant bg-surface-container-lowest dark:bg-surface-container-low" open={!!trackingStartDate}>
         <summary className="list-none cursor-pointer min-h-12 px-4 py-3 flex items-center justify-between gap-3 text-sm font-medium text-on-surface [&::-webkit-details-marker]:hidden">

@@ -2,6 +2,7 @@
 // pages, le lien direct de la notification et la désactivation de la motivation.
 import { test, expect, type Page } from './fixtures';
 import { LATEST_VERSION } from '../src/changelog';
+import { goTo } from './nav';
 
 // Date figée en milieu d'année : de janvier à mars, l'app propose l'année précédente
 // (defaultReviewYear), et le test casserait la CI pendant trois mois.
@@ -13,19 +14,6 @@ const openDemo = async (page: Page, query = '') => {
   await page.clock.setFixedTime(FIXED_NOW);
   await page.addInitScript(v => { try { localStorage.setItem('last_seen_version', v); } catch { /* ignoré */ } }, LATEST_VERSION);
   await page.goto(`/?demo=1${query}`);
-};
-
-/** Ouvre un écran : barre latérale sur ordinateur, menu « Plus » sur mobile. */
-const goTo = async (page: Page, label: string, isMobile: boolean) => {
-  if (!isMobile) {
-    await page.locator('aside').getByRole('button', { name: label, exact: true }).click();
-    return;
-  }
-  const bar = page.getByRole('navigation', { name: 'Navigation principale' });
-  const tab = bar.getByRole('button', { name: label, exact: true });
-  if (await tab.count()) { await tab.click(); return; }
-  await bar.getByRole('button', { name: 'Plus', exact: true }).click();
-  await page.getByRole('dialog', { name: "Plus d'écrans" }).getByRole('button', { name: label, exact: true }).click();
 };
 
 const openYearSheet = async (page: Page) => {

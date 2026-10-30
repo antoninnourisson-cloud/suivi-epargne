@@ -7,6 +7,7 @@ import { test, expect, type Page } from './fixtures';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { LATEST_VERSION } from '../src/changelog';
+import { screenReady } from './nav';
 
 // axe-core est déjà installé avec eslint-plugin-jsx-a11y (dépendance de développement).
 const AXE = readFileSync(createRequire(import.meta.url).resolve('axe-core/axe.min.js'), 'utf8');
@@ -76,8 +77,9 @@ const iconContrastViolations = (page: Page): Promise<string[]> => page.evaluate(
 });
 
 // Écrans les plus lus, et ceux qui ont de petites icônes (Mes comptes, Dons, Fiches de paie ;
-// les échéances récurrentes sont dans « Virements »).
-const VIEWS = ['dashboard', 'transfers', 'pilot', 'journal', 'parental', 'accounts', 'yield', 'donations', 'payslips', 'agenda', 'subscriptions', 'history'];
+// les échéances récurrentes sont dans Comptes › Mouvements, ancienne adresse « transfers »,
+// panneau ouvert avant la mesure), et le Calendrier fiscal d'Impôts.
+const VIEWS = ['dashboard', 'transfers', 'pilot', 'journal', 'parental', 'accounts', 'yield', 'donations', 'payslips', 'agenda', 'subscriptions', 'history', 'taxes&tab=calendar'];
 
 for (const theme of ['light', 'dark'] as const) {
   test.describe(`Contrastes AA, thème ${theme === 'light' ? 'clair' : 'sombre'}`, () => {
@@ -96,7 +98,9 @@ for (const theme of ['light', 'dark'] as const) {
       test(`écran ${view}`, async ({ page }) => {
         await page.goto(`/?demo=1&view=${view}`);
         await expect(page.locator('main h2').first()).toBeVisible();
+        await screenReady(page);
         await page.waitForTimeout(500); // contenus chargés à la demande
+        if (view === 'transfers') await page.locator('main').getByRole('button', { name: 'Échéances récurrentes' }).click();
         expect(await contrastViolations(page), view).toEqual([]);
         expect(await iconContrastViolations(page), `icônes, ${view}`).toEqual([]);
       });

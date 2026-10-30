@@ -7,7 +7,7 @@ import { useState } from 'react';
 import { act, cleanup, fireEvent, render, renderHook, screen } from '@testing-library/react';
 import { emptyData } from '../lib/schema';
 import { AccountType, type AppDoc, type PayRecord, type PayslipRecord, type SavingsAccount } from '../types';
-import { stripParam, useDeepLinks, useViewState } from './useAppNavigation';
+import { stripParam, useDeepLinks, useViewFocus, useViewState } from './useAppNavigation';
 import { clearRequestedSection, OPEN_SECTION_EVENT, peekRequestedSection } from '../components/settings/sections';
 import { OPEN_PAY_SHEET_EVENT, takePaySheetRequest } from '../components/pilot/paySheetRequest';
 import { syncLabel, syncTitle } from './SyncStatus';
@@ -19,7 +19,7 @@ const lastProps: Record<string, Record<string, unknown>> = {};
 vi.mock('./screens', () => {
   const stub = (name: string) => (props: Record<string, unknown>) => { renders[name] = (renders[name] ?? 0) + 1; lastProps[name] = props; return <div data-testid={name} />; };
   const names = ['AccountUpdate', 'AccountsView', 'Agenda', 'AskPeculeEntry', 'AssistantPilot', 'CloudBackupPanel', 'Dashboard', 'Donations', 'DriveBackupsPanel',
-    'FiscalWatchCard', 'History', 'Journal', 'MotivationSettings', 'ParentalShare', 'Payslips', 'ServerSecurityPanel',
+    'FiscalCalendar', 'FiscalWatchCard', 'History', 'Journal', 'MotivationSettings', 'ParentalShare', 'Payslips', 'ServerSecurityPanel',
     'SetAsideVersionsPanel', 'Settings', 'ShareTargetHost', 'Simulator', 'SoloPlanCard', 'Subscriptions', 'TaxNoticePanel', 'TaxReturnHelper',
     'TransferManager', 'Yield', 'ViewLoader'];
   return {
@@ -28,6 +28,7 @@ vi.mock('./screens', () => {
   };
 });
 import { ScreenRouter, type AccountFormState, type ScreenData } from './ScreenRouter';
+import { placeOf, type Place, type ScreenTab } from '../navigation';
 import type { DerivedData } from './useDerivedData';
 import type { AccountActions } from './useAccountActions';
 import type { FiscalWatch } from '../hooks/useFiscalWatch';
@@ -75,6 +76,14 @@ describe('liens directs', () => {
     expect(openView2).toHaveBeenCalledWith('pilot');
     expect(takePaySheetRequest()).toBe(true);
     window.removeEventListener(OPEN_PAY_SHEET_EVENT, onRequest);
+  });
+
+  it('ancienne clé ou écran, avec `&tab=` facultatif : transmis, puis retirés de l’adresse', () => {
+    window.history.replaceState({}, '', '/?view=taxes&tab=calendar');
+    const openView = vi.fn();
+    renderHook(() => useDeepLinks(true, openView, () => {}));
+    expect(openView).toHaveBeenCalledWith('taxes', 'calendar');
+    expect(window.location.search).toBe('');
   });
 
   it('écran inconnu de cette version : le lien reste dans l’adresse pour la version suivante', () => {
@@ -137,24 +146,89 @@ describe('liens directs', () => {
 });
 
 describe('écran courant', () => {
-  it('le dernier écran enregistré remplace l’Accueil, et chaque changement est mémorisé', () => {
+  beforeEach(() => localStorage.clear());
+
+  it('le dernier endroit enregistré remplace l’Accueil, et chaque changement est mémorisé', () => {
     const setLastView = vi.fn();
     const { result, rerender } = renderHook(({ last }) => useViewState(last, setLastView), { initialProps: { last: 'dashboard' } });
-    rerender({ last: 'pilot' });
-    expect(result.current.view).toBe('pilot');
-    act(() => result.current.setView('journal'));
-    expect(setLastView).toHaveBeenLastCalledWith('journal');
+    rerender({ last: 'pilot/payslips' });
+    expect(result.current.place).toEqual({ screen: 'pilot', tab: 'payslips' });
+    act(() => result.current.navigate('journal'));
+    expect(result.current.place).toEqual({ screen: 'accounts', tab: 'movements' });
+    expect(setLastView).toHaveBeenLastCalledWith('accounts/movements');
     // Ailleurs que sur l'Accueil, un nouveau `lastView` ne déplace pas l'utilisateur.
     rerender({ last: 'yield' });
-    expect(result.current.view).toBe('journal');
+    expect(result.current.place).toEqual({ screen: 'accounts', tab: 'movements' });
   });
 
-  it('un lien direct l’emporte sur le dernier écran enregistré', () => {
+  it('ancien `lastView` (fichier d’une version précédente, sur Drive) : relu par la table d’alias', () => {
+    const { result, rerender } = renderHook(({ last }) => useViewState(last, () => {}), { initialProps: { last: 'dashboard' } });
+    rerender({ last: 'subscriptions' });
+    expect(result.current.place).toEqual({ screen: 'pilot', tab: 'subscriptions' });
+  });
+
+  it('un lien direct l’emporte sur le dernier endroit enregistré', () => {
     const { result, rerender } = renderHook(({ last }) => useViewState(last, () => {}), { initialProps: { last: 'dashboard' } });
     act(() => result.current.openLinkedView('update'));
-    act(() => result.current.setView('dashboard'));
+    act(() => result.current.navigate('dashboard'));
     rerender({ last: 'pilot' });
-    expect(result.current.view).toBe('dashboard');
+    expect(result.current.place).toEqual({ screen: 'dashboard' });
+  });
+
+  it('onglet mémorisé : rouvert par les menus (openScreen), jamais par un lien (navigate)', () => {
+    const { result } = renderHook(() => useViewState('dashboard', () => {}));
+    act(() => result.current.navigate('pilot'));
+    act(() => result.current.selectTab('subscriptions'));
+    act(() => result.current.navigate('dashboard'));
+    act(() => result.current.openScreen('pilot'));
+    expect(result.current.place).toEqual({ screen: 'pilot', tab: 'subscriptions' });
+    act(() => result.current.navigate('dashboard'));
+    act(() => result.current.navigate('pilot'));
+    expect(result.current.place).toEqual({ screen: 'pilot', tab: 'month' });
+    // Un écran jamais ouvert : son premier onglet. Un onglet d'un autre écran est ignoré.
+    act(() => result.current.openScreen('analyses'));
+    expect(result.current.place).toEqual({ screen: 'analyses', tab: 'evolution' });
+    act(() => result.current.selectTab('month'));
+    expect(result.current.place).toEqual({ screen: 'analyses', tab: 'evolution' });
+  });
+
+  it('Pilotage mémorisé sur Abonnements, puis ?action=pay : Pilotage › Ce mois et la feuille de paie', () => {
+    const { result } = renderHook(() => useViewState('dashboard', () => {}));
+    act(() => result.current.openScreen('pilot'));
+    act(() => result.current.selectTab('subscriptions'));
+    act(() => result.current.navigate('dashboard'));
+    window.history.replaceState({}, '', '/?action=pay');
+    renderHook(() => useDeepLinks(true, result.current.openLinkedView, () => {}));
+    expect(result.current.place).toEqual({ screen: 'pilot', tab: 'month' });
+    expect(takePaySheetRequest()).toBe(true);
+    // Même chose avec l'écran dans le lien, et un onglet demandé qui n'est pas celui de la paie.
+    act(() => result.current.openScreen('dashboard'));
+    window.history.replaceState({}, '', '/?view=pilot&tab=subscriptions&action=pay');
+    renderHook(() => useDeepLinks(true, result.current.openLinkedView, () => {}));
+    expect(result.current.place).toEqual({ screen: 'pilot', tab: 'month' });
+    expect(takePaySheetRequest()).toBe(true);
+    expect(window.location.search).toBe('');
+  });
+
+  it('onglet changé : le focus ne bouge pas ; écran changé : compteur de navigation avancé', () => {
+    const { result } = renderHook(() => useViewState('dashboard', () => {}));
+    act(() => result.current.navigate('pilot'));
+    const seq = result.current.seq;
+    act(() => result.current.selectTab('payslips'));
+    expect(result.current.seq).toBe(seq);
+    act(() => result.current.navigate('subscriptions'));
+    expect(result.current.seq).toBe(seq + 1);
+    // Même endroit : rien ne change (pas de focus volé).
+    act(() => result.current.navigate('subscriptions'));
+    expect(result.current.seq).toBe(seq + 1);
+  });
+
+  it('titre de l’onglet du navigateur : écran et onglet', () => {
+    const main = { current: null };
+    const { rerender } = renderHook(({ place }) => useViewFocus(place, 0, true, main), { initialProps: { place: { screen: 'accounts', tab: 'movements' } as Place } });
+    expect(document.title).toBe('Comptes · Mouvements · Pécule');
+    rerender({ place: { screen: 'dashboard' } });
+    expect(document.title).toBe('Accueil · Pécule');
   });
 });
 
@@ -428,8 +502,10 @@ describe('écran mémoïsé', () => {
   const accountForm: AccountFormState = { editingAccount: undefined, setEditingAccount: () => {}, showForm: false, setShowForm: () => {} };
   const setView = () => {};
   const onSignedOut = () => {};
-  const onQuickAdd = () => {};
+  const onSelectTab = () => {};
   const onShareDone = () => {};
+  const home: Place = { screen: 'dashboard' };
+  const noTabs: ScreenTab[] = [];
 
   it('un changement d’état d’App sans rapport (fenêtre, toast, sauvegarde) ne re-rend pas l’écran', () => {
     for (const k of Object.keys(renders)) delete renders[k];
@@ -439,7 +515,7 @@ describe('écran mémoïsé', () => {
       return <>
         <button onClick={() => setN(n + 1)}>etat-app {n}</button>
         <button onClick={() => setD({ ...data, doc: { ...doc } })}>donnees</button>
-        <ScreenRouter view="dashboard" setView={setView} data={d} derived={derived} actions={actions} fiscalWatch={fiscalWatch} accountForm={accountForm} onSignedOutEverywhere={onSignedOut} onRequestLogout={onSignedOut} onQuickAdd={onQuickAdd} shareMarker={null} shareReady onShareDone={onShareDone} />
+        <ScreenRouter place={home} setView={setView} onSelectTab={onSelectTab} hiddenTabs={noTabs} data={d} derived={derived} actions={actions} fiscalWatch={fiscalWatch} accountForm={accountForm} onSignedOutEverywhere={onSignedOut} onRequestLogout={onSignedOut} shareMarker={null} shareReady onShareDone={onShareDone} />
       </>;
     };
     render(<UiProviders><Parent /></UiProviders>);
@@ -459,10 +535,10 @@ describe('partage vers Pécule (aiguillage)', () => {
     const accountForm: AccountFormState = { editingAccount: undefined, setEditingAccount: () => {}, showForm: false, setShowForm: () => {} };
     const onShareDone = vi.fn();
     const Parent = () => {
-      const [view, setView] = useState<'dashboard' | 'payslips'>('dashboard');
+      const [place, setPlace] = useState<Place>({ screen: 'dashboard' });
       const [marker, setMarker] = useState<string | null>('1');
-      return <ScreenRouter view={view} setView={v => setView(v as 'payslips')} data={data} derived={{} as DerivedData} actions={{ importStatement: () => null } as unknown as AccountActions}
-        fiscalWatch={{ proposals: [] } as unknown as FiscalWatch} accountForm={accountForm} onSignedOutEverywhere={() => {}} onRequestLogout={() => {}} onQuickAdd={() => {}}
+      return <ScreenRouter place={place} setView={v => setPlace(placeOf(v))} onSelectTab={() => {}} hiddenTabs={[]} data={data} derived={{} as DerivedData} actions={{ importStatement: () => null } as unknown as AccountActions}
+        fiscalWatch={{ proposals: [] } as unknown as FiscalWatch} accountForm={accountForm} onSignedOutEverywhere={() => {}} onRequestLogout={() => {}}
         shareMarker={marker} shareReady onShareDone={() => { onShareDone(); setMarker(null); }} />;
     };
     render(<UiProviders><Parent /></UiProviders>);
@@ -477,5 +553,72 @@ describe('partage vers Pécule (aiguillage)', () => {
     expect(payslips.sharedFile).toBe(file);
     act(() => payslips.onSharedFileTaken());
     expect((lastProps.Payslips as { sharedFile: File | null }).sharedFile).toBeNull();
+  });
+});
+
+describe('écrans à onglets', () => {
+  const doc = emptyData();
+  const data = { doc, geminiApiKey: '', patchConfig: () => {}, setActivePayslipId: () => {} } as unknown as ScreenData;
+  const derived = { fullData: doc } as unknown as DerivedData;
+  const accountForm: AccountFormState = { editingAccount: undefined, setEditingAccount: () => {}, showForm: false, setShowForm: () => {} };
+  const renderAt = (place: Place, hiddenTabs: ScreenTab[] = []) => {
+    const onSelectTab = vi.fn();
+    for (const k of Object.keys(renders)) delete renders[k];
+    render(<UiProviders><ScreenRouter place={place} setView={() => {}} onSelectTab={onSelectTab} hiddenTabs={hiddenTabs} data={data} derived={derived}
+      actions={{} as AccountActions} fiscalWatch={{ proposals: [] } as unknown as FiscalWatch} accountForm={accountForm}
+      onSignedOutEverywhere={() => {}} onRequestLogout={() => {}} shareMarker={null} shareReady onShareDone={() => {}} /></UiProviders>);
+    return onSelectTab;
+  };
+  const tabNames = (label: string) => screen.getAllByRole('tab').filter(t => t.closest('[role="tablist"]')?.getAttribute('aria-label') === label).map(t => t.textContent);
+  const shown = () => Object.keys(renders).filter(k => k !== 'ViewLoader');
+
+  it.each([
+    [{ screen: 'accounts', tab: 'balances' }, 'Comptes', ['Soldes', 'Mouvements', 'Parents'], ['AccountsView']],
+    [{ screen: 'accounts', tab: 'movements' }, 'Comptes', ['Soldes', 'Mouvements', 'Parents'], ['Journal']],
+    [{ screen: 'accounts', tab: 'parents' }, 'Comptes', ['Soldes', 'Mouvements', 'Parents'], ['ParentalShare']],
+    [{ screen: 'pilot', tab: 'month' }, 'Pilotage', ['Ce mois', 'Abonnements', 'Fiches de paie'], ['AssistantPilot']],
+    [{ screen: 'pilot', tab: 'subscriptions' }, 'Pilotage', ['Ce mois', 'Abonnements', 'Fiches de paie'], ['Subscriptions']],
+    [{ screen: 'pilot', tab: 'payslips' }, 'Pilotage', ['Ce mois', 'Abonnements', 'Fiches de paie'], ['Payslips']],
+    [{ screen: 'analyses', tab: 'evolution' }, 'Analyses', ['Évolution', 'Rendement', 'Agenda', 'Et si…'], ['History']],
+    [{ screen: 'analyses', tab: 'yield' }, 'Analyses', ['Évolution', 'Rendement', 'Agenda', 'Et si…'], ['Yield']],
+    [{ screen: 'analyses', tab: 'agenda' }, 'Analyses', ['Évolution', 'Rendement', 'Agenda', 'Et si…'], ['Agenda']],
+    [{ screen: 'analyses', tab: 'simulator' }, 'Analyses', ['Évolution', 'Rendement', 'Agenda', 'Et si…'], ['Simulator']],
+    [{ screen: 'taxes', tab: 'donations' }, 'Impôts', ['Dons et déclaration', 'Calendrier fiscal'], ['Donations']],
+    [{ screen: 'taxes', tab: 'calendar' }, 'Impôts', ['Dons et déclaration', 'Calendrier fiscal'], ['FiscalCalendar']],
+  ] as [Place, string, string[], string[]][])('%o : titre « %s », onglets, et seul l’onglet choisi est monté', (place, title, tabs, mounted) => {
+    renderAt(place);
+    expect(screen.getByRole('heading', { name: title, level: 2 })).toBeTruthy();
+    expect(tabNames(title)).toEqual(tabs);
+    const selected = screen.getAllByRole('tab').filter(t => t.getAttribute('aria-selected') === 'true');
+    expect(selected).toHaveLength(1);
+    const panel = screen.getByRole('tabpanel');
+    expect(panel.getAttribute('aria-labelledby')).toBe(selected[0].id);
+    expect(shown()).toEqual(mounted);
+  });
+
+  it('Comptes › Mouvements : le journal reçoit le virement et les échéances récurrentes', () => {
+    renderAt({ screen: 'accounts', tab: 'movements' });
+    expect(lastProps.Journal.toolsSlot).toBeTruthy();
+  });
+
+  it('onglet touché : signalé (le parent change d’onglet) ; flèches au clavier', () => {
+    const onSelectTab = renderAt({ screen: 'pilot', tab: 'month' });
+    fireEvent.click(screen.getByRole('tab', { name: 'Abonnements' }));
+    expect(onSelectTab).toHaveBeenCalledWith('subscriptions');
+    const current = screen.getByRole('tab', { name: 'Ce mois' });
+    current.focus();
+    fireEvent.keyDown(current, { key: 'ArrowLeft' });
+    expect(onSelectTab).toHaveBeenLastCalledWith('payslips');
+  });
+
+  it('mode solo : l’onglet Parents est masqué', () => {
+    renderAt({ screen: 'accounts', tab: 'balances' }, ['parents']);
+    expect(tabNames('Comptes')).toEqual(['Soldes', 'Mouvements']);
+  });
+
+  it('écrans sans onglets : ni titre ajouté ni onglets', () => {
+    renderAt({ screen: 'settings' });
+    expect(screen.queryByRole('tablist')).toBeNull();
+    expect(shown()).toEqual(['Settings']);
   });
 });

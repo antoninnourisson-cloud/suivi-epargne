@@ -1,14 +1,19 @@
-// Navigation mobile : quatre onglets et un panneau « Plus » regroupé par zones.
+// Navigation mobile : quatre onglets et un panneau « Plus » regroupé par zones. Une entrée qui
+// nomme un écran rouvre son dernier onglet ; une ancienne entrée (Journal, Abonnements…) ouvre
+// son onglet (voir navigation.ts).
 import React from 'react';
 import { MoreHorizontal, X } from 'lucide-react';
-import { NAV_ITEMS, NAV_SECTIONS, NavItem, View } from '../navigation';
+import { activeNavKey, goToNavItem, NAV_ITEMS, NAV_SECTIONS, type NavItem, type Place, type Screen, type View } from '../navigation';
 import { Modal } from './Modal';
 import { IconButton } from './ui';
 import { AskNavButton } from './AskNavButton';
 
 interface BottomNavProps {
-  view: View;
-  setView: (v: View) => void;
+  place: Place;
+  /** Ancienne entrée : l'onglet de son alias. */
+  onNavigate: (v: View) => void;
+  /** Entrée d'un écran : son onglet mémorisé. */
+  onOpenScreen: (s: Screen) => void;
   moreOpen: boolean;
   setMoreOpen: (open: boolean) => void;
   /** Écrans masqués (ex. part parentale en mode solo). */
@@ -29,17 +34,19 @@ const TabButton: React.FC<{ active: boolean; onClick: () => void; icon: NavItem[
   </button>
 );
 
-export const BottomNav: React.FC<BottomNavProps> = ({ view, setView, moreOpen, setMoreOpen, hidden = [], onAsk }) => {
+export const BottomNav: React.FC<BottomNavProps> = ({ place, onNavigate, onOpenScreen, moreOpen, setMoreOpen, hidden = [], onAsk }) => {
   const items = NAV_ITEMS.filter(i => !hidden.includes(i.key));
   const tabs = items.filter(i => i.tab);
   const more = items.filter(i => !i.tab);
-  const inMore = more.some(i => i.key === view);
-  const go = (v: View) => { setView(v); setMoreOpen(false); };
+  // Onglets de la barre : actifs pour tout leur écran ; « Plus » pour les autres écrans.
+  const barActive = activeNavKey(place, tabs.map(t => t.key));
+  const moreActive = barActive ? undefined : activeNavKey(place, more.map(i => i.key));
+  const go = (v: View) => { goToNavItem(v, onNavigate, onOpenScreen); setMoreOpen(false); };
   return (
     <>
       <nav aria-label="Navigation principale" className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-surface-container flex pb-[env(safe-area-inset-bottom)]">
-        {tabs.map(t => <TabButton key={t.key} active={view === t.key} current={view === t.key} onClick={() => setView(t.key)} icon={t.icon} label={t.short ?? t.label} />)}
-        <TabButton active={moreOpen || inMore} onClick={() => setMoreOpen(true)} icon={MoreHorizontal} label="Plus" expanded={moreOpen} />
+        {tabs.map(t => <TabButton key={t.key} active={barActive === t.key} current={barActive === t.key} onClick={() => goToNavItem(t.key, onNavigate, onOpenScreen)} icon={t.icon} label={t.short ?? t.label} />)}
+        <TabButton active={moreOpen || !!moreActive} onClick={() => setMoreOpen(true)} icon={MoreHorizontal} label="Plus" expanded={moreOpen} />
       </nav>
 
       <Modal open={moreOpen} onClose={() => setMoreOpen(false)} label="Plus d'écrans" variant="sheet" className="md:hidden p-4">
@@ -59,8 +66,8 @@ export const BottomNav: React.FC<BottomNavProps> = ({ view, setView, moreOpen, s
                   <button
                     key={item.key}
                     onClick={() => go(item.key)}
-                    aria-current={view === item.key ? 'page' : undefined}
-                    className={`flex flex-col items-center gap-2 p-3 rounded-2xl min-h-[72px] ${view === item.key ? 'bg-secondary-container text-on-secondary-container' : 'bg-surface-container text-on-surface-variant'}`}
+                    aria-current={moreActive === item.key ? 'page' : undefined}
+                    className={`flex flex-col items-center gap-2 p-3 rounded-2xl min-h-[72px] ${moreActive === item.key ? 'bg-secondary-container text-on-secondary-container' : 'bg-surface-container text-on-surface-variant'}`}
                   >
                     <item.icon className="w-5 h-5" aria-hidden="true" />
                     <span className="text-xs font-medium text-center leading-tight">{item.label}</span>

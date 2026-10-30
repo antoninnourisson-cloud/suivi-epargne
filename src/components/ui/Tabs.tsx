@@ -1,5 +1,7 @@
 // Onglets Material 3 (« primary tabs ») : motif ARIA complet (tablist, tab, tabpanel
-// reliés), flèches gauche/droite, Début et Fin, un seul arrêt de tabulation.
+// reliés), flèches gauche/droite, Début et Fin, un seul arrêt de tabulation. `fill` : onglets
+// d'un écran (Comptes, Pilotage…), qui se partagent la largeur sur téléphone et se resserrent
+// sous 360 px pour tenir sans défilement horizontal jusqu'à 320 px.
 import React, { useId } from 'react';
 import { onTablistKeyDown } from '../../lib/tablist';
 
@@ -12,9 +14,10 @@ interface TabsProps<T extends string> {
   onChange: (value: T) => void;
   children: React.ReactNode;
   className?: string;
+  fill?: boolean;
 }
 
-export const Tabs = <T extends string>({ label, tabs, value, onChange, children, className = '' }: TabsProps<T>) => {
+export const Tabs = <T extends string>({ label, tabs, value, onChange, children, className = '', fill = false }: TabsProps<T>) => {
   const base = useId();
   return (
     <div className={className}>
@@ -31,7 +34,7 @@ export const Tabs = <T extends string>({ label, tabs, value, onChange, children,
               aria-controls={`${base}-panel`}
               tabIndex={selected ? 0 : -1}
               onClick={() => onChange(t.value)}
-              className={`relative h-12 px-4 flex items-center justify-center gap-2 text-sm font-medium whitespace-nowrap transition-colors hover:bg-on-surface/8 ${selected ? 'text-primary' : 'text-on-surface-variant'}`}
+              className={`relative h-12 ${fill ? 'flex-1 sm:flex-none px-3 max-[359px]:px-2 max-[359px]:text-xs' : 'px-4'} flex items-center justify-center gap-2 text-sm font-medium whitespace-nowrap transition-colors hover:bg-on-surface/8 ${selected ? 'text-primary' : 'text-on-surface-variant'}`}
             >
               {t.icon && <t.icon className="w-4 h-4" aria-hidden="true" />}
               {t.label}

@@ -2,7 +2,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { useState } from 'react';
-import { DataTable, DeltaBadge, MoneyText, SegmentedButton, Tabs, TextField, sparkPath } from './index';
+import { DataTable, DeltaBadge, InTabPanelContext, MoneyText, PageHeader, SegmentedButton, Tabs, TextField, sparkPath } from './index';
 
 describe('sparkPath', () => {
   it('trace la série de gauche à droite, le maximum en haut', () => {
@@ -68,5 +68,21 @@ describe('TextField', () => {
     const input = screen.getByLabelText('Montant');
     expect(input.getAttribute('aria-invalid')).toBe('true');
     expect(screen.getByRole('alert').textContent).toBe('Montant trop élevé');
+  });
+});
+
+describe('PageHeader', () => {
+  it('écran : titre h2 visible', () => {
+    const { unmount } = render(<PageHeader title="Journal" subtitle="Tout ce qui a changé." />);
+    expect(screen.getByRole('heading', { name: 'Journal', level: 2 }).className).not.toMatch(/sr-only/);
+    unmount();
+  });
+
+  it('dans l’onglet d’un écran : h3 masqué à l’écran, explication et actions gardées', () => {
+    render(<InTabPanelContext.Provider value><PageHeader title="Journal" subtitle="Tout ce qui a changé." actions={<button type="button">Importer</button>} /></InTabPanelContext.Provider>);
+    expect(screen.queryByRole('heading', { level: 2 })).toBeNull();
+    expect(screen.getByRole('heading', { name: 'Journal', level: 3 }).className).toMatch(/sr-only/);
+    expect(screen.getByText('Tout ce qui a changé.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Importer' })).toBeTruthy();
   });
 });

@@ -6,6 +6,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { AccountType, type SavingsAccount } from '../types';
 import { QuickAddModal } from './QuickAddModal';
 import { QuickAddFab, QuickAddNavButton, showQuickAddFab } from './QuickAddFab';
+import { placeOf } from '../navigation';
 import { Modal } from './Modal';
 
 afterEach(() => { cleanup(); localStorage.clear(); });
@@ -115,8 +116,10 @@ describe('Modal', () => {
 
 describe('bouton d’ajout rapide', () => {
   it('masqué sur les écrans qui ont déjà leur ajout ou leur enregistrement', () => {
-    for (const v of ['update', 'transfers', 'subscriptions', 'donations', 'payslips', 'parental', 'settings'] as const) expect(showQuickAddFab(v)).toBe(false);
-    for (const v of ['dashboard', 'accounts', 'journal', 'pilot', 'history', 'agenda'] as const) expect(showQuickAddFab(v)).toBe(true);
+    for (const v of ['update', 'subscriptions', 'donations', 'payslips', 'parental', 'settings'] as const) expect(showQuickAddFab(placeOf(v))).toBe(false);
+    // Comptes › Mouvements (ex-Journal et ex-Virements) le garde.
+    for (const v of ['dashboard', 'accounts', 'journal', 'transfers', 'pilot', 'history', 'agenda'] as const) expect(showQuickAddFab(placeOf(v))).toBe(true);
+    expect(showQuickAddFab({ screen: 'taxes', tab: 'calendar' })).toBe(true);
   });
 
   it('téléphone : « Mouvement » visible, nom complet pour les lecteurs d’écran ; ordinateur : libellé complet', () => {

@@ -2,17 +2,12 @@
 // salaire, compte dans la paie nette après impôt et reste enregistré après un changement d'écran.
 import { test, expect, type Page } from './fixtures';
 import { LATEST_VERSION } from '../src/changelog';
+import { goTo } from './nav';
 
 const openDemo = async (page: Page) => {
   await page.addInitScript(v => { try { localStorage.setItem('last_seen_version', v); } catch { /* ignoré */ } }, LATEST_VERSION);
   await page.goto('/?demo=1');
   await expect(page.getByRole('heading', { name: 'Accueil', level: 2 })).toBeAttached();
-};
-
-const goTo = async (page: Page, label: string, isMobile: boolean) => {
-  const nav = isMobile ? page.getByRole('navigation', { name: 'Navigation principale' }) : page.locator('aside');
-  await nav.getByRole('button', { name: label, exact: true }).click();
-  await expect(page).toHaveTitle(new RegExp(`^${label}`));
 };
 
 /** « 1 273,34 € » → 1273.34 */

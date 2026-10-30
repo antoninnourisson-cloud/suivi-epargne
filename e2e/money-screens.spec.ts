@@ -7,6 +7,7 @@ import { test, expect, type Page } from './fixtures';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { LATEST_VERSION } from '../src/changelog';
+import { screenReady } from './nav';
 
 // axe-core est déjà installé avec eslint-plugin-jsx-a11y (dépendance de développement).
 const AXE = readFileSync(createRequire(import.meta.url).resolve('axe-core/axe.min.js'), 'utf8');
@@ -17,6 +18,7 @@ const openDemo = async (page: Page, view: string) => {
   await page.addInitScript(v => { try { localStorage.setItem('last_seen_version', v); } catch { /* ignoré */ } }, LATEST_VERSION);
   await page.goto(`/?demo=1&view=${view}`);
   await expect(page.locator('main h2').first()).toBeVisible();
+  await screenReady(page);
 };
 
 /** Élément qui a le focus : dans l'écran (<main>), jamais sur <body>. */
@@ -119,7 +121,8 @@ test.describe('Accessibilité des écrans d’argent (démo)', () => {
     await page.setViewportSize({ width: 320, height: 700 });
     for (const [view, title] of [['donations', 'Dons et impôts'], ['parental', 'Part parentale'], ['payslips', 'Fiches de paie']]) {
       await openDemo(page, view);
-      await expect(page.getByRole('heading', { name: title, level: 2 })).toBeVisible();
+      // Onglets de Comptes, Pilotage et Impôts : le titre de l'ancien écran devient un h3.
+      await expect(page.getByRole('heading', { name: title, level: 3, exact: true })).toBeVisible();
       const overflow = await page.evaluate(() => {
         const main = document.querySelector('main')!;
         const wide = Array.from(main.querySelectorAll<HTMLElement>('*'))

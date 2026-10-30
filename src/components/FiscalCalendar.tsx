@@ -1,20 +1,12 @@
-// Onglet « Horloge fiscale » : quand chaque PEA, PEE ou assurance-vie devient disponible.
-import React from 'react';
+// Impôts › Calendrier fiscal (ex-« Horloge fiscale » du Pilotage) : quand chaque PEA, PEE ou
+// assurance-vie devient disponible.
+import React, { useMemo } from 'react';
+import type { FiscalConfig, SavingsAccount } from '../types';
+import { computeFiscalClock, type FiscalClockItem } from '../lib/fiscalClock';
 import { Hourglass, Lock, Unlock } from 'lucide-react';
-import { Card, EmptyState, StatTile } from '../ui';
+import { Card, EmptyState, PageHeader, StatTile } from './ui';
 
-export interface FiscalClockItem {
-  id: string;
-  name: string;
-  type: string;
-  date: string;
-  timeLeft: string;
-  isAvailable: boolean;
-  /** Précision en une phrase (ex. PEE : ce qui se débloque à l'échéance). */
-  note?: string;
-}
-
-export const FiscalClock: React.FC<{ items: FiscalClockItem[] }> = ({ items }) => {
+const FiscalClock: React.FC<{ items: FiscalClockItem[] }> = ({ items }) => {
   if (items.length === 0) {
     return (
       <Card>
@@ -62,6 +54,17 @@ export const FiscalClock: React.FC<{ items: FiscalClockItem[] }> = ({ items }) =
           );
         })}
       </ul>
+    </div>
+  );
+};
+
+/** Onglet « Calendrier fiscal » de l'écran Impôts. */
+export const FiscalCalendar: React.FC<{ accounts: SavingsAccount[]; fiscalConfig: FiscalConfig }> = ({ accounts, fiscalConfig }) => {
+  const items = useMemo(() => computeFiscalClock(accounts, fiscalConfig), [accounts, fiscalConfig]);
+  return (
+    <div className="animate-fade-in pb-20">
+      <PageHeader title="Calendrier fiscal" subtitle="Quand chaque PEA, PEE ou assurance-vie devient disponible sans surcoût d'impôt." />
+      <FiscalClock items={items} />
     </div>
   );
 };

@@ -5,27 +5,14 @@
 // qui rejoint l'écran Fiches de paie.
 import { test, expect, type Page } from './fixtures';
 import { LATEST_VERSION } from '../src/changelog';
+import { goTo, screenReady } from './nav';
 
 const openDemo = async (page: Page, query = 'view=pilot') => {
   // « Quoi de neuf » déjà vu : la modale ne masque pas l'écran.
   await page.addInitScript(v => { try { localStorage.setItem('last_seen_version', v); } catch { /* ignoré */ } }, LATEST_VERSION);
   await page.goto(`/?demo=1&${query}`);
   await expect(page.locator('main h2').first()).toBeVisible();
-};
-
-const goTo = async (page: Page, label: string, isMobile: boolean) => {
-  if (!isMobile) {
-    await page.locator('aside').getByRole('button', { name: label, exact: true }).click();
-  } else {
-    const bar = page.getByRole('navigation', { name: 'Navigation principale' });
-    const tab = bar.getByRole('button', { name: label, exact: true });
-    if (await tab.count()) await tab.click();
-    else {
-      await bar.getByRole('button', { name: 'Plus', exact: true }).click();
-      await page.getByRole('dialog', { name: "Plus d'écrans" }).getByRole('button', { name: label, exact: true }).click();
-    }
-  }
-  await expect(page).toHaveTitle(new RegExp(`^${label}`));
+  await screenReady(page);
 };
 
 /** « 1 273,34 € » → 1273.34 */

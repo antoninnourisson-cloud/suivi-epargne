@@ -3,6 +3,7 @@
 // anneau, et sur téléphone chaque contrôle offre une cible tactile d'au moins 48 px.
 import { test, expect, type Page } from './fixtures';
 import { LATEST_VERSION } from '../src/changelog';
+import { screenReady } from './nav';
 
 const openDemo = async (page: Page, view?: string) => {
   // « Quoi de neuf » déjà vu : la modale ne masque pas l'écran.
@@ -119,7 +120,7 @@ test.describe('Affichage (démo)', () => {
     await expect(page.getByRole('button', { name: 'Masquer les montants' }).filter({ visible: true })).toHaveAttribute('aria-pressed', 'true');
     for (const view of ['pilot', 'history']) {
       await page.goto(`/?demo=1&view=${view}`);
-      await expect(page.locator('main h2').first()).toBeAttached();
+      await screenReady(page);
       await page.waitForTimeout(500); // écran et graphiques chargés à la demande
       expect(amountInDigits.test(await main.innerText()), view).toBe(false);
     }

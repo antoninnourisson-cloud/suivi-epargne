@@ -39,8 +39,8 @@ self.addEventListener('notificationclick', (event) => {
         if (w.url.startsWith(self.registration.scope) && 'focus' in w) {
           // `section` : carte de Paramètres à ouvrir (alertes de sécurité : « Appareils
           // connectés », sauvegarde de secours) ; `action` : rituel à ouvrir (notification
-          // de paie, `?view=pilot&action=pay`).
-          w.postMessage({ type: 'open-view', view, year: target.searchParams.get('year'), section: target.searchParams.get('section'), action: target.searchParams.get('action') });
+          // de paie, `?view=pilot&action=pay`) ; `tab` : onglet de l'écran visé.
+          w.postMessage({ type: 'open-view', view, year: target.searchParams.get('year'), section: target.searchParams.get('section'), action: target.searchParams.get('action'), tab: target.searchParams.get('tab') });
           return w.focus();
         }
       }

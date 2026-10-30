@@ -1,11 +1,16 @@
-// Écran courant : dernier écran ouvert, liens directs (notifications, raccourci d'ajout
-// rapide, messages du service worker), et ce qui suit un changement d'écran (titre de
-// l'onglet, retour en haut, focus sur le titre).
+// Endroit courant (écran et onglet) : dernier endroit ouvert, liens directs (notifications,
+// raccourci d'ajout rapide, messages du service worker), onglet mémorisé de chaque écran, et
+// ce qui suit un changement d'écran (titre de l'onglet, retour en haut, focus sur le titre).
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { RefObject } from 'react';
-import { isView, navLabel, type View } from '../navigation';
+import {
+  encodePlace, isTabOf, isView, parsePlace, placeIn, placeLabel, placeOf, samePlace,
+  type Place, type Screen, type ScreenTab, type View,
+} from '../navigation';
 import { isSettingsSection, openSettingsSection } from '../components/settings/sections';
 import { requestPaySheet } from '../components/pilot/paySheetRequest';
+import { lsGetJSON, lsSetJSON } from '../lib/storage';
+import { storageKey } from '../lib/storageKeys';
 
 /** Retire un paramètre de l'adresse sans recharger la page (les autres paramètres restent). */
 export const stripParam = (name: string) => {
@@ -15,25 +20,65 @@ export const stripParam = (name: string) => {
   window.history.replaceState({}, '', window.location.pathname + (rest ? `?${rest}` : ''));
 };
 
+// ---------------------------------------------------------------------------
+// Onglet mémorisé de chaque écran (préférence de cet appareil)
+// ---------------------------------------------------------------------------
+
+const TABS_KEY = storageKey('screenTabs');
+const isTabMap = (v: unknown): v is Record<string, string> => !!v && typeof v === 'object' && !Array.isArray(v);
+
+/** Dernier onglet affiché de cet écran, s'il existe encore ; sinon l'onglet par défaut. */
+export const rememberedPlace = (screen: Screen): Place => placeIn(screen, lsGetJSON(TABS_KEY, {}, isTabMap)[screen]);
+
+const rememberTab = (screen: Screen, tab: ScreenTab) => {
+  const map = lsGetJSON(TABS_KEY, {}, isTabMap);
+  if (map[screen] === tab) return;
+  lsSetJSON(TABS_KEY, { ...map, [screen]: tab });
+};
+
+// ---------------------------------------------------------------------------
+// Endroit courant
+// ---------------------------------------------------------------------------
+
+interface NavState {
+  place: Place;
+  /** Compteur des changements d'endroit par navigation (pas par un onglet touché) : focus. */
+  seq: number;
+}
+
 /**
- * Écran affiché. Au premier chargement, le dernier écran ouvert (`lastView`, enregistré dans
- * le fichier) remplace l'Accueil, sauf si un lien direct a déjà choisi l'écran. Chaque
- * changement est mémorisé sur l'appareil (setLastView ne déclenche pas d'écriture Drive).
+ * Endroit affiché. Au premier chargement, le dernier endroit ouvert (`lastView`, enregistré
+ * dans le fichier, ancien format compris) remplace l'Accueil, sauf si un lien direct a déjà
+ * choisi l'écran. Chaque changement est mémorisé sur l'appareil (setLastView ne déclenche pas
+ * d'écriture Drive), et l'onglet de chaque écran à onglets aussi.
+ * - `navigate(view, tab?)` : liens internes et liens directs, toujours l'onglet de l'alias ;
+ * - `openScreen(screen)` : barre du bas, « Plus », menu latéral, l'onglet mémorisé ;
+ * - `selectTab(tab)` : un onglet touché dans l'écran (le focus reste sur l'onglet).
  */
 export const useViewState = (lastView: string, setLastView: (v: string) => void) => {
-  const [view, setView] = useState<View>('dashboard');
+  const [{ place, seq }, setState] = useState<NavState>({ place: { screen: 'dashboard' }, seq: 0 });
   const deepLinkedRef = useRef(false);
-  /** Écran ouvert par un lien direct : le dernier écran enregistré ne le remplace plus. */
-  const openLinkedView = useCallback((v: View) => { deepLinkedRef.current = true; setView(v); }, []);
-  // Mise à jour fonctionnelle : on lit l'écran courant sans dépendre de `view`, sinon revenir
+  const go = useCallback((next: Place) => setState(s => (samePlace(s.place, next) ? s : { place: next, seq: s.seq + 1 })), []);
+  const navigate = useCallback((v: View, tab?: string) => go(placeOf(v, tab)), [go]);
+  /** Endroit ouvert par un lien direct : le dernier endroit enregistré ne le remplace plus. */
+  const openLinkedView = useCallback((v: View, tab?: string) => { deepLinkedRef.current = true; navigate(v, tab); }, [navigate]);
+  const openScreen = useCallback((screen: Screen) => go(rememberedPlace(screen)), [go]);
+  const selectTab = useCallback((tab: ScreenTab) => setState(s => (
+    isTabOf(s.place.screen, tab) && s.place.tab !== tab ? { place: { screen: s.place.screen, tab }, seq: s.seq } : s
+  )), []);
+  // Mise à jour fonctionnelle : on lit l'endroit courant sans dépendre de lui, sinon revenir
   // à l'Accueil relancerait l'effet (avec l'ancien `lastView`) et renverrait aussitôt vers
   // l'écran précédent.
   useEffect(() => {
-    if (!isView(lastView) || deepLinkedRef.current) return;
-    setView(v => (v === 'dashboard' ? lastView : v));
+    const saved = parsePlace(lastView);
+    if (!saved || deepLinkedRef.current) return;
+    setState(s => (s.place.screen === 'dashboard' && !samePlace(s.place, saved) ? { place: saved, seq: s.seq + 1 } : s));
   }, [lastView]);
-  useEffect(() => { setLastView(view); }, [view, setLastView]);
-  return { view, setView, openLinkedView };
+  useEffect(() => {
+    setLastView(encodePlace(place));
+    if (place.tab) rememberTab(place.screen, place.tab);
+  }, [place, setLastView]);
+  return { place, seq, navigate, openLinkedView, openScreen, selectTab };
 };
 
 /**
@@ -42,13 +87,15 @@ export const useViewState = (lastView: string, setLastView: (v: string) => void)
  * qu'un simple rechargement ne les rejoue pas.
  * - `?action=quickadd` : raccourci PWA « Ajouter un mouvement » (appui long sur l'icône) ;
  * - `?action=pay` (avec ou sans `view=pilot`) : raccourci « J'ai reçu ma paie » et
- *   notification de paie : le Pilotage s'ouvre directement sur le rituel ;
- * - `?view=update` : écran ouvert par une notification. Un écran inconnu de cette version
- *   (lien d'une version plus récente, encore en cours de mise à jour) reste dans l'adresse
- *   pour que la nouvelle version, chargée juste après, l'ouvre ;
+ *   notification de paie : le Pilotage s'ouvre directement sur le rituel (onglet « Ce mois »,
+ *   jamais l'onglet mémorisé) ;
+ * - `?view=update` (ancienne clé ou écran, avec `&tab=` facultatif) : endroit ouvert par une
+ *   notification. Un écran inconnu de cette version (lien d'une version plus récente, encore
+ *   en cours de mise à jour) reste dans l'adresse pour que la nouvelle version, chargée juste
+ *   après, l'ouvre ;
  * - message `open-view` du service worker : app déjà ouverte au clic sur une notification.
  */
-export const useDeepLinks = (ready: boolean, openLinkedView: (v: View) => void, openQuickAdd: () => void) => {
+export const useDeepLinks = (ready: boolean, openLinkedView: (v: View, tab?: string) => void, openQuickAdd: () => void) => {
   useEffect(() => {
     if (!ready) return;
     const params = new URLSearchParams(window.location.search);
@@ -56,15 +103,18 @@ export const useDeepLinks = (ready: boolean, openLinkedView: (v: View) => void, 
       openQuickAdd();
       stripParam('action');
     }
+    const target = params.get('view');
     if (params.get('action') === 'pay') {
       requestPaySheet();
       stripParam('action');
-      if (!params.get('view')) openLinkedView('pilot');
+      if (!target) openLinkedView('pilot');
     }
-    const target = params.get('view');
     if (isView(target)) {
-      openLinkedView(target);
+      // Le rituel de paie vit dans Pilotage › Ce mois : un lien de paie l'ouvre toujours.
+      const tab = params.get('action') === 'pay' && placeOf(target).screen === 'pilot' ? null : params.get('tab');
+      if (tab) openLinkedView(target, tab); else openLinkedView(target);
       stripParam('view');
+      stripParam('tab');
     }
   }, [ready, openLinkedView, openQuickAdd]);
 
@@ -74,7 +124,7 @@ export const useDeepLinks = (ready: boolean, openLinkedView: (v: View) => void, 
       const target: unknown = e.data && e.data.type === 'open-view' ? e.data.view : null;
       if (!isView(target)) return;
       // « Votre année » (notification de janvier) : l'année passe par l'adresse, lue par
-      // Historique à l'ouverture, et par un événement s'il est déjà affiché.
+      // Analyses › Évolution à l'ouverture, et par un événement s'il est déjà affiché.
       const year = typeof e.data.year === 'string' && /^\d{4}$/.test(e.data.year) ? e.data.year : null;
       if (year) {
         window.history.replaceState(window.history.state, '', `${window.location.pathname}?year=${year}`);
@@ -83,9 +133,10 @@ export const useDeepLinks = (ready: boolean, openLinkedView: (v: View) => void, 
       // Alertes de sécurité (retrait du verrou, suppression de sauvegarde) : la carte
       // concernée des Paramètres s'ouvre aussi, comme avec `?section=` au démarrage.
       if (target === 'settings' && isSettingsSection(e.data.section)) openSettingsSection(e.data.section);
-      // Notification de paie : le rituel « J'ai reçu ma paie » s'ouvre avec le Pilotage.
-      if (target === 'pilot' && e.data.action === 'pay') requestPaySheet();
-      openLinkedView(target);
+      // Notification de paie : le rituel « J'ai reçu ma paie » s'ouvre avec Pilotage › Ce mois.
+      const pay = target === 'pilot' && e.data.action === 'pay';
+      if (pay) requestPaySheet();
+      if (!pay && typeof e.data.tab === 'string') openLinkedView(target, e.data.tab); else openLinkedView(target);
     };
     navigator.serviceWorker.addEventListener('message', onMessage);
     return () => navigator.serviceWorker.removeEventListener('message', onMessage);
@@ -93,13 +144,18 @@ export const useDeepLinks = (ready: boolean, openLinkedView: (v: View) => void, 
 };
 
 /**
- * Changer d'écran : titre de l'onglet, retour en haut, et focus sur le titre de l'écran
- * (annoncé par les lecteurs d'écran). Pas au tout premier affichage.
+ * Titre de l'onglet du navigateur (« Comptes · Mouvements · Pécule ») à chaque changement
+ * d'endroit, onglet compris. Changer d'écran (`seq`) : retour en haut et focus sur le titre de
+ * l'écran (annoncé par les lecteurs d'écran), pas au tout premier affichage ; un onglet
+ * touché garde le focus sur l'onglet.
  */
-export const useViewFocus = (view: View, isAuthenticated: boolean, mainRef: RefObject<HTMLElement | null>) => {
+export const useViewFocus = (place: Place, seq: number, isAuthenticated: boolean, mainRef: RefObject<HTMLElement | null>) => {
+  const label = placeLabel(place);
+  useEffect(() => {
+    document.title = isAuthenticated ? `${label} · Pécule` : 'Pécule';
+  }, [label, isAuthenticated]);
   const firstViewRef = useRef(true);
   useEffect(() => {
-    document.title = isAuthenticated ? `${navLabel(view)} · Pécule` : 'Pécule';
     const main = mainRef.current;
     if (!main) return;
     main.scrollTo({ top: 0 });
@@ -119,5 +175,5 @@ export const useViewFocus = (view: View, isAuthenticated: boolean, mainRef: RefO
       }
     }, 100);
     return () => clearInterval(t);
-  }, [view, isAuthenticated, mainRef]);
+  }, [seq, isAuthenticated, mainRef]);
 };

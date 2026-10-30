@@ -2,6 +2,7 @@
 // et le tableau de données montre l'écart avec le plan actuel.
 import { test, expect, type Page } from './fixtures';
 import { LATEST_VERSION } from '../src/changelog';
+import { goTo } from './nav';
 
 const openDemo = async (page: Page) => {
   // « Quoi de neuf » déjà vu : la modale ne masque pas l'écran.
@@ -10,22 +11,11 @@ const openDemo = async (page: Page) => {
   await expect(page.getByRole('heading', { name: 'Accueil', level: 2 })).toBeAttached();
 };
 
-/** Ouvre un écran : barre latérale sur ordinateur, menu « Plus » sur mobile. */
-const goTo = async (page: Page, label: string, isMobile: boolean) => {
-  if (!isMobile) {
-    await page.locator('aside').getByRole('button', { name: label, exact: true }).click();
-    return;
-  }
-  const bar = page.getByRole('navigation', { name: 'Navigation principale' });
-  await bar.getByRole('button', { name: 'Plus', exact: true }).click();
-  await page.getByRole('dialog', { name: "Plus d'écrans" }).getByRole('button', { name: label, exact: true }).click();
-};
-
 test.describe('Simulateur « Et si… » (démo)', () => {
   test('un achat de 3 000 € fait baisser le résultat et apparaît dans les données', async ({ page, isMobile }) => {
     await openDemo(page);
     await goTo(page, 'Et si…', isMobile);
-    await expect(page.getByRole('heading', { name: 'Et si…', level: 2 })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Et si…', level: 3, exact: true })).toBeVisible();
 
     const result = page.getByText(/^Dans 24 mois$/).locator('..');
     await expect(result).toBeVisible();

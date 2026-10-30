@@ -1,4 +1,5 @@
-// Écrans Journal, Virements, Agenda, Abonnements, Historique, Mes comptes (recherche) et « Et si… » en
+// Écrans Journal, Virements, Agenda, Abonnements, Historique, Mes comptes (recherche), « Et si… » et
+// Calendrier fiscal (onglets de Comptes, Pilotage, Analyses et Impôts) en
 // mode démo (?demo=1) : aucun défilement horizontal à 320 px (WCAG 1.4.10, refusion),
 // lignes du Journal lisibles sur téléphone, et ajout rapide protégé (un toucher hors de la
 // feuille ne perd pas la saisie, « Annuler » après l'ajout).
@@ -12,15 +13,15 @@ const openDemo = async (page: Page, view?: string) => {
 };
 
 const SCREENS: [view: string, title: string][] = [
-  ['journal', 'Journal'], ['transfers', 'Virements'], ['agenda', 'Agenda'],
+  ['journal', 'Journal'], ['transfers', 'Journal'], ['agenda', 'Agenda'],
   ['subscriptions', 'Abonnements'], ['history', 'Historique'], ['accounts', 'Mes comptes'],
-  ['simulator', 'Et si…'], ['yield', 'Rendement'],
+  ['simulator', 'Et si…'], ['yield', 'Rendement'], ['taxes&tab=calendar', 'Calendrier fiscal'],
 ];
 
 test.describe('écrans Material 3 (démo)', () => {
   test('aucun défilement horizontal à 320 px de large', async ({ page, isMobile }) => {
     test.skip(isMobile, 'une seule largeur, fixée ici');
-    test.setTimeout(120_000); // huit écrans, le serveur de dev compile chacun à la première ouverture
+    test.setTimeout(120_000); // neuf écrans, le serveur de dev compile chacun à la première ouverture
     await page.setViewportSize({ width: 320, height: 700 });
     const overflowOf = () => page.evaluate(() => {
       const main = document.querySelector('main')!;
@@ -38,14 +39,15 @@ test.describe('écrans Material 3 (démo)', () => {
     for (const [view, title] of SCREENS) {
       await openDemo(page, view);
       // Première ouverture : le serveur de dev compile l'écran (lent quand deux tests tournent).
-      await expect(page.getByRole('heading', { name: title, level: 2 })).toBeVisible({ timeout: 15_000 });
+      // Chacun est l'onglet d'un écran : son titre devient un titre de section (h3).
+      await expect(page.getByRole('heading', { name: title, level: 3, exact: true })).toBeAttached({ timeout: 15_000 });
       if (view === 'accounts') await page.getByLabel('Rechercher un mouvement').fill('a');
       expect.soft(await overflowOf(), view).toEqual({ scroll: 0, wide: [], scrollers: [] });
-      // Les onglets d'un écran se mesurent aussi : chacun a son propre contenu.
-      const tabs = view === 'transfers' ? ['Virement', 'Récurrents'] : view === 'history' ? ['Charges fixes'] : [];
-      for (const tab of tabs) {
-        await page.getByRole('tab', { name: tab }).click();
-        expect.soft(await overflowOf(), `${view} / ${tab}`).toEqual({ scroll: 0, wide: [], scrollers: [] });
+      // Les panneaux et choix d'un écran se mesurent aussi : chacun a son propre contenu.
+      const parts = view === 'transfers' ? ['Virement entre deux comptes', 'Échéances récurrentes'] : view === 'history' ? ['Charges fixes'] : [];
+      for (const part of parts) {
+        await page.locator('main').getByRole('button', { name: part, exact: true }).click();
+        expect.soft(await overflowOf(), `${view} / ${part}`).toEqual({ scroll: 0, wide: [], scrollers: [] });
       }
     }
   });
@@ -84,7 +86,7 @@ test.describe('écrans Material 3 (démo)', () => {
   test('ordinateur : le bouton d’ajout est dans le menu latéral, pas sur les champs', async ({ page, isMobile }) => {
     test.skip(isMobile, 'menu latéral de l’ordinateur');
     await openDemo(page, 'subscriptions');
-    await expect(page.getByRole('heading', { name: 'Abonnements', level: 2 })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Abonnements', level: 3, exact: true })).toBeAttached();
     const add = page.getByRole('button', { name: 'Ajouter un mouvement' });
     await expect(add).toHaveCount(1);
     await expect(page.locator('aside').getByRole('button', { name: 'Ajouter un mouvement' })).toBeVisible();

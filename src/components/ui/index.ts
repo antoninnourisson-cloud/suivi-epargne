@@ -16,3 +16,4 @@ export { StatTile } from './StatTile';
 export { Tabs } from './Tabs';
 export { TextField, fieldClass } from './TextField';
 export { Button } from '../Button';
+export { InTabPanelContext } from './inTabPanel';

@@ -40,7 +40,7 @@ import { SyncBanners, useSyncToasts } from './app/SyncBanners';
 import { SyncDialogsHost, useSyncDialogs } from './app/SyncDialogs';
 import { LoginScreen } from './app/LoginScreen';
 import { AppShell } from './app/AppShell';
-import type { View } from './navigation';
+import { encodePlace, visiblePlace, type ScreenTab, type View } from './navigation';
 
 // Barre du bas (mobile) mémoïsée : re-rendue seulement au changement d'écran ou du menu « Plus ».
 const StableBottomNav = memo(BottomNav);
@@ -83,14 +83,14 @@ const AppRoot: React.FC = () => {
 
   const syncDialogs = useSyncDialogs(data.syncConflict, !!data.conflict);
   const auth = useAuthSession({ isAuthenticated, setIsAuthenticated, data, lock, addToast, dialog, openLogoutDialog: syncDialogs.openLogout });
-  const { view, setView, openLinkedView } = useViewState(data.lastView, data.setLastView);
+  const nav = useViewState(data.lastView, data.setLastView);
+  const { navigate: setView, openLinkedView, openScreen, selectTab, seq } = nav;
   const lockFlow = useLockFlow({
     lock, load: { isLoading: data.isLoadingData, isAuthenticated, loadFailed: data.loadFailed },
     addToast, setView, logout: auth.logout,
   });
   useDeepLinks(isAuthenticated && !locked, openLinkedView, openQuickAdd);
   const mainRef = useRef<HTMLElement>(null);
-  useViewFocus(view, isAuthenticated, mainRef);
   usePreloadScreens(isAuthenticated);
   useSyncToasts(data.lastSavedAt, data.remoteUpdatedAt, addToast);
 
@@ -113,6 +113,10 @@ const AppRoot: React.FC = () => {
   // en attente. La copie hors ligne, elle, reste affichée pendant qu'on rejoint Drive.
   const booting = (data.isLoadingData && !data.offlineDataAt) || (!data.dataShown && !data.loadFailed);
   const hiddenScreens = useMemo<View[]>(() => (derived.showParentalScreen ? [] : ['parental']), [derived.showParentalScreen]);
+  // Onglet masqué (mode solo : « Parents ») : l'endroit retombe sur l'onglet par défaut.
+  const hiddenTabs = useMemo<ScreenTab[]>(() => (derived.showParentalScreen ? [] : ['parents']), [derived.showParentalScreen]);
+  const place = useMemo(() => visiblePlace(nav.place, hiddenTabs), [nav.place, hiddenTabs]);
+  useViewFocus(place, seq, isAuthenticated, mainRef);
   // Toasts et confirmations seulement par-dessus l'app ouverte (jamais sur le verrou).
   useMainUiShown(!locked && isAuthenticated && !booting);
 
@@ -153,7 +157,7 @@ const AppRoot: React.FC = () => {
     return (
       <LastSavedAtContext.Provider value={data.lastSavedAt}>
         <AppShell
-          view={view} setView={setView} showParentalScreen={derived.showParentalScreen}
+          place={place} onNavigate={setView} onOpenScreen={openScreen} showParentalScreen={derived.showParentalScreen}
           syncPhase={syncPhase(data.syncStatus, data.syncConflict, data.lastSavedAt)} lastSavedAt={data.lastSavedAt}
           hasPendingEdits={hasPendingEdits()} onRetrySync={data.retrySync} onReconnect={() => void auth.reconnect()}
           isDark={isDark} onToggleTheme={toggleTheme} discreet={discreet} onToggleDiscreet={toggleDiscreet} onRequestLogout={auth.requestLogout} mainRef={mainRef}
@@ -161,11 +165,11 @@ const AppRoot: React.FC = () => {
           overlays={<>
             {/* Ajout rapide flottant (téléphone), masqué là où l'écran a déjà son propre ajout ou
                 sa barre d'enregistrement (voir showQuickAddFab). Sur ordinateur : navAction. */}
-            {data.accounts.length > 0 && showQuickAddFab(view) && (
-              <QuickAddFab scrollRef={mainRef} resetKey={view} onClick={openQuickAdd} />
+            {data.accounts.length > 0 && showQuickAddFab(place) && (
+              <QuickAddFab scrollRef={mainRef} resetKey={encodePlace(place)} onClick={openQuickAdd} />
             )}
             {quickAddOpen && <Lazy><QuickAddModal open={quickAddOpen} accounts={data.accounts} onClose={closeQuickAdd} onSubmit={actions.quickAdd} /></Lazy>}
-            <StableBottomNav view={view} setView={setView} moreOpen={moreNavOpen} setMoreOpen={setMoreNavOpen} hidden={hiddenScreens} onAsk={openAsk} />
+            <StableBottomNav place={place} onNavigate={setView} onOpenScreen={openScreen} moreOpen={moreNavOpen} setMoreOpen={setMoreNavOpen} hidden={hiddenScreens} onAsk={openAsk} />
             {askOpen && <Lazy><AskPeculeSheet data={fullData} geminiApiKey={data.geminiApiKey} taxEstimate={derived.taxEstimate} monthPlan={derived.monthPlan}
               onClose={closeAsk} onOpenSettings={section => { openSettingsSection(section); setView('settings'); }} /></Lazy>}
             {/* Une fois après chaque mise à jour : ce qui a changé. */}
@@ -176,8 +180,8 @@ const AppRoot: React.FC = () => {
         >
           <SyncBanners data={data} onReconnect={() => void auth.reconnect()} onOpenConflict={syncDialogs.openConflict} />
           <BackupDeletionNotice active={data.dataShown && !data.isLoadingData} onOpenSettings={() => setView('settings')} />
-          <ScreenRouter key={discreet ? 'montants-masques' : 'montants'} view={view} setView={setView} data={screenData} derived={derived} actions={actions}
-            fiscalWatch={fiscalWatch} accountForm={accountForm} onSignedOutEverywhere={auth.signedOutEverywhere} onRequestLogout={auth.requestLogout} onQuickAdd={openQuickAdd}
+          <ScreenRouter key={discreet ? 'montants-masques' : 'montants'} place={place} setView={setView} onSelectTab={selectTab} hiddenTabs={hiddenTabs} data={screenData} derived={derived} actions={actions}
+            fiscalWatch={fiscalWatch} accountForm={accountForm} onSignedOutEverywhere={auth.signedOutEverywhere} onRequestLogout={auth.requestLogout}
             shareMarker={shareMarker} shareReady={data.dataShown && !data.isLoadingData} onShareDone={endShare} />
         </AppShell>
       </LastSavedAtContext.Provider>

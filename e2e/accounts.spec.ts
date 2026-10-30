@@ -36,7 +36,7 @@ test.describe('Comptes (démo)', () => {
     await expect(accountRow(page, 'Assurance vie')).toContainText(/Gain \+300\s€ · \+[\d,]+\s% par an depuis juin 2024/);
 
     await open(page, 'yield');
-    await expect(page.getByRole('heading', { name: 'Rendement', level: 2 })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Rendement', level: 3, exact: true })).toBeVisible();
     const perf = page.getByRole('table', { name: /rendement annuel de chaque placement/ });
     await expect(perf.getByRole('row', { name: /Assurance vie/ })).toContainText(/\/ an/);
     await expect(page.getByRole('table', { name: /après inflation/ })).toContainText(/après inflation [+-][\d,]+\s%/);

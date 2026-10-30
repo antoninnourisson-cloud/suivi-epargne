@@ -88,6 +88,8 @@ export const STORAGE_KEYS = {
   homeMoreOpen: { key: 'home_more_open', kind: 'preference' },
   todoOpen: { key: 'todo_open', kind: 'preference' },
   settingsOpenCards: { key: 'settings_open_cards', kind: 'preference' },
+  /** Dernier onglet de chaque écran à onglets (rouvert par la barre du bas et les menus). */
+  screenTabs: { key: 'screen_tabs', kind: 'preference' },
   installPromptDismissedAt: { key: 'install_prompt_dismissed_at', kind: 'preference' },
   lastSeenVersion: { key: 'last_seen_version', kind: 'preference' },
   geminiModel: { key: 'gemini_model', kind: 'preference' },
