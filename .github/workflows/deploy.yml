@@ -1,6 +1,6 @@
 name: Déploiement
 
-# checks (ci.yml) → [site : build → deploy] + [serveur] + [en-têtes edge] → release.
+# checks (ci.yml) → [site : build + serveur joignable → deploy] + [serveur] + [en-têtes edge] → release.
 # Une seule vérification par push, puis les TROIS parties partent ensemble à chaque push sur
 # main : l'app et le serveur ne peuvent plus rester désaccordés. (Jusqu'au 26/10/2026, le
 # serveur et edge/ avaient leurs propres workflows filtrés par chemins : un déploiement raté
@@ -151,9 +151,37 @@ jobs:
         with:
           path: ./dist
 
+  backend:
+    name: Serveur joignable
+    # Le site publié appelle VITE_BACKEND_URL (.env.production, aussi dans sa CSP). Si cette
+    # adresse ne répond pas (domaine pas encore créé dans Cloudflare, Worker absent), l'app en
+    # ligne perdrait connexion persistante, rappels et sauvegarde : le site n'est pas publié.
+    # Les Workers, eux, partent quand même (ils ne dépendent pas de cette adresse).
+    # Script et test : scripts/check-backend.mjs.
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Checkout (adresse du serveur et script)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            .env.production
+            .nvmrc
+            scripts/check-backend.mjs
+          sparse-checkout-cone-mode: false
+
+      - name: Installation de Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version-file: .nvmrc
+
+      - name: GET /status du serveur
+        run: node scripts/check-backend.mjs .env.production
+
   deploy:
     name: Déploiement
-    needs: build
+    needs: [build, backend]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
