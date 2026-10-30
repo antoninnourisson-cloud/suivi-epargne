@@ -528,7 +528,7 @@ export const PayReceivedSheet: React.FC<SheetProps> = ({ doc, geminiApiKey, pick
 
           {transferLines.length > 0 && (
             <>
-              <h3 className="mt-6 flex items-center gap-2 border-b border-outline-variant pb-2 text-sm font-medium text-on-surface"><ArrowRightLeft className="w-4 h-4 text-on-surface-variant" aria-hidden="true" /> Avant l'épargne : les virements de la paie</h3>
+              <h3 className="mt-6 flex items-center gap-2 border-b border-outline-variant pb-2 text-sm font-medium text-on-surface"><ArrowRightLeft className="w-4 h-4 text-on-surface-variant" aria-hidden="true" /> Virements de la paie, déduits avant l'épargne</h3>
               <ul className="divide-y divide-outline-variant">{transferLines.map(renderLine)}</ul>
             </>
           )}

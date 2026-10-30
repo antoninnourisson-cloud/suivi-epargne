@@ -228,7 +228,7 @@ describe('Rituel : bilan, deuxième paie, modification', () => {
     expect(screen.getByRole('radio', { name: /Versement en plus/ })).toHaveProperty('checked', true);
     fireEvent.change(amountField(), { target: { value: '300' } });
     toPlan();
-    expect(screen.queryByText("Avant l'épargne : les virements de la paie")).toBeNull();
+    expect(screen.queryByText("Virements de la paie, déduits avant l'épargne")).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Tout est fait comme conseillé' }));
     const input = props.onRecordPay.mock.calls[0][0];
     expect(input.pay).toMatchObject({ kind: 'extra', amount: 300 });

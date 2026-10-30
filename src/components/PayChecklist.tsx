@@ -284,7 +284,7 @@ export const PayChecklist: React.FC<PayChecklistProps> = ({
       {transferLines.length > 0 && (
         <>
           <div className="mt-6 flex items-baseline justify-between gap-3 border-b border-outline-variant pb-2">
-            <h4 className="text-sm font-medium text-on-surface flex items-center gap-2"><ArrowRightLeft className="w-4 h-4 text-on-surface-variant" aria-hidden="true" /> Avant l'épargne : les virements de la paie</h4>
+            <h4 className="text-sm font-medium text-on-surface flex items-center gap-2"><ArrowRightLeft className="w-4 h-4 text-on-surface-variant" aria-hidden="true" /> Virements de la paie, déduits avant l'épargne</h4>
             <MoneyText value={transferTotal} className="text-sm font-medium text-on-surface" />
           </div>
           <ul className="divide-y divide-outline-variant">

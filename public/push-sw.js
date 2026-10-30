@@ -38,8 +38,9 @@ self.addEventListener('notificationclick', (event) => {
       for (const w of windows) {
         if (w.url.startsWith(self.registration.scope) && 'focus' in w) {
           // `section` : carte de Paramètres à ouvrir (alertes de sécurité : « Appareils
-          // connectés », sauvegarde de secours).
-          w.postMessage({ type: 'open-view', view, year: target.searchParams.get('year'), section: target.searchParams.get('section') });
+          // connectés », sauvegarde de secours) ; `action` : rituel à ouvrir (notification
+          // de paie, `?view=pilot&action=pay`).
+          w.postMessage({ type: 'open-view', view, year: target.searchParams.get('year'), section: target.searchParams.get('section'), action: target.searchParams.get('action') });
           return w.focus();
         }
       }
