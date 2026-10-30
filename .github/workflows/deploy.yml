@@ -2,10 +2,8 @@ name: Déploiement
 
 # checks (ci.yml) → [site : build + serveur joignable → deploy] + [serveur] + [en-têtes edge] → release.
 # Une seule vérification par push, puis les TROIS parties partent ensemble à chaque push sur
-# main : l'app et le serveur ne peuvent plus rester désaccordés. (Jusqu'au 26/10/2026, le
-# serveur et edge/ avaient leurs propres workflows filtrés par chemins : un déploiement raté
-# n'était jamais refait tant qu'aucun de leurs fichiers ne changeait, et l'app du lot 3 a
-# tourné trois jours face à l'ancien serveur.) Redéployer un Worker inchangé est sans effet.
+# main : l'app et le serveur ne peuvent plus rester désaccordés (des workflows filtrés par
+# chemins laissaient un déploiement raté jamais refait). Redéployer un Worker inchangé est sans effet.
 # Le site publie le dossier `dist` construit ET testé par ci.yml dans cette même exécution
 # (artefact site-dist) : rien n'est reconstruit entre le test et la mise en ligne. Après un
 # déploiement réussi, la version en tête de src/changelog.ts est publiée comme tag + GitHub
@@ -59,7 +57,7 @@ jobs:
     needs: [checks, cloudflare]
     # Le jeton Cloudflare ne sert qu'à main (push ou lancement manuel) et aux retours arrière
     # depuis un tag v* : un « Run workflow » lancé sur une branche de travail ne met plus en
-    # production un serveur ou des en-têtes non fusionnés (audit du 29/10/2026, SEC-06).
+    # production un serveur ou des en-têtes non fusionnés.
     # L'environnement « cloudflare » est limité à main et aux tags v* dans Settings →
     # Environments (MAINTENANCE.md) : double verrou si la condition venait à être modifiée.
     if: ${{ needs.cloudflare.outputs.ok == 'true' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) }}

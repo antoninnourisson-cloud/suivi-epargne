@@ -1,6 +1,6 @@
 // ================================================
 // FILE: src/lib/motivation.ts
-// Motivation (phase 2) : bons mois, séries, jalons, point de paie et contrôle des fiches
+// Motivation : bons mois, séries, jalons, point de paie et contrôle des fiches
 // de paie. Fonctions pures, partagées par l'app et le serveur de notifications.
 //
 // Garde-fous voulus par l'utilisateur : rien ne récompense un comportement risqué (crypto,
