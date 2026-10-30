@@ -10,11 +10,12 @@ import { fileURLToPath } from 'node:url';
 
 export const LIMIT_KB = 500;
 
-/** Chemin (relatif au build) du script module que charge index.html, ou null. */
+/** Chemin (relatif au build) du script module que charge index.html, ou null (balises et
+ * attributs sans tenir compte de la casse, comme le navigateur). */
 export const mainEntryPath = html => {
-  for (const tag of html.match(/<script\b[^>]*>/g) ?? []) {
-    if (!/\btype=["']module["']/.test(tag)) continue;
-    const src = /\bsrc=["']([^"']+)["']/.exec(tag);
+  for (const tag of html.match(/<script\b[^>]*>/gi) ?? []) {
+    if (!/\btype=["']module["']/i.test(tag)) continue;
+    const src = /\bsrc=["']([^"']+)["']/i.exec(tag);
     if (src) return src[1].replace(/^\.?\//, '');
   }
   return null;

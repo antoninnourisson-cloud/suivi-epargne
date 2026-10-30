@@ -23,6 +23,7 @@ describe('check-bundle-size', () => {
     expect(mainEntryPath(html)).toBe('assets/index-abc.js');
     expect(mainEntryPath("<script type='module' src='/assets/a.js'>")).toBe('assets/a.js');
     expect(mainEntryPath('<script src="a.js">')).toBeNull();
+    expect(mainEntryPath('<SCRIPT TYPE="module" SRC="/assets/b.js"></SCRIPT>')).toBe('assets/b.js');
   });
 
   it('plafond en kB de Vite (1 000 octets), limite comprise', () => {
