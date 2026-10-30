@@ -6,7 +6,7 @@ import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 import path from 'path';
 import { readFileSync } from 'fs';
-import { latestVersionFromChangelog } from './src/lib/changelogVersion';
+import { latestVersionFromChangelog } from './src/lib/changelogVersion.ts';
 
 // Version de l'app servie par `virtual:app-version` (voir src/appVersion.ts). Au build : la
 // chaîne seule, lue en tête de src/changelog.ts, pour que l'historique complet ne soit chargé
@@ -15,7 +15,7 @@ import { latestVersionFromChangelog } from './src/lib/changelogVersion';
 const appVersionPlugin = (): Plugin => {
   const id = 'virtual:app-version';
   const resolvedId = `\0${id}`;
-  const changelog = path.resolve(__dirname, 'src/changelog.ts');
+  const changelog = path.resolve(import.meta.dirname, 'src/changelog.ts');
   let isBuild = false;
   return {
     name: 'app-version',
@@ -177,30 +177,34 @@ export default defineConfig({
     })
   ],
   build: {
-    rollupOptions: {
+    rolldownOptions: {
       output: {
         // Moins de requêtes à la première visite (avant que le service worker serve tout) :
         // les icônes (lucide-react) et le kit d'interface (src/components/ui) forment chacun
-        // UN fichier partagé, et les fichiers de moins de 8 Ko sont fusionnés avec un voisin.
-        // Mesuré le 22 octobre 2026 (build de production, même code avec et sans ces deux
-        // réglages) : 96 fichiers JS dont 48 de moins de 1 Kio → 33, aucun sous 1 Kio ;
-        // 30 fichiers JS chargés pour afficher l'Accueil → 5, pour presque le même poids
-        // (203 → 206 Kio gzip : les icônes des autres écrans viennent avec) ; précache
-        // 107 → 44 entrées (572 → 548 Kio gzip).
-        // Revers : un module chargé à la demande de moins de 8 Ko qui ne dépend que du code de
-        // démarrage est fusionné dans le fichier principal (Agenda et QuickAddModal sont donc
-        // chargés ensemble : components/agendaQuickAdd.ts).
-        // Pour le garder hors du démarrage, le charger avec un module plus gros qui ne sert qu'à
-        // lui (ex. services/fiscalWatchGemini.ts, chargé avec le client Gemini). Un manualChunks
-        // par écran ne convient pas : il aspire aussi les dépendances partagées (recharts…).
-        experimentalMinChunkSize: 8000,
-        manualChunks: id => (id.includes('node_modules/lucide-react') ? 'icons' : id.includes('/src/components/ui/') ? 'ui' : undefined),
+        // UN fichier partagé (`codeSplitting.groups` de Rolldown, ex-`manualChunks` de Rollup).
+        // Jusqu'à Vite 6 (Rollup), `experimentalMinChunkSize: 8000` fusionnait aussi les fichiers
+        // de moins de 8 Ko avec un voisin. Rolldown (Vite 8, 30 octobre 2026) n'a pas
+        // d'équivalent : un groupe « partagé » pour les petits modules communs faisait planter
+        // l'app au démarrage (ordre d'exécution des modules), et `strictExecutionOrder` qui le
+        // corrige réduit le fichier principal à une coquille (scripts/check-bundle-size.mjs ne
+        // mesurerait plus rien). Mesuré le 30 octobre 2026 (build de production, Vite 6 → 8) :
+        // 41 → 76 fichiers JS ; fichier principal 452 → 408 kB ; précache 54 → 89 entrées
+        // (1 664 → 1 636 Kio) ; Accueil du mode démo, écrans préchargés compris : 22 → 42
+        // fichiers JS, 853 → 804 kB. À revoir quand Rolldown saura fusionner les petits fichiers.
+        // Un `codeSplitting` par écran ne convient pas : il aspire aussi les dépendances
+        // partagées (recharts…).
+        codeSplitting: {
+          groups: [
+            { name: 'icons', test: /[\\/]node_modules[\\/]lucide-react[\\/]/ },
+            { name: 'ui', test: /[\\/]src[\\/]components[\\/]ui[\\/]/ },
+          ],
+        },
       },
     },
   },
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './src'),
+      '@': path.resolve(import.meta.dirname, './src'),
     },
   },
 });

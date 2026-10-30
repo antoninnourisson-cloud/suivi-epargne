@@ -1,6 +1,6 @@
 // Tests unitaires (app + serveur) et couverture. Reprend la configuration Vite de l'app.
 import { defineConfig, mergeConfig } from 'vitest/config';
-import viteConfig from './vite.config';
+import viteConfig from './vite.config.ts';
 
 // Cœur métier : calculs purs (src/lib), serveur (worker/src) et en-têtes (edge/src).
 const CORE = '{src/lib,worker/src,edge/src}/**/*.ts';
