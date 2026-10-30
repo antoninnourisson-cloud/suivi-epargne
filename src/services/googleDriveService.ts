@@ -350,7 +350,7 @@ const fetchWithTimeout = async (url: string, options: RequestInit = {}): Promise
   try {
     return await fetch(url, { ...options, signal: controller.signal });
   } catch (e: unknown) {
-    if ((e as { name?: string } | null)?.name === 'AbortError') throw new TypeError('NETWORK_TIMEOUT');
+    if ((e as { name?: string } | null)?.name === 'AbortError') throw new TypeError('NETWORK_TIMEOUT', { cause: e });
     throw e;
   } finally {
     clearTimeout(timer);
@@ -373,7 +373,7 @@ const authedFetch = async (url: string, options: RequestInit = {}): Promise<Resp
       // perdue — sinon une simple coupure pendant un rafraîchissement déconnectait.
       if (e instanceof TypeError) throw e;
       handleAuthLost();
-      throw new Error('SESSION_EXPIRED');
+      throw new Error('SESSION_EXPIRED', { cause: e });
     }
     res = await build();
     if (res.status === 401) { handleAuthLost(); throw new Error('SESSION_EXPIRED'); }

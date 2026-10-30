@@ -36,13 +36,14 @@ export const xirr = (flows: CashFlow[]): number | null => {
   const points = valid.map(f => ({ t: (dayNumber(f.date) - t0) / DAYS_PER_YEAR, a: f.amount }));
   const npv = (r: number) => points.reduce((s, p) => s + p.a / Math.pow(1 + r, p.t), 0);
   let lo = -0.9999, hi = 100;
-  let fLo = npv(lo), fHi = npv(hi);
+  let fLo = npv(lo);
+  const fHi = npv(hi);
   if (!Number.isFinite(fLo) || !Number.isFinite(fHi) || fLo * fHi > 0) return null;
   for (let i = 0; i < 200 && hi - lo > 1e-9; i++) {
     const mid = (lo + hi) / 2;
     const fMid = npv(mid);
     if (fMid === 0) return mid;
-    if (fMid * fLo < 0) { hi = mid; fHi = fMid; } else { lo = mid; fLo = fMid; }
+    if (fMid * fLo < 0) { hi = mid; } else { lo = mid; fLo = fMid; }
   }
   return (lo + hi) / 2;
 };

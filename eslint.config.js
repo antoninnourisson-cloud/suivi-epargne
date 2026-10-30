@@ -25,6 +25,14 @@ export default tseslint.config(
   { ignores: ['dist', 'dist-e2e', 'node_modules', 'worker/node_modules', 'worker/.wrangler', 'edge/node_modules', 'edge/.wrangler', 'public/push-sw.js', 'public/share-sw.js', 'dev-dist'] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
+  // Ajouts de eslint:recommended en ESLint 10 (et nouveau défaut de no-shadow-restricted-names),
+  // activés dès ESLint 9 : la montée de version ne fera surgir aucune alerte nouvelle.
+  { rules: {
+    'no-unassigned-vars': 'error',
+    'no-useless-assignment': 'error',
+    'preserve-caught-error': 'error',
+    'no-shadow-restricted-names': ['error', { reportGlobalThis: true }],
+  } },
   {
     files: ['**/*.{ts,tsx}'],
     languageOptions: { ecmaVersion: 2022, globals: { ...globals.browser, ...globals.node } },

@@ -274,7 +274,7 @@ const call = async (path: string, init: RequestInit = {}, withSession = true, ti
   } catch (e: unknown) {
     // Même convention que googleDriveService : un problème réseau (y compris un délai
     // dépassé) remonte en TypeError, ce que la sauvegarde traite comme « hors ligne ».
-    if ((e as { name?: string } | null)?.name === 'AbortError') throw new TypeError('BACKEND_TIMEOUT');
+    if ((e as { name?: string } | null)?.name === 'AbortError') throw new TypeError('BACKEND_TIMEOUT', { cause: e });
     throw e;
   } finally {
     clearTimeout(timer);

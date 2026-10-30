@@ -344,7 +344,6 @@ export const runFiscalWatch = async (
     if (!p.s.ok || !p.text) { report.status = 'fetch_failed'; continue; }
     if (!p.inBudget) { report.status = 'skipped_budget'; report.error = p.fitsContext ? undefined : 'page trop longue pour le modèle'; continue; }
 
-    let out: AiOutput | null = null;
     let parsed: unknown = null;
     for (const schema of [pageSchema(p.fields), null]) {
       if (schema === null) {
@@ -355,10 +354,10 @@ export const runFiscalWatch = async (
       }
       spent += p.est;
       try {
-        out = await callModel(ai, p.system, p.text, schema);
+        const out = await callModel(ai, p.system, p.text, schema);
         const n = usedNeurons(out);
         if (n === undefined) usageKnown = false; else { used += n; report.neuronsUsed = round1((report.neuronsUsed ?? 0) + n); }
-        parsed = parseModelJson(out?.response);
+        parsed = parseModelJson(out.response);
         if (validatePageValues(parsed, p.s, p.fields)) { report.error = undefined; break; }
         report.status = 'invalid_json';
         report.error = 'réponse illisible';

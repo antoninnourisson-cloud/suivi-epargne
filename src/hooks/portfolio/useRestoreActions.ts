@@ -49,7 +49,7 @@ export const useRestoreActions = (docState: DocumentState, { hasLoadedRef, offli
             ? setAsideCurrent('restore', 'Vos données avant le retour à une copie de secours')
             : setAsideCurrent('import', 'Vos données avant un import'));
         } catch (err) {
-          if (opts?.requireSetAside) throw new Error('SET_ASIDE_FAILED');
+          if (opts?.requireSetAside) throw new Error('SET_ASIDE_FAILED', { cause: err });
           console.warn('Données actuelles non mises de côté', err);
         }
       }
