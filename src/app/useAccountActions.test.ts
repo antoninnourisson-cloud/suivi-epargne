@@ -19,7 +19,7 @@ type ToastArg = Parameters<AddToast>[0] & { action?: { label: string; onClick: (
 
 const setup = (doc: AppDoc) => {
   const setters = {
-    setAccounts: vi.fn(), setParentalRestitution: vi.fn(), setActivePayslipId: vi.fn(), setFiscalConfig: vi.fn(),
+    setAccounts: vi.fn(), setPays: vi.fn(), setParentalRestitution: vi.fn(), setActivePayslipId: vi.fn(), setFiscalConfig: vi.fn(),
     patchConfig: vi.fn(), exportData: vi.fn(),
   };
   const addToast = vi.fn<AddToast>(() => 'id');
@@ -44,7 +44,7 @@ describe('refus des commandes', () => {
   it('compte disparu entre-temps : rien à signaler (ni toast ni écriture)', () => {
     const { result, setters, addToast } = setup(withAccounts(account('a')));
     act(() => { result.current.quickAdd('disparu', 10, 'IN', 'x', '2026-10-01'); });
-    act(() => result.current.cancelPayDeposit('a', 'disparu'));
+    act(() => result.current.uncheckPayLine({ key: 's:disparu', label: 'x', amount: 1, kind: 'saving', accountId: 'disparu' }));
     act(() => result.current.revertRate('disparu', '2026-08-01'));
     act(() => result.current.deleteMovement('a', 'disparu'));
     expect(addToast).not.toHaveBeenCalled();
@@ -257,5 +257,100 @@ describe('Pilotage, veille fiscale, relevés', () => {
     expect(refusal).toMatch(/date du relevé invalide/);
     act(() => { refusal = result.current.importStatement([{ accountId: 'disparu', date: '2026-10-15', movements: [{ date: '2026-10-10', label: 'V', amount: 5, type: 'IN' }] }]); });
     expect(refusal).toBe('Rien à importer.');
+  });
+});
+
+describe('paie reçue (commandes de la paie)', () => {
+  const line = (id: string, amount = 30) => ({ key: `s:${id}`, label: id, amount, kind: 'saving' as const, accountId: id });
+  const paysWritten = (setters: { setPays: ReturnType<typeof vi.fn> }, i: number) => setters.setPays.mock.calls[i][0] as AppDoc['pays'];
+
+  it('cocher une ligne d’un compte supprimé : rien d’écrit, rien à signaler, false', () => {
+    const { result, setters, addToast } = setup(withAccounts(account('a')));
+    let ok = true;
+    act(() => { ok = result.current.checkPayLine([line('disparu')], line('disparu'), 30); });
+    expect(ok).toBe(false);
+    expect(setters.setPays).not.toHaveBeenCalled();
+    expect(addToast).not.toHaveBeenCalled();
+  });
+
+  it('cocher un virement de la paie : la paie est enregistrée, sans toast ; « Recalculer » défige', () => {
+    const doc = withAccounts(account('a'));
+    const { result, rerender, setters, addToast } = setup(doc);
+    const loyer = { key: 't:loyer', label: 'Loyer', amount: 800, kind: 'transfer' as const };
+    act(() => { result.current.checkPayLine([loyer, line('a')], loyer, 800); });
+    expect(setters.setAccounts).not.toHaveBeenCalled();
+    expect(addToast).not.toHaveBeenCalled();
+    const pays = paysWritten(setters, 0);
+    expect(pays[0]).toMatchObject({ lines: [loyer, line('a')], done: { 't:loyer': { amount: 800 } } });
+    // Rien n'est fait tant que la coche reste : « Recalculer » ne fait rien ; décochée, il défige.
+    rerender({ d: { ...doc, pays } });
+    act(() => result.current.resetPayPlan());
+    expect(setters.setPays).toHaveBeenCalledTimes(1);
+    act(() => result.current.uncheckPayLine(loyer));
+    rerender({ d: { ...doc, pays: paysWritten(setters, 1) } });
+    act(() => result.current.resetPayPlan());
+    expect(paysWritten(setters, 2)[0]).toMatchObject({ lines: [], done: {} });
+  });
+
+  it('enregistrer la paie : toast avec « Annuler » qui remet paies et soldes ; refus renvoyé à la feuille', () => {
+    const doc = withAccounts(account('a'));
+    const { result, setters, lastToast, accountsWritten } = setup(doc);
+    let refusal: string | null = 'x';
+    act(() => { refusal = result.current.recordPay({ pay: { receivedOn: '2026-10-27', amount: 2500 }, lines: [line('a', 300)], done: [{ key: 's:a', amount: 300 }], transferDate: '2026-10-28' }); });
+    expect(refusal).toBeNull();
+    expect(accountsWritten(0)[0].totalAmount).toBe(400);
+    expect(paysWritten(setters, 0)).toHaveLength(1);
+    expect(lastToast()).toMatchObject({ kind: 'success', action: { label: 'Annuler' } });
+    act(() => lastToast().action!.onClick());
+    expect(accountsWritten(1)[0].totalAmount).toBe(100);
+    expect(paysWritten(setters, 1)).toEqual([]);
+    act(() => { refusal = result.current.recordPay({ pay: { receivedOn: '2026-10-27', amount: 2500 }, lines: [line('b')], done: [{ key: 's:b', amount: 30 }], transferDate: '2026-10-28' }); });
+    expect(refusal).toMatch(/n'existe plus/);
+  });
+
+  it('modifier la paie : « Annuler » ; paie disparue : refus renvoyé', () => {
+    const pay = { id: 'p', receivedOn: '2026-10-27', savingsMonth: '2026-11', amount: 2500, lines: [], done: {} };
+    const { result, setters, lastToast } = setup({ ...withAccounts(account('a')), pays: [pay] });
+    let refusal: string | null = 'x';
+    act(() => { refusal = result.current.updatePay({ payId: 'p', amount: 2600 }); });
+    expect(refusal).toBeNull();
+    expect(paysWritten(setters, 0)[0].amount).toBe(2600);
+    act(() => lastToast().action!.onClick());
+    expect(paysWritten(setters, 1)).toEqual([pay]);
+    act(() => { refusal = result.current.updatePay({ payId: 'autre' }); });
+    expect(refusal).toBe('Paie introuvable.');
+  });
+
+  it('supprimer une paie sans versement : simple confirmation', () => {
+    const pay = { id: 'p', receivedOn: '2026-10-27', savingsMonth: '2026-11', amount: 2500, lines: [], done: {} };
+    const { result, setters, dialog, lastToast } = setup({ ...withAccounts(account('a')), pays: [pay] });
+    act(() => result.current.deletePay('inconnue'));
+    expect(dialog.open).not.toHaveBeenCalled();
+    act(() => result.current.deletePay('p'));
+    const asked = dialog.open.mock.calls[0][0];
+    expect(asked).toMatchObject({ title: 'Supprimer cette paie', danger: true, confirmLabel: 'Supprimer' });
+    expect(asked.alternative).toBeUndefined();
+    act(() => asked.onConfirm!());
+    expect(paysWritten(setters, 0)).toEqual([]);
+    expect(lastToast()).toMatchObject({ message: 'Paie supprimée', action: { label: 'Annuler' } });
+  });
+
+  it('supprimer une paie qui a créé des versements : supprimer aussi, ou les garder', () => {
+    const a = account('a', { totalAmount: 130, ownedAmount: 130, movements: [{ id: 'm', date: '2026-10-28', amount: 30, label: 'Virement de paie', type: 'IN', payId: 'p' }] });
+    const pay = { id: 'p', receivedOn: '2026-10-27', savingsMonth: '2026-11', amount: 2500, lines: [line('a')], done: { 's:a': { amount: 30, movementId: 'm' } } };
+    const { result, setters, dialog, lastToast, accountsWritten } = setup({ ...withAccounts(a), pays: [pay] });
+    act(() => result.current.deletePay('p'));
+    const asked = dialog.open.mock.calls[0][0];
+    expect(asked).toMatchObject({ confirmLabel: 'Supprimer aussi le versement', alternative: { label: 'Garder le versement' } });
+    expect(asked.message).toMatch(/Elle a créé un versement sur vos comptes\. Supprimer aussi le versement enregistré/);
+    act(() => asked.onConfirm!());
+    expect(accountsWritten(0)[0]).toMatchObject({ totalAmount: 100, movements: [] });
+    expect(lastToast().message).toBe('Paie supprimée, avec son versement');
+    act(() => lastToast().action!.onClick());
+    expect(accountsWritten(1)[0].totalAmount).toBe(130);
+    expect(paysWritten(setters, 1)).toEqual([pay]);
+    act(() => asked.alternative!.onClick());
+    expect(accountsWritten(2)[0]).toMatchObject({ totalAmount: 130 });
+    expect(accountsWritten(2)[0].movements[0].payId).toBeUndefined();
   });
 });

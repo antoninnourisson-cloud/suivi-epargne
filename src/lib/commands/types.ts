@@ -4,8 +4,8 @@
 // applique `next`, et rejoue `undo` sur l'état du moment si l'utilisateur annule.
 import type { GlobalAppData } from '../../types';
 
-/** Ce que les commandes lisent et modifient. */
-export type CommandState = Pick<GlobalAppData, 'accounts' | 'parentalRestitution'>;
+/** Ce que les commandes lisent et modifient (les paies reçues : commandes de la paie, pay.ts). */
+export type CommandState = Pick<GlobalAppData, 'accounts' | 'parentalRestitution' | 'pays'>;
 
 /** Champs modifiés : seuls les champs présents sont à appliquer (`parentalRestitution: undefined` = l'effacer). */
 export type CommandPatch = Partial<CommandState>;

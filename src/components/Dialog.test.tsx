@@ -17,6 +17,16 @@ const renderDialog = (state: Partial<DialogState>) => {
 };
 
 describe('Dialog', () => {
+  it('troisième choix : son action, puis la fenêtre se ferme, sans confirmer ; focus toujours sur « Annuler »', () => {
+    const keep = vi.fn();
+    const { onClose, onConfirm } = renderDialog({ danger: true, confirmLabel: 'Supprimer aussi les versements', alternative: { label: 'Garder les versements', onClick: keep } });
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Annuler' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Garder les versements' }));
+    expect(keep).toHaveBeenCalledTimes(1);
+    expect(onConfirm).not.toHaveBeenCalled();
+    expect(onClose).toHaveBeenCalled();
+  });
+
   it('saisie : le champ a un libellé visible et relié, Entrée valide la nouvelle valeur', () => {
     const { onClose, onConfirm } = renderDialog({ kind: 'prompt', title: 'Renommer le mouvement', defaultValue: 'Courses', confirmLabel: 'Renommer' });
     const field = screen.getByLabelText('Nouveau libellé') as HTMLInputElement;

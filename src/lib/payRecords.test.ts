@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { openPay, payAdjustmentOf, payChecklistOf, withPayAdjustment, withPayChecklist } from './payRecords';
+import { findMovement, liveDone, newPayId, openPay, payAdjustmentOf, payChecklistOf, payMovements, suggestedPayKind, withPayAdjustment } from './payRecords';
 import type { PayChecklist, PayRecord } from '../types';
 
 // Paie le 27 : le 2 novembre 2026, la paie en cours est celle du 27 octobre (épargne de novembre).
@@ -24,20 +24,38 @@ describe('paie ouverte', () => {
 });
 
 describe('liste à cocher (forme historique)', () => {
-  it('cocher crée la paie du mois d\'épargne en cours, reçue à la date attendue ; la liste se relit telle quelle', () => {
-    const pays = withPayChecklist({ pays: [], config }, list, NOV_2, 2512.345);
-    expect(pays).toEqual([{ id: 'pay-2026-11', receivedOn: '2026-10-27', savingsMonth: '2026-11', amount: 2512.35, lines: list.lines, done: list.done }]);
-    expect(payChecklistOf({ pays, config }, NOV_2)).toEqual(list);
-    // Paie suivante : plus de liste figée.
-    expect(payChecklistOf({ pays, config }, new Date(2026, 10, 28))).toBeUndefined();
+  const pay: PayRecord = { id: 'pay-2026-11', receivedOn: '2026-10-27', savingsMonth: '2026-11', amount: 2512.35, lines: list.lines, done: list.done };
+  it('la liste figée de la paie ouverte se relit telle quelle ; plus rien à la paie suivante', () => {
+    expect(payChecklistOf({ pays: [pay], config }, NOV_2)).toEqual(list);
+    expect(payChecklistOf({ pays: [pay], config }, new Date(2026, 10, 28))).toBeUndefined();
+    // Plan pas encore figé : pas de liste.
+    expect(payChecklistOf({ pays: [{ ...pay, lines: [], done: {} }], config }, NOV_2)).toBeUndefined();
   });
-  it('modifie la paie existante sans toucher au reste ; défiger garde la paie', () => {
-    const existing: PayRecord = { id: 'oct', receivedOn: '2026-10-26', savingsMonth: '2026-11', amount: 2600, bonus: 100, lines: [], done: {}, payslipId: 'f1' };
-    const pays = withPayChecklist({ pays: [existing], config }, list, NOV_2, 0);
-    expect(pays).toEqual([{ ...existing, lines: list.lines, done: list.done }]);
-    expect(payChecklistOf({ pays, config }, NOV_2)?.month).toBe('2026-10');
-    expect(withPayChecklist({ pays, config }, undefined, NOV_2, 0)).toEqual([existing]);
-    expect(withPayChecklist({ pays: [], config }, undefined, NOV_2, 0)).toEqual([]);
+  it('un versement supprimé à la main décoche sa ligne ; les coches sans versement restent', () => {
+    const done = { ...list.done, 't:loyer': { amount: 800 }, 's:pea': { amount: 50, alreadyRecorded: true } };
+    const accounts = [{ id: 'la', movements: [] }];
+    expect(payChecklistOf({ pays: [{ ...pay, done }], config, accounts }, NOV_2)?.done).toEqual({ 't:loyer': { amount: 800 }, 's:pea': { amount: 50, alreadyRecorded: true } });
+    const kept = [{ id: 'av', movements: [{ id: 'm1', date: '2026-11-01', amount: 500, label: 'Virement de paie', type: 'IN' as const }] }];
+    expect(liveDone(done, kept)).toEqual(done);
+    expect(payMovements({ done }, kept)).toEqual([{ accountId: 'av', movement: kept[0].movements[0] }]);
+    expect(findMovement(kept, 'absent')).toBeUndefined();
+  });
+});
+
+describe('nouvelle paie', () => {
+  it('identifiant libre par mois d\'épargne', () => {
+    expect(newPayId([], '2026-11')).toBe('pay-2026-11');
+    expect(newPayId([{ id: 'pay-2026-11' }, { id: 'pay-2026-11-2' }], '2026-11')).toBe('pay-2026-11-3');
+  });
+  it('deuxième paie du même mois d\'épargne : proposée en versement en plus', () => {
+    const pays: PayRecord[] = [
+      { id: 'oct', receivedOn: '2026-10-27', savingsMonth: '2026-11', amount: 2500, lines: [], done: {} },
+      { id: 'prime', receivedOn: '2026-11-05', savingsMonth: '2026-11', amount: 300, kind: 'extra', lines: [], done: {} },
+    ];
+    expect(suggestedPayKind(pays, '2026-11')).toBe('extra');
+    expect(suggestedPayKind(pays, '2026-11', 'oct')).toBeUndefined();
+    expect(suggestedPayKind(pays, '2026-12')).toBeUndefined();
+    expect(suggestedPayKind(undefined, '2026-12')).toBeUndefined();
   });
 });
 

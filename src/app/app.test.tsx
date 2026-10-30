@@ -163,7 +163,7 @@ const account = (id: string, extra: Partial<SavingsAccount> = {}): SavingsAccoun
 describe('actions sur les données', () => {
   const setup = (doc: AppDoc) => {
     const setters = {
-      setAccounts: vi.fn(), setParentalRestitution: vi.fn(), setActivePayslipId: vi.fn(), setFiscalConfig: vi.fn(),
+      setAccounts: vi.fn(), setPays: vi.fn(), setParentalRestitution: vi.fn(), setActivePayslipId: vi.fn(), setFiscalConfig: vi.fn(),
       patchConfig: vi.fn(), exportData: vi.fn(),
     };
     const addToast = vi.fn<AddToast>(() => 'id');
@@ -206,20 +206,27 @@ describe('actions sur les données', () => {
     expect((setters.setAccounts.mock.calls[1][0] as SavingsAccount[])[0]).toMatchObject({ totalAmount: 100, ownedAmount: 100, movements: [] });
   });
 
-  it('virement de paie coché : versement enregistré, sans « Annuler » (c’est la case qui l’annule)', () => {
+  it('virement de paie coché : versement rattaché à la paie, sans « Annuler » (c’est la case qui l’annule)', () => {
     const doc = { ...emptyData(), accounts: [account('a', { totalAmount: 100, ownedAmount: 100 })] };
-    const { result, setters, addToast } = setup(doc);
-    let id: string | undefined;
-    act(() => { id = result.current.recordPayDeposit('a', 30); });
+    const { result, rerender, setters, addToast } = setup(doc);
+    const line = { key: 's:a', label: 'a', amount: 30, kind: 'saving' as const, accountId: 'a' };
+    let ok = false;
+    act(() => { ok = result.current.checkPayLine([line], line, 30); });
+    expect(ok).toBe(true);
     const after = (setters.setAccounts.mock.calls[0][0] as SavingsAccount[])[0];
     expect(after).toMatchObject({ totalAmount: 130, ownedAmount: 130 });
-    expect(after.movements?.[0]).toMatchObject({ id, label: 'Virement de paie', amount: 30, type: 'IN' });
+    const pays = setters.setPays.mock.calls[0][0] as AppDoc['pays'];
+    expect(pays).toHaveLength(1);
+    expect(after.movements?.[0]).toMatchObject({ label: 'Virement de paie', amount: 30, type: 'IN', payId: pays[0].id });
+    expect(pays[0].done['s:a']).toEqual({ amount: 30, movementId: after.movements![0].id });
     const toast = addToast.mock.calls[0][0];
     expect(toast).toMatchObject({ kind: 'success' });
     expect(toast).not.toHaveProperty('action');
-    // Décocher la ligne passe par cancelPayDeposit, qui retire exactement ce versement.
-    act(() => result.current.cancelPayDeposit('a', id!));
+    // Décocher la ligne (paie relue au rendu suivant) retire exactement ce versement.
+    rerender({ d: { ...doc, accounts: [after], pays } });
+    act(() => result.current.uncheckPayLine(line));
     expect((setters.setAccounts.mock.calls[1][0] as SavingsAccount[])[0]).toMatchObject({ totalAmount: 100, ownedAmount: 100, movements: [] });
+    expect((setters.setPays.mock.calls[1][0] as AppDoc['pays'])[0].done).toEqual({});
   });
 
   it('mouvement récurrent enregistré : « Annuler » le retire', () => {

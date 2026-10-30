@@ -9,7 +9,7 @@ import { mulberry32 } from '../simulator';
 import {
   applyPatch, CommandOk, CommandResult, CommandState,
   quickAdd, deleteMovement, cancelDeposit, saveAccount, deleteAccount, recordRestitution, undoRestitution, updateBalances,
-  linkedTransfer,
+  linkedTransfer, recordPay, uncheckPayLine, deletePay,
 } from './index';
 
 const initial = (): CommandState => ({
@@ -20,6 +20,7 @@ const initial = (): CommandState => ({
     { id: 'cc', name: 'CC', institution: 'B', type: AccountType.COMPTE_COURANT, totalAmount: 0.1, ownedAmount: 0.1, parentalCapital: 0, movements: [] },
   ],
   parentalRestitution: { plannedDate: '2027-01-01' },
+  pays: [],
 });
 
 const checkInvariants = (s: CommandState, where: string) => {
@@ -122,6 +123,37 @@ const runSequence = (seed: number, steps: number) => {
     } else if (roll < 0.78) {
       name = 'deleteAccount';
       r = deleteAccount(s, { accountId: pick(accounts).id });
+    } else if (roll < 0.86) {
+      // Paie : enregistrée avec des versements (comptes au hasard, dont un disparu), une ligne
+      // décochée, ou la paie supprimée avec ou sans ses versements.
+      const pays = s.pays ?? [];
+      const op = pays.length === 0 ? 0 : Math.floor(rnd() * 3);
+      if (op === 0) {
+        const targets = [...accounts.map(a => a.id), 'disparu'].filter(() => rnd() < 0.5);
+        const lines = targets.map(t => ({ key: `s:${t}`, label: t, amount: cents(800), kind: 'saving' as const, accountId: t }));
+        name = `recordPay ${targets.join(',')}`;
+        r = recordPay(s, {
+          pay: { receivedOn: '2026-10-27', amount: cents(3000), kind: pays.length > 0 ? 'extra' : undefined }, lines,
+          done: lines.map(l => ({ key: l.key, amount: l.amount, alreadyRecorded: rnd() < 0.2 })), transferDate: '2026-10-28',
+          ids: { movements: lines.map(() => `m${id++}`) },
+        });
+        if (r.ok) {
+          const after = applyPatch(s, r.next);
+          for (const a of after.accounts) expect(a.parentalCapital, where).toBe(accounts.find(x => x.id === a.id)!.parentalCapital);
+        }
+      } else {
+        const pay = pick(pays);
+        if (op === 1) {
+          const keys = Object.keys(pay.done);
+          if (keys.length === 0) continue;
+          name = `uncheckPayLine ${pay.id}`;
+          r = uncheckPayLine(s, { payId: pay.id, key: pick(keys) });
+        } else {
+          const withMovements = rnd() < 0.5;
+          name = `deletePay ${pay.id} ${withMovements}`;
+          r = deletePay(s, { payId: pay.id, withMovements });
+        }
+      }
     } else if (roll < 0.9) {
       name = 'recordRestitution';
       const wasDone = !!s.parentalRestitution?.done;

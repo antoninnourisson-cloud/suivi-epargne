@@ -197,8 +197,9 @@ export interface PayChecklistLine {
 export interface PayChecklist {
   month: string;            // 'YYYY-MM' : le plan est figé pour ce mois-là
   lines: PayChecklistLine[];
-  // Virements faits : montant réel (peut différer du prévu) et mouvement enregistré.
-  done: Record<string, { amount: number; movementId?: string; alreadyRecorded?: boolean }>;
+  // Virements faits : montant réel (peut différer du prévu) et mouvement enregistré ;
+  // `accountId` : compte réellement crédité quand il diffère de celui de la ligne.
+  done: Record<string, { amount: number; movementId?: string; alreadyRecorded?: boolean; accountId?: string }>;
 }
 
 // Une paie reçue (ou un versement en plus : prime à part, deuxième employeur) et ce qu'on en

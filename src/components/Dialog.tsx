@@ -21,6 +21,9 @@ export interface DialogState {
   // prêterait à confusion (ex. « Annuler la restitution »).
   cancelLabel?: string;
   danger?: boolean;
+  // Troisième choix, entre « Annuler » et le bouton principal (ex. « Garder les versements »
+  // face à « Supprimer aussi les versements ») : il ferme la fenêtre après son action.
+  alternative?: { label: string; onClick: () => void };
   onConfirm?: (value?: string) => void;
 }
 
@@ -54,6 +57,7 @@ export const Dialog: React.FC<{ state: DialogState; onClose: () => void }> = ({ 
       )}
       <div className="flex flex-wrap gap-2 justify-end">
         <Button ref={cancelRef} variant="text" onClick={onClose}>{state.cancelLabel || 'Annuler'}</Button>
+        {state.alternative && <Button variant="outlined" onClick={() => { state.alternative!.onClick(); onClose(); }}>{state.alternative.label}</Button>}
         <Button variant={state.danger ? 'danger' : 'filled'} onClick={confirm}>{state.confirmLabel || 'Confirmer'}</Button>
       </div>
     </Modal>

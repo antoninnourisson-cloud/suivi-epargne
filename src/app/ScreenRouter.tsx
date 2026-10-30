@@ -26,17 +26,17 @@ import { useAddToast, useDialog } from './UiProviders';
 export const useScreenData = (data: PortfolioData) => {
   const {
     doc, geminiApiKey, setGeminiApiKey, setAccounts, setExpenses, setPayslips, setRecurringMovements, setSubscriptions,
-    setDonations, setPayChecklist, setPayAdjustment, setActivePayslipId, setFiscalConfig, updateWorkBenefits, patchConfig,
+    setDonations, setPayAdjustment, setActivePayslipId, setFiscalConfig, updateWorkBenefits, patchConfig,
     importData, recoverSetAside, listDriveBackups,
     restoreDriveBackup, listSetAsideVersions, currentData,
   } = data;
   return useMemo(() => ({
     doc, geminiApiKey, setGeminiApiKey, setAccounts, setExpenses, setPayslips, setRecurringMovements, setSubscriptions,
-    setDonations, setPayChecklist, setPayAdjustment, setActivePayslipId, setFiscalConfig, updateWorkBenefits, patchConfig,
+    setDonations, setPayAdjustment, setActivePayslipId, setFiscalConfig, updateWorkBenefits, patchConfig,
     importData, recoverSetAside, listDriveBackups,
     restoreDriveBackup, listSetAsideVersions, currentData,
   }), [doc, geminiApiKey, setGeminiApiKey, setAccounts, setExpenses, setPayslips, setRecurringMovements, setSubscriptions,
-    setDonations, setPayChecklist, setPayAdjustment, setActivePayslipId, setFiscalConfig, updateWorkBenefits, patchConfig,
+    setDonations, setPayAdjustment, setActivePayslipId, setFiscalConfig, updateWorkBenefits, patchConfig,
     importData, recoverSetAside, listDriveBackups,
     restoreDriveBackup, listSetAsideVersions, currentData]);
 };
@@ -131,10 +131,10 @@ export const ScreenRouter = memo(function ScreenRouter({ view, setView, data, de
           fiscalConfig={doc.fiscalConfig} workBenefits={doc.workBenefits}
           activePayslip={derived.activePayslip} onClearActivePayslip={actions.clearActivePayslip}
           subscriptions={doc.subscriptions} onOpenSubscriptions={() => setView('subscriptions')}
-          payChecklist={payChecklist} onPayChecklistChange={data.setPayChecklist}
+          payChecklist={payChecklist} onPayLineCheck={actions.checkPayLine} onPayLineUncheck={actions.uncheckPayLine} onPayPlanReset={actions.resetPayPlan}
           payAdjustment={payAdjustment} onPayAdjustmentChange={data.setPayAdjustment}
           payCalendar={payCalendar}
-          onRecordPayDeposit={actions.recordPayDeposit} onCancelPayDeposit={actions.cancelPayDeposit} />}
+          />}
 
         {view === 'transfers' && <TransferManager accounts={doc.accounts} onCommit={actions.commit} recurringMovements={doc.recurringMovements} onUpdateRecurring={data.setRecurringMovements} onQuickAdd={onQuickAdd} />}
         {view === 'update' && <AccountUpdate accounts={doc.accounts} onCommit={actions.commit} onAddAccount={openNewAccount}

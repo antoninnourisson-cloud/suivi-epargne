@@ -5,7 +5,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import React, { useState } from 'react';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { PayChecklist } from './PayChecklist';
-import { AccountType, type PayChecklist as PayChecklistData } from '../types';
+import { AccountType, type PayChecklist as PayChecklistData, type PayChecklistLine } from '../types';
 import type { PlacementStep } from '../lib/finance';
 
 afterEach(cleanup);
@@ -15,11 +15,28 @@ const steps: PlacementStep[] = [
 ];
 const transfers = [{ key: 't:loyer', label: 'Revolut commun', amount: 800 }];
 
+// Les commandes de la paie (lib/commands/pay) sont testées à part : ici, une liste en mémoire
+// qui fait la même chose (fige les lignes, coche, décoche, défige).
 const Harness: React.FC<{ onRecord: (id: string, amount: number) => string | undefined; onCancel?: () => void; initial?: PayChecklistData }> = ({ onRecord, onCancel = () => {}, initial }) => {
   const [list, setList] = useState<PayChecklistData | undefined>(initial);
+  const now = new Date();
+  const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const onCheck = (lines: PayChecklistLine[], l: PayChecklistLine, amount: number, alreadyRecorded: boolean) => {
+    let movementId: string | undefined;
+    if (!alreadyRecorded && l.kind === 'saving' && l.accountId && amount > 0) {
+      movementId = onRecord(l.accountId, amount);
+      if (!movementId) return false;
+    }
+    setList(prev => ({ month, lines, done: { ...prev?.done, [l.key]: { amount, movementId, alreadyRecorded: alreadyRecorded || undefined } } }));
+    return true;
+  };
+  const onUncheck = (l: PayChecklistLine) => {
+    onCancel();
+    setList(prev => prev && ({ ...prev, done: Object.fromEntries(Object.entries(prev.done).filter(([k]) => k !== l.key)) }));
+  };
   return (
     <PayChecklist superNet={2000} transfers={transfers} steps={steps} totalToInvest={300} shortfall={0}
-      checklist={list} onChange={setList} onRecordDeposit={onRecord} onCancelDeposit={onCancel} />
+      checklist={list} onCheck={onCheck} onUncheck={onUncheck} onReset={() => setList(undefined)} />
   );
 };
 
@@ -63,6 +80,35 @@ describe('PayChecklist', () => {
     expect(screen.getByLabelText(/^Montant réel de Livret A/)).toHaveProperty('value', '250');
     fireEvent.click(screen.getByRole('button', { name: 'Recalculer le plan sur les soldes actuels' }));
     expect(screen.getByLabelText(/^Montant réel de Livret A/)).toHaveProperty('value', '300');
+  });
+});
+
+describe('PayChecklist : branchement des commandes', () => {
+  it('cocher transmet le plan affiché (figé ou vivant) et le montant saisi ; refusé, la ligne reste à faire', () => {
+    const now = new Date();
+    const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const frozenLines = [{ key: 's:la', label: 'Livret A', amount: 250, kind: 'saving' as const, accountId: 'la' }];
+    const onCheck = vi.fn(() => false);
+    render(<PayChecklist superNet={2000} transfers={transfers} steps={steps} totalToInvest={300} shortfall={0}
+      checklist={{ month, lines: frozenLines, done: {} }} onCheck={onCheck} onUncheck={vi.fn()} onReset={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText(/^Montant réel de Livret A/), { target: { value: '240,5' } });
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Livret A' }));
+    expect(onCheck).toHaveBeenCalledWith(frozenLines, frozenLines[0], 240.5, false);
+    expect((screen.getByRole('checkbox', { name: 'Livret A' }) as HTMLInputElement).checked).toBe(false);
+  });
+
+  it('décocher appelle la commande et remet le montant fait dans le champ', () => {
+    const now = new Date();
+    const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const lines = [{ key: 's:la', label: 'Livret A', amount: 250, kind: 'saving' as const, accountId: 'la' }];
+    const onUncheck = vi.fn();
+    const { rerender } = render(<PayChecklist superNet={2000} transfers={transfers} steps={steps} totalToInvest={300} shortfall={0}
+      checklist={{ month, lines, done: { 's:la': { amount: 240, movementId: 'm' } } }} onCheck={vi.fn(() => true)} onUncheck={onUncheck} onReset={vi.fn()} />);
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Livret A' }));
+    expect(onUncheck).toHaveBeenCalledWith(lines[0]);
+    rerender(<PayChecklist superNet={2000} transfers={transfers} steps={steps} totalToInvest={300} shortfall={0}
+      checklist={{ month, lines, done: {} }} onCheck={vi.fn(() => true)} onUncheck={onUncheck} onReset={vi.fn()} />);
+    expect(screen.getByLabelText(/^Montant réel de Livret A/)).toHaveProperty('value', '240');
   });
 });
 

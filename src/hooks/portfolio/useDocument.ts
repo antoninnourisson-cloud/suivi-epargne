@@ -7,9 +7,9 @@ import { lsDel, lsGet, lsSet } from '../../lib/storage';
 import { migrate, emptyData, withoutDeviceOnlyFields, APP_SCHEMA_VERSION } from '../../lib/schema';
 import { downloadJSON } from '../../services/fileDownload';
 import { localTodayISO } from '../../lib/dates';
-import type { AppDoc, PayAdjustment, PayChecklist, WorkBenefits } from '../../types';
+import type { AppDoc, PayAdjustment, WorkBenefits } from '../../types';
 import { computeMonthlyPay } from '../../lib/finance';
-import { withPayAdjustment, withPayChecklist } from '../../lib/payRecords';
+import { withPayAdjustment } from '../../lib/payRecords';
 import { GEMINI_KEY, LAST_VIEW_KEY } from './keys';
 
 type Config = AppDoc['config'];
@@ -70,9 +70,6 @@ export const useDocument = () => {
       setSubscriptions: top('subscriptions'),
       setDonations: top('donations'),
       setPays: top('pays'),
-      /** Liste à cocher de la paie en cours, enregistrée sur la paie du mois d'épargne (lib/payRecords). */
-      setPayChecklist: (next: PayChecklist | undefined) =>
-        setDoc(d => ({ ...d, pays: withPayChecklist(d, next, new Date(), computeMonthlyPay(d)) })),
       /** Réglages de la paie en cours (« Capacité d'épargne du mois », « Somme en plus à placer »). */
       setPayAdjustment: (next: PayAdjustment | undefined) =>
         setDoc(d => ({ ...d, pays: withPayAdjustment(d, next, new Date(), computeMonthlyPay(d)) })),

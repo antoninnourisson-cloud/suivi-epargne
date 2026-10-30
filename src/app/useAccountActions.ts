@@ -6,31 +6,34 @@
 // Les actions ont une identité stable (elles lisent l'état le plus récent dans une réf) : les
 // écrans mémoïsés ne sont pas re-rendus quand seul App change.
 import { useMemo, useRef } from 'react';
-import type { AppDoc, PayslipRecord, RecurringMovement, SavingsAccount } from '../types';
+import type { AppDoc, PayChecklistLine, PayslipRecord, RecurringMovement, SavingsAccount } from '../types';
 import type { PortfolioData } from '../hooks/usePortfolioData';
 import type { FiscalProposal } from '../lib/fiscalWatch';
 import type { CancellingGroup } from '../lib/accountOps';
 import { isRestitutionMovement } from '../lib/accountOps';
 import { localTodayISO, parseISODate } from '../lib/dates';
 import { plainEUR } from '../lib/format';
+import { computeMonthlyPay } from '../lib/finance';
+import { liveDone, openPay, payMovements } from '../lib/payRecords';
 import {
   type CommandError, type CommandOk, type CommandPatch, type CommandState,
-  saveAccount, deleteAccount, quickAdd, planMovementDeletion, deleteMovement, cancelDeposit, removeCancellingMovements,
+  saveAccount, deleteAccount, quickAdd, planMovementDeletion, deleteMovement, removeCancellingMovements,
   recordRestitution, undoRestitution, revertRateChange, renameMovement, toggleMovementAdjustment,
   importStatement, type StatementImportItem,
+  recordPay, uncheckPayLine, updatePay, deletePay, type RecordPayInput, type UpdatePayInput,
 } from '../lib/commands';
 import type { AddToast, DialogApi } from './UiProviders';
 
 type Setters = Pick<PortfolioData,
-  'setAccounts' | 'setParentalRestitution' | 'setActivePayslipId' | 'setFiscalConfig' | 'patchConfig' | 'exportData'>;
+  'setAccounts' | 'setPays' | 'setParentalRestitution' | 'setActivePayslipId' | 'setFiscalConfig' | 'patchConfig' | 'exportData'>;
 
 export const useAccountActions = (doc: AppDoc, setters: Setters, addToast: AddToast, dialog: DialogApi) => {
   // État le plus récent : une confirmation ou une annulation (toast) s'applique à l'état du
   // moment, pas à celui du rendu qui l'a créée.
   const docRef = useRef(doc);
   docRef.current = doc;
-  const commandStateRef = useRef<CommandState>({ accounts: doc.accounts, parentalRestitution: doc.parentalRestitution });
-  commandStateRef.current = { accounts: doc.accounts, parentalRestitution: doc.parentalRestitution };
+  const commandStateRef = useRef<CommandState>({ accounts: doc.accounts, parentalRestitution: doc.parentalRestitution, pays: doc.pays });
+  commandStateRef.current = { accounts: doc.accounts, parentalRestitution: doc.parentalRestitution, pays: doc.pays };
   const deps = useRef({ setters, addToast, dialog });
   deps.current = { setters, addToast, dialog };
 
@@ -41,35 +44,117 @@ export const useAccountActions = (doc: AppDoc, setters: Setters, addToast: AddTo
       commandStateRef.current = { ...commandStateRef.current, ...patch };
       if (patch.accounts) s().setAccounts(patch.accounts);
       if ('parentalRestitution' in patch) s().setParentalRestitution(patch.parentalRestitution);
+      if ('pays' in patch) s().setPays(patch.pays ?? []);
     };
     const undoAction = (r: CommandOk, label = 'Annuler') => ({ label, onClick: () => commit(r.undo(commandStateRef.current)) });
     // Compte ou mouvement disparu entre-temps : rien à signaler.
     const showCommandError = (e: CommandError) => { if (e.code !== 'not-found') toast({ message: e.error, kind: 'error' }); };
 
-    /** Ajout rapide ; renvoie l'id du mouvement créé (la liste des virements de paie peut l'annuler). */
-    const addMovement = (
-      accountId: string, amount: number, type: 'IN' | 'OUT', label: string, date: string,
-      { undoable = true }: { undoable?: boolean } = {},
-    ): string | undefined => {
+    /** Ajout rapide ; renvoie l'id du mouvement créé. */
+    const addMovement = (accountId: string, amount: number, type: 'IN' | 'OUT', label: string, date: string): string | undefined => {
       // Garde-fou dans la commande : un retrait ne peut pas entamer la part des parents.
       const r = quickAdd(commandStateRef.current, { accountId, amount, type, label, date });
       if (!r.ok) { showCommandError(r); return undefined; }
       commit(r.next);
       // « Annuler » comme pour toutes les autres opérations : une faute de frappe sur le
       // montant (affiché dans le message) se corrige sans aller chercher le mouvement.
-      toast({ message: r.message, kind: 'success', ...(undoable ? { action: undoAction(r) } : {}) });
+      toast({ message: r.message, kind: 'success', action: undoAction(r) });
       return r.movementId;
     };
+
+    // Paie ouverte (mois d'épargne en cours), lue sur les paies les plus récentes.
+    const currentOpenPay = () => openPay({ ...docRef.current, pays: commandStateRef.current.pays });
 
     return {
       commit,
       quickAdd: (accountId: string, amount: number, type: 'IN' | 'OUT', label: string, date: string) =>
         addMovement(accountId, amount, type, label, date),
-      // Pas de « Annuler » ici : la liste des virements de paie garde l'id du mouvement pour
-      // cocher la ligne, et c'est en la décochant qu'on annule (sinon la ligne resterait
-      // « faite » pour un versement disparu).
-      recordPayDeposit: (accountId: string, amount: number) =>
-        addMovement(accountId, amount, 'IN', 'Virement de paie', localTodayISO(), { undoable: false }),
+
+      // --- PAIE (lib/commands/pay) ---
+      /**
+       * Coche une ligne de « Où le placer » : la paie du mois d'épargne en cours (créée au
+       * besoin, reçue au début du mois d'épargne, au montant de la paie estimée) fige `lines`,
+       * et une ligne d'épargne crée son versement, daté du jour et rattaché à la paie. Pas de
+       * « Annuler » ici : c'est en décochant la ligne qu'on annule. false si c'est refusé.
+       */
+      checkPayLine: (lines: PayChecklistLine[], line: PayChecklistLine, amount: number, alreadyRecorded = false): boolean => {
+        const { window, pay } = currentOpenPay();
+        const estimated = computeMonthlyPay(docRef.current);
+        const r = recordPay(commandStateRef.current, {
+          pay: pay ? { id: pay.id } : { receivedOn: window.start, savingsMonth: window.key, amount: Number.isFinite(estimated) ? Math.max(0, estimated) : 0 },
+          lines, done: [{ key: line.key, amount, alreadyRecorded }], transferDate: localTodayISO(),
+        });
+        if (!r.ok) { showCommandError(r); return false; }
+        commit(r.next);
+        if (r.movementIds.length > 0) toast({ message: r.message, kind: 'success' });
+        return true;
+      },
+      /** Décoche une ligne de la paie ouverte : son versement est annulé. */
+      uncheckPayLine: (line: PayChecklistLine) => {
+        const { pay } = currentOpenPay();
+        if (!pay) return;
+        const r = uncheckPayLine(commandStateRef.current, { payId: pay.id, key: line.key });
+        if (!r.ok) { showCommandError(r); return; }
+        commit(r.next);
+      },
+      /** « Recalculer le plan » : défige la liste de la paie ouverte (seulement si rien n'est fait). */
+      resetPayPlan: () => {
+        const { pay } = currentOpenPay();
+        if (!pay || Object.keys(liveDone(pay.done, commandStateRef.current.accounts)).length > 0) return;
+        const r = updatePay(commandStateRef.current, { payId: pay.id, lines: [] });
+        if (r.ok) commit(r.next);
+      },
+      /**
+       * « J'ai reçu ma paie » enregistré : la paie, ses lignes faites et tous les versements
+       * en une fois, avec un seul « Annuler ». Renvoie le refus (affiché dans la feuille), sinon `null`.
+       */
+      recordPay: (input: RecordPayInput): string | null => {
+        const r = recordPay(commandStateRef.current, input);
+        if (!r.ok) return r.error;
+        commit(r.next);
+        toast({ message: r.message, kind: 'success', action: undoAction(r) });
+        return null;
+      },
+      /** « Modifier la paie » : montant, date, mois d'épargne, à placer. Refus renvoyé, sinon `null`. */
+      updatePay: (input: UpdatePayInput): string | null => {
+        const r = updatePay(commandStateRef.current, input);
+        if (!r.ok) return r.error;
+        commit(r.next);
+        toast({ message: r.message, kind: 'success', action: undoAction(r) });
+        return null;
+      },
+      /**
+       * « Supprimer cette paie » : si elle a créé des versements (toujours présents), la fenêtre
+       * demande s'il faut les supprimer aussi. Une seule annulation remet tout.
+       */
+      deletePay: (payId: string) => {
+        const pay = (commandStateRef.current.pays ?? []).find(p => p.id === payId);
+        if (!pay) return;
+        const run = (withMovements: boolean) => {
+          const r = deletePay(commandStateRef.current, { payId, withMovements });
+          if (!r.ok) { showCommandError(r); return; }
+          commit(r.next);
+          toast({ message: r.message, action: undoAction(r) });
+        };
+        const count = payMovements(pay, commandStateRef.current.accounts).length;
+        if (count === 0) {
+          deps.current.dialog.open({
+            kind: 'confirm', danger: true, confirmLabel: 'Supprimer', title: 'Supprimer cette paie',
+            message: 'La paie et ses coches seront supprimées.',
+            onConfirm: () => run(false),
+          });
+          return;
+        }
+        const them = count === 1 ? 'le versement enregistré' : `les ${count} versements enregistrés`;
+        deps.current.dialog.open({
+          kind: 'confirm', danger: true, title: 'Supprimer cette paie',
+          message: `Elle a créé ${count === 1 ? 'un versement' : `${count} versements`} sur vos comptes. Supprimer aussi ${them}, ou les garder comme versements ordinaires ?`,
+          confirmLabel: count === 1 ? 'Supprimer aussi le versement' : 'Supprimer aussi les versements',
+          onConfirm: () => run(true),
+          alternative: { label: count === 1 ? 'Garder le versement' : 'Garder les versements', onClick: () => run(false) },
+        });
+      },
+
       recordRecurring: (r: RecurringMovement, date: string) => { addMovement(r.accountId, r.amount, r.type, r.label, date); },
 
       /** Enregistre un compte ; false si la commande le refuse (le formulaire reste ouvert). */
@@ -141,13 +226,6 @@ export const useAccountActions = (doc: AppDoc, setters: Setters, addToast: AddTo
         if (!r.ok) { showCommandError(r); return; }
         commit(r.next);
         toast({ message: r.message, kind: 'success', action: undoAction(r) });
-      },
-
-      /** Annule un versement enregistré depuis la liste des virements de paie. */
-      cancelPayDeposit: (accountId: string, movementId: string) => {
-        const r = cancelDeposit(commandStateRef.current, { accountId, movementId });
-        if (!r.ok) { showCommandError(r); return; }
-        commit(r.next);
       },
 
       // --- RESTITUTION DU CAPITAL PARENTAL (lib/commands/restitution) ---

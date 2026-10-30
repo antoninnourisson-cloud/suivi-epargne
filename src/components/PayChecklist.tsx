@@ -22,10 +22,13 @@ interface PayChecklistProps {
   totalToInvest: number;
   shortfall: number; // > 0 : les virements dépassent la paie
   checklist?: PayChecklistData;
-  onChange: (next: PayChecklistData | undefined) => void;
-  // Enregistre un versement réel sur un compte de l'app ; renvoie l'id du mouvement créé.
-  onRecordDeposit: (accountId: string, amount: number) => string | undefined;
-  onCancelDeposit: (accountId: string, movementId: string) => void;
+  // Coche une ligne (commande recordPay : la paie du mois d'épargne, créée au besoin, fige
+  // `lines` et enregistre le versement d'une ligne d'épargne) ; false si c'est refusé.
+  onCheck: (lines: PayChecklistLine[], line: PayChecklistLine, amount: number, alreadyRecorded: boolean) => boolean;
+  // Décoche une ligne et annule son versement (commande uncheckPayLine).
+  onUncheck: (line: PayChecklistLine) => void;
+  // « Recalculer le plan » : défige la liste (rien n'est coché).
+  onReset: () => void;
   customSplit?: boolean;       // répartition personnalisée : change le « pourquoi » de chaque compte
   paydayDay?: number;          // la liste suit la paie, pas le mois calendaire
   payCalendar?: Omit<PayCalendarData, 'paydayDay'>; // fiches et paies déclarées (même fenêtre que l'Accueil)
@@ -34,7 +37,7 @@ interface PayChecklistProps {
 const MONTHS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
 
 export const PayChecklist: React.FC<PayChecklistProps> = ({
-  superNet, transfers, steps, totalToInvest, shortfall, checklist, onChange, onRecordDeposit, onCancelDeposit, paydayDay, payCalendar, customSplit = false,
+  superNet, transfers, steps, totalToInvest, shortfall, checklist, onCheck, onUncheck, onReset, paydayDay, payCalendar, customSplit = false,
 }) => {
   const now = new Date();
   const period = payPeriodOf(paydayDay, now, payCalendar);
@@ -67,22 +70,14 @@ export const PayChecklist: React.FC<PayChecklistProps> = ({
   const check = (l: PayChecklistLine, alreadyRecorded = false) => {
     const amount = draftAmount(l);
     if (amount === null) return;
-    const base: PayChecklistData = frozen ?? { month, lines: liveLines, done: {} };
-    let movementId: string | undefined;
-    if (!alreadyRecorded && l.kind === 'saving' && l.accountId && amount > 0) {
-      movementId = onRecordDeposit(l.accountId, amount);
-      // Compte supprimé depuis (ou versement refusé) : on ne coche pas un virement fantôme.
-      if (!movementId) return;
-    }
-    onChange({ ...base, done: { ...base.done, [l.key]: { amount, movementId, alreadyRecorded: alreadyRecorded || undefined } } });
+    // Compte supprimé depuis (ou versement refusé) : la commande refuse, la ligne reste à faire.
+    onCheck(lines, l, amount, alreadyRecorded);
   };
 
   const uncheck = (l: PayChecklistLine) => {
     if (!frozen) return;
     const entry = frozen.done[l.key];
-    if (entry?.movementId && l.accountId) onCancelDeposit(l.accountId, entry.movementId);
-    const { [l.key]: _removed, ...rest } = frozen.done;
-    onChange({ ...frozen, done: rest });
+    onUncheck(l);
     setDrafts(d => ({ ...d, [l.key]: toInputAmount(entry?.amount ?? l.amount) }));
   };
 
@@ -208,7 +203,7 @@ export const PayChecklist: React.FC<PayChecklistProps> = ({
         <p role="status" className="mt-4 text-sm font-medium text-error flex items-center gap-2"><Info className="w-4 h-4 shrink-0" aria-hidden="true" /> Il manque {formatEUR(shortfall)} : les virements et l'épargne prévus dépassent la paie.</p>
       )}
       {frozen && doneCount === 0 && (
-        <Button variant="text" onClick={() => onChange(undefined)} className="mt-4 -ml-3 max-sm:h-12">
+        <Button variant="text" onClick={onReset} className="mt-4 -ml-3 max-sm:h-12">
           <RotateCcw className="w-4 h-4" aria-hidden="true" /> Recalculer le plan sur les soldes actuels
         </Button>
       )}

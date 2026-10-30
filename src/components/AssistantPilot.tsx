@@ -1,6 +1,6 @@
 // src/components/AssistantPilot.tsx
 import React, { useState, useMemo, useEffect, useId, useRef } from 'react';
-import { SavingsAccount, Expense, AccountType, FiscalConfig, WorkBenefits, PayslipRecord, Subscription, PayChecklist as PayChecklistData, PayAdjustment, AppDoc } from '../types';
+import { SavingsAccount, Expense, AccountType, FiscalConfig, WorkBenefits, PayslipRecord, Subscription, PayChecklist as PayChecklistData, PayChecklistLine, PayAdjustment, AppDoc } from '../types';
 import { PayChecklist } from './PayChecklist';
 import { SavingsSplitEditor } from './SavingsSplitEditor';
 import { computeIncome, computeMaturityCountdown, computePeeAvailability, describeMaturity, computePlacementStrategy, payslipSuperNet, subscriptionsAsExpenses, computePayTransfers, computeRecentSavingsRate, activeSavingsSplit, payPeriodOf } from '../lib/finance';
@@ -48,20 +48,21 @@ interface AssistantPilotProps {
   subscriptions: Subscription[];
   onOpenSubscriptions: () => void;
   payChecklist?: PayChecklistData;
-  onPayChecklistChange: (next: PayChecklistData | undefined) => void;
+  /** Cocher, décocher une ligne, recalculer le plan (commandes de la paie, useAccountActions). */
+  onPayLineCheck: (lines: PayChecklistLine[], line: PayChecklistLine, amount: number, alreadyRecorded: boolean) => boolean;
+  onPayLineUncheck: (line: PayChecklistLine) => void;
+  onPayPlanReset: () => void;
   /** Réglages de la paie en cours (paie du mois d'épargne en cours, lib/payRecords). */
   payAdjustment?: PayAdjustment;
   onPayAdjustmentChange: (next: PayAdjustment | undefined) => void;
   /** Fiches et paies déclarées : la paie en cours suit la même fenêtre que l'Accueil. */
   payCalendar?: Omit<PayCalendarData, 'paydayDay'>;
-  onRecordPayDeposit: (accountId: string, amount: number) => string | undefined;
-  onCancelPayDeposit: (accountId: string, movementId: string) => void;
 }
 
 export const AssistantPilot: React.FC<AssistantPilotProps> = ({
   accounts, expenses, onUpdateExpenses, config, onPatchConfig,
   fiscalConfig, workBenefits, activePayslip, onClearActivePayslip,
-  subscriptions, onOpenSubscriptions, payChecklist, onPayChecklistChange, onRecordPayDeposit, onCancelPayDeposit,
+  subscriptions, onOpenSubscriptions, payChecklist, onPayLineCheck, onPayLineUncheck, onPayPlanReset,
   payAdjustment, onPayAdjustmentChange, payCalendar,
 }) => {
   const { grossAnnual, leisureBudget, projectSavings, taxRateManual, extraMonthlyIncome, paydayDay, paydayAmount, savingsSplit, savingsSplitFrom } = config;
@@ -412,9 +413,9 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
         totalToInvest={budgetData.totalToInvest}
         shortfall={shortfall}
         checklist={payChecklist}
-        onChange={onPayChecklistChange}
-        onRecordDeposit={onRecordPayDeposit}
-        onCancelDeposit={onCancelPayDeposit}
+        onCheck={onPayLineCheck}
+        onUncheck={onPayLineUncheck}
+        onReset={onPayPlanReset}
         paydayDay={paydayDay}
         payCalendar={payCalendar}
         customSplit={customSplit}

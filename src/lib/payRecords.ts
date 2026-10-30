@@ -2,16 +2,21 @@
 // FILE: src/lib/payRecords.ts
 // Paies reçues (GlobalAppData.pays, schéma v3) : la paie « ouverte » est celle du mois
 // d'épargne en cours (lib/payCalendar). Tant que le rituel « Ma paie » n'existe pas, le
-// Pilotage, la routine, la pastille et le serveur lisent et modifient la paie ouverte sous
-// ses anciennes formes : liste à cocher (PayChecklist) et réglages de la paie en cours
-// (PayAdjustment). Fonctions pures, partagées par l'app et le serveur.
+// Pilotage, la routine, la pastille et le serveur lisent la paie ouverte sous ses anciennes
+// formes : liste à cocher (PayChecklist, modifiée par les commandes de lib/commands/pay) et
+// réglages de la paie en cours (PayAdjustment). Fonctions pures, partagées par l'app et le
+// serveur.
 // ================================================
-import type { GlobalAppData, PayAdjustment, PayChecklist, PayRecord } from '../types';
+import type { AccountMovement, GlobalAppData, PayAdjustment, PayChecklist, PayRecord, SavingsAccount } from '../types';
 import { currentSavingsMonth, PayCalendarData, PayWindow, savingsMonthOfPay } from './payCalendar';
 import { formatISODay } from './dates';
 import { round2 } from './money';
 
-export type PayData = Pick<GlobalAppData, 'pays' | 'payslips'> & { config?: Pick<GlobalAppData['config'], 'paydayDay'> };
+export type PayData = Pick<GlobalAppData, 'pays' | 'payslips'> & {
+  config?: Pick<GlobalAppData['config'], 'paydayDay'>;
+  /** Comptes : une ligne dont le versement a été supprimé à la main n'est plus « faite ». */
+  accounts?: Pick<SavingsAccount, 'id' | 'movements'>[];
+};
 
 /** Ce que la règle du mois d'épargne lit dans les données. */
 export const payCalendarOf = (data: PayData): PayCalendarData => ({
@@ -27,10 +32,53 @@ export const openPay = (data: PayData, asOf: Date = new Date()): { window: PayWi
   return { window, pay };
 };
 
+/** Identifiant libre pour une paie du mois d'épargne `savingsMonth` ('pay-2026-11', puis '-2'…). */
+export const newPayId = (pays: Pick<PayRecord, 'id'>[], savingsMonth: string): string => {
+  let id = `pay-${savingsMonth}`;
+  for (let n = 2; pays.some(p => p.id === id); n++) id = `pay-${savingsMonth}-${n}`;
+  return id;
+};
+
+/**
+ * Une deuxième paie sur un mois d'épargne qui en a déjà une est proposée comme « versement en
+ * plus » (prime à part, deuxième employeur) : elle n'ouvre pas de nouveau mois.
+ */
+export const suggestedPayKind = (pays: PayRecord[] = [], savingsMonth: string, exceptId?: string): 'extra' | undefined =>
+  pays.some(p => p.id !== exceptId && p.kind !== 'extra' && savingsMonthOfPay(p) === savingsMonth) ? 'extra' : undefined;
+
+// ---------------------------------------------------------------------------
+// Versements rattachés à une paie
+// ---------------------------------------------------------------------------
+
+type MovementHolder = Pick<SavingsAccount, 'id' | 'movements'>;
+
+/** Mouvement d'un des comptes, s'il existe encore (avec son compte). */
+export const findMovement = (accounts: MovementHolder[], movementId: string): { accountId: string; movement: AccountMovement } | undefined => {
+  for (const a of accounts) {
+    const movement = (a.movements ?? []).find(m => m.id === movementId);
+    if (movement) return { accountId: a.id, movement };
+  }
+  return undefined;
+};
+
+/**
+ * Coches encore valables : une ligne dont le versement a été supprimé à la main (Journal,
+ * fiche du compte) redevient à faire. Les coches sans versement (virements de la paie, « Déjà
+ * enregistré ») restent.
+ */
+export const liveDone = (done: PayChecklist['done'], accounts: MovementHolder[]): PayChecklist['done'] =>
+  Object.fromEntries(Object.entries(done).filter(([, d]) => !d.movementId || findMovement(accounts, d.movementId)));
+
+/** Versements créés par cette paie et toujours présents (pour « Supprimer cette paie »). */
+export const payMovements = (pay: Pick<PayRecord, 'done'>, accounts: MovementHolder[]) =>
+  Object.values(pay.done).flatMap(d => {
+    const found = d.movementId ? findMovement(accounts, d.movementId) : undefined;
+    return found ? [found] : [];
+  });
+
 /** Paie à créer pour le mois d'épargne en cours, reçue au début de la fenêtre. */
 const newPay = (pays: PayRecord[], window: PayWindow, amount: number): PayRecord => {
-  let id = `pay-${window.key}`;
-  for (let n = 2; pays.some(p => p.id === id); n++) id = `pay-${window.key}-${n}`;
+  const id = newPayId(pays, window.key);
   return {
     id, receivedOn: window.start, savingsMonth: window.key,
     amount: Number.isFinite(amount) ? round2(Math.max(0, amount)) : 0, lines: [], done: {},
@@ -45,25 +93,13 @@ const replacePay = (pays: PayRecord[], next: PayRecord) => pays.map(p => (p.id =
 
 /**
  * Liste figée de la paie ouverte, sous sa forme historique (`month` = mois de versement,
- * celui de payPeriodOf). `undefined` tant que le plan n'est pas figé (rien de coché).
+ * celui de payPeriodOf). `undefined` tant que le plan n'est pas figé (rien de coché). Avec
+ * les comptes, une ligne dont le versement a disparu n'est plus cochée.
  */
 export const payChecklistOf = (data: PayData, asOf: Date = new Date()): PayChecklist | undefined => {
   const { window, pay } = openPay(data, asOf);
   if (!pay || pay.lines.length === 0) return undefined;
-  return { month: window.payMonth, lines: pay.lines, done: pay.done };
-};
-
-/**
- * Paies après une modification de la liste : lignes et coches enregistrées sur la paie
- * ouverte (créée au début du mois d'épargne, au montant `amount` de la paie théorique, si
- * elle n'existe pas). `undefined` défige le plan : la paie reste, sans lignes ni coches.
- */
-export const withPayChecklist = (data: PayData, next: PayChecklist | undefined, asOf: Date, amount: number): PayRecord[] => {
-  const pays = data.pays ?? [];
-  const { window, pay } = openPay(data, asOf);
-  if (!next) return pay ? replacePay(pays, { ...pay, lines: [], done: {} }) : pays;
-  if (pay) return replacePay(pays, { ...pay, lines: next.lines, done: next.done });
-  return [...pays, { ...newPay(pays, window, amount), lines: next.lines, done: next.done }];
+  return { month: window.payMonth, lines: pay.lines, done: data.accounts ? liveDone(pay.done, data.accounts) : pay.done };
 };
 
 // ---------------------------------------------------------------------------
