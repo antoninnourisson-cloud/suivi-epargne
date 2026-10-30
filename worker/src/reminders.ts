@@ -13,7 +13,6 @@ import {
   computePlacementStrategy,
   findDueSubscriptions,
   computePayTransfers,
-  buildPayLines,
   payPeriodOf,
   activeSavingsSplit,
   computeMonthSavedAmount,
@@ -29,13 +28,15 @@ import { computeYearReview } from '../../src/lib/agenda';
 import { closingApplies, isYearClosed } from '../../src/lib/yearClosing';
 import { formatISODay, parseISODate } from '../../src/lib/dates';
 import { describeStaleBalances, findStaleBalances } from '../../src/lib/freshness';
-import { formatEUR, frenchDay } from '../../src/lib/format';
+import { elideDe, formatEUR, formatMonth, frenchDay } from '../../src/lib/format';
 import { DEFAULT_FISCAL_CONFIG } from '../../src/constants';
 import { lepTimelineFromData, describeLepTimeline } from '../../src/lib/lep';
 import { computeGoodMonths, computePayReview, motivationSettings } from '../../src/lib/motivation';
 import { isReminderEnabled } from '../../src/lib/notificationPrefs';
 import { computeMonthTarget } from '../../src/lib/payAdjustment';
-import { payChecklistOf } from '../../src/lib/payRecords';
+import { isPayReviewDone, liveDone } from '../../src/lib/payRecords';
+import { savingsMonthOfPay, validPayday } from '../../src/lib/payCalendar';
+import { recommendPayDistribution } from '../../src/lib/payDistribution';
 import { buildTaxReturnReminder } from '../../src/lib/taxReturn';
 import type { PushMessage } from './webpush';
 
@@ -43,6 +44,11 @@ export interface Reminder {
   // Clé de dédoublonnage : un même rappel n'est envoyé qu'une fois (le cron tourne
   // chaque jour, l'échéance reste « due » plusieurs jours de suite).
   key: string;
+  /**
+   * Anciennes formes de la clé (rappels de paie avant le mois d'épargne) : un rappel déjà
+   * marqué envoyé sous l'une d'elles PAR L'ANCIENNE VERSION n'est pas renvoyé (index.ts).
+   */
+  legacyKeys?: string[];
   message: PushMessage;
 }
 
@@ -112,6 +118,8 @@ export const computeReminders = (data: GlobalAppData, today: CivilDate | Date, a
   const todayN = dayNumber(Y, M + 1, D);
   const accounts = data.accounts || [];
   const link = (view: string) => viewUrl(appUrl, view);
+  // Ouvre le rituel « J'ai reçu ma paie » (useDeepLinks, ?action=pay).
+  const payLink = `${link('pilot')}&action=pay`;
   const out: Reminder[] = [];
   const monthKey = `${Y}-${pad2(M + 1)}`;
 
@@ -178,69 +186,95 @@ export const computeReminders = (data: GlobalAppData, today: CivilDate | Date, a
     });
   }
 
-  // 5. Jour de paie : le plan de placement du Pilotage, pour savoir quoi virer où.
-  const payday = data.config?.paydayDay;
-  if (payday && payday >= 1 && payday <= 31) {
-    // Fenêtre de 3 jours comptée depuis la date de paie, même à cheval sur deux mois (une
-    // paie le 30 gardait sinon un seul jour pour un cron manqué).
+  // 5. Jour de paie : « Paie reçue ? », avec le plan de placement du Pilotage, tant que la paie
+  //    de ce mois d'épargne n'est pas déclarée dans l'app (rituel « J'ai reçu ma paie »). Le
+  //    clic ouvre directement le rituel (?view=pilot&action=pay).
+  //    Clés au MOIS D'ÉPARGNE (lib/payCalendar, règle du 15 : paie du 27 octobre → '2026-11',
+  //    du 27 décembre → '2027-01'). Avant, elles portaient le mois de VERSEMENT ('2026-10') :
+  //    `legacyKeys` garde l'ancienne forme, pour que le jour de la mise en service n'envoie
+  //    pas une seconde fois un rappel déjà parti (voir `send` dans index.ts).
+  //    Le serveur ne lit que la dernière version synchronisée du fichier : une paie déclarée
+  //    hors ligne peut valoir, au pire, une relance de trop.
+  const payday = validPayday(data.config?.paydayDay);
+  if (payday) {
+    // Date attendue d'après le seul jour de paie (fenêtre de 3 jours comptée depuis elle, même
+    // à cheval sur deux mois : une paie le 30 gardait sinon un seul jour pour un cron manqué).
     const payPeriod = payPeriodOf(payday, now);
+    const savingsMonth = payPeriod.savingsMonth;
+    const legacy = (prefix: string): Pick<Reminder, 'legacyKeys'> =>
+      payPeriod.key !== savingsMonth ? { legacyKeys: [`${prefix}:${payPeriod.key}`] } : {};
+    const pay = (data.pays ?? []).find(p => p.kind !== 'extra' && savingsMonthOfPay(p) === savingsMonth);
     const daysSincePay = todayN - dayNumberOfLocal(payPeriod.payDate);
-    if (daysSincePay >= 0 && daysSincePay < PAYDAY_WINDOW_DAYS) {
-      // Même objectif que le Pilotage et l'Accueil (réglages de cette paie compris).
+    const transfers = () => computePayTransfers({
+      expenses: data.expenses || [],
+      subscriptions: data.subscriptions,
+      leisureBudget: data.config.leisureBudget ?? 0,
+      projectSavings: data.config.projectSavings ?? 0,
+    });
+    // Estimation du Pilotage tant que la paie n'est pas déclarée (même objectif que l'Accueil).
+    const estimate = () => {
       const amount = computeMonthTarget(data, now).total;
       const steps = amount > 0
         ? computePlacementStrategy(amount, accounts, data.fiscalConfig || DEFAULT_FISCAL_CONFIG, activeSavingsSplit(data.config, now))
         : [];
+      return { amount, steps };
+    };
+    if (!pay && daysSincePay >= 0 && daysSincePay < PAYDAY_WINDOW_DAYS) {
+      const { amount, steps } = estimate();
       if (steps.length > 0) {
         out.push({
-          key: `payday:${payPeriod.key}`,
+          key: `payday:${savingsMonth}`,
+          ...legacy('payday'),
           message: {
-            title: `Salaire versé : ${eur(amount)} à placer`,
+            title: `Paie reçue ? Environ ${eur(amount)} à placer`,
             body: [
-              ...computePayTransfers({
-                expenses: data.expenses || [],
-                subscriptions: data.subscriptions,
-                leisureBudget: data.config.leisureBudget ?? 0,
-                projectSavings: data.config.projectSavings ?? 0,
-              }).map(t => `${eur(t.amount)} ${t.label}`),
+              ...transfers().map(t => `${eur(t.amount)} ${t.label}`),
               `Épargne : ${steps.filter(s => !s.infoOnly).map(s => `${eur(s.fillAmount)} ${s.alert ? `→ ${s.accountName.toLowerCase()}` : `sur ${s.accountName}`}`).join(', ')}`,
             ].join(' · ') + '.',
-            url: link('pilot'),
+            url: payLink,
             tag: 'payday',
           },
         });
       }
     }
 
-    // 5 bis. Trois jours après la paie : virements encore ni faits ni cochés dans la liste
-    //        du Pilotage. Une seule relance par paie, et rien si tout est coché. La liste
-    //        suit la paie (du 27 au 26 suivant), pas le mois calendaire.
-    const period = payPeriod;
-    const sincePayday = daysSincePay;
-    if (sincePayday >= PAYDAY_FOLLOWUP_DELAY_DAYS && sincePayday < PAYDAY_FOLLOWUP_DELAY_DAYS + PAYDAY_WINDOW_DAYS) {
-      const checklist = payChecklistOf(data, now);
-      let lines = checklist?.lines;
-      if (!lines) {
-        const amount = computeMonthTarget(data, now).total;
-        const steps = amount > 0 ? computePlacementStrategy(amount, accounts, data.fiscalConfig || DEFAULT_FISCAL_CONFIG, activeSavingsSplit(data.config, now)) : [];
-        lines = buildPayLines(computePayTransfers({
-          expenses: data.expenses || [],
-          subscriptions: data.subscriptions,
-          leisureBudget: data.config.leisureBudget ?? 0,
-          projectSavings: data.config.projectSavings ?? 0,
-        }), steps);
-      }
-      const pending = lines.filter(l => !checklist?.done[l.key]);
-      if (pending.length > 0) {
-        out.push({
-          key: `payday-followup:${period.key}`,
-          message: {
-            title: `${pending.length} virement${pending.length > 1 ? 's' : ''} de paie à faire ou à cocher`,
-            body: `${pending.map(l => l.label).join(', ')}. Cochez-les dans le Pilotage une fois faits.`,
-            url: link('pilot'),
-            tag: 'payday-followup',
-          },
-        });
+    // 5 bis. Trois jours après la paie attendue, une seule relance par mois d'épargne (même
+    //        clé dans les deux cas) : paie pas encore déclarée, ou lignes de la paie déclarée
+    //        ni faites ni cochées. Rien si tout est fait.
+    if (daysSincePay >= PAYDAY_FOLLOWUP_DELAY_DAYS && daysSincePay < PAYDAY_FOLLOWUP_DELAY_DAYS + PAYDAY_WINDOW_DAYS) {
+      if (!pay) {
+        const { steps } = estimate();
+        if (transfers().length > 0 || steps.length > 0) {
+          out.push({
+            key: `payday-followup:${savingsMonth}`,
+            ...legacy('payday-followup'),
+            message: {
+              title: 'Paie pas encore déclarée ?',
+              body: `Attendue le ${frenchDay(payPeriod.payDate)}. Dès qu'elle est là, déclarez-la : Pécule vous dit quoi placer, et où.`,
+              url: payLink,
+              tag: 'payday-followup',
+            },
+          });
+        }
+      } else {
+        // Plan figé de la paie, sinon celui que la carte « Ma paie » affiche pour le montant reçu.
+        const lines = pay.lines.length > 0
+          ? pay.lines
+          : recommendPayDistribution(data, { amount: pay.amount, bonus: pay.bonus, toSave: pay.toSave, receivedOn: pay.receivedOn }).lines;
+        const done = liveDone(pay.done, accounts);
+        const pending = lines.filter(l => !done[l.key]);
+        if (pending.length > 0) {
+          out.push({
+            key: `payday-followup:${savingsMonth}`,
+            ...legacy('payday-followup'),
+            message: {
+              title: `${pending.length} virement${pending.length > 1 ? 's' : ''} à faire`,
+              body: `${pending.map(l => l.label).join(', ')}. Cochez-les dans « Ma paie » une fois faits.`,
+              url: link('pilot'),
+              tag: 'payday-followup',
+            },
+          });
+        }
       }
     }
   }
@@ -263,10 +297,12 @@ export const computeReminders = (data: GlobalAppData, today: CivilDate | Date, a
   }
 
 
-  // 7. Point de paie : bilan de la fenêtre de paie qui vient de se terminer (src/lib/motivation,
-  //    les mêmes chiffres que l'app). Envoyé le premier jour de la nouvelle fenêtre, avec
-  //    PAYDAY_WINDOW_DAYS jours de rattrapage si le cron a manqué ; la clé `recap:<paie>`
-  //    garantit un seul envoi par paie.
+  // 7. Bilan du mois d'épargne qui vient de se terminer (src/lib/motivation, les mêmes
+  //    chiffres que la carte « Bilan d'octobre » de l'app). Envoyé le premier jour du nouveau
+  //    mois d'épargne, avec PAYDAY_WINDOW_DAYS jours de rattrapage si le cron a manqué ; la clé
+  //    `recap:<mois d'épargne>` garantit un seul envoi (ancienne forme : mois de versement de
+  //    la paie, gardée en `legacyKeys`). Rien si le bilan est déjà validé dans l'app (étape 0
+  //    du rituel « J'ai reçu ma paie », ou carte de l'Accueil).
   //
   //    Fusion avec le rappel du jour de paie (une seule notification ce jour-là) : quand le
   //    rappel `payday:` est émis aujourd'hui, que les deux types sont actifs et que la fenêtre
@@ -285,7 +321,7 @@ export const computeReminders = (data: GlobalAppData, today: CivilDate | Date, a
   const goodMonths = computeGoodMonths({
     accounts,
     today: todayKey,
-    paydayDay: payday && payday >= 1 && payday <= 31 ? payday : undefined,
+    paydayDay: payday,
     payslips: data.payslips,
     pays: data.pays,
     threshold: motivation.threshold,
@@ -296,7 +332,8 @@ export const computeReminders = (data: GlobalAppData, today: CivilDate | Date, a
   if (review && reviewWindow && reviewWindow.source !== 'calendar') {
     const [ey, em, ed] = review.end.split('-').map(Number);
     const sinceEnd = todayN - dayNumber(ey, em, ed);
-    if (sinceEnd >= 0 && sinceEnd < PAYDAY_WINDOW_DAYS) {
+    const reviewed = isPayReviewDone(review.key, data.config?.payReviewsDone, data.pays);
+    if (sinceEnd >= 0 && sinceEnd < PAYDAY_WINDOW_DAYS && !reviewed) {
       const [sy, sm, sd] = review.start.split('-').map(Number);
       const lastDay = new Date(ey, em - 1, ed - 1);   // dernier jour de la fenêtre (fin exclue)
       const beforeStart = new Date(sy, sm - 1, sd - 1); // veille de la fenêtre
@@ -304,7 +341,7 @@ export const computeReminders = (data: GlobalAppData, today: CivilDate | Date, a
       const ownedStart = computeAccountBalanceAtDate(accounts, formatISODay(beforeStart));
       const pct = ownedStart > 0 ? ((ownedEnd - ownedStart) / ownedStart) * 100 : 0;
       const interest = interestBetween(accounts, beforeStart, lastDay);
-      const month = MONTH_NAMES[Number(review.payMonth.slice(5, 7)) - 1];
+      const bilan = `Bilan ${elideDe(formatMonth(review.key))}`;
       const saved = `${review.saved >= 0 ? '+' : ''}${eur(review.saved)}`;
       // Gamification désactivée : ni « bon mois » ni « série ». Pas de mention d'un mois
       // raté non plus (pas de pression), seulement les chiffres.
@@ -312,14 +349,14 @@ export const computeReminders = (data: GlobalAppData, today: CivilDate | Date, a
       const streak = motivation.enabled && goodMonths.streak >= 2 ? goodMonths.streak : 0;
       const paydayReminder = out.find(r => r.key.startsWith('payday:'));
       const sameDayAsPayday = paydayReminder && payday && review.end === formatISODay(payPeriodOf(payday, now).payDate);
-      if (paydayReminder && sameDayAsPayday && isReminderEnabled(paydayReminder.key, prefs) && isReminderEnabled(`recap:${review.payMonth}`, prefs)) {
+      if (paydayReminder && sameDayAsPayday && isReminderEnabled(paydayReminder.key, prefs) && isReminderEnabled(`recap:${review.key}`, prefs)) {
         paydayReminder.message = {
           ...paydayReminder.message,
-          body: `${paydayReminder.message.body} Paie précédente : ${saved} mis de côté${good ? ', bon mois ✓' : ''}${streak ? `, série de ${streak}` : ''}.`,
+          body: `${paydayReminder.message.body} ${bilan} : ${saved} mis de côté${good ? ', bon mois ✓' : ''}${streak ? `, série de ${streak}` : ''}.`,
         };
       } else {
         const parts = [
-          `${saved} mis de côté sur la paie de ${month}${good || review.plan ? ` (${[
+          `${saved} mis de côté${good || review.plan ? ` (${[
             ...(review.plan ? [`objectif ${eur(review.plan)}`] : []),
             ...(good ? ['bon mois ✓'] : []),
           ].join(', ')})` : ''}`,
@@ -328,9 +365,10 @@ export const computeReminders = (data: GlobalAppData, today: CivilDate | Date, a
           ...(interest >= 1 ? [`≈ ${eur(interest)} d'intérêts`] : []),
         ];
         out.push({
-          key: `recap:${review.payMonth}`,
+          key: `recap:${review.key}`,
+          ...(review.payMonth !== review.key ? { legacyKeys: [`recap:${review.payMonth}`] } : {}),
           message: {
-            title: `Point de paie de ${month}`,
+            title: bilan,
             body: parts.join(' · ') + '.',
             url: link('dashboard'),
             tag: 'monthly-recap',
@@ -493,9 +531,9 @@ const DISCREET_BODIES: Record<string, string> = {
   recurring: 'Une échéance est à enregistrer dans l’app.',
   parental: 'Le point sur les intérêts de fin d’année est prêt.',
   payday: 'Votre rappel de paie est prêt.',
-  'payday-followup': 'Des virements de paie restent à faire ou à cocher.',
+  'payday-followup': 'Votre paie attend dans l’app : à déclarer ou à répartir.',
   sub: 'Un prélèvement approche : le détail est dans l’app.',
-  recap: 'Le point de paie est prêt.',
+  recap: 'Le bilan du mois est prêt.',
   'tax-return': 'Votre aide à la déclaration de revenus est prête dans l’app.',
   'restitution-prep': 'La restitution approche : le détail est dans l’app.',
   'restitution-day': 'C’est le jour de la restitution : le détail est dans l’app.',
@@ -504,7 +542,7 @@ const DISCREET_BODIES: Record<string, string> = {
 };
 // Titres qui portent eux-mêmes un montant : seule partie remplacée d'un titre.
 const DISCREET_TITLES: Record<string, string> = {
-  payday: 'Salaire versé',
+  payday: 'Paie reçue ?',
   'restitution-day': 'Restitution du capital de vos parents',
 };
 const GENERIC_BODY = 'Ouvrez Pécule pour voir le détail.';

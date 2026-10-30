@@ -5,8 +5,8 @@
 export interface NotificationCategory { id: string; label: string; prefixes: string[] }
 
 export const NOTIFICATION_CATEGORIES: NotificationCategory[] = [
-  { id: 'payday', label: 'Jour de paie : quoi placer, et où', prefixes: ['payday'] },
-  { id: 'payday-followup', label: 'Relance des virements de paie non cochés', prefixes: ['payday-followup'] },
+  { id: 'payday', label: 'Jour de paie : paie reçue ? quoi placer, et où', prefixes: ['payday'] },
+  { id: 'payday-followup', label: 'Relance : paie à déclarer ou virements à faire', prefixes: ['payday-followup'] },
   { id: 'subscriptions', label: 'Prélèvements des abonnements', prefixes: ['sub'] },
   { id: 'recurring', label: 'Échéances récurrentes à enregistrer', prefixes: ['recurring'] },
   { id: 'stale', label: 'Soldes non actualisés depuis un mois', prefixes: ['stale'] },
@@ -14,7 +14,8 @@ export const NOTIFICATION_CATEGORIES: NotificationCategory[] = [
   { id: 'lep', label: 'Éligibilité au LEP', prefixes: ['lep'] },
   { id: 'tax', label: 'Impôts : déclaration, dons, paramètres fiscaux', prefixes: ['tax-return', 'donations', 'fiscal-review', 'annual-statement'] },
   { id: 'parents', label: 'Capital des parents : intérêts et restitution', prefixes: ['parental', 'restitution-prep', 'restitution-day'] },
-  { id: 'recap', label: 'Point de paie (bilan de la paie précédente)', prefixes: ['recap'] },
+  // Id et préfixe « recap » gardés (préférences existantes) : le bilan du mois d'épargne écoulé.
+  { id: 'recap', label: "Bilan du mois d'épargne écoulé", prefixes: ['recap'] },
   // Id et préfixe « year-review » gardés (préférences existantes) ; la clôture de janvier l'a remplacé.
   { id: 'year-review', label: "Clôture et bilan de l'année (janvier)", prefixes: ['year-review', 'year-closing'] },
 ];

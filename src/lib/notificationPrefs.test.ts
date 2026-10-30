@@ -19,10 +19,10 @@ describe('préférences de notifications', () => {
     expect(categoryOfKey('year-closing:2026')?.id).toBe('year-review');
     expect(isReminderEnabled('year-closing:2026', { 'year-review': false })).toBe(false);
   });
-  it('le point de paie garde l’id et le préfixe « recap » (préférences existantes conservées)', () => {
+  it('le bilan du mois d’épargne garde l’id et le préfixe « recap » (préférences existantes conservées)', () => {
     const cat = categoryOfKey('recap:2026-09');
     expect(cat?.id).toBe('recap');
-    expect(cat?.label).toBe('Point de paie (bilan de la paie précédente)');
+    expect(cat?.label).toBe("Bilan du mois d'épargne écoulé");
     expect(isReminderEnabled('recap:2026-09', { recap: false })).toBe(false);
   });
 });

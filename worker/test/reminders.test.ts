@@ -75,28 +75,32 @@ describe('computeReminders', () => {
       const r = computeReminders(withPayday(28, 650), new Date(2026, 8, 28, 9), APP)
         .filter(x => x.key.startsWith('payday'));
       expect(r).toHaveLength(1);
-      expect(r[0].key).toBe('payday:2026-09');
+      // Paie du 28 septembre : épargne d'octobre.
+      expect(r[0].key).toBe('payday:2026-10');
+      expect(r[0].legacyKeys).toEqual(['payday:2026-09']);
+      expect(r[0].message.title).toMatch(/^Paie reçue \? Environ 650\s€ à placer$/);
+      expect(r[0].message.url).toBe(`${APP}?view=pilot&action=pay`);
       // Plafond LEP par défaut 10 000 € : 400 € de place, le reste sur le Livret A.
       expect(r[0].message.body).toMatch(/400.*LEP.*250.*Livret A/);
     });
 
     it('reste valable 3 jours puis se tait', () => {
       const keys = (d: Date) => computeReminders(withPayday(25, 100), d, APP).map(x => x.key);
-      expect(keys(new Date(2026, 8, 24, 9))).not.toContain('payday:2026-09');
-      expect(keys(new Date(2026, 8, 27, 9))).toContain('payday:2026-09');
-      expect(keys(new Date(2026, 8, 28, 9))).not.toContain('payday:2026-09');
+      expect(keys(new Date(2026, 8, 24, 9))).not.toContain('payday:2026-10');
+      expect(keys(new Date(2026, 8, 27, 9))).toContain('payday:2026-10');
+      expect(keys(new Date(2026, 8, 28, 9))).not.toContain('payday:2026-10');
     });
 
     it('ramène le 31 au dernier jour des mois courts', () => {
       const r = computeReminders(withPayday(31, 100), new Date(2026, 8, 30, 9), APP);
-      expect(r.map(x => x.key)).toContain('payday:2026-09');
+      expect(r.map(x => x.key)).toContain('payday:2026-10');
     });
 
     it("sans montant saisi, prend la capacité calculée du Pilotage et se tait si elle est nulle", () => {
       const data = withPayday(28);
-      expect(computeReminders(data, new Date(2026, 8, 28, 9), APP).map(x => x.key)).not.toContain('payday:2026-09');
+      expect(computeReminders(data, new Date(2026, 8, 28, 9), APP).map(x => x.key)).not.toContain('payday:2026-10');
       data.config.grossAnnual = 45000;
-      const r = computeReminders(data, new Date(2026, 8, 28, 9), APP).find(x => x.key === 'payday:2026-09');
+      const r = computeReminders(data, new Date(2026, 8, 28, 9), APP).find(x => x.key === 'payday:2026-10');
       expect(r?.message.title).toMatch(/à placer/);
     });
   });
@@ -153,14 +157,14 @@ describe('computeReminders', () => {
         subscriptions: [{ id: 's', name: 'Spotify', amount: 11, debitAccount: 'Revolut perso', frequency: 'monthly', anchorDate: '2026-01-10', active: true }],
         config: { ...base().config, leisureBudget: 750, projectSavings: 200, paydayDay: 28, paydayAmount: 500 },
       });
-      const r = computeReminders(data, new Date(2026, 8, 28, 9), APP).find(x => x.key === 'payday:2026-09');
+      const r = computeReminders(data, new Date(2026, 8, 28, 9), APP).find(x => x.key === 'payday:2026-10');
       expect(r?.message.body).toMatch(/900.*Revolut commun · 11.*Abonnements \(Revolut perso\) · 200.*Épargne projets · 750.*Argent plaisir.*Épargne : 500.*Livret A/);
-      expect(r?.message.url).toBe(`${APP}?view=pilot`);
+      expect(r?.message.url).toBe(`${APP}?view=pilot&action=pay`);
     });
   });
 
-  describe('point de paie', () => {
-    // Paie le 27 : la fenêtre « paie de septembre » va du 27 sept. au 26 oct. inclus.
+  describe('bilan du mois d’épargne', () => {
+    // Paie le 27 : l'épargne d'octobre va du 27 sept. au 26 oct. inclus (paie de septembre).
     const acc = {
       id: 'la', name: 'Livret A', type: AccountType.LIVRET_A, institution: 'B',
       totalAmount: 1620, ownedAmount: 1620, parentalCapital: 0, interestRate: 3,
@@ -175,54 +179,90 @@ describe('computeReminders', () => {
     });
     const at = (d: GlobalAppData, day: number, month = 10) => computeReminders(d, { year: 2026, month, day }, APP);
 
-    it('part le premier jour de la nouvelle fenêtre avec les chiffres de la paie écoulée', () => {
-      const r = at(data({ notificationPrefs: { payday: false } }), 27).find(x => x.key === 'recap:2026-09');
-      expect(r?.message.title).toBe('Point de paie de septembre');
-      expect(r?.message.body).toMatch(/^\+620\s€ mis de côté sur la paie de septembre \(objectif 650\s€, bon mois ✓\) · série de 2 · épargne 1\s620\s€ \(\+62 %\) · ≈ \d+\s€ d'intérêts\.$/);
+    it('part le premier jour du nouveau mois d’épargne avec les chiffres du mois écoulé', () => {
+      const r = at(data({ notificationPrefs: { payday: false } }), 27).find(x => x.key === 'recap:2026-10');
+      expect(r?.message.title).toBe('Bilan d\'octobre');
+      expect(r?.message.body).toMatch(/^\+620\s€ mis de côté \(objectif 650\s€, bon mois ✓\) · série de 2 · épargne 1\s620\s€ \(\+62 %\) · ≈ \d+\s€ d'intérêts\.$/);
       expect(r?.message.url).toBe(APP);
+      // Ancienne clé (mois de versement de la paie) : pas de doublon le jour de la mise en service.
+      expect(r?.legacyKeys).toEqual(['recap:2026-09']);
     });
 
     it('rattrape 3 jours un cron manqué, puis se tait ; plus de bilan calendaire le 1er', () => {
       const keys = (day: number, month = 10) => at(data({ notificationPrefs: { payday: false } }), day, month).map(x => x.key).filter(k => k.startsWith('recap:'));
       expect(keys(26)).toEqual([]);
-      expect(keys(29)).toEqual(['recap:2026-09']);
+      expect(keys(29)).toEqual(['recap:2026-10']);
       expect(keys(30)).toEqual([]);
-      expect(keys(1)).toEqual([]); // 1er octobre : la paie d'août s'est terminée le 27 septembre
+      expect(keys(1)).toEqual([]); // 1er octobre : l'épargne de septembre s'est terminée le 27 septembre
     });
 
     it('sans gamification : ni « bon mois » ni « série », les chiffres restent', () => {
-      const r = at(data({ gamification: false, notificationPrefs: { payday: false } }), 27).find(x => x.key === 'recap:2026-09');
-      expect(r?.message.body).toMatch(/^\+620\s€ mis de côté sur la paie de septembre \(objectif 650\s€\) · épargne/);
+      const r = at(data({ gamification: false, notificationPrefs: { payday: false } }), 27).find(x => x.key === 'recap:2026-10');
+      expect(r?.message.body).toMatch(/^\+620\s€ mis de côté \(objectif 650\s€\) · épargne/);
       expect(r?.message.body).not.toMatch(/bon mois|série/);
     });
 
-    it('le jour de paie, une seule notification : le bilan est replié dans le rappel de paie', () => {
+    it('le jour de paie, une seule notification : le bilan est replié dans « Paie reçue ? »', () => {
       for (const day of [27, 28, 29]) {
         const r = at(data(), day);
         expect(r.some(x => x.key.startsWith('recap:'))).toBe(false);
-        const pay = r.find(x => x.key === 'payday:2026-10');
-        expect(pay?.message.body).toMatch(/Paie précédente : \+620\s€ mis de côté, bon mois ✓, série de 2\.$/);
+        const pay = r.find(x => x.key === 'payday:2026-11');
+        expect(pay?.message.title).toMatch(/^Paie reçue \? Environ 650\s€ à placer$/);
+        expect(pay?.message.body).toMatch(/ Bilan d'octobre : \+620\s€ mis de côté, bon mois ✓, série de 2\.$/);
       }
-      const off = at(data({ gamification: false }), 27).find(x => x.key === 'payday:2026-10');
-      expect(off?.message.body).toMatch(/Paie précédente : \+620\s€ mis de côté\.$/);
+      const off = at(data({ gamification: false }), 27).find(x => x.key === 'payday:2026-11');
+      expect(off?.message.body).toMatch(/Bilan d'octobre : \+620\s€ mis de côté\.$/);
     });
 
     it('bilan désactivé : le rappel de paie reste tel quel', () => {
       const r = at(data({ notificationPrefs: { recap: false } }), 27);
-      expect(r.find(x => x.key === 'payday:2026-10')?.message.body).not.toContain('Paie précédente');
+      expect(r.find(x => x.key === 'payday:2026-11')?.message.body).not.toContain('Bilan');
+    });
+
+    it('bilan déjà validé dans l’app (rituel ou Accueil) : ni bilan seul, ni phrase dans le rappel', () => {
+      for (const d of [
+        data({ payReviewsDone: ['2026-10'] }),
+        { ...data(), pays: [{ id: 'pay-2026-10', receivedOn: '2026-09-27', savingsMonth: '2026-10', amount: 2400, lines: [], done: {}, reviewedAt: '2026-10-27' }] },
+      ]) {
+        const r = at(d, 27);
+        expect(r.some(x => x.key.startsWith('recap:'))).toBe(false);
+        expect(r.find(x => x.key === 'payday:2026-11')?.message.body).not.toContain('Bilan');
+      }
     });
 
     it('sans jour de paie ni fiche de paie : bilan du mois calendaire du 1er au 3', () => {
       const d = data({ paydayDay: undefined });
       const r = at(d, 1).find(x => x.key.startsWith('recap:'));
       expect(r?.key).toBe('recap:2026-09');
+      expect(r?.legacyKeys).toBeUndefined();
       expect(r?.message.title).toBe('Bilan de septembre');
       expect(at(d, 27).some(x => x.key.startsWith('recap:'))).toBe(false);
     });
 
     it('en mode discret, aucun montant', () => {
       const [r] = applyDiscreetMode(at(data({ notificationPrefs: { payday: false } }), 27).filter(x => x.key.startsWith('recap:')));
-      expect(r.message).toMatchObject({ title: 'Point de paie de septembre', body: 'Le point de paie est prêt.' });
+      expect(r.message).toMatchObject({ title: 'Bilan d\'octobre', body: 'Le bilan du mois est prêt.' });
+      expect(r.legacyKeys).toEqual(['recap:2026-09']);
+    });
+
+    it('paie du 27 décembre : épargne de janvier de l’année suivante, bilan de décembre', () => {
+      const r = at(data(), 27, 12);
+      const pay = r.find(x => x.key.startsWith('payday:'));
+      expect(pay?.key).toBe('payday:2027-01');
+      expect(pay?.legacyKeys).toEqual(['payday:2026-12']);
+      expect(pay?.message.body).toMatch(/ Bilan de décembre : /);
+      const recap = at(data({ notificationPrefs: { payday: false } }), 28, 12).find(x => x.key.startsWith('recap:'));
+      expect(recap?.key).toBe('recap:2026-12');
+      expect(recap?.legacyKeys).toEqual(['recap:2026-11']);
+      expect(recap?.message.title).toBe('Bilan de décembre');
+      const followup = at(data(), 30, 12).find(x => x.key.startsWith('payday-followup:'));
+      expect(followup?.key).toBe('payday-followup:2027-01');
+    });
+
+    it('paie avant le 15 : même mois d’épargne qu’avant, aucune ancienne clé', () => {
+      const r = at(data({ paydayDay: 5 }), 5, 11).find(x => x.key.startsWith('payday:'));
+      expect(r?.key).toBe('payday:2026-11');
+      expect(r?.legacyKeys).toBeUndefined();
     });
   });
 
@@ -282,8 +322,8 @@ describe('computeReminders', () => {
     });
   });
 
-  describe('relance des virements de paie', () => {
-    const data = (done?: Record<string, { amount: number }>) => base({
+  describe('relance de la paie (J+3)', () => {
+    const data = (done?: Record<string, { amount: number; movementId?: string }>) => base({
       accounts: [livret],
       expenses: [{ id: 'e', name: 'Revolut commun', amount: 900 }],
       config: { ...base().config, paydayDay: 27, paydayAmount: 500 },
@@ -297,36 +337,68 @@ describe('computeReminders', () => {
       } : undefined,
     });
     // Liste et réglages écrits au format d'avant le schéma v3 : le serveur lit le fichier
-    // passé par migrate() (worker/src/google.ts), qui les reporte sur la paie de septembre.
-    const at = (d: ReturnType<typeof data>, day: number) => computeReminders(migrate(d), new Date(2026, 8, day, 9), APP).find(x => x.key === 'payday-followup:2026-09');
+    // passé par migrate() (worker/src/google.ts), qui les reporte sur la paie déclarée de
+    // l'épargne d'octobre (paie du 27 septembre).
+    const at = (d: GlobalAppData, day: number) => computeReminders(migrate(d), new Date(2026, 8, day, 9), APP).find(x => x.key === 'payday-followup:2026-10');
 
-    it('relance 3 jours après la paie les virements non cochés', () => {
+    it('paie déclarée : relance 3 jours après la paie les lignes ni faites ni cochées', () => {
       const r = at(data({ 't:Revolut commun': { amount: 900 } }), 30);
-      expect(r?.message.title).toBe('1 virement de paie à faire ou à cocher');
-      expect(r?.message.body).toContain('Livret A');
-      expect(r?.message.body).not.toContain('Revolut commun');
+      expect(r?.message.title).toBe('1 virement à faire');
+      expect(r?.message.body).toBe('Livret A. Cochez-les dans « Ma paie » une fois faits.');
+      expect(r?.message.url).toBe(`${APP}?view=pilot`);
+      expect(r?.legacyKeys).toEqual(['payday-followup:2026-09']);
+      expect(at(data({}), 30)?.message.title).toBe('2 virements à faire');
     });
-    it("relance tout si la liste n'a pas été touchée, et rien avant le délai", () => {
-      expect(at(data(), 30)?.message.title).toBe('2 virements de paie à faire ou à cocher');
+
+    it('paie pas encore déclarée : « Paie pas encore déclarée ? », vers le rituel, et rien avant le délai', () => {
+      const r = at(data(), 30);
+      expect(r?.message.title).toBe('Paie pas encore déclarée ?');
+      expect(r?.message.body).toBe("Attendue le 27 septembre. Dès qu'elle est là, déclarez-la : Pécule vous dit quoi placer, et où.");
+      expect(r?.message.url).toBe(`${APP}?view=pilot&action=pay`);
       expect(at(data(), 28)).toBeUndefined();
+      expect(computeReminders(migrate(data()), new Date(2026, 9, 3, 9), APP).some(x => x.key.startsWith('payday-followup:'))).toBe(false); // 3 octobre : rattrapage terminé
     });
-    it('se tait quand tout est coché', () => {
+
+    it('se tait quand tout est fait', () => {
       expect(at(data({ 't:Revolut commun': { amount: 900 }, 's:la': { amount: 500 } }), 30)).toBeUndefined();
     });
-    it('compte la somme en plus saisie dans le Pilotage pour cette paie, pas celle de la paie précédente', () => {
+
+    it('un versement supprimé à la main redevient à faire', () => {
+      const d = data({ 't:Revolut commun': { amount: 900 }, 's:la': { amount: 500, movementId: 'disparu' } });
+      expect(at(d, 30)?.message.title).toBe('1 virement à faire');
+      const kept = data({ 't:Revolut commun': { amount: 900 }, 's:la': { amount: 500, movementId: 'm' } });
+      expect(at(kept, 30)).toBeUndefined();
+    });
+
+    it('paie déclarée sans plan figé : les lignes conseillées pour le montant reçu', () => {
+      const d: GlobalAppData = { ...data(), pays: [{ id: 'pay-2026-10', receivedOn: '2026-09-28', savingsMonth: '2026-10', amount: 1400, lines: [], done: {} }] };
+      const r = at(d, 30);
+      expect(r?.message.title).toBe('2 virements à faire');
+      expect(r?.message.body).toBe('Revolut commun, Livret A. Cochez-les dans « Ma paie » une fois faits.');
+      // Paie déclarée : pas de « Paie reçue ? » le jour de paie.
+      expect(computeReminders(d, new Date(2026, 8, 28, 9), APP).some(x => x.key.startsWith('payday:'))).toBe(false);
+    });
+
+    it('un versement en plus ne vaut pas déclaration de la paie', () => {
+      const d: GlobalAppData = { ...data(), pays: [{ id: 'x', receivedOn: '2026-09-28', savingsMonth: '2026-10', amount: 300, kind: 'extra', lines: [], done: {} }] };
+      expect(at(d, 30)?.message.title).toBe('Paie pas encore déclarée ?');
+    });
+
+    it('compte la somme en plus de cette paie (migrée), pas celle de la paie précédente', () => {
       // Rien à placer d'habitude (0 €) : seule la prime saisie pour cette paie crée la ligne d'épargne.
-      const withExtra = (period?: string) => {
+      const withExtra = (period?: string): GlobalAppData => {
         const d = data();
         return { ...d, config: { ...d.config, paydayAmount: 0, ...(period ? { payAdjustment: { period, extra: 300 } } : {}) } };
       };
-      expect(at(withExtra(), 30)?.message.title).toBe('1 virement de paie à faire ou à cocher');
-      expect(at(withExtra('2026-09'), 30)?.message.title).toBe('2 virements de paie à faire ou à cocher');
-      expect(at(withExtra('2026-08'), 30)?.message.title).toBe('1 virement de paie à faire ou à cocher');
-      // Le rappel du jour de paie annonce le même objectif que le Pilotage.
-      const pay = (d: GlobalAppData) => computeReminders(migrate(d), new Date(2026, 8, 27, 9), APP).find(x => x.key === 'payday:2026-09')?.message.title;
+      expect(at(withExtra(), 30)?.message.title).toBe('Paie pas encore déclarée ?');
+      expect(at(withExtra('2026-09'), 30)?.message.title).toBe('2 virements à faire');
+      expect(at(withExtra('2026-08'), 30)?.message.title).toBe('Paie pas encore déclarée ?');
+      // Le rappel du jour de paie annonce le même objectif que le Pilotage ; la paie dont la
+      // somme en plus a été saisie compte comme déclarée (plus de « Paie reçue ? »).
+      const pay = (d: GlobalAppData) => computeReminders(migrate(d), new Date(2026, 8, 27, 9), APP).find(x => x.key === 'payday:2026-10')?.message.title;
       const d = data();
-      expect(pay({ ...d, config: { ...d.config, payAdjustment: { period: '2026-09', extra: 300 } } })).toMatch(/^Salaire versé : 800\s€ à placer$/);
-      expect(pay({ ...d, config: { ...d.config, payAdjustment: { period: '2026-08', extra: 300 } } })).toMatch(/^Salaire versé : 500\s€ à placer$/);
+      expect(pay({ ...d, config: { ...d.config, payAdjustment: { period: '2026-09', extra: 300 } } })).toBeUndefined();
+      expect(pay({ ...d, config: { ...d.config, payAdjustment: { period: '2026-08', extra: 300 } } })).toMatch(/^Paie reçue \? Environ 500\s€ à placer$/);
     });
   });
 
@@ -443,7 +515,7 @@ describe('mode discret', () => {
     expect(out.map(x => x.message.body)).toEqual([
       'Une échéance est à enregistrer dans l’app.',
       'Un prélèvement approche : le détail est dans l’app.',
-      'Le point de paie est prêt.',
+      'Le bilan du mois est prêt.',
       'Révision du 1er août : pensez à mettre à jour Livret A.', // sans montant : inchangé
     ]);
     expect(out.map(x => x.message.title)).toEqual(['Échéance : Épargne auto', 'Prélèvement demain : Netflix', 'Bilan de septembre', 'Taux réglementés révisés']);
@@ -453,11 +525,11 @@ describe('mode discret', () => {
 
   it('retire aussi les montants des titres qui en portent', () => {
     const [pay, don, unknown] = applyDiscreetMode([
-      r('payday:2026-10', 'Salaire versé : 2 000 € à placer', '900 € Revolut commun · Épargne : 500 € sur Livret A.'),
+      r('payday:2026-10', 'Paie reçue ? Environ 2 000 € à placer', '900 € Revolut commun · Épargne : 500 € sur Livret A.'),
       r('tax-return:2026', 'Déclaration des revenus 2026', 'À vérifier : vos dons (7UD, 7UF). Dons : 150 €, ≈ 108 € de réduction.'),
       r('nouveau:1', 'Titre 12 €', 'Corps 12 €'),
     ]);
-    expect(pay.message).toMatchObject({ title: 'Salaire versé', body: 'Votre rappel de paie est prêt.' });
+    expect(pay.message).toMatchObject({ title: 'Paie reçue ?', body: 'Votre rappel de paie est prêt.' });
     // Un titre sans montant (l'année seule) est gardé ; le corps devient générique.
     expect(don.message).toMatchObject({ title: 'Déclaration des revenus 2026', body: 'Votre aide à la déclaration de revenus est prête dans l’app.' });
     expect(unknown.message).toMatchObject({ title: 'Pécule', body: 'Ouvrez Pécule pour voir le détail.' });

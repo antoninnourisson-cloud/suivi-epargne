@@ -227,6 +227,47 @@ describe('tournée quotidienne des rappels', () => {
     expect(kv.keysWithPrefix('sent:u1:')).toEqual(['sent:u1:recurring:r1:2026-09']);
   });
 
+  describe('rappels de paie au mois d’épargne (mise en service)', () => {
+    const payTitles = () => push.sent.map(x => x.message.title).filter(t => t.startsWith('Paie reçue'));
+    const withPayday = () => ({ ...dataFile({ paydayDay: 27, paydayAmount: 300 }), recurringMovements: [] });
+
+    it('rappel déjà parti sous l’ancienne clé (mois de versement) : pas de doublon le lendemain', async () => {
+      await subscribeDevice();
+      google.files = [{ id: 'f1', modifiedTime: '2026-10-27T10:00:00Z', content: withPayday() }];
+      vi.setSystemTime(new Date('2026-10-28T07:00:00Z'));
+      // La veille, l'ancienne version a envoyé la paie du 27 octobre sous « payday:2026-10 ».
+      await kv.put('sent:u1:payday:2026-10', '1', { expirationTtl: 3600 });
+      await runCron();
+      expect(payTitles()).toEqual([]);
+      expect(kv.keysWithPrefix('sent:u1:payday:')).toEqual(['sent:u1:payday:2026-10']);
+    });
+
+    it('sans ancienne clé : envoyé une fois sous la clé du mois d’épargne', async () => {
+      await subscribeDevice();
+      google.files = [{ id: 'f1', modifiedTime: '2026-10-27T10:00:00Z', content: withPayday() }];
+      vi.setSystemTime(new Date('2026-10-28T07:00:00Z'));
+      await runCron();
+      expect(payTitles()).toHaveLength(1);
+      expect(push.sent.find(x => x.message.title.startsWith('Paie reçue'))?.message.url).toBe(`${APP}?view=pilot&action=pay`);
+      expect(await kv.get('sent:u1:payday:2026-11')).toBe('2');
+      vi.setSystemTime(new Date('2026-10-29T07:00:00Z'));
+      await runCron();
+      expect(payTitles()).toHaveLength(1);
+    });
+
+    it('la clé de la paie d’octobre (nouvelle forme) ne bloque pas la paie de novembre', async () => {
+      await subscribeDevice();
+      google.files = [{ id: 'f1', modifiedTime: '2026-11-27T10:00:00Z', content: withPayday() }];
+      // « payday:2026-11 » écrit par la nouvelle version = paie du 27 octobre (épargne de novembre),
+      // pas l'ancienne clé de la paie du 27 novembre.
+      vi.setSystemTime(new Date('2026-11-27T07:00:00Z'));
+      await kv.put('sent:u1:payday:2026-11', '2', { expirationTtl: 3600 });
+      await runCron();
+      expect(payTitles()).toHaveLength(1);
+      expect(await kv.get('sent:u1:payday:2026-12')).toBe('2');
+    });
+  });
+
   it('aucun fichier de données : rien n’est envoyé, la tournée reste saine', async () => {
     await subscribeDevice();
     await runCron();

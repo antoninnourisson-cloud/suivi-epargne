@@ -29,7 +29,7 @@
 //                     seulement tant qu'il sert, 61 jours au plus sans usage (userRecords.ts)
 //   push:<sub>        abonnements push des appareils (subscriptions.ts)
 //   push-removed:<sub>  abonnements retirés depuis moins de 30 jours (alerte d'effacement des copies)
-//   sent:<sub>:<k>    rappels déjà envoyés (dédoublonnage, ~400 jours)
+//   sent:<sub>:<k>    rappels déjà envoyés (dédoublonnage, ~400 jours ; valeur SENT_MARK)
 //   health:cron       compte rendu de la dernière tâche quotidienne
 //   health:site       dernier contrôle des pages publiques (GET /status, 15 min)
 //   health:fiscal-watch, health:cron-log  dernier succès/échec de la veille du lundi et
@@ -98,6 +98,14 @@ export interface Env {
 }
 
 const SENT_TTL = 400 * DAY;
+// Valeur des marques « envoyé ». Les rappels de paie comptaient par mois de VERSEMENT
+// ('payday:2026-10' pour la paie du 27 octobre), ils comptent désormais par mois d'épargne
+// ('payday:2026-11'). L'ancienne version marquait '1' : une ancienne clé (Reminder.legacyKeys)
+// ne bloque un rappel que si elle porte cette valeur, sinon la clé de la paie d'octobre
+// ('payday:2026-11', nouvelle forme) bloquerait à tort la paie de novembre (même texte en
+// ancienne forme). Le jour de la mise en service ne renvoie donc rien de déjà parti.
+const SENT_MARK = '2';
+const LEGACY_SENT_MARK = '1';
 const RECONNECT_NOTICE_TTL = 3 * DAY;
 const LOGIN_CODE_TTL = 60;       // minimum KV ; le code est effacé dès l'échange
 
@@ -976,12 +984,13 @@ const remindUser = async (env: Env, sub: string, now: Date): Promise<void> => {
   const persist = async () => { if (subs.length !== stored.length) await writePushList(env, sub, subs); };
   if (subs.length === 0) { await persist(); return; }
 
-  const send = async (message: PushMessage, sentKey: string, ttl: number) => {
+  const send = async (message: PushMessage, sentKey: string, ttl: number, legacyKeys: string[] = []) => {
     if (await env.STORE.get(sentKey)) return;
+    for (const k of legacyKeys) if ((await env.STORE.get(k)) === LEGACY_SENT_MARK) return;
     const { delivered, gone } = await deliver(env, subs, message);
     if (gone.length) subs = subs.filter(x => !gone.includes(x.endpoint));
     // Marqué « envoyé » seulement si au moins un appareil l'a reçu : sinon on réessaie demain.
-    if (delivered > 0) await env.STORE.put(sentKey, '1', { expirationTtl: ttl });
+    if (delivered > 0) await env.STORE.put(sentKey, SENT_MARK, { expirationTtl: ttl });
   };
 
   let accessToken: string;
@@ -1007,7 +1016,7 @@ const remindUser = async (env: Env, sub: string, now: Date): Promise<void> => {
     if (isDiscreet(data)) reminders = applyDiscreetMode(reminders);
     for (const reminder of reminders) {
       if (subs.length === 0) break;
-      await send(reminder.message, `sent:${sub}:${reminder.key}`, SENT_TTL);
+      await send(reminder.message, `sent:${sub}:${reminder.key}`, SENT_TTL, (reminder.legacyKeys ?? []).map(k => `sent:${sub}:${k}`));
     }
   } finally {
     await persist();
