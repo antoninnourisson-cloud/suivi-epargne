@@ -20,6 +20,7 @@
 // suivie d'un chargement Drive réussi (`completeReset`). Si la session ne peut pas être
 // fermée, le verrou reste affiché.
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import {
   isLockActive, getLockDelayMs, isLockResetPending, markLockResetPending, cancelLockReset, completeLockReset,
   getLockResetRequest, requestLockReset, cancelLockResetRequest, isLockResetAlertSent, markLockResetAlertSent,
@@ -169,7 +170,9 @@ export const useAppLock = () => {
       if (lockedRef.current) return;
       lockedRef.current = true;
       returnFocusRef.current = restorableFocus(document.activeElement);
-      setLocked(true);
+      // Rendu synchrone : au retour au premier plan, la surcouche doit être en place avant
+      // la prochaine image, pas une image plus tard.
+      flushSync(() => setLocked(true));
     };
     const endSuspension = () => {
       // Le choix peut être signalé avant le retour au premier plan : la suspension couvre

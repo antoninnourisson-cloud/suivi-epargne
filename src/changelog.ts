@@ -15,8 +15,8 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
-    version: '2026.10.29-3',
-    date: '2026-10-29',
+    version: '2026.10.30-3',
+    date: '2026-10-30',
     title: 'Mode discret et routine du mois',
     items: [
       "Nouveau : le bouton œil, en haut de l'écran et dans le menu, masque tous les montants d'un geste (« •••• € »). Le réglage se retrouve dans Paramètres, Affichage ; il est propre à l'appareil et coupé par défaut.",
@@ -24,11 +24,12 @@ export const CHANGELOG: ChangelogEntry[] = [
       "Dans le Pilotage, « paie − dépenses = à placer » s'affiche avec la même précision partout. Le simulateur « Et si… » indique le résultat probable à votre rythme et où se situe votre plan.",
       "Une carte « Appareil » dans Paramètres montre si le stockage est protégé et garde les dernières erreurs, sans aucune donnée personnelle, avec « Copier » et « Effacer ». Si l'app plante, un écran propose de la recharger.",
       "Le menu de l'ordinateur reste en place quand on fait défiler la page, et les textes disent « Paie d'octobre » ou « l'Assurance vie » au lieu de « de octobre ».",
+      "La date du jour se met à jour à minuit et au retour sur l'app : agenda, échéances et objectif du mois restent justes.",
     ],
   },
   {
-    version: '2026.10.29-2',
-    date: '2026-10-29',
+    version: '2026.10.30-2',
+    date: '2026-10-30',
     title: 'Verrou plus souple, soldes et fiches de paie',
     items: [
       "Verrou : vous choisissez maintenant après combien de temps il se remet (Immédiatement, 1, 5 ou 15 minutes ; 5 par défaut). Il se pose par-dessus ce que vous faisiez, sans effacer une saisie en cours, et ne se déclenche pas pendant un choix de fichier. À l'ouverture de l'app, il reste toujours verrouillé.",
@@ -40,8 +41,8 @@ export const CHANGELOG: ChangelogEntry[] = [
     ],
   },
   {
-    version: '2026.10.29',
-    date: '2026-10-29',
+    version: '2026.10.30',
+    date: '2026-10-30',
     title: 'Des calculs plus justes',
     items: [
       "Les intérêts ajoutés par la puce « Intérêts » de l'ajout rapide ne comptent plus comme de l'épargne. Ceux déjà saisis avant cette mise à jour se corrigent au Journal avec « Pas de l'épargne ».",
@@ -49,7 +50,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       "Votre rythme d'épargne et la projection à 6 et 12 mois reposent sur ce que vous avez versé moins retiré, sans les intérêts ni les variations de valeur.",
       "En janvier, les intérêts de l'année proposés dans Actualiser sont datés du 31 décembre.",
       "Un montant écrit « 12.500 » est refusé comme ambigu au lieu d'être lu 12,5 : écrivez 12 500 ou 12,5.",
-      "La date du jour se met à jour à minuit et au retour sur l'app : agenda, échéances et objectif du mois restent justes.",
+      "Restitution aux parents : les intérêts offerts sont calculés avec les taux de chaque période de l'année et la date de chaque versement de vos parents, comme le reste de l'app, et non plus au seul taux du jour.",
     ],
   },
   {

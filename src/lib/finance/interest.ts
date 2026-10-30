@@ -185,11 +185,23 @@ export const computeAccruedInterest = (
   let balance = startBalance;
   let cursor = yearStart;
   let interest = 0;
-  const accrue = (from: Date, to: Date, bal: number) => {
+  // Un changement de taux daté coupe aussi la période, même sans mouvement ce jour-là.
+  const rateBreaks = (account.rateHistory || [])
+    .map(c => parseISODate(c.date))
+    .filter(d => d > yearStart && d < end)
+    .sort((a, b) => a.getTime() - b.getTime());
+  const accrueSpan = (from: Date, to: Date, bal: number) => {
     // daysBetween arrondit en jours calendaires entiers : une division brute par MS_PER_DAY
     // renvoie 184,04 jours sur une période traversant le passage à l'heure d'hiver.
     const days = daysBetween(from, to);
     if (days > 0 && bal > 0) interest += bal * (rateAtDate(currentRate, account.rateHistory, from) / 100) * (days / 365);
+  };
+  const accrue = (from: Date, to: Date, bal: number) => {
+    let start = from;
+    for (const b of rateBreaks) {
+      if (b > start && b < to) { accrueSpan(start, b, bal); start = b; }
+    }
+    accrueSpan(start, to, bal);
   };
   for (const m of events) {
     const at = parseISODate(m.date);

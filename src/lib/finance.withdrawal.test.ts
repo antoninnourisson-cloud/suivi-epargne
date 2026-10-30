@@ -238,6 +238,30 @@ describe('restitution du capital parental', () => {
     expect(p.totalLost).toBeCloseTo(8246 * 0.024 / 24);
   });
 
+  it('applique les taux datés de l’année, pas le seul taux du jour', () => {
+    // 2,4 % jusqu'au 31 juillet, 1,7 % depuis le 1er août : 14 quinzaines puis 10.
+    const la = acc({ id: 'la', type: AccountType.LIVRET_A, interestRate: 1.7, rateHistory: [{ date: '2026-08-01', rate: 2.4 }], totalAmount: 15000, ownedAmount: 5000, parentalCapital: 10000 });
+    const p = computeRestitutionPlan([la], '2027-01-01');
+    expect(p.totalInterest).toBeCloseTo(10000 * (0.024 * 14 + 0.017 * 10) / 24);
+    expect(p.totalInterest).not.toBeCloseTo(10000 * 0.017);
+  });
+
+  it('ne fait rapporter un versement des parents qu’à partir de sa date', () => {
+    // 5 000 € présents toute l'année, 5 000 € versés le 1er juillet : un dépôt rapporte à
+    // partir de la quinzaine suivante (16 juillet), soit 11 quinzaines.
+    const la = acc({ id: 'la', type: AccountType.LIVRET_A, interestRate: 2.4, totalAmount: 10000, ownedAmount: 0, parentalCapital: 10000,
+      movements: [{ id: 'p', date: '2026-07-01', amount: 5000, label: 'Versement des parents', type: 'IN', kind: 'parental' }] });
+    const p = computeRestitutionPlan([la], '2027-01-01');
+    expect(p.totalInterest).toBeCloseTo(5000 * 0.024 + 5000 * 0.024 * 11 / 24);
+  });
+
+  it('prorata journalier hors livrets, avec un taux daté', () => {
+    // 3 % jusqu'au 1er juillet (181 jours), 2 % ensuite (184 jours).
+    const cat = acc({ id: 'cat', type: AccountType.ASSURANCE_VIE, interestRate: 2, rateHistory: [{ date: '2026-07-01', rate: 3 }], totalAmount: 1000, ownedAmount: 0, parentalCapital: 1000 });
+    const p = computeRestitutionPlan([cat], '2027-01-01');
+    expect(p.totalInterest).toBeCloseTo(1000 * (0.03 * 181 + 0.02 * 184) / 365);
+  });
+
   it('retire la part parentale sans toucher à la part propre', () => {
     const [after] = accountsAfterRestitution([lep]);
     expect(after.parentalCapital).toBe(0);

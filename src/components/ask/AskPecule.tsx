@@ -1,7 +1,7 @@
 // « Demander à Pécule » : questions en français sur ses propres données, réponses de Google
 // Gemini (clé de l'utilisateur). Lecture seule. La conversation ne vit que dans cette fenêtre :
-// jamais enregistrée (ni Drive, ni appareil, ni serveur), effacée à la fermeture, au verrouillage
-// et à la déconnexion (la fenêtre est alors retirée).
+// jamais enregistrée (ni Drive, ni appareil, ni serveur), effacée à la fermeture et à la
+// déconnexion (la fenêtre est alors retirée). Le verrou la recouvre sans l'effacer.
 import React, { useEffect, useRef, useState } from 'react';
 import { KeyRound, MessageCircleQuestion, Send, Sparkles, X } from 'lucide-react';
 import type { GlobalAppData } from '../../types';
@@ -144,7 +144,7 @@ export const AskPecule: React.FC<AskPeculeProps> = ({ data, geminiApiKey, taxEst
 
 /**
  * Entrée de l'Accueil : le bouton et sa fenêtre. La fenêtre (donc la conversation) disparaît
- * à sa fermeture, en quittant l'Accueil, au verrouillage et à la déconnexion.
+ * à sa fermeture, en quittant l'Accueil et à la déconnexion.
  */
 export const AskPeculeEntry: React.FC<Omit<AskPeculeProps, 'onClose'>> = props => {
   const [open, setOpen] = useState(false);
