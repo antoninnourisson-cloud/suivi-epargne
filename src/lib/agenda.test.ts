@@ -30,7 +30,8 @@ describe('buildAgenda', () => {
     const has = (kind: string, date: string) => events.some(e => e.kind === kind && e.date === date);
     expect(has('payday', '2026-10-27')).toBe(true);
     // Le montant de la ligne de paie est ce qu'il faut placer, et la ligne le dit.
-    expect(events.find(e => e.kind === 'payday')).toMatchObject({ title: 'Jour de paie', detail: expect.stringMatching(/^Montant à placer/) });
+    // Nommée par le mois d'épargne qu'elle ouvre (paie du 27 octobre → épargne de novembre).
+    expect(events.find(e => e.kind === 'payday')).toMatchObject({ title: 'Paie attendue · épargne de novembre', detail: expect.stringMatching(/^Montant à placer/) });
     expect(has('subscription', '2026-10-01')).toBe(true);
     expect(events.filter(e => e.title === 'Navigo').length).toBe(3); // 1er oct, nov, déc : deux mois seulement
     expect(has('subscription', '2027-08-06')).toBe(true);              // annuel : tout l'horizon
@@ -63,23 +64,31 @@ describe('buildAgenda', () => {
     expect(fiscalOn20({ ...closed, fiscalConfig: { ...DEFAULT_FISCAL_CONFIG, paramsReviewedYear: 2027 } })).toBe(false);
   });
 
-  it("jour de paie : la ligne reprend l'objectif de la paie en cours (somme en plus comprise), pas les suivantes", () => {
+  it("paie du jour pas encore déclarée : la ligne reprend l'objectif du mois (versement en plus compris), pas les suivantes", () => {
     const payDay = new Date(2026, 9, 27, 9); // 27 octobre 2026, jour de paie
-    // Réglages au format d'avant le schéma v3, reportés sur la paie par migrate() comme à
-    // l'ouverture du fichier.
-    const data = migrate(base({
-      config: { ...base().config, paydayDay: 27, paydayAmount: 1000, payAdjustment: { period: '2026-10', extra: 300 } },
-    }));
+    // Prime versée à part le 20 octobre, rangée dans l'épargne de novembre : elle s'ajoute.
+    const extra = { id: 'pay-2026-11', receivedOn: '2026-10-20', savingsMonth: '2026-11', amount: 300, kind: 'extra' as const, lines: [], done: {} };
+    const data = base({ config: { ...base().config, paydayDay: 27, paydayAmount: 1000 }, pays: [extra] });
     const paydays = buildAgenda(data, payDay).events.filter(e => e.kind === 'payday');
-    expect(paydays.map(e => [e.date, e.amount])).toEqual([['2026-10-27', 1300], ['2026-11-27', 1000], ['2026-12-27', 1000]]);
+    expect(paydays.map(e => [e.date, e.title, e.amount])).toEqual([
+      ['2026-10-27', 'Paie attendue · épargne de novembre', 1300],
+      ['2026-11-27', 'Paie attendue · épargne de décembre', 1000],
+      ['2026-12-27', 'Paie attendue · épargne de janvier', 1000],
+    ]);
+    // Avant la paie, le versement en plus du mois d'épargne suivant ne s'applique pas encore.
+    expect(buildAgenda(base({ config: data.config, pays: [{ ...extra, receivedOn: '2026-10-28', savingsMonth: '2026-12' }] }), NOW).events.find(e => e.kind === 'payday'))
+      .toMatchObject({ date: '2026-10-27', amount: 1000 });
+  });
 
-    // Capacité saisie pour cette paie : elle remplace le montant habituel ce jour-là seulement.
-    const manual = migrate(base({ config: { ...base().config, paydayDay: 27, paydayAmount: 1000, payAdjustment: { period: '2026-10', capacity: 800 } } }));
-    expect(buildAgenda(manual, payDay).events.find(e => e.kind === 'payday')).toMatchObject({ date: '2026-10-27', amount: 800 });
-
-    // Avant la paie, le réglage de la paie précédente ne s'applique pas à la suivante.
-    const before = migrate(base({ config: { ...base().config, paydayDay: 27, paydayAmount: 1000, payAdjustment: { period: '2026-09', extra: 300 } } }));
-    expect(buildAgenda(before, NOW).events.find(e => e.kind === 'payday')).toMatchObject({ date: '2026-10-27', amount: 1000 });
+  it("une paie déjà déclarée n'est plus attendue (même reçue en avance)", () => {
+    const declared = { id: 'pay-2026-11', receivedOn: '2026-10-24', savingsMonth: '2026-11', amount: 2400, lines: [], done: {} };
+    const data = base({ config: { ...base().config, paydayDay: 27, paydayAmount: 1000 }, pays: [declared] });
+    const paydays = buildAgenda(data, new Date(2026, 9, 25, 9)).events.filter(e => e.kind === 'payday');
+    expect(paydays.map(e => e.date)).toEqual(['2026-11-27', '2026-12-27', '2027-01-27']);
+    // Un ancien réglage de la paie en cours (schéma v2) devient une paie de ce mois (lib/schema) :
+    // elle compte comme déclarée.
+    const migrated = migrate(base({ config: { ...base().config, paydayDay: 27, paydayAmount: 1000, payAdjustment: { period: '2026-10', extra: 300 } } }));
+    expect(buildAgenda(migrated, new Date(2026, 9, 27, 9)).events.find(e => e.kind === 'payday')?.date).toBe('2026-11-27');
   });
 
   it('renvoie à part les maturités fiscales lointaines', () => {
@@ -120,6 +129,26 @@ describe('computeYearReview', () => {
     // quinzaines (− 1,33 €) : 27,42 €.
     expect(r.interest).toBeCloseTo(20 + 8.75 - 100 * 0.02 * 16 / 24, 10);
     expect(r.interest).toBeCloseTo(27.42, 2);
+  });
+
+  it("compte par mois d'épargne : la paie du 27 décembre ouvre janvier de l'année suivante, les intérêts restent à la date réelle", () => {
+    const la = acc({ id: 'la', interestRate: 2, totalAmount: 2400, ownedAmount: 2400, movements: [
+      { id: '1', date: '2026-11-28', amount: 600, label: 'x', type: 'IN' },
+      { id: '2', date: '2026-12-28', amount: 800, label: 'x', type: 'IN' },
+      { id: '3', date: '2027-01-05', amount: 1000, label: 'x', type: 'IN' },
+    ] });
+    const data = base({ accounts: [la], config: { ...base().config, paydayDay: 27 } });
+    const y2026 = computeYearReview(data, 2026, new Date(2027, 1, 10));
+    // Versement du 28 novembre : épargne de décembre 2026 ; celui du 28 décembre : janvier 2027.
+    expect(y2026.saved).toBe(600);
+    expect(y2026.best).toEqual({ month: 11, saved: 600 });
+    expect(y2026.monthly).toHaveLength(12);
+    const y2027 = computeYearReview(data, 2027, new Date(2027, 1, 10));
+    expect(y2027.monthly.slice(0, 2)).toEqual([{ month: 0, saved: 1800 }, { month: 1, saved: 0 }]);
+    // Intérêts : quinzaines sur les dates réelles (le versement du 28 décembre ne rapporte rien en 2026).
+    expect(y2026.interest).toBeCloseTo(600 * 0.02 * 2 / 24, 10);
+    // Sans jour de paie : mois civils, comme avant.
+    expect(computeYearReview(base({ accounts: [la] }), 2026, new Date(2027, 1, 10)).saved).toBe(1400);
   });
 
   it("reprend la restitution et les intérêts offerts de l'année", () => {

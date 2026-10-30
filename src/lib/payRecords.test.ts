@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { findMovement, isPayReviewDone, liveDone, newPayId, openPay, payAdjustmentOf, payChecklistOf, payForPayslipPeriod, payMovements, payslipForMonth, payslipPeriodOf, suggestedPayKind, withPayReviewed } from './payRecords';
+import { findMovement, isPayReviewDone, liveDone, newPayId, openPay, payChecklistOf, payForPayslipPeriod, payMovements, payslipForMonth, payslipPeriodOf, suggestedPayKind, withPayReviewed } from './payRecords';
 import type { PayChecklist, PayRecord, PayslipRecord } from '../types';
 
 // Paie le 27 : le 2 novembre 2026, la paie en cours est celle du 27 octobre (épargne de novembre).
@@ -59,13 +59,6 @@ describe('nouvelle paie', () => {
   });
 });
 
-describe('réglages de la paie en cours (forme historique)', () => {
-  it('un réglage de la paie précédente ne s\'applique plus', () => {
-    const pays: PayRecord[] = [{ id: 'sep', receivedOn: '2026-09-27', savingsMonth: '2026-10', amount: 2400, toSave: 900, lines: [], done: {} }];
-    expect(payAdjustmentOf({ pays, config }, new Date(2026, 9, 20))).toEqual({ period: '2026-09', capacity: 900 });
-    expect(payAdjustmentOf({ pays, config }, NOV_2)).toBeUndefined();
-  });
-});
 
 describe('fiche de paie de la paie', () => {
   const pays: PayRecord[] = [

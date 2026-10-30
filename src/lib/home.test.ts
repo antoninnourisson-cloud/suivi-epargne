@@ -83,9 +83,9 @@ describe('signaux de l\'Accueil', () => {
     // Musique (22/10) est déjà dans la carte des prélèvements : les trois suivants à la place,
     // y compris Musique le mois prochain (hors des 7 jours).
     expect(homeAgenda(events, debits).map(e => [e.title, e.date])).toEqual([
-      ['Jour de paie', '2026-10-27'], ['Assurance', '2026-11-05'], ['Musique', '2026-11-22'],
+      ['Paie attendue · épargne de novembre', '2026-10-27'], ['Assurance', '2026-11-05'], ['Musique', '2026-11-22'],
     ]);
-    expect(homeAgenda(events, []).map(e => e.title)).toEqual(['Musique', 'Jour de paie', 'Assurance']);
+    expect(homeAgenda(events, []).map(e => e.title)).toEqual(['Musique', 'Paie attendue · épargne de novembre', 'Assurance']);
   });
 
   it('reminds the parents\' interest in December only', () => {
@@ -185,9 +185,11 @@ describe('rythme et projection', () => {
   });
 
   it('follows the pay period when a payday is known', () => {
-    const period = { end: '2026-10-27', byPay: true, since: 'depuis la paie du 27 septembre' };
+    const period = { key: '2026-10', end: '2026-10-27', byPay: true, since: 'depuis la paie du 27 septembre' };
     const g = savingsGauge({ saved: 300, goal: 600, period, today: '2026-10-01' });
-    expect(g.title).toBe('Placé depuis la paie du 27 septembre');
+    // Nommée par le mois d'épargne (paie du 27 septembre → épargne d'octobre).
+    expect(g.title).toBe("Épargne d'octobre");
+    expect(g.since).toBe('Depuis la paie du 27 septembre');
     expect(g.daysLeft).toBe(26);
     expect(g.until).toBe('la prochaine paie');
     expect(g.pct).toBe(50);
@@ -195,6 +197,7 @@ describe('rythme et projection', () => {
     expect(g.tick).toBeNull();
     const m = savingsGauge({ saved: 700, goal: 600, period: { end: '2026-11-01', byPay: false, since: 'depuis le 1er octobre' }, today: '2026-10-20' });
     expect(m.title).toBe('Placé depuis le 1er octobre');
+    expect(m.since).toBeNull();
     expect(m.daysLeft).toBe(12);
     expect(m.until).toBe('la fin du mois');
     expect(m.pct).toBe(100);
@@ -237,12 +240,15 @@ describe('fenêtre « ce mois-ci » : la paie en cours', () => {
     expect(p.start).toBe('2026-09-27');
     expect(p.end).toBe('2026-10-27');
     expect(p.byPay).toBe(true);
+    // Mois d'épargne d'octobre (paie du 27 septembre), paie attendue pas encore déclarée.
+    expect(p.key).toBe('2026-10');
+    expect(p.declared).toBe(false);
     expect(p.since).toBe('depuis la paie du 27 septembre');
     expect(p.saved).toBe(320);
     expect(p.rate).toBe(16);
-    // Le suivi commence au premier versement (28 août) : les paies d'avant ne sont pas des
-    // barres à 0 %, seules la paie d'août et celle en cours sont montrées.
-    expect(p.history).toEqual([{ month: '2026-08', saved: 500, rate: 25 }, { month: '2026-09', saved: 320, rate: 16 }]);
+    // Le suivi commence au premier versement (28 août) : les mois d'avant ne sont pas des
+    // barres à 0 %, seuls l'épargne de septembre (paie d'août) et le mois en cours sont montrés.
+    expect(p.history).toEqual([{ month: '2026-09', saved: 500, rate: 25 }, { month: '2026-10', saved: 320, rate: 16 }]);
     expect(p.avgRate).toBe(25);
     expect(p.avgCount).toBe(1);
   });
@@ -252,9 +258,9 @@ describe('fenêtre « ce mois-ci » : la paie en cours', () => {
     // suivi reprend au versement du 10 septembre (dans la paie d'août, du 27 août au 26 septembre).
     const accounts = [livret([mv('2025-01-15', 300), mv('2026-09-10', 100), mv('2026-09-28', 200)])];
     const p = payPeriodSavings({ accounts, today: '2026-10-02', paydayDay: 27, monthlyPay: 2000, trackingStartISO: '2026-09-01' });
-    expect(p.history).toEqual([{ month: '2026-08', saved: 100, rate: 5 }, { month: '2026-09', saved: 200, rate: 10 }]);
+    expect(p.history).toEqual([{ month: '2026-09', saved: 100, rate: 5 }, { month: '2026-10', saved: 200, rate: 10 }]);
     const later = payPeriodSavings({ accounts, today: '2026-10-02', paydayDay: 27, monthlyPay: 2000, trackingStartISO: '2026-09-27' });
-    expect(later.history.map(h => h.month)).toEqual(['2026-09']);
+    expect(later.history.map(h => h.month)).toEqual(['2026-10']);
     // Aucun versement encore : seule la paie en cours.
     expect(payPeriodSavings({ accounts: [], today: '2026-10-02', paydayDay: 27, monthlyPay: 2000 }).history).toHaveLength(1);
     // Suivi ancien : les 12 dernières paies.
@@ -269,6 +275,13 @@ describe('fenêtre « ce mois-ci » : la paie en cours', () => {
     // Paie inconnue : pas de taux plutôt qu'un 0 % trompeur.
     expect(p.rate).toBeNull();
     expect(p.avgRate).toBeNull();
+  });
+
+  it('marks the month declared once its pay is received, from the day it arrived', () => {
+    // Paie reçue le 25 septembre (en avance) : l'épargne d'octobre part de là.
+    const pays = [{ id: 'pay-2026-10', receivedOn: '2026-09-25', savingsMonth: '2026-10' }];
+    const p = payPeriodSavings({ accounts: [livret([mv('2026-09-25', 300)])], today: '2026-10-02', paydayDay: 27, pays, monthlyPay: 0 });
+    expect([p.key, p.declared, p.start, p.saved]).toEqual(['2026-10', true, '2026-09-25', 300]);
   });
 
   it('bounds the next payday to the end of a short month and crosses the year', () => {

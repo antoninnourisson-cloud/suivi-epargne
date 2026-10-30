@@ -61,7 +61,18 @@ describe('buildAskSnapshot', () => {
     // Épargne : octobre 150 − 50, trimestre (oct.) 100, depuis janvier 300 + 200,33 + 100.
     expect(s.epargne).toMatchObject({ ceMois: 100, ceTrimestre: 100, depuisLe1erJanvier: 600.33, prevueChaqueMois: 700.13 });
     expect(s.epargneParMois).toHaveLength(24);
-    expect(s.epargneParMois[23]).toEqual({ mois: '2026-10', epargne: 100 });
+    // Sans jour de paie : les mois d'épargne sont les mois civils.
+    expect(s.epargne.moisEpargneEnCours).toBe('2026-10');
+    expect(s.epargneParMois[23]).toEqual({ moisEpargne: '2026-10', depuisLe: '2026-10-01', epargne: 100 });
+  });
+
+  it("compte l'épargne par mois d'épargne avec un jour de paie (paie du 27 octobre = novembre)", () => {
+    const data = base();
+    const s = JSON.parse(buildAskSnapshot({ ...data, config: { ...data.config, paydayDay: 27 } }, NOW).json);
+    expect(s.epargne.moisEpargneEnCours).toBe('2026-11');
+    expect(s.epargne.note).toMatch(/mois d'épargne/);
+    expect(s.epargneParMois).toHaveLength(24);
+    expect(s.epargneParMois[23]).toMatchObject({ moisEpargne: '2026-11', depuisLe: '2026-10-27' });
     // Un relevé par mois : le dernier de septembre.
     expect(s.soldesParMois).toEqual([{ mois: '2026-08', total: 27000.11, partPropre: 22000 }, { mois: '2026-09', total: 27800, partPropre: 22700 }]);
     expect(s.abonnements).toEqual([{ nom: 'Musique', montant: 10.99, frequence: 'monthly', coutMensuel: 10.99, compteDebite: 'Carte' }]);

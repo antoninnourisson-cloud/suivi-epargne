@@ -165,6 +165,37 @@ describe('computeBadgeCount', () => {
     // Liste au format d'avant le schéma v3 : migrate() la reporte sur la paie de septembre.
     expect(computeBadgeCount(migrate(data), new Date(2026, 9, 1))).toBe(1);
   });
+
+  it("paie attendue pas encore déclarée : 1 (le rituel), quel que soit le nombre de virements ; rien à répartir : 0", () => {
+    const data: GlobalAppData = {
+      accounts: [acc({ id: 'la', interestRate: 1.7, totalAmount: 1000, ownedAmount: 1000 })],
+      expenses: [{ id: 'e', name: 'Commun', amount: 900 }, { id: 'l', name: 'Loyer', amount: 700 }], history: [],
+      config: { grossAnnual: 0, leisureBudget: 0, projectSavings: 0, taxRateManual: 0, extraMonthlyIncome: 0, paydayDay: 27, paydayAmount: 500 },
+      fiscalConfig: { ...CFG, paramsReviewedYear: 2026 },
+    };
+    expect(computeBadgeCount(data, new Date(2026, 9, 28))).toBe(1);
+    expect(computeBadgeCount({ ...data, expenses: [], config: { ...data.config, paydayAmount: 0 } }, new Date(2026, 9, 28))).toBe(0);
+    // Sans jour de paie ni paie déclarée : rien d'attendu.
+    expect(computeBadgeCount({ ...data, config: { ...data.config, paydayDay: undefined } }, new Date(2026, 9, 28))).toBe(0);
+  });
+
+  it('paie déclarée : ses virements pas encore faits (un versement supprimé à la main redevient à faire)', () => {
+    const pay = {
+      id: 'pay-2026-11', receivedOn: '2026-10-27', savingsMonth: '2026-11', amount: 2400,
+      lines: [
+        { key: 't:Commun', label: 'Commun', amount: 900, kind: 'transfer' as const },
+        { key: 's:la', label: 'Livret A', amount: 500, kind: 'saving' as const, accountId: 'la' },
+      ],
+      done: { 't:Commun': { amount: 900 }, 's:la': { amount: 500, movementId: 'disparu' } },
+    };
+    const data: GlobalAppData = {
+      accounts: [acc({ id: 'la', interestRate: 1.7, totalAmount: 1000, ownedAmount: 1000 })],
+      expenses: [], history: [], pays: [pay],
+      config: { grossAnnual: 0, leisureBudget: 0, projectSavings: 0, taxRateManual: 0, extraMonthlyIncome: 0, paydayDay: 27 },
+      fiscalConfig: { ...CFG, paramsReviewedYear: 2026 },
+    };
+    expect(computeBadgeCount(data, new Date(2026, 9, 28))).toBe(1);
+  });
 });
 
 describe('projectSavings et restitution', () => {

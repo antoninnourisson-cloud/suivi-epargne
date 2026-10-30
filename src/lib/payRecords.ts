@@ -1,13 +1,13 @@
 // ================================================
 // FILE: src/lib/payRecords.ts
 // Paies reçues (GlobalAppData.pays, schéma v3) : la paie « ouverte » est celle du mois
-// d'épargne en cours (lib/payCalendar), déclarée par le rituel « J'ai reçu ma paie ». La
-// routine, la pastille et le serveur la lisent encore sous ses anciennes formes : liste à
-// cocher (PayChecklist, modifiée par les commandes de lib/commands/pay) et réglages de la
-// paie en cours (PayAdjustment). Ici aussi : le lien paie ↔ fiche de paie et le bilan du mois
-// validé. Fonctions pures, partagées par l'app et le serveur.
+// d'épargne en cours (lib/payCalendar), déclarée par le rituel « J'ai reçu ma paie ». Le
+// Pilotage et le serveur lisent encore ses lignes sous leur forme historique de liste à cocher
+// (PayChecklist, modifiée par les commandes de lib/commands/pay). Ici aussi : les versements
+// rattachés, le lien paie ↔ fiche de paie et le bilan du mois validé. Fonctions pures,
+// partagées par l'app et le serveur.
 // ================================================
-import type { AccountMovement, GlobalAppData, PayAdjustment, PayChecklist, PayRecord, PayslipRecord, SavingsAccount } from '../types';
+import type { AccountMovement, GlobalAppData, PayChecklist, PayRecord, PayslipRecord, SavingsAccount } from '../types';
 import { currentSavingsMonth, PayCalendarData, PayWindow, savingsMonthOfPay, shiftMonth } from './payCalendar';
 import { formatISODay } from './dates';
 
@@ -88,21 +88,6 @@ export const payChecklistOf = (data: PayData, asOf: Date = new Date()): PayCheck
   const { window, pay } = openPay(data, asOf);
   if (!pay || pay.lines.length === 0) return undefined;
   return { month: window.payMonth, lines: pay.lines, done: data.accounts ? liveDone(pay.done, data.accounts) : pay.done };
-};
-
-// ---------------------------------------------------------------------------
-// Réglages de la paie en cours (Pilotage › Mes paramètres)
-// ---------------------------------------------------------------------------
-
-/** « Capacité d'épargne du mois » et « Somme en plus à placer » de la paie ouverte. */
-export const payAdjustmentOf = (data: PayData, asOf: Date = new Date()): PayAdjustment | undefined => {
-  const { window, pay } = openPay(data, asOf);
-  if (!pay || (pay.toSave === undefined && !pay.bonus)) return undefined;
-  return {
-    period: window.payMonth,
-    ...(pay.toSave !== undefined ? { capacity: pay.toSave } : {}),
-    ...(pay.bonus ? { extra: pay.bonus } : {}),
-  };
 };
 
 // ---------------------------------------------------------------------------

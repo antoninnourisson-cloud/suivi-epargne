@@ -10,7 +10,7 @@
 // ================================================
 import type { GlobalAppData, PayAdjustment } from '../types';
 import { computeMonthlySavingsCapacity } from './finance';
-import { openPay, payAdjustmentOf, PayData } from './payRecords';
+import { openPay } from './payRecords';
 import { recommendPayDistribution } from './payDistribution';
 import { savingsMonthOfPay } from './payCalendar';
 import { round2 } from './money';
@@ -34,9 +34,6 @@ const PERIOD = /^\d{4}-(0[1-9]|1[0-2])$/;
 const finiteOrUndefined = (v: unknown): number | undefined =>
   typeof v === 'number' && Number.isFinite(v) ? v : undefined;
 
-/** Réglage de la paie en cours (paie du mois d'épargne en cours), ou `undefined`. */
-export const currentPayAdjustment = (data: PayData, asOf: Date = new Date()): PayAdjustment | undefined =>
-  payAdjustmentOf(data, asOf);
 
 /** Combine capacité calculée, montant du rappel de paie et réglage de la paie en cours. */
 export const combineMonthTarget = (input: {

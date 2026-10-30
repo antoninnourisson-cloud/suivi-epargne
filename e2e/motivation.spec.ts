@@ -29,6 +29,9 @@ const openCard = async (page: Page, name: string) => {
   await expect(button).toHaveAttribute('aria-expanded', 'true');
 };
 
+/** Carte et jauge du mois d'épargne en cours (« Épargne de novembre »), pas « Épargne de précaution ». */
+const SAVINGS_MONTH = /^Épargne (de |d')(janvier|février|mars|avril|mai|juin|juillet|août|septembre|octobre|novembre|décembre)$/;
+
 test.describe('Motivation (démo)', () => {
   test('la carte « Bons mois » montre la série, la paie en cours est sur la jauge unique', async ({ page }) => {
     await openDemo(page);
@@ -36,20 +39,22 @@ test.describe('Motivation (démo)', () => {
     await expect(card).toBeVisible();
     await expect(card).toContainText(/Série : \d+ bons? mois/);
     await expect(card).toContainText(/Joker \d{4}/);
-    await expect(card.getByRole('list', { name: 'Dernières paies' }).getByRole('listitem')).not.toHaveCount(0);
+    await expect(card.getByRole('list', { name: "Derniers mois d'épargne" }).getByRole('listitem')).not.toHaveCount(0);
     await expect(card).toContainText('Prochain jalon');
     // Plus de seconde jauge du même montant : le seuil « bon mois » est sur la jauge de la paie.
     await expect(card.getByRole('progressbar')).toHaveCount(0);
-    const savings = page.getByRole('region', { name: /^Placé depuis la paie du/ });
-    await expect(savings.getByRole('progressbar', { name: /^Placé depuis la paie du/ })).toHaveAttribute('aria-valuetext', /bon mois dès 500\s€/);
+    // La carte porte le nom du mois d'épargne ; son début (la paie) est rappelé dessous.
+    const savings = page.getByRole('region', { name: SAVINGS_MONTH });
+    await expect(savings).toContainText(/Depuis la paie du/);
+    await expect(savings.getByRole('progressbar', { name: SAVINGS_MONTH })).toHaveAttribute('aria-valuetext', /bon mois dès 500\s€/);
     await expect(savings).toContainText(/Bon mois (dès 500\s€|acquis)/);
     // Le taux d'épargne lit la même fenêtre (la paie), plus le mois civil.
     await expect(savings).toContainText(/Cette paie \d+ %/);
   });
 
-  test('le point de paie se valide puis disparaît', async ({ page }) => {
+  test('le bilan du mois se valide puis disparaît', async ({ page }) => {
     await openDemo(page);
-    const review = page.getByRole('region', { name: /Point de paie :/ });
+    const review = page.getByRole('region', { name: /^Bilan d/ });
     await expect(review).toBeVisible();
     await expect(review).toContainText('Versements');
     await review.getByRole('button', { name: 'Valider' }).click();
@@ -89,6 +94,6 @@ test.describe('Motivation (démo)', () => {
     await expect(page.getByRole('heading', { name: 'Accueil', level: 2 })).toBeAttached();
     await expect(page.getByRole('region', { name: 'Mon épargne nette' })).toBeVisible();
     await expect(page.getByRole('region', { name: 'Bons mois', exact: true })).toHaveCount(0);
-    await expect(page.getByRole('region', { name: /Point de paie :/ })).toHaveCount(0);
+    await expect(page.getByRole('region', { name: /^Bilan d/ })).toHaveCount(0);
   });
 });

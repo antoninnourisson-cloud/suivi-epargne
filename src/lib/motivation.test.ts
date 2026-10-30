@@ -1,9 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import {
-  payWindowStart, recentPayWindows, savedBetween, computeGoodMonths, computeMilestones, nextMilestone,
+  recentPayWindows, savedBetween, computeGoodMonths, computeMilestones, nextMilestone,
   computePayReview, detectPayslipAnomalies, motivationSettings, PAY_WINDOW_DAYS,
 } from './motivation';
 import { AccountMovement, AccountType, PayslipRecord, SavingsAccount } from '../types';
+// Début d'un mois d'épargne sans paie déclarée (ex-payWindowStart de ce module).
+import { expectedPayStart as payWindowStart } from './payCalendar';
 
 const mv = (date: string, amount: number, type: 'IN' | 'OUT' = 'IN', extra: Partial<AccountMovement> = {}): AccountMovement =>
   ({ id: `${date}-${amount}-${type}`, date, amount, type, label: 'x', ...extra });
@@ -84,6 +86,13 @@ describe('bons mois et séries', () => {
     expect(r.months.map(m => m.key)).toEqual(['2026-06']);
     expect(r.jokersUsed).toEqual([]);
   });
+  it("le joker appartient à l'année du mois d'épargne : un mois raté sur la paie du 27 décembre compte l'année d'après", () => {
+    // Bons mois jusqu'à décembre 2026, épargne de janvier 2027 (paie du 27 décembre) ratée.
+    const acc = account([mv('2026-10-28', 600), mv('2026-11-28', 600), mv('2026-12-28', 100), mv('2027-01-28', 600)]);
+    const r = computeGoodMonths({ accounts: [acc], today: '2027-02-10', paydayDay: 27 });
+    expect(r.months.find(m => m.key === '2027-01')).toMatchObject({ start: '2026-12-27', joker: true });
+    expect(r.jokersUsed).toEqual(['2027']);
+  });
   it('respecte un seuil personnalisé', () => {
     const r = computeGoodMonths({ accounts: [monthly([600])], today: '2026-02-20', paydayDay: 27, threshold: 800 });
     expect(r.months[0].good).toBe(false);
@@ -116,6 +125,16 @@ describe('jalons', () => {
   it('ajoute « premier bon mois en solo » après la restitution', () => {
     const list = computeMilestones({ ...base, accounts: [], restitutionDoneOn: '2026-02-01' });
     expect(list.find(m => m.id === 'solo-month')?.achieved).toBe(true);
+  });
+  it("« premier bon mois en solo » : l'épargne de janvier (paie du 27 décembre) compte pour une restitution le 1er janvier", () => {
+    const solo = (months: number[], restitutionDoneOn: string) => {
+      const goodMonths = computeGoodMonths({ accounts: [account(months.map((a, i) => mv(i === 0 ? '2026-12-28' : '2027-01-28', a)))], today: '2027-01-20', paydayDay: 27 });
+      return computeMilestones({ ...base, goodMonths, accounts: [], restitutionDoneOn }).find(m => m.id === 'solo-month')?.achieved;
+    };
+    // Fenêtre du 27 décembre 2026 au 27 janvier 2027 = épargne de janvier, premier mois solo.
+    expect(solo([600], '2027-01-01')).toBe(true);
+    // Restitution le 20 janvier : le mois solo est février (règle du 15), pas encore joué.
+    expect(solo([600], '2027-01-20')).toBe(false);
   });
 });
 

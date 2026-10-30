@@ -1,6 +1,7 @@
-// Carte « Routine d'octobre : 2/4 » de l'Accueil : les étapes de la paie, chacune déduite des
-// données (lib/monthRoutine), avec un bouton qui mène à l'écran existant. Une fois tout fait,
-// la carte se replie en une ligne, jusqu'à la paie suivante.
+// Carte « Routine de novembre : 2/3 » de l'Accueil : les étapes du mois d'épargne (paie reçue
+// et répartie, fiche de paie, soldes), chacune déduite des données (lib/monthRoutine), avec un
+// bouton qui mène au rituel ou à l'écran existant. Une fois tout fait, la carte se replie en
+// une ligne, jusqu'à la paie suivante.
 import React from 'react';
 import { CheckCircle2, Circle, ListChecks } from 'lucide-react';
 import type { MonthRoutine, RoutineStepKey } from '../../lib/monthRoutine';

@@ -8,16 +8,19 @@ import { GlobalAppData, AccountType } from '../types';
 import { formatISODay, parseISODate } from './dates';
 import {
   nextSubscriptionDate, isMonthlyCharge, computeMaturityCountdown, describeMaturity, computePeeAvailability, tracksDeposits,
-  computeMonthlySavingsCapacity, computeMonthSavedAmount, computeAccruedInterest,
+  computeMonthlySavingsCapacity, computeAccruedInterest,
   computeAccountBalanceAtDate, computeMonthlyPay, computeDonationSummary,
-  computeAccruedParentalInterest, effectivePayday, subscriptionMonthlyCost, payPeriodOf,
+  computeAccruedParentalInterest, effectivePayday, subscriptionMonthlyCost,
 } from './finance';
+import { currentSavingsMonth, savingsMonthOf, savingsMonthOfPay } from './payCalendar';
+import { elideDe, formatMonth } from './format';
 import { computeMonthTarget } from './payAdjustment';
 import { DEFAULT_FISCAL_CONFIG } from '../constants';
 import { signedAmount } from './money';
 import { lepTimelineFromData } from './lep';
 import { buildTaxReturnChecklist, taxReturnTopics } from './taxReturn';
 import { closingApplies, isYearClosed } from './yearClosing';
+import { savingsByMonth } from './motivation';
 
 export type AgendaKind = 'payday' | 'subscription' | 'recurring' | 'rates' | 'restitution' | 'fiscal' | 'statement' | 'donations' | 'review' | 'maturity' | 'lep';
 
@@ -46,21 +49,31 @@ export const buildAgenda = (data: GlobalAppData, asOfDate: Date = new Date(), mo
   const events: AgendaEvent[] = [];
   const push = (d: Date, e: Omit<AgendaEvent, 'date'>) => { if (d >= today && d <= horizon) events.push({ ...e, date: formatISODay(d) }); };
 
-  // Paies (les trois prochaines). Le jour de la paie, la ligne reprend l'objectif de la paie
-  // en cours (réglages du Pilotage compris, comme la jauge de l'Accueil) ; les suivantes, le
-  // montant habituel (rappel de paie ou capacité calculée).
+  // Paies attendues (les trois prochaines), nommées par le mois d'épargne qu'elles ouvrent
+  // (« Paie attendue · épargne de décembre », règle du 15 de lib/payCalendar). Une paie déjà
+  // déclarée dans le rituel « J'ai reçu ma paie » n'est plus attendue. Celle du mois d'épargne
+  // en cours (paie du jour pas encore déclarée) reprend l'objectif du mois (comme la jauge de
+  // l'Accueil) ; les suivantes, le montant habituel (rappel de paie ou capacité calculée).
   const payday = data.config?.paydayDay;
   if (payday) {
     const recurring = data.config.paydayAmount ?? computeMonthlySavingsCapacity(data);
-    const currentPayDay = formatISODay(payPeriodOf(payday, asOfDate).payDate);
+    const calendar = { paydayDay: payday, payslips: data.payslips, pays: data.pays };
+    const current = currentSavingsMonth(calendar, formatISODay(asOfDate)).key;
+    const declared = new Set((data.pays ?? []).filter(p => p.kind !== 'extra').map(savingsMonthOfPay));
     for (let k = 0, found = 0; found < 3 && k < 4; k++) {
       const y = today.getFullYear(), m = today.getMonth() + k;
       const d = new Date(y, m, effectivePayday(payday, new Date(y, m, 1).getFullYear(), new Date(y, m, 1).getMonth()));
       if (d < today) continue;
-      const amount = formatISODay(d) === currentPayDay ? computeMonthTarget(data, asOfDate).total : recurring;
+      const savingsMonth = savingsMonthOf(formatISODay(d));
+      if (declared.has(savingsMonth)) continue;
+      const amount = savingsMonth === current ? computeMonthTarget(data, asOfDate).total : recurring;
       // Le montant est ce qu'il faut PLACER, pas la paie reçue : le détail le dit (un seul nom
       // par montant, comme « l'objectif » du Pilotage et de l'Accueil).
-      push(d, { kind: 'payday', title: 'Jour de paie', detail: amount > 0 ? 'Montant à placer : virements à faire et à cocher dans le Pilotage' : undefined, amount: amount > 0 ? amount : undefined, view: 'pilot' });
+      push(d, {
+        kind: 'payday', title: `Paie attendue · épargne ${elideDe(formatMonth(savingsMonth))}`,
+        detail: amount > 0 ? "Montant à placer : à répartir avec « J'ai reçu ma paie » dans le Pilotage" : undefined,
+        amount: amount > 0 ? amount : undefined, view: 'pilot',
+      });
       found++;
     }
   }
@@ -164,8 +177,10 @@ export const buildAgenda = (data: GlobalAppData, asOfDate: Date = new Date(), mo
 export interface YearReview {
   year: number;
   complete: boolean;               // false : année en cours, chiffres partiels
-  saved: number;                   // versements − retraits sur l'épargne (hors valorisation)
-  monthly: { month: number; saved: number }[];
+  // Versements − retraits sur l'épargne (hors valorisation), sur les mois d'épargne de l'année :
+  // la paie du 27 décembre ouvre l'épargne de janvier de l'année suivante (lib/payCalendar).
+  saved: number;
+  monthly: { month: number; saved: number }[];  // mois d'épargne (0 = janvier)
   best?: { month: number; saved: number };
   worst?: { month: number; saved: number };
   savingsRate: number | null;      // part de la paie actuelle × 12 (approximation)
@@ -186,12 +201,11 @@ export interface YearReview {
 export const computeYearReview = (data: GlobalAppData, year: number, asOfDate: Date = new Date()): YearReview => {
   const accounts = data.accounts || [];
   const complete = asOfDate >= new Date(year + 1, 0, 1);
-  const monthly: { month: number; saved: number }[] = [];
-  for (let m = 0; m < 12; m++) {
-    const end = new Date(year, m + 1, 0);
-    if (new Date(year, m, 1) > asOfDate) break;
-    monthly.push({ month: m, saved: computeMonthSavedAmount(accounts, end > asOfDate ? asOfDate : end, data.config?.trackingStartDate) });
-  }
+  // Mois d'épargne de l'année déjà ouverts (mois civils sans jour de paie ni paie déclarée).
+  const monthly = savingsByMonth({
+    accounts, today: formatISODay(asOfDate), paydayDay: data.config?.paydayDay, payslips: data.payslips, pays: data.pays,
+    trackingStartISO: data.config?.trackingStartDate, fromKey: `${year}-01`, toKey: `${year}-12`,
+  }).map(w => ({ month: Number(w.key.slice(5, 7)) - 1, saved: w.saved }));
   const saved = monthly.reduce((s, x) => s + x.saved, 0);
   const sorted = [...monthly].sort((a, b) => b.saved - a.saved);
   const pay = computeMonthlyPay(data);

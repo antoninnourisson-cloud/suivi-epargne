@@ -221,7 +221,7 @@ export interface PayRecord {
 }
 
 // Ancien format (schéma v2), converti en PayRecord par migrate() puis retiré : réglages de
-// la paie en cours. Reste la forme lue par le Pilotage (lib/payRecords, payAdjustmentOf).
+// la paie en cours. Reste la forme combinée par le Pilotage (lib/payAdjustment, combineMonthTarget).
 export interface PayAdjustment {
   period: string;           // 'YYYY-MM' : mois de la paie concernée (payPeriodOf)
   capacity?: number;        // « Capacité d'épargne du mois » saisie (remplace le calcul)

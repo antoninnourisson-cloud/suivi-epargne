@@ -119,3 +119,26 @@ test('fiche de paie saisie dans le rituel : son net payé devient le montant, et
   await goTo(page, 'Fiches de paie', isMobile);
   await expect(page.getByText(/2\s600,40\s€/).first()).toBeVisible();
 });
+
+test("Accueil : la routine et la carte du mois d'épargne ouvrent le rituel, puis suivent la paie déclarée", async ({ page, isMobile }) => {
+  await openDemo(page, 'view=dashboard');
+  const routine = page.getByRole('region', { name: /^Routine (de |d')\S+ : \d\/3$/ });
+  await expect(routine).toBeVisible();
+  await expect(routine.getByText('Paie reçue et répartie')).toBeVisible();
+  const savings = page.getByRole('region', { name: /^Épargne (de |d')(janvier|février|mars|avril|mai|juin|juillet|août|septembre|octobre|novembre|décembre)$/ });
+  await expect(savings.getByText(/^Paie attendue le .* : reçue \?$/)).toBeVisible();
+  await savings.getByRole('button', { name: "J'ai reçu ma paie", exact: true }).click();
+
+  const dialog = await ritual(page);
+  await dialog.getByRole('button', { name: 'Voir la répartition' }).click();
+  await dialog.getByRole('button', { name: 'Tout est fait comme conseillé' }).click();
+  await expect(dialog).toBeHidden();
+
+  // De retour sur l'Accueil : plus d'invitation, l'étape « Paie reçue et répartie » est faite.
+  await goTo(page, 'Accueil', isMobile);
+  await expect(savings).toBeVisible();
+  await expect(savings.getByRole('button', { name: "J'ai reçu ma paie", exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /^J'ai reçu ma paie : / })).toHaveCount(0);
+  // Bilan validé dans le rituel : la carte de l'Accueil ne revient pas.
+  await expect(page.getByRole('region', { name: /^Bilan d/ })).toHaveCount(0);
+});

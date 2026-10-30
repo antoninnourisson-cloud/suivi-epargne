@@ -1,9 +1,10 @@
-// Carte « Point de paie » : le bilan de la dernière paie terminée, proposé une fois jusqu'à
-// ce que l'utilisateur le valide.
+// Carte « Bilan d'octobre » : le bilan du dernier mois d'épargne terminé, proposé une fois
+// jusqu'à ce que l'utilisateur le valide (étape 0 du rituel « J'ai reçu ma paie », sinon sur
+// l'Accueil).
 import React from 'react';
 import { Check, ClipboardCheck, Minus, ShieldCheck } from 'lucide-react';
 import type { PayReview } from '../../lib/motivation';
-import { formatEUR, formatPeriod } from '../../lib/format';
+import { elideDe, formatEUR, formatMonth } from '../../lib/format';
 import { Button, Card, MoneyText } from '../ui';
 
 interface PayReviewCardProps {
@@ -12,9 +13,11 @@ interface PayReviewCardProps {
   onAction?: (view: NonNullable<PayReview['action']>['view']) => void;
   /** Libellé du bouton de validation (« Continuer » dans le rituel de paie). */
   validateLabel?: string;
+  /** Titre de la carte (défaut « Bilan d'octobre » ; le rituel, qui le dit déjà, en donne un autre). */
+  title?: string;
 }
 
-export const PayReviewCard: React.FC<PayReviewCardProps> = ({ review, onValidate, onAction, validateLabel = 'Valider' }) => {
+export const PayReviewCard: React.FC<PayReviewCardProps> = ({ review, onValidate, onAction, validateLabel = 'Valider', title }) => {
   const status = review.good
     ? { label: 'Bon mois', icon: Check, cls: 'bg-secondary-container text-on-secondary-container' }
     : review.joker
@@ -28,7 +31,7 @@ export const PayReviewCard: React.FC<PayReviewCardProps> = ({ review, onValidate
   ];
 
   return (
-    <Card id="pay-review" variant="elevated" title={`Point de paie : ${formatPeriod(review.payMonth)}`} icon={ClipboardCheck}>
+    <Card id="pay-review" variant="elevated" title={title ?? `Bilan ${elideDe(formatMonth(review.key))}`} icon={ClipboardCheck}>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <p className="text-sm text-on-surface-variant">
           <span className="text-[28px] leading-9 font-normal text-on-surface tabular-nums">{formatEUR(review.saved, 0)}</span>

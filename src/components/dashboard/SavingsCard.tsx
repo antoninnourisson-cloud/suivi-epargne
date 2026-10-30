@@ -1,11 +1,12 @@
-// Carte « Placé depuis la paie » de l'Accueil : LE chiffre du mois en cours. Une seule fenêtre
-// (la paie en cours, sinon le mois civil) pour la jauge, le seuil « bon mois » et le taux
-// d'épargne ; une seule jauge avec deux repères (objectif du Pilotage, seuil « bon mois »).
-// Les calculs sont dans lib/home (payPeriodSavings, savingsGauge).
+// Carte « Épargne de novembre » de l'Accueil : LE chiffre du mois en cours. Une seule fenêtre
+// (le mois d'épargne en cours, de paie en paie, sinon le mois civil) pour la jauge, le seuil
+// « bon mois » et le taux d'épargne ; une seule jauge avec deux repères (objectif du Pilotage,
+// seuil « bon mois »). Paie attendue mais pas encore déclarée : « J'ai reçu ma paie » ouvre le
+// rituel. Les calculs sont dans lib/home (payPeriodSavings, savingsGauge).
 import React, { useState } from 'react';
-import { CalendarCheck, Percent, PiggyBank } from 'lucide-react';
-import { Card } from '../ui';
-import { formatEUR, formatSignedEUR } from '../../lib/format';
+import { CalendarCheck, Percent, PiggyBank, Wallet } from 'lucide-react';
+import { Button, Card } from '../ui';
+import { formatEUR, formatSignedEUR, frenchDay } from '../../lib/format';
 import { parseISODate } from '../../lib/dates';
 import type { PayPeriodSavings, SavingsGauge } from '../../lib/home';
 import { deMonth } from '../motivation/text';
@@ -23,6 +24,8 @@ interface SavingsCardProps {
   gauge: SavingsGauge;
   period: PayPeriodSavings;
   monthlyPay: number;
+  /** Ouvre le rituel « J'ai reçu ma paie » (bouton affiché tant que la paie attendue n'est pas déclarée). */
+  onPayReceived?: () => void;
 }
 
 /** Phrase sous la jauge : ce qui reste pour l'objectif, puis pour le « bon mois ». */
@@ -41,14 +44,16 @@ const gaugeSentences = (g: SavingsGauge, saved: number): string[] => {
   return out;
 };
 
-export const SavingsCard: React.FC<SavingsCardProps> = ({ gauge, period, monthlyPay }) => {
+export const SavingsCard: React.FC<SavingsCardProps> = ({ gauge, period, monthlyPay, onPayReceived }) => {
   const [rateMonth, setRateMonth] = useState<string | null>(null);
   const { title, max, pct, tick, done, good } = gauge;
   const { saved, history, avgRate, avgCount, byPay } = period;
   const maxRate = Math.max(1, ...history.map(m => Math.abs(m.rate)));
   const selected = history.find(m => m.month === rateMonth);
   const unit = byPay ? 'paie' : 'mois';
-  const label = (month: string, withYear: boolean) => (byPay ? `Paie ${deMonth(monthName(month, withYear))}` : capitalize(monthName(month, withYear)));
+  // De paie en paie, chaque barre est un mois d'épargne (« Épargne de novembre »).
+  const label = (month: string, withYear: boolean) => (byPay ? `Épargne ${deMonth(monthName(month, withYear))}` : capitalize(monthName(month, withYear)));
+  const askPay = byPay && !period.declared && !!onPayReceived;
   const valueText = [
     `${fmtEUR(saved)} placés`,
     gauge.hasPlan && `objectif ${fmtEUR(gauge.plan)}`,
@@ -61,6 +66,16 @@ export const SavingsCard: React.FC<SavingsCardProps> = ({ gauge, period, monthly
         {max > 0 && <span className="text-on-surface-variant font-normal"> / {fmtEUR(max)}</span>}
       </p>
     }>
+      {gauge.since && <p className="-mt-3 mb-3 text-sm text-on-surface-variant">{gauge.since}</p>}
+      {askPay && (
+        <div className="mb-4 p-3 rounded-xl bg-surface-container flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+          <p className="text-sm text-on-surface-variant flex items-center gap-1.5 min-w-0">
+            <Wallet className="w-4 h-4 shrink-0" aria-hidden="true" />
+            Paie attendue le {frenchDay(parseISODate(period.start))} : reçue ?
+          </p>
+          <Button variant="tonal" size="sm" onClick={onPayReceived}>J'ai reçu ma paie</Button>
+        </div>
+      )}
       {max > 0 && (
         <>
           <div className="relative">

@@ -1,12 +1,13 @@
-// Carte « Bons mois » de l'Accueil : la série, le joker de l'année, l'historique des dernières
-// paies et le prochain jalon. La paie en cours face au seuil est sur la jauge unique de la carte
-// « Placé depuis la paie » (dashboard/SavingsCard) : plus deux jauges du même montant.
+// Carte « Bons mois » de l'Accueil : la série, le joker de l'année, les derniers mois d'épargne
+// (« Novembre : bon mois ») et le prochain jalon. Le mois en cours face au seuil est sur la jauge
+// unique de la carte « Épargne de novembre » (dashboard/SavingsCard) : plus deux jauges du même
+// montant.
 // Ton positif : on montre ce qui est acquis, jamais la menace de perdre la série.
 import React, { useEffect, useState } from 'react';
 import { CalendarCheck, Check, Flag, Hourglass, Minus, ShieldCheck, Sparkles } from 'lucide-react';
 import type { GoodMonthsSummary, Milestone, MonthResult } from '../../lib/motivation';
 import { parseISODate } from '../../lib/dates';
-import { formatEUR, formatPeriod } from '../../lib/format';
+import { formatEUR } from '../../lib/format';
 import { Button, Card } from '../ui';
 import { MilestonesSheet } from './MilestonesSheet';
 import { deMonth, payMonthName } from './text';
@@ -34,7 +35,8 @@ export const GoodMonthsCard: React.FC<GoodMonthsCardProps> = ({ summary, today, 
   const [sheetOpen, setSheetOpen] = useState(false);
   const { streak, bestStreak, months, jokersUsed } = summary;
   const year = Number(today.slice(0, 4));
-  const jokerMonth = months.find(m => m.joker && m.start.startsWith(String(year)));
+  // Le joker appartient à l'année du mois d'épargne (lib/motivation).
+  const jokerMonth = months.find(m => m.joker && m.key.startsWith(String(year)));
   // Région d'annonce présente dès le montage et remplie juste après : un lecteur d'écran
   // n'annonce pas une région role="status" insérée déjà pleine.
   const [mounted, setMounted] = useState(false);
@@ -66,24 +68,25 @@ export const GoodMonthsCard: React.FC<GoodMonthsCardProps> = ({ summary, today, 
         <p className="text-on-surface-variant flex items-center gap-1.5">
           <ShieldCheck className="w-4 h-4 shrink-0" aria-hidden="true" />
           {jokersUsed.includes(String(year))
-            ? `Joker ${year} utilisé${jokerMonth ? ` pour la paie ${deMonth(payMonthName(jokerMonth.payMonth, year))}` : ''} : votre série a continué.`
+            ? `Joker ${year} utilisé${jokerMonth ? ` pour l'épargne ${deMonth(payMonthName(jokerMonth.key, year))}` : ''} : votre série a continué.`
             : `Joker ${year} disponible : un mois plus difficile ne coupe pas la série.`}
         </p>
       </div>
 
       {months.length > 0 && (
         <div className="mt-4">
-          <ol aria-label="Dernières paies" className="flex flex-wrap gap-x-1.5 gap-y-2">
+          <ol aria-label="Derniers mois d'épargne" className="flex flex-wrap gap-x-1.5 gap-y-2">
             {months.map(m => {
               const s = statusOf(m);
               const { icon: Icon, dot, label } = STATUS[s];
-              const text = `Paie ${deMonth(formatPeriod(m.payMonth))} : ${label}, ${formatEUR(m.saved, 0)}`;
+              const name = payMonthName(m.key, year);
+              const text = `${name.charAt(0).toUpperCase()}${name.slice(1)} : ${label}, ${formatEUR(m.saved, 0)}`;
               return (
                 <li key={m.key} className="flex flex-col items-center gap-1 w-9" title={text}>
                   <span className={`w-7 h-7 rounded-full flex items-center justify-center ${dot}`} aria-hidden="true">
                     <Icon className="w-3.5 h-3.5" />
                   </span>
-                  <span className="text-[11px] text-on-surface-variant" aria-hidden="true">{parseISODate(`${m.payMonth}-01`).toLocaleDateString('fr-FR', { month: 'short' })}</span>
+                  <span className="text-[11px] text-on-surface-variant" aria-hidden="true">{parseISODate(`${m.key}-01`).toLocaleDateString('fr-FR', { month: 'short' })}</span>
                   <span className="sr-only">{text}</span>
                 </li>
               );

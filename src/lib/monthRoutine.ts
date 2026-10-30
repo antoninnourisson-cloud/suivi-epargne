@@ -1,28 +1,29 @@
 // ================================================
 // FILE: src/lib/monthRoutine.ts
-// « Routine du mois » de l'Accueil : la suite d'étapes de chaque paie, aujourd'hui répartie
-// sur quatre écrans (fiche de paie, virements du Pilotage, Actualiser, point de paie). Chaque
-// étape est déduite des données déjà là, sans case à cocher en plus :
-//  1. la fiche de paie du mois est importée (Fiches de paie) ;
-//  2. les virements de la paie sont tous cochés (Pilotage › Où le placer) ;
+// « Routine de novembre » de l'Accueil : la suite d'étapes de chaque mois d'épargne (de la paie
+// reçue à la suivante, lib/payCalendar). Chaque étape est déduite des données déjà là, sans
+// case à cocher en plus :
+//  1. la paie est reçue et répartie : déclarée dans le rituel « J'ai reçu ma paie », ses
+//     virements tous faits, et le bilan du mois précédent validé (étape 0 du rituel, ou carte
+//     de l'Accueil) ;
+//  2. la fiche de paie du mois est importée (Fiches de paie, ou dans le rituel) ;
 //  3. les soldes sont actualisés : comptes courants et livrets vérifiés depuis la paie, et
-//     aucun compte en retard (Actualiser) ;
-//  4. le point de paie de la paie précédente est validé (carte de l'Accueil).
+//     aucun compte en retard (Actualiser).
 // Une étape qui ne concerne pas l'utilisateur est retirée (aucune fiche de paie jamais
-// importée, Pilotage sans paie, motivation coupée). Fonction pure, testée.
+// importée, Pilotage sans paie ni bilan). Fonction pure, testée.
 // ================================================
-import type { PayChecklist, PayRecord, PayslipRecord, SavingsAccount } from '../types';
-import { payPeriodOf } from './finance';
+import type { PayRecord, PayslipRecord, SavingsAccount } from '../types';
 import { findStaleBalances, freshnessLimitDays, lastBalanceCheck } from './freshness';
-import { formatISODay } from './dates';
-import { elideDe, formatPeriod } from './format';
+import { formatISODay, parseISODate } from './dates';
+import { elideDe, formatMonth, formatPeriod, frenchDay } from './format';
+import { isPayReviewDone, liveDone, openPay, payslipPeriodOf } from './payRecords';
 
-export type RoutineStepKey = 'payslip' | 'transfers' | 'balances' | 'review';
+export type RoutineStepKey = 'pay' | 'payslip' | 'balances';
 
 export interface RoutineStep {
   key: RoutineStepKey;
   label: string;
-  /** Où en est l'étape, en quelques mots (« 3 sur 5 cochés », « 2 comptes à actualiser »). */
+  /** Où en est l'étape, en quelques mots (« 3 sur 5 faits », « 2 comptes à actualiser »). */
   detail: string;
   done: boolean;
   /** Bouton qui mène à l'étape (absent une fois faite). */
@@ -30,10 +31,12 @@ export interface RoutineStep {
 }
 
 export interface MonthRoutine {
-  /** Paie concernée ('YYYY-MM', mois de versement : payPeriodOf). */
+  /** Mois d'épargne concerné ('YYYY-MM', lib/payCalendar). */
   periodKey: string;
-  /** Mois de la paie, en toutes lettres (« octobre »). */
+  /** Mois d'épargne, en toutes lettres (« novembre »). */
   monthName: string;
+  /** La paie de ce mois est déclarée (sinon l'étape « Paie » ouvre le rituel). */
+  payDeclared: boolean;
   steps: RoutineStep[];
   doneCount: number;
   complete: boolean;
@@ -47,53 +50,60 @@ const plural = (n: number, word: string) => `${n} ${word}${n > 1 ? 's' : ''}`;
 export const computeMonthRoutine = (input: {
   accounts: SavingsAccount[];
   payslips?: PayslipRecord[];
-  /** Paies déclarées : la paie en cours suit le même mois d'épargne que l'Accueil. */
+  /** Paies déclarées : début du mois d'épargne, virements faits, bilan validé dans le rituel. */
   pays?: PayRecord[];
-  payChecklist?: PayChecklist;
-  /** Paie nette mensuelle du Pilotage : sans elle, pas de virements de paie à cocher. */
+  /** Paie nette mensuelle du Pilotage : sans elle (ni paie déclarée, ni bilan), pas d'étape « Paie ». */
   monthlyPay?: number;
   paydayDay?: number;
   now: Date;
-  /** Point de paie proposé (lib/motivation) : absent si la motivation est coupée. */
+  /** Bilan du mois d'épargne précédent (lib/motivation) : absent si la motivation est coupée. */
   payReviewKey?: string;
-  /** Mois de versement de la paie du point de paie, pour son libellé (défaut : la clé). */
-  payReviewMonth?: string;
   payReviewsDone?: string[];
 }): MonthRoutine | null => {
-  const { accounts, payslips = [], payChecklist, now } = input;
+  const { accounts, payslips = [], pays = [], now } = input;
   if (accounts.length === 0) return null;
-  const period = payPeriodOf(input.paydayDay, now, { payslips, pays: input.pays });
-  const monthName = period.payDate.toLocaleDateString('fr-FR', { month: 'long' });
+  const { window, pay } = openPay({ pays, payslips, accounts, config: { paydayDay: input.paydayDay } }, now);
   const steps: RoutineStep[] = [];
 
-  // 1. Fiche de paie du mois : seulement pour qui en importe.
-  if (payslips.length > 0) {
-    const done = payslips.some(p => p.extracted.period?.trim() === period.key);
-    steps.push({ key: 'payslip', label: `Fiche de paie ${elideDe(formatPeriod(period.key))}`, detail: done ? 'Importée' : 'À importer', done, action: 'Importer' });
+  // 1. Paie reçue et répartie : déclarée, virements faits, bilan du mois précédent validé.
+  const reviewPending = !!input.payReviewKey && !isPayReviewDone(input.payReviewKey, input.payReviewsDone, pays);
+  if ((input.monthlyPay ?? 0) > 0 || pay || input.payReviewKey) {
+    const done = pay ? liveDone(pay.done, accounts) : {};
+    const total = pay?.lines.length ?? 0;
+    const checked = pay ? pay.lines.filter(l => done[l.key]).length : 0;
+    const review = reviewPending ? `Bilan ${elideDe(formatMonth(input.payReviewKey!))} à valider` : '';
+    let detail: string, action: string;
+    if (!pay) {
+      detail = review ? `${review}, puis paie à déclarer` : 'Pas encore déclarée';
+      action = "J'ai reçu ma paie";
+    } else if (checked < total) {
+      detail = `${checked} sur ${total} faits${review ? ` · ${review.charAt(0).toLowerCase()}${review.slice(1)}` : ''}`;
+      action = 'Voir';
+    } else if (review) {
+      detail = review;
+      action = 'Voir le bilan';
+    } else {
+      detail = `Reçue le ${frenchDay(parseISODate(pay.receivedOn))}`;
+      action = 'Voir';
+    }
+    steps.push({ key: 'pay', label: 'Paie reçue et répartie', detail, done: !!pay && checked === total && !reviewPending, action });
   }
 
-  // 2. Virements de la paie, cochés dans le Pilotage (liste figée pour cette paie).
-  if ((input.monthlyPay ?? 0) > 0 || payChecklist) {
-    const frozen = payChecklist && payChecklist.month === period.key ? payChecklist : undefined;
-    const total = frozen?.lines.length ?? 0;
-    const checked = frozen ? frozen.lines.filter(l => frozen.done[l.key]).length : 0;
-    const done = !!frozen && checked === total;
-    steps.push({
-      key: 'transfers', label: 'Virements de la paie',
-      detail: done ? 'Tous cochés' : frozen ? `${checked} sur ${total} cochés` : 'À cocher dans le Pilotage',
-      done, action: 'Cocher',
-    });
+  // 2. Fiche de paie du mois (celui qui précède le mois d'épargne) : seulement pour qui en importe.
+  if (payslips.length > 0) {
+    const period = payslipPeriodOf(window.key);
+    const done = payslips.some(p => p.extracted.period?.trim() === period) || (!!pay?.payslipId && payslips.some(p => p.id === pay.payslipId));
+    steps.push({ key: 'payslip', label: `Fiche de paie ${elideDe(formatPeriod(period))}`, detail: done ? 'Importée' : 'À importer', done, action: 'Importer' });
   }
 
   // 3. Soldes : comptes revus chaque mois vérifiés depuis la paie, et aucun compte en retard.
   const todayISO = formatISODay(now);
-  const payISO = formatISODay(period.payDate);
   const toCheck = new Set(findStaleBalances(accounts, now).map(s => s.id));
   for (const a of accounts) {
     const limit = freshnessLimitDays(a.type);
     if (a.totalAmount <= 0.005 || limit === null || limit > MONTHLY_LIMIT_DAYS) continue;
     const checkedOn = lastBalanceCheck(a, todayISO);
-    if (!checkedOn || checkedOn < payISO) toCheck.add(a.id);
+    if (!checkedOn || checkedOn < window.start) toCheck.add(a.id);
   }
   steps.push({
     key: 'balances', label: 'Soldes actualisés',
@@ -101,14 +111,8 @@ export const computeMonthRoutine = (input: {
     done: toCheck.size === 0, action: 'Actualiser',
   });
 
-  // 4. Point de paie (bilan de la paie précédente), validé sur l'Accueil.
-  if (input.payReviewKey) {
-    const done = (input.payReviewsDone ?? []).includes(input.payReviewKey);
-    steps.push({ key: 'review', label: `Point de paie ${elideDe(formatPeriod(input.payReviewMonth ?? input.payReviewKey))}`, detail: done ? 'Validé' : 'À valider', done, action: 'Voir' });
-  }
-
   // Une seule étape : pas une routine, la liste « À faire » suffit.
   if (steps.length < 2) return null;
   const doneCount = steps.filter(s => s.done).length;
-  return { periodKey: period.key, monthName, steps, doneCount, complete: doneCount === steps.length };
+  return { periodKey: window.key, monthName: formatMonth(window.key), payDeclared: !!pay, steps, doneCount, complete: doneCount === steps.length };
 };

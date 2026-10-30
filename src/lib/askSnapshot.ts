@@ -14,10 +14,12 @@ import { DEFAULT_FISCAL_CONFIG } from '../constants';
 import { round2 } from './money';
 import { formatISODay } from './dates';
 import {
-  computeAccruedInterest, computeAccruedParentalInterest, computeMaturityCountdown, computeMonthSavedAmount,
+  computeAccruedInterest, computeAccruedParentalInterest, computeMaturityCountdown,
   computeMonthlyPay, subscriptionMonthlyCost, type SalaryTaxEstimate,
 } from './finance';
 import { buildAgenda } from './agenda';
+import { savingsByMonth } from './motivation';
+import { shiftMonth } from './payCalendar';
 
 /** Taille maximale du résumé (caractères JSON) : environ 10 000 jetons au plus. */
 export const ASK_SNAPSHOT_MAX_CHARS = 40_000;
@@ -106,15 +108,19 @@ export const buildAskSnapshot = (
     };
   });
 
-  // Épargne mise de côté (versements − retraits hors valorisation), mois par mois sur 24 mois.
-  const epargneParMois: { mois: string; epargne: number }[] = [];
-  for (let i = 23; i >= 0; i--) {
-    const end = new Date(year, today.getMonth() - i + 1, 0);
-    const asOfMonth = end > today ? today : end;
-    epargneParMois.push({ mois: monthKey(asOfMonth), epargne: round2(computeMonthSavedAmount(accounts, asOfMonth, trackingStart)) });
-  }
-  const quarterStart = monthKey(new Date(year, Math.floor(today.getMonth() / 3) * 3, 1));
-  const savedFrom = (from: string) => sum(epargneParMois.filter(m => m.mois >= from).map(m => m.epargne));
+  // Épargne mise de côté (versements − retraits hors valorisation), par MOIS D'ÉPARGNE sur 24
+  // mois (lib/payCalendar : la paie du 27 octobre ouvre l'épargne de novembre ; mois civils sans
+  // jour de paie ni paie déclarée).
+  const months = savingsByMonth({
+    accounts, today: asOf, paydayDay: data.config?.paydayDay, payslips: data.payslips, pays: data.pays,
+    trackingStartISO: trackingStart, fromKey: shiftMonth(monthKey(today), -24), toKey: '9999-12',
+  }).slice(-24);
+  const epargneParMois = months.map(m => ({ moisEpargne: m.key, depuisLe: m.start, epargne: round2(m.saved) }));
+  // Mois d'épargne en cours : le dernier ouvert (il peut porter la clé du mois civil suivant).
+  const savingsMonth = months.length > 0 ? months[months.length - 1].key : monthKey(today);
+  const [smYear, smMonth] = savingsMonth.split('-').map(Number);
+  const quarterStart = monthKey(new Date(smYear, Math.floor((smMonth - 1) / 3) * 3, 1));
+  const savedFrom = (from: string) => sum(epargneParMois.filter(m => m.moisEpargne >= from).map(m => m.epargne));
   const thisMonth = monthKey(today);
 
   // Soldes de fin de mois (relevés mensuels de l'historique), le dernier relevé de chaque mois.
@@ -167,9 +173,11 @@ export const buildAskSnapshot = (
       nombreDeComptes: accounts.length,
     },
     epargne: {
-      ceMois: savedFrom(thisMonth),
+      note: "Comptée par mois d'épargne : une paie reçue à partir du 15 finance le mois suivant (paie du 27 octobre = épargne de novembre).",
+      moisEpargneEnCours: savingsMonth,
+      ceMois: savedFrom(savingsMonth),
       ceTrimestre: savedFrom(quarterStart),
-      depuisLe1erJanvier: savedFrom(`${year}-01`),
+      depuisLe1erJanvier: savedFrom(`${smYear}-01`),
       sur12DerniersMois: sum(epargneParMois.slice(-12).map(m => m.epargne)),
       prevueChaqueMois: eur(extras.monthPlan),
       suiviDepuis: trackingStart || undefined,

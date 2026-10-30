@@ -315,7 +315,7 @@ export const PayReceivedSheet: React.FC<SheetProps> = ({ doc, geminiApiKey, pick
         <>
           {heading(`Bilan ${elideDe(formatMonth(review.key))}`)}
           <p className="text-sm text-on-surface-variant mb-4">Avant de répartir la nouvelle paie : ce que le mois qui s'achève a donné.</p>
-          <PayReviewCard review={review} onValidate={() => { onValidateReview(review.key); setStep(1); }} validateLabel="Continuer" />
+          <PayReviewCard review={review} onValidate={() => { onValidateReview(review.key); setStep(1); }} validateLabel="Continuer" title="Résultat du mois" />
         </>
       )}
 

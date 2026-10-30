@@ -5,7 +5,9 @@
 //
 // Les chiffres viennent des calculs existants : `computeYearReview` (mis de côté, taux,
 // épargne nette, intérêts, meilleur mois, dons, restitution) et `motivation.ts` (bons
-// mois, séries, joker, jalons). Garde-fous : pas de classement, pas de pression, rien qui
+// mois, séries, joker, jalons). L'épargne se compte par mois d'épargne (lib/payCalendar) :
+// la paie du 27 décembre ouvre janvier, et compte dans l'année suivante ; le fiscal (intérêts,
+// dons, restitution) reste à la date réelle. Garde-fous : pas de classement, pas de pression, rien qui
 // récompense un comportement risqué ; avec `config.gamification === false`, seules les
 // pages de chiffres restent (ni bons mois ni jalons).
 // ================================================
@@ -77,13 +79,15 @@ export const defaultReviewYear = (years: number[], today: Date = new Date()): nu
 };
 
 /**
- * Rien à raconter : aucun mouvement d'épargne ni relevé mensuel dans l'année, pas de
- * restitution. (Les intérêts d'une année sans aucune donnée seraient une reconstitution
- * à partir des soldes d'aujourd'hui : ils ne suffisent pas à la raconter.)
+ * Rien à raconter : aucun mouvement d'épargne ni relevé mensuel dans l'année (ni épargne sur
+ * ses mois d'épargne : la paie du 27 décembre ouvre janvier), pas de restitution. (Les
+ * intérêts d'une année sans aucune donnée seraient une reconstitution à partir des soldes
+ * d'aujourd'hui : ils ne suffisent pas à la raconter.)
  */
 const isEmptyYear = (data: GlobalAppData, year: number, review: YearReview) => {
   const trackingStart = data.config?.trackingStartDate;
-  const hasFlows = (data.accounts || []).some(a => a.movements.some(m => m.date.startsWith(`${year}-`) && isSavingsFlow(m, trackingStart)));
+  const hasFlows = review.monthly.some(m => m.saved !== 0)
+    || (data.accounts || []).some(a => a.movements.some(m => m.date.startsWith(`${year}-`) && isSavingsFlow(m, trackingStart)));
   const hasSnapshots = (data.history || []).some(s => s.date.startsWith(`${year}-`));
   return !hasFlows && !hasSnapshots && !review.restitution;
 };
@@ -91,13 +95,13 @@ const isEmptyYear = (data: GlobalAppData, year: number, review: YearReview) => {
 interface StreakStats { good: number; best: number }
 
 /**
- * Bons mois et meilleure série atteinte jusqu'à une date (fenêtres commencées avant
- * `beforeISO`), en relisant les résultats de `computeGoodMonths` (joker compris).
+ * Bons mois et meilleure série atteinte avant le mois d'épargne `beforeKey` ('YYYY-MM'), en
+ * relisant les résultats de `computeGoodMonths` (joker compris).
  */
-const streakStats = (months: MonthResult[], beforeISO: string): StreakStats => {
+const streakStats = (months: MonthResult[], beforeKey: string): StreakStats => {
   let run = 0, best = 0, good = 0;
   for (const m of months) {
-    if (m.start >= beforeISO) break;
+    if (m.key >= beforeKey) break;
     if (m.good) { good++; run++; best = Math.max(best, run); continue; }
     if (m.inProgress || m.joker) continue;
     run = 0;
@@ -129,7 +133,7 @@ export const buildYearInReview = (data: GlobalAppData, year: number, today: Date
     text: review.saved > 0
       ? (complete
         ? 'Versements moins retraits sur vos comptes d\'épargne, de janvier à décembre.'
-        : 'Versements moins retraits sur vos comptes d\'épargne depuis le 1er janvier. L\'année n\'est pas finie.')
+        : 'Versements moins retraits sur vos comptes d\'épargne depuis janvier. L\'année n\'est pas finie.')
       : 'Cette année, vous avez surtout puisé dans votre épargne : c\'est aussi à ça qu\'elle sert.',
   };
   if (empty) return { year, complete, gamification: motivation.enabled, empty, headline, pages: [], review };
@@ -166,7 +170,7 @@ export const buildYearInReview = (data: GlobalAppData, year: number, today: Date
     });
   }
 
-  // 5. Bons mois, série et joker (paies commencées dans l'année).
+  // 5. Bons mois, série et joker (mois d'épargne de l'année, rattachés par leur clé).
   let goodMonths: GoodMonthsSummary | undefined;
   if (motivation.enabled) {
     const firstFlow = accounts
@@ -178,20 +182,20 @@ export const buildYearInReview = (data: GlobalAppData, year: number, today: Date
       accounts, today: formatISODay(today), paydayDay: config.paydayDay, payslips: data.payslips, pays: data.pays,
       threshold: motivation.threshold, trackingStartISO: trackingStart, count,
     });
-    const inYear = goodMonths.months.filter(m => m.start.startsWith(`${Y}-`));
+    const inYear = goodMonths.months.filter(m => m.key.startsWith(`${Y}-`));
     const counted = inYear.filter(m => !m.inProgress || m.good);
     if (counted.length > 0) {
       const good = counted.filter(m => m.good).length;
-      const { best } = streakStats(goodMonths.months, `${year + 1}-01-01`);
+      const { best } = streakStats(goodMonths.months, `${year + 1}-01`);
       const joker = goodMonths.jokersUsed.includes(Y);
-      const parts = [`Paies après lesquelles vous avez mis au moins ${eur(goodMonths.threshold)} de côté.`];
+      const parts = [`Mois d'épargne où vous avez mis au moins ${eur(goodMonths.threshold)} de côté.`];
       if (best >= 2) parts.push(`Plus belle série : ${best} bons mois d'affilée.`);
       if (joker) parts.push('Le joker de l\'année a couvert un mois plus serré.');
       pages.push({ id: 'good-months', label: 'Bons mois', value: `${good} sur ${counted.length}`, text: parts.join(' '), game: true });
     }
   }
 
-  // 6. Meilleur mois (calendaire).
+  // 6. Meilleur mois (mois d'épargne).
   if (review.best && review.best.saved > 0 && review.monthly.length > 1) {
     pages.push({
       id: 'best-month', label: 'Meilleur mois', value: capitalize(MONTHS[review.best.month]),
@@ -202,18 +206,17 @@ export const buildYearInReview = (data: GlobalAppData, year: number, today: Date
   // 7. Jalons franchis dans l'année : ceux dont on sait reconstituer l'état au 1er janvier
   // (montant d'épargne, bons mois, séries) ; les autres dépendent de l'état actuel.
   if (goodMonths) {
-    const startISO = `${Y}-01-01`, endISO = `${year + 1}-01-01`;
-    const at = (beforeISO: string, mySavings: number) => {
-      const s = streakStats(goodMonths!.months, beforeISO);
+    const at = (beforeKey: string, mySavings: number) => {
+      const s = streakStats(goodMonths!.months, beforeKey);
       const summary: GoodMonthsSummary = {
-        ...goodMonths!, months: goodMonths!.months.filter(m => m.start < beforeISO),
+        ...goodMonths!, months: goodMonths!.months.filter(m => m.key < beforeKey),
         goodCount: s.good, bestStreak: s.best, streak: 0, current: undefined,
       };
       return computeMilestones({ accounts, mySavings, monthlySpending: 0, goodMonths: summary })
         .filter(m => m.achieved && /^(savings-|streak-|good-month-)/.test(m.id));
     };
-    const before = new Set(at(startISO, netStart).map(m => m.id));
-    const reached = at(endISO, review.netEnd).filter(m => !before.has(m.id));
+    const before = new Set(at(`${Y}-01`, netStart).map(m => m.id));
+    const reached = at(`${year + 1}-01`, review.netEnd).filter(m => !before.has(m.id));
     if (reached.length > 0) {
       pages.push({
         id: 'milestones', label: 'Jalons atteints', value: String(reached.length),

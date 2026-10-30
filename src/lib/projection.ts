@@ -5,13 +5,13 @@
 // ================================================
 import { AccountType, FiscalConfig, GlobalAppData, SavingsAccount, PayslipRecord } from '../types';
 import {
-  computePlacementStrategy, activeSavingsSplit, SavingsSplit, payslipSuperNet,
-  buildPayLines, computePayTransfers, computeMonthlySavingsCapacity, findDueRecurring,
+  SavingsSplit, payslipSuperNet, computePayTransfers, findDueRecurring,
   findStaleRegulatedRates, findFiscalReview, findAvRateUpdatesDue, socialChargesRateFor,
   accountAgeYears, computeMaturityCountdown, PFU_INCOME_TAX_RATE, isHousingSavingsIncomeTaxExempt,
 } from './finance';
 import { parseISODate } from './dates';
-import { payChecklistOf } from './payRecords';
+import { liveDone, openPay } from './payRecords';
+import { computeMonthTarget } from './payAdjustment';
 import { prepareProjection, projectedTotal, runProjection } from './projectionEngine';
 import { growthView } from './performance';
 import { DEFAULT_FISCAL_CONFIG } from '../constants';
@@ -172,23 +172,24 @@ export const detectPayRaise = (payslips: PayslipRecord[]): { latest: PayslipReco
 // ---------------------------------------------------------------------------
 
 /**
- * Nombre de choses à faire, affiché sur l'icône de l'app installée : virements de la paie
- * en cours non cochés, échéances récurrentes à enregistrer, taux et paramètres fiscaux à
- * revoir.
+ * Nombre de choses à faire, affiché sur l'icône de l'app installée : paie du mois d'épargne
+ * attendue mais pas encore déclarée (1 : le rituel « J'ai reçu ma paie »), sinon ses
+ * virements pas encore faits ; échéances récurrentes à enregistrer, taux et paramètres
+ * fiscaux à revoir.
  */
 export const computeBadgeCount = (data: GlobalAppData, asOfDate: Date = new Date()): number => {
   const accounts = data.accounts || [];
   const cfg = data.fiscalConfig || DEFAULT_FISCAL_CONFIG;
   let count = 0;
-  const payday = data.config?.paydayDay;
-  if (payday) {
-    const checklist = payChecklistOf(data, asOfDate);
-    const amount = data.config.paydayAmount ?? computeMonthlySavingsCapacity(data);
-    const lines = checklist?.lines ?? buildPayLines(
-      computePayTransfers({ expenses: data.expenses || [], subscriptions: data.subscriptions, leisureBudget: data.config.leisureBudget ?? 0, projectSavings: data.config.projectSavings ?? 0 }),
-      amount > 0 ? computePlacementStrategy(amount, accounts, cfg, activeSavingsSplit(data.config, asOfDate)) : []
-    );
-    count += lines.filter(l => !checklist?.done[l.key]).length;
+  const { pay } = openPay({ ...data, accounts }, asOfDate);
+  if (pay) {
+    // Une ligne dont le versement a été supprimé à la main redevient à faire.
+    const done = liveDone(pay.done, accounts);
+    count += pay.lines.filter(l => !done[l.key]).length;
+  } else if (data.config?.paydayDay) {
+    // Même objectif que le Pilotage et l'Accueil (lib/payAdjustment) : rien à répartir, rien à faire.
+    const transfers = computePayTransfers({ expenses: data.expenses || [], subscriptions: data.subscriptions, leisureBudget: data.config.leisureBudget ?? 0, projectSavings: data.config.projectSavings ?? 0 });
+    if (transfers.length > 0 || computeMonthTarget(data, asOfDate).total > 0) count += 1;
   }
   count += findDueRecurring(data.recurringMovements || [], accounts, asOfDate).length;
   if (findStaleRegulatedRates(accounts, asOfDate)) count += 1;

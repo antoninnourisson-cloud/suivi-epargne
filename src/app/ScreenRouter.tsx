@@ -133,7 +133,7 @@ export const ScreenRouter = memo(function ScreenRouter({ view, setView, data, de
           payslips={doc.payslips} gamification={c.gamification} goodMonthThreshold={c.goodMonthThreshold}
           milestonesSeen={c.milestonesSeen} payReviewsDone={c.payReviewsDone} rfrByYear={c.rfrByYear}
           restitutionDoneOn={doc.parentalRestitution?.done?.date} restitutionPlannedDate={doc.parentalRestitution?.plannedDate}
-          yearClosing={derived.yearClosing} payChecklist={payChecklist} pays={doc.pays}
+          yearClosing={derived.yearClosing} pays={doc.pays}
           askSlot={<Lazy><AskPeculeEntry data={derived.fullData} geminiApiKey={data.geminiApiKey} taxEstimate={derived.taxEstimate} monthPlan={derived.monthPlan} onOpenSettings={openSettings} /></Lazy>}
           onMarkMilestonesSeen={actions.markMilestonesSeen} onValidatePayReview={actions.validatePayReview} />}
 

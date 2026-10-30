@@ -12,7 +12,7 @@ const routine = (done: boolean[]): MonthRoutine => {
     { key: 'balances' as const, label: 'Soldes actualisés', detail: done[1] ? 'À jour' : '1 compte à actualiser', done: done[1], action: 'Actualiser' },
   ];
   const doneCount = done.filter(Boolean).length;
-  return { periodKey: '2026-10', monthName: 'octobre', steps, doneCount, complete: doneCount === steps.length };
+  return { periodKey: '2026-10', monthName: 'octobre', payDeclared: true, steps, doneCount, complete: doneCount === steps.length };
 };
 
 describe('MonthRoutineCard', () => {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { combineMonthTarget, computeMonthTarget, currentPayAdjustment, sanitizePayAdjustment } from './payAdjustment';
+import { combineMonthTarget, computeMonthTarget, sanitizePayAdjustment } from './payAdjustment';
+import { openPay } from './payRecords';
 import { emptyData, migrate } from './schema';
 import { computeMonthlyPay, computeMonthlySavingsCapacity } from './finance';
 import type { GlobalAppData, PayRecord } from '../types';
@@ -16,24 +17,19 @@ const withConfig = (patch: Partial<GlobalAppData['config']>): GlobalAppData => {
   return migrate({ ...d, schemaVersion: 2, config: { ...d.config, ...patch } });
 };
 
-describe('currentPayAdjustment', () => {
-  it('ne garde que le réglage de la paie en cours', () => {
+// Les anciens réglages de la paie en cours (schéma v2) vivent sur la paie de leur mois
+// d'épargne (toSave, bonus) : ils ne valent que pour ce mois-là.
+describe('réglages de la paie en cours migrés', () => {
+  it('ne gardent que le réglage de la paie en cours', () => {
     const data = withConfig({ paydayDay: 27, payAdjustment: { period: '2026-09', extra: 500 } });
-    expect(currentPayAdjustment(data, OCT_19)).toEqual({ period: '2026-09', extra: 500 });
+    expect(openPay(data, OCT_19).pay).toMatchObject({ savingsMonth: '2026-10', bonus: 500 });
     // Paie suivante (27 octobre) : le réglage de septembre ne vaut plus.
-    expect(currentPayAdjustment(data, OCT_28)).toBeUndefined();
+    expect(openPay(data, OCT_28).pay).toBeUndefined();
   });
 
   it('sans jour de paie, la période est le mois calendaire', () => {
-    expect(currentPayAdjustment(withConfig({ payAdjustment: { period: '2026-10', capacity: 900 } }), OCT_19)).toEqual({ period: '2026-10', capacity: 900 });
-    expect(currentPayAdjustment(withConfig({ payAdjustment: { period: '2026-09', capacity: 900 } }), OCT_19)).toBeUndefined();
-    expect(currentPayAdjustment({}, OCT_19)).toBeUndefined();
-  });
-
-  it("se lit sur la paie du mois d'épargne en cours", () => {
-    const pays = [{ id: 'p', receivedOn: '2026-09-27', savingsMonth: '2026-10', amount: 2500, toSave: 700, bonus: 300, lines: [], done: {} }];
-    expect(currentPayAdjustment({ pays, config: { paydayDay: 27 } }, OCT_19)).toEqual({ period: '2026-09', capacity: 700, extra: 300 });
-    expect(currentPayAdjustment({ pays, config: { paydayDay: 27 } }, OCT_28)).toBeUndefined();
+    expect(openPay(withConfig({ payAdjustment: { period: '2026-10', capacity: 900 } }), OCT_19).pay).toMatchObject({ savingsMonth: '2026-10', toSave: 900 });
+    expect(openPay(withConfig({ payAdjustment: { period: '2026-09', capacity: 900 } }), OCT_19).pay).toBeUndefined();
   });
 });
 

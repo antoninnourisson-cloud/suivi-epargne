@@ -29,7 +29,7 @@ import {
 import { MS_PER_DAY, daysBetween, formatISODay, parseISODate } from './dates';
 import { round2, signedAmount } from './money';
 import { csvAmount, type CsvCell } from './csv';
-import { elideDe, formatEUR, formatPeriod, frenchDay } from './format';
+import { elideDe, formatEUR, formatMonth, formatPeriod, frenchDay } from './format';
 
 // ---------------------------------------------------------------------------
 // Votre épargne à ce jour
@@ -263,13 +263,17 @@ export const averageFullMonthRate = (history: MonthSavingsRate[]): number | null
 };
 
 /**
- * Le chiffre « ce mois-ci » de l'Accueil, sur UNE seule fenêtre : la paie en cours (jour de
- * paie, ou date d'enregistrement de la fiche de paie), sinon le mois civil. La jauge, le taux
- * d'épargne et la carte « Bons mois » lisent tous cette même fenêtre (lib/motivation,
- * recentPayWindows) : pas de « 0 % ce mois-ci » le 2 octobre quand 320 € ont été placés depuis
- * la paie du 27 septembre.
+ * Le chiffre « ce mois-ci » de l'Accueil, sur UNE seule fenêtre : le mois d'épargne en cours
+ * (lib/payCalendar : de la paie reçue, ou attendue, à la paie suivante), sinon le mois civil.
+ * La jauge, le taux d'épargne et la carte « Bons mois » lisent tous cette même fenêtre : pas de
+ * « 0 % ce mois-ci » le 2 novembre quand 320 € ont été placés depuis la paie du 27 octobre
+ * (épargne de novembre).
  */
 export interface PayPeriodSavings {
+  /** Mois d'épargne en cours, 'YYYY-MM' (« Épargne de novembre »). */
+  key: string;
+  /** La paie de ce mois est déclarée (rituel « J'ai reçu ma paie ») ; sinon elle est attendue. */
+  declared: boolean;
   /** Premier jour de la fenêtre en cours (AAAA-MM-JJ). */
   start: string;
   /** Début de la fenêtre suivante (exclu) : prochaine paie, ou 1er du mois suivant. */
@@ -282,7 +286,7 @@ export interface PayPeriodSavings {
   saved: number;
   /** Part de la paie mise de côté dans la fenêtre en cours, en % (null sans paie connue). */
   rate: number | null;
-  /** Les dernières fenêtres, la plus ancienne d'abord, celle en cours comprise. */
+  /** Les derniers mois d'épargne (`month` = leur clé), le plus ancien d'abord, celui en cours compris. */
   history: MonthSavingsRate[];
   /** Moyenne des fenêtres terminées où quelque chose a bougé (null sans paie connue). */
   avgRate: number | null;
@@ -310,8 +314,8 @@ export const payPeriodSavings = (opts: {
   const shown = windows.filter((w, i) => i === windows.length - 1 || (trackingFrom !== undefined && w.end > trackingFrom));
   const history: MonthSavingsRate[] = shown.map(w => {
     const saved = savedBetween(accounts, w.start, w.end, today, trackingStartISO, payAttribution(w.key, opts.pays));
-    // Libellé « Paie d'octobre » : mois de versement de la paie.
-    return { month: w.payMonth, saved, rate: monthlyPay > 0 ? (saved / monthlyPay) * 100 : 0 };
+    // Libellé « Épargne de novembre » : le mois d'épargne de la fenêtre.
+    return { month: w.key, saved, rate: monthlyPay > 0 ? (saved / monthlyPay) * 100 : 0 };
   });
   const current = windows[windows.length - 1];
   const byPay = current.source !== 'calendar';
@@ -320,6 +324,8 @@ export const payPeriodSavings = (opts: {
   const end = paydayDay || current.source === 'calendar' ? expectedPayDate(paydayDay, shiftMonth(current.payMonth, 1)) : current.end;
   const startDay = frenchDay(parseISODate(current.start));
   return {
+    key: current.key,
+    declared: current.source === 'received',
     start: current.start,
     end,
     byPay,
@@ -336,8 +342,10 @@ export const payPeriodSavings = (opts: {
 export interface GaugeTick { kind: 'goal' | 'threshold'; amount: number; pct: number }
 
 export interface SavingsGauge {
-  /** « Placé depuis la paie du 27 septembre » ou « Placé depuis le 1er octobre ». */
+  /** « Épargne de novembre » (mois d'épargne) ou « Placé depuis le 1er octobre » (mois civil). */
   title: string;
+  /** « Depuis la paie du 27 octobre », sous le titre d'un mois d'épargne (null en mois civil). */
+  since: string | null;
   hasPlan: boolean;
   plan: number;
   /** Seuil « bon mois » (0 : motivation coupée). */
@@ -367,7 +375,7 @@ export const savingsGauge = (opts: {
   goal?: number;
   /** Seuil « bon mois » ; absent ou 0 quand la motivation est coupée. */
   threshold?: number;
-  period: Pick<PayPeriodSavings, 'end' | 'byPay' | 'since'>;
+  period: Pick<PayPeriodSavings, 'end' | 'byPay' | 'since'> & Partial<Pick<PayPeriodSavings, 'key'>>;
   today: string;
 }): SavingsGauge => {
   const { saved, goal, period, today } = opts;
@@ -380,7 +388,8 @@ export const savingsGauge = (opts: {
     ? (plan < threshold ? { kind: 'goal' as const, amount: plan } : { kind: 'threshold' as const, amount: threshold })
     : null;
   return {
-    title: `Placé ${period.since}`,
+    title: period.byPay && period.key ? `Épargne ${elideDe(formatMonth(period.key))}` : `Placé ${period.since}`,
+    since: period.byPay && period.key ? period.since.charAt(0).toUpperCase() + period.since.slice(1) : null,
     hasPlan,
     plan,
     threshold,

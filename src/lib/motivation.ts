@@ -10,7 +10,7 @@
 import { AccountMovement, AccountType, PayRecord, PayslipRecord, SavingsAccount } from '../types';
 import { isSavingsFlow } from './finance/savings';
 import { signedAmount } from './money';
-import { expectedPayStart, payWindows, paySavingsMonths, PayCalendarData, PayWindow } from './payCalendar';
+import { payWindows, paySavingsMonths, savingsMonthOf, PayCalendarData, PayWindow } from './payCalendar';
 import { computeEmergencyFund } from './planning';
 import { plainEUR } from './format';
 import { hasParentalCapital } from './parentalMode';
@@ -34,14 +34,6 @@ export const motivationSettings = (config: MotivationConfig | undefined) => ({
 // ---------------------------------------------------------------------------
 
 export type { PayWindow } from './payCalendar';
-
-/**
- * Début du « mois » de la paie versée en `key` ('YYYY-MM', mois de versement) quand elle n'est
- * pas déclarée : la date d'enregistrement d'une fiche de paie de ce mois si elle tombe à une
- * semaine près du jour de paie attendu ; sinon le jour de paie ; sans jour de paie, le 1er.
- */
-export const payWindowStart = (key: string, paydayDay: number | undefined, payslips: Pick<PayslipRecord, 'addedAt' | 'extracted'>[] = []) =>
-  expectedPayStart(key, paydayDay, payslips);
 
 /**
  * Les `count` derniers mois d'épargne (le plus ancien d'abord), celui en cours compris : voir
@@ -109,6 +101,35 @@ export const savedBetween = (
   return Math.round(total * 100) / 100;
 };
 
+/**
+ * Épargne de chaque mois d'épargne de `fromKey` à `toKey` ('YYYY-MM', inclus), déjà ouvert à
+ * `today`, le plus ancien d'abord : « Votre année » (mois par mois, meilleur mois) et « Demander
+ * à Pécule ». Une paie reçue le 27 décembre ouvre l'épargne de janvier de l'année suivante ; sans
+ * jour de paie ni paie déclarée, ce sont les mois civils.
+ */
+export const savingsByMonth = (input: {
+  accounts: { type: AccountType; movements: AccountMovement[] }[];
+  today: string;
+  paydayDay?: number;
+  payslips?: Pick<PayslipRecord, 'addedAt' | 'extracted'>[];
+  pays?: PayCalendarData['pays'];
+  trackingStartISO?: string;
+  fromKey: string;
+  toKey: string;
+}): { key: string; start: string; end: string; saved: number }[] => {
+  const [fy, fm] = input.fromKey.split('-').map(Number);
+  const [ty, tm] = input.today.split('-').map(Number);
+  // Assez de fenêtres pour remonter jusqu'à `fromKey` (une de plus : le mois d'épargne en cours
+  // peut avoir la clé du mois suivant).
+  const count = Math.min(600, Math.max(1, (ty - fy) * 12 + (tm - fm) + 2));
+  return payWindows({ paydayDay: input.paydayDay, payslips: input.payslips, pays: input.pays }, input.today, count)
+    .filter(w => w.key >= input.fromKey && w.key <= input.toKey)
+    .map(w => ({
+      key: w.key, start: w.start, end: w.end,
+      saved: savedBetween(input.accounts, w.start, w.end, input.today, input.trackingStartISO, payAttribution(w.key, input.pays)),
+    }));
+};
+
 export interface MonthResult extends PayWindow {
   saved: number;
   good: boolean;
@@ -146,9 +167,10 @@ export const savingsTrackingFrom = (
 };
 
 /**
- * Bons mois des 12 dernières paies. Les fenêtres antérieures au début du suivi (premier
- * versement d'épargne ou « Repartir de zéro ») ne comptent pas : on ne pénalise pas les mois
- * d'avant l'app. Un mois raté par an est couvert par un joker.
+ * Bons mois des 12 derniers mois d'épargne (« Novembre : bon mois »). Les fenêtres antérieures
+ * au début du suivi (premier versement d'épargne ou « Repartir de zéro ») ne comptent pas : on
+ * ne pénalise pas les mois d'avant l'app. Un mois raté par an est couvert par un joker : l'année
+ * est celle du mois d'épargne (la paie du 27 décembre, épargne de janvier, compte l'année d'après).
  */
 export const computeGoodMonths = (input: {
   accounts: { type: AccountType; movements: AccountMovement[] }[];
@@ -176,7 +198,7 @@ export const computeGoodMonths = (input: {
   for (const m of months) {
     if (m.good) { streak++; bestStreak = Math.max(bestStreak, streak); continue; }
     if (m.inProgress) continue; // pas encore joué : ne casse rien
-    const year = m.start.slice(0, 4);
+    const year = m.key.slice(0, 4);
     if (!jokersUsed.includes(year) && streak > 0) { jokersUsed.push(year); m.joker = true; continue; }
     streak = 0;
   }
@@ -271,10 +293,14 @@ export const computeMilestones = (input: {
     achieved: Object.values(input.rfrByYear || {}).some(v => v > 0),
   });
   if (input.restitutionDoneOn) {
+    // Premier mois d'épargne « solo » : celui que la règle du 15 donne à la date de restitution.
+    // Restitution le 1er janvier 2027 : l'épargne de janvier (paie du 27 décembre) compte déjà,
+    // même si sa fenêtre s'est ouverte quelques jours avant.
+    const soloFrom = savingsMonthOf(input.restitutionDoneOn);
     list.push({
       id: 'solo-month', title: 'Premier bon mois en solo',
       detail: 'Un bon mois après la restitution du capital de vos parents.',
-      achieved: goodMonths.months.some(m => m.good && m.start >= (input.restitutionDoneOn as string)),
+      achieved: goodMonths.months.some(m => m.good && m.key >= soloFrom),
     });
   }
   return list;
@@ -285,13 +311,13 @@ export const nextMilestone = (milestones: Milestone[]): Milestone | undefined =>
   milestones.filter(m => !m.achieved && m.progress !== undefined).sort((a, b) => (b.progress ?? 0) - (a.progress ?? 0))[0];
 
 // ---------------------------------------------------------------------------
-// Point de paie : bilan de la paie précédente
+// Point de paie : bilan du mois d'épargne précédent (« Bilan d'octobre »)
 // ---------------------------------------------------------------------------
 
 export interface PayReview {
   /** Mois d'épargne ('YYYY-MM') : clé des points de paie validés (config.payReviewsDone). */
   key: string;
-  /** Mois de versement de la paie (libellés « Point de paie : octobre »). */
+  /** Mois de versement de la paie (clés `recap:` des notifications du serveur). */
   payMonth: string;
   start: string;
   end: string;

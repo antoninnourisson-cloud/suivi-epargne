@@ -9,8 +9,9 @@ const acc = (over: Partial<SavingsAccount>): SavingsAccount => ({
 });
 const mv = (date: string, amount: number, type: 'IN' | 'OUT' = 'IN'): AccountMovement => ({ id: `${date}-${amount}-${type}`, date, amount, label: 'Épargne', type });
 
-// 2025 : 600 € le 28 de chaque mois (paie le 27), sauf juin (100 €). Livret A à 3 %.
-const moves2025 = Array.from({ length: 12 }, (_, m) => mv(`2025-${String(m + 1).padStart(2, '0')}-28`, m === 5 ? 100 : 600));
+// 2025 : 600 € le 10 de chaque mois (paie le 27 : le 10, c'est encore le mois d'épargne du mois
+// même), sauf juin (100 €). Livret A à 3 %.
+const moves2025 = Array.from({ length: 12 }, (_, m) => mv(`2025-${String(m + 1).padStart(2, '0')}-10`, m === 5 ? 100 : 600));
 const total2025 = moves2025.reduce((s, m) => s + m.amount, 0); // 6 700
 const base = (over: Partial<GlobalAppData> = {}): GlobalAppData => ({
   accounts: [acc({
@@ -98,6 +99,20 @@ describe('buildYearInReview', () => {
     const data = base({ history: [{ date: '2025-10-07', totalAmount: 15000, ownedAmount: 15000 }] });
     const net = buildYearInReview(data, 2025, NOW).pages.find(p => p.id === 'net')!;
     expect(plain(net.text)).toContain('8 300 € en début d\'année');
+  });
+
+  it("rattache les mois d'épargne à l'année par leur clé : la paie du 27 décembre compte en janvier suivant", () => {
+    // Versements le 28 (lendemain de la paie) : celui du 28 décembre 2025 est l'épargne de janvier 2026.
+    const moves = Array.from({ length: 12 }, (_, m) => mv(`2025-${String(m + 1).padStart(2, '0')}-28`, 600));
+    const data = base({ accounts: [acc({ id: 'la', name: 'Livret A', totalAmount: 15000, ownedAmount: 15000, movements: moves })] });
+    const y2025 = buildYearInReview(data, 2025, new Date(2026, 1, 10));
+    // Janvier 2025 (paie du 27 décembre 2024) : avant le suivi ; février à décembre : 11 × 600 €.
+    expect(y2025.review.saved).toBe(6600);
+    expect(plain(y2025.pages.find(p => p.id === 'good-months')?.value)).toBe('11 sur 11');
+    const y2026 = buildYearInReview(data, 2026, new Date(2026, 1, 10));
+    expect(y2026.review.saved).toBe(600);
+    expect(y2026.review.monthly[0]).toEqual({ month: 0, saved: 600 });
+    expect(plain(y2026.pages.find(p => p.id === 'good-months')?.value)).toBe('1 sur 1');
   });
 
   it('pas de mot pour l\'année suivante quand elle est déjà passée', () => {
