@@ -196,7 +196,7 @@ réponses) ; sinon `401` avec `REAUTH_REQUIRED` (session inconnue, ou d'avant la
 | `GET /push/devices` 🔒 | — | `{"devices":[{"id","host","createdAt","current"}]}` |
 | `POST /push/remove` 🔒 | `{"id"}` ou `{"endpoint"}` | `{"ok":true,"removed":bool,"devices":n}` |
 | `POST /push/test` 🔒 | — | `{"ok":bool,"delivered":n}` |
-| `GET /status` | — | `{"ok","cron":{"lastRunAt","ok"},"site":{"checkedAt","ok","failing","hsts"}}` (surveillance, sans donnée personnelle ; `site` : pages publiques, et script principal cité par `index.html` qui doit répondre 200 en JavaScript, pour repérer un écran blanc) |
+| `GET /status` | — | `{"ok","cron":{"lastRunAt","ok"},"site":{"checkedAt","ok","failing","hsts"},"fiscalWatch":{"lastSuccessAt","lastFailureAt","ok"},"history":[…10 passages des crons, catégories d'erreur seulement]}` (clés KV `health:fiscal-watch` et `health:cron-log` ; surveillance, sans donnée personnelle ; `site` : pages publiques, et script principal cité par `index.html` qui doit répondre 200 en JavaScript, pour repérer un écran blanc) |
 | `PUT /backup` 🔒 | copie chiffrée (≤ 2 Mo) | `{"date","dates"}` ; conservation échelonnée (24 copies au plus) ; `429` au-delà de 20 envois par jour |
 | `GET /backup` 🔒 | — | `{"dates","deletion"?}` ; `GET /backup/:date` : la copie chiffrée |
 | `DELETE /backup` 🔒 | — | programme l'effacement, dans 7 jours, des copies présentes ; une nouvelle demande ajoute les copies envoyées depuis (chacune garde sa propre échéance ; `purgeAt` = la plus tardive) : `{"ok","scheduled","purgeAt","copies"}` |

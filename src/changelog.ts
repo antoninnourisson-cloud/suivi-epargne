@@ -15,6 +15,44 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '2026.10.29-3',
+    date: '2026-10-29',
+    title: 'Mode discret et routine du mois',
+    items: [
+      "Nouveau : le bouton œil, en haut de l'écran et dans le menu, masque tous les montants d'un geste (« •••• € »). Le réglage se retrouve dans Paramètres, Affichage ; il est propre à l'appareil et coupé par défaut.",
+      "Nouveau : l'Accueil propose une « Routine du mois » en quatre étapes (fiche de paie, virements de la paie, soldes à jour, point de paie). Chaque étape se coche toute seule quand c'est fait, puis la carte se replie.",
+      "Dans le Pilotage, « paie − dépenses = à placer » s'affiche avec la même précision partout. Le simulateur « Et si… » indique le résultat probable à votre rythme et où se situe votre plan.",
+      "Une carte « Appareil » dans Paramètres montre si le stockage est protégé et garde les dernières erreurs, sans aucune donnée personnelle, avec « Copier » et « Effacer ». Si l'app plante, un écran propose de la recharger.",
+      "Le menu de l'ordinateur reste en place quand on fait défiler la page, et les textes disent « Paie d'octobre » ou « l'Assurance vie » au lieu de « de octobre ».",
+    ],
+  },
+  {
+    version: '2026.10.29-2',
+    date: '2026-10-29',
+    title: 'Verrou plus souple, soldes et fiches de paie',
+    items: [
+      "Verrou : vous choisissez maintenant après combien de temps il se remet (Immédiatement, 1, 5 ou 15 minutes ; 5 par défaut). Il se pose par-dessus ce que vous faisiez, sans effacer une saisie en cours, et ne se déclenche pas pendant un choix de fichier. À l'ouverture de l'app, il reste toujours verrouillé.",
+      "« Se déconnecter » se trouve désormais dans Paramètres sur téléphone. L'état de synchronisation, qui indique « À jour », se touche pour voir la dernière écriture sur votre Drive et réessayer.",
+      "Actualiser : chaque compte indique depuis quand son solde est vérifié, et « Inchangé » confirme un solde tel quel sans créer de mouvement. Le bouton « Solde vérifié » devient « Confirmer le solde ».",
+      "Les mouvements d'un compte sont plus lisibles sur téléphone, et l'Historique y montre la variation de votre part.",
+      "Fiches de paie : « Choisir sur l'appareil » importe un PDF ou une image sans passer par Drive. Un avertissement signale des montants qui ne se recoupent pas, et pour un mois déjà présent, vous choisissez de remplacer la fiche ou d'en ajouter une seconde.",
+      "Quand un fichier est partagé vers Pécule, l'app affiche son nom, sa taille et son heure d'arrivée avant de le lire, avec la possibilité d'annuler.",
+    ],
+  },
+  {
+    version: '2026.10.29',
+    date: '2026-10-29',
+    title: 'Des calculs plus justes',
+    items: [
+      "Les intérêts ajoutés par la puce « Intérêts » de l'ajout rapide ne comptent plus comme de l'épargne. Ceux déjà saisis avant cette mise à jour se corrigent au Journal avec « Pas de l'épargne ».",
+      "Prélèvements sociaux : 17,2 % seulement pour l'assurance vie, les CEL ouverts avant 2018 et les PEL d'avant 2018 pendant 12 ans ; 18,6 % pour les autres comptes, PEL et CEL récents compris.",
+      "Votre rythme d'épargne et la projection à 6 et 12 mois reposent sur ce que vous avez versé moins retiré, sans les intérêts ni les variations de valeur.",
+      "En janvier, les intérêts de l'année proposés dans Actualiser sont datés du 31 décembre.",
+      "Un montant écrit « 12.500 » est refusé comme ambigu au lieu d'être lu 12,5 : écrivez 12 500 ou 12,5.",
+      "La date du jour se met à jour à minuit et au retour sur l'app : agenda, échéances et objectif du mois restent justes.",
+    ],
+  },
+  {
     version: '2026.10.28-3',
     date: '2026-10-28',
     title: 'Demander à Pécule, et partager un document vers Pécule',
