@@ -31,6 +31,8 @@ export const OverflowMenu: React.FC<OverflowMenuProps> = ({ label, actions, clas
   const wrapRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const itemsRef = useRef<(HTMLButtonElement | null)[]>([]);
+  // Position du bouton à l'ouverture : seul un vrai déplacement ferme le menu.
+  const anchorRef = useRef<{ top: number; left: number } | null>(null);
 
   const close = (refocus = false) => {
     setOpen(false);
@@ -44,6 +46,7 @@ export const OverflowMenu: React.FC<OverflowMenuProps> = ({ label, actions, clas
     if (!r) return;
     const height = actions.length * ITEM_HEIGHT + 16;
     const below = r.bottom + height <= window.innerHeight - 8;
+    anchorRef.current = { top: r.top, left: r.left };
     setPos({
       top: below ? r.bottom + 4 : Math.max(8, r.top - height - 4),
       left: Math.max(8, Math.min(r.right - MENU_WIDTH, window.innerWidth - MENU_WIDTH - 8)),
@@ -56,7 +59,13 @@ export const OverflowMenu: React.FC<OverflowMenuProps> = ({ label, actions, clas
   useEffect(() => {
     if (!open) return;
     const onDown = (e: Event) => { if (!wrapRef.current?.contains(e.target as Node)) close(); };
-    const onScroll = () => close();
+    // Un défilement encore en cours au moment du toucher (inertie, mise en vue du bouton)
+    // envoie un événement juste après l'ouverture sans rien déplacer : le menu reste ouvert.
+    const onScroll = () => {
+      const r = buttonRef.current?.getBoundingClientRect();
+      const a = anchorRef.current;
+      if (!r || !a || Math.abs(r.top - a.top) > 2 || Math.abs(r.left - a.left) > 2) close();
+    };
     document.addEventListener('pointerdown', onDown);
     window.addEventListener('scroll', onScroll, true);
     window.addEventListener('resize', onScroll);
