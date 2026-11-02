@@ -87,6 +87,11 @@ test.describe('Affichage (démo)', () => {
       const sizes = await page.evaluate(() => ({ doc: document.documentElement.scrollHeight, win: window.innerHeight, aside: document.querySelector('aside')!.getBoundingClientRect().height }));
       expect(sizes.doc).toBeLessThanOrEqual(sizes.win);
       expect(sizes.aside).toBeLessThanOrEqual(sizes.win);
+      // Toutes les entrées du menu latéral tiennent sans faire défiler la liste des écrans.
+      const sideNav = aside.getByRole('navigation', { name: 'Navigation principale' });
+      await expect(sideNav.getByRole('button')).toHaveText(['Accueil', 'Actualiser les soldes', 'Comptes', 'Pilotage', 'Analyses', 'Impôts', 'Paramètres']);
+      expect(await sideNav.evaluate(el => el.scrollHeight <= el.clientHeight)).toBe(true);
+      for (const name of ['Demander à Pécule', 'Paramètres', 'Déconnexion']) await expect(aside.getByRole('button', { name, exact: true })).toBeInViewport({ ratio: 1 });
       // Molette sur le contenu : main défile, la page non ; l'action principale et la déconnexion restent visibles.
       await page.locator('main').hover();
       await page.mouse.wheel(0, 1500);

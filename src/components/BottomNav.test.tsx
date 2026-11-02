@@ -1,18 +1,18 @@
 // @vitest-environment jsdom
 // Barre du bas : l'onglet « Plus » annonce qu'il ouvre une boîte de dialogue, et si elle est
-// ouverte (aria-haspopup, aria-expanded) ; les entrées passent par le modèle de navigation
-// (écran → onglet mémorisé, ancienne entrée → son onglet) ; l'onglet actif suit l'écran.
+// ouverte (aria-haspopup, aria-expanded) ; quatre écrans dans la barre, quatre entrées dans
+// « Plus » ; chaque entrée rouvre l'onglet mémorisé de son écran ; l'onglet actif suit l'écran.
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import React, { useState } from 'react';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { BottomNav } from './BottomNav';
-import type { Place, Screen, View } from '../navigation';
+import type { Place, Screen } from '../navigation';
 
 afterEach(cleanup);
 
-const Harness: React.FC<{ place?: Place; onNavigate?: (v: View) => void; onOpenScreen?: (s: Screen) => void; onAsk?: () => void }> = ({ place = { screen: 'dashboard' }, onNavigate = vi.fn(), onOpenScreen = vi.fn(), onAsk }) => {
+const Harness: React.FC<{ place?: Place; onOpenScreen?: (s: Screen) => void; onAsk?: () => void }> = ({ place = { screen: 'dashboard' }, onOpenScreen = vi.fn(), onAsk }) => {
   const [moreOpen, setMoreOpen] = useState(false);
-  return <BottomNav place={place} onNavigate={onNavigate} onOpenScreen={onOpenScreen} moreOpen={moreOpen} setMoreOpen={setMoreOpen} onAsk={onAsk} />;
+  return <BottomNav place={place} onOpenScreen={onOpenScreen} moreOpen={moreOpen} setMoreOpen={setMoreOpen} onAsk={onAsk} />;
 };
 
 const current = () => screen.getAllByRole('button').filter(b => b.getAttribute('aria-current') === 'page').map(b => b.textContent);
@@ -44,18 +44,29 @@ describe('BottomNav', () => {
     expect(screen.queryByRole('dialog', { name: "Plus d'écrans" })).toBeNull();
   });
 
-  it('un écran de la barre rouvre son onglet mémorisé ; une ancienne entrée ouvre son onglet', () => {
-    const onNavigate = vi.fn();
+  it('barre : Accueil, Actualiser, Comptes, Pilotage, Plus ; « Plus » : Demander à Pécule et trois écrans', () => {
+    render(<Harness onAsk={() => {}} />);
+    const bar = screen.getByRole('navigation', { name: 'Navigation principale' });
+    expect([...bar.querySelectorAll('button')].map(b => b.textContent)).toEqual(['Accueil', 'Actualiser', 'Comptes', 'Pilotage', 'Plus']);
+    fireEvent.click(screen.getByRole('button', { name: 'Plus' }));
+    const sheet = screen.getByRole('dialog', { name: "Plus d'écrans" });
+    const entries = [...sheet.querySelectorAll('button')].map(b => b.textContent?.trim()).filter(t => t !== '');
+    expect(entries).toEqual(['Demander à Pécule', 'Analyses', 'Impôts', 'Paramètres']);
+  });
+
+  it('chaque entrée rouvre l’onglet mémorisé de son écran', () => {
     const onOpenScreen = vi.fn();
-    render(<Harness onNavigate={onNavigate} onOpenScreen={onOpenScreen} />);
+    render(<Harness onOpenScreen={onOpenScreen} />);
     fireEvent.click(screen.getByRole('button', { name: 'Pilotage' }));
     expect(onOpenScreen).toHaveBeenCalledWith('pilot');
-    fireEvent.click(screen.getByRole('button', { name: 'Plus' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Abonnements' }));
-    expect(onNavigate).toHaveBeenCalledWith('subscriptions');
-    fireEvent.click(screen.getByRole('button', { name: 'Plus' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Paramètres' }));
-    expect(onOpenScreen).toHaveBeenLastCalledWith('settings');
+    fireEvent.click(screen.getByRole('button', { name: 'Actualiser' }));
+    expect(onOpenScreen).toHaveBeenLastCalledWith('update');
+    for (const [name, key] of [['Analyses', 'analyses'], ['Impôts', 'taxes'], ['Paramètres', 'settings']]) {
+      fireEvent.click(screen.getByRole('button', { name: 'Plus' }));
+      fireEvent.click(screen.getByRole('button', { name }));
+      expect(onOpenScreen).toHaveBeenLastCalledWith(key);
+      expect(screen.queryByRole('dialog', { name: "Plus d'écrans" })).toBeNull();
+    }
   });
 
   it('onglet actif : l’écran de la barre pour tous ses onglets, « Plus » pour Analyses, Impôts et Paramètres', () => {

@@ -106,9 +106,11 @@ interface ScreenRouterProps {
   shareMarker: string | null;
   shareReady: boolean;
   onShareDone: () => void;
+  /** « Faire un virement » (Comptes › Mouvements) : la feuille « Ajouter un mouvement » sur Virement. */
+  onOpenTransfer: () => void;
 }
 
-export const ScreenRouter = memo(function ScreenRouter({ place, setView, onSelectTab, hiddenTabs, data, derived, actions, fiscalWatch, accountForm, onSignedOutEverywhere, onRequestLogout, shareMarker, shareReady, onShareDone }: ScreenRouterProps) {
+export const ScreenRouter = memo(function ScreenRouter({ place, setView, onSelectTab, hiddenTabs, data, derived, actions, fiscalWatch, accountForm, onSignedOutEverywhere, onRequestLogout, shareMarker, shareReady, onShareDone, onOpenTransfer }: ScreenRouterProps) {
   const addToast = useAddToast();
   const dialog = useDialog();
   const { doc } = data;
@@ -198,7 +200,7 @@ export const ScreenRouter = memo(function ScreenRouter({ place, setView, onSelec
           accounts={doc.accounts} restitution={doc.parentalRestitution} onDeleteMovement={actions.deleteMovement}
           trackingStartDate={c.trackingStartDate} onSetTrackingStart={actions.setTrackingStart}
           onToggleAdjustment={actions.toggleAdjustment} onRemoveCancelling={actions.removeCancelling} onRevertRate={actions.revertRate}
-          toolsSlot={<TransferManager accounts={doc.accounts} onCommit={actions.commit} recurringMovements={doc.recurringMovements} onUpdateRecurring={data.setRecurringMovements} />} />}
+          toolsSlot={<TransferManager accounts={doc.accounts} onOpenTransfer={onOpenTransfer} recurringMovements={doc.recurringMovements} onUpdateRecurring={data.setRecurringMovements} />} />}
         {tab === 'calendar' && <FiscalCalendar accounts={doc.accounts} fiscalConfig={doc.fiscalConfig} />}
         {tab === 'agenda' && <Agenda data={derived.fullData} onOpen={v => { if (!isView(v)) return; if (v === 'settings') openSettingsSection('fiscal'); setView(v); }} />}
         {tab === 'parents' && <ParentalShare

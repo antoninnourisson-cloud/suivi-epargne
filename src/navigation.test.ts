@@ -1,9 +1,9 @@
 // Modèle de navigation : 7 écrans, onglets, table d'alias des anciennes clés d'écran (liens,
-// notifications, `lastView` d'un ancien fichier), forme enregistrée, entrées de menu actives.
-import { describe, it, expect, vi } from 'vitest';
+// notifications, `lastView` d'un ancien fichier), forme enregistrée, menus.
+import { describe, it, expect } from 'vitest';
 import {
-  activeNavKey, encodePlace, goToNavItem, isScreen, isView, NAV_ITEMS, parsePlace, placeIn, placeLabel, placeOf,
-  SCREEN_TABS, tabsOf, VIEW_ALIASES, visiblePlace, type Place, type View,
+  BAR_SCREENS, encodePlace, isScreen, isView, MORE_SCREENS, parsePlace, placeIn, placeLabel, placeOf,
+  SCREEN_LABELS, SCREEN_SHORT_LABELS, SCREEN_TABS, SIDE_SCREENS, tabsOf, VIEW_ALIASES, visiblePlace, type Place, type View,
 } from './navigation';
 
 // Les 15 clés d'écran d'avant les onglets : chacune doit garder une destination explicite.
@@ -116,21 +116,22 @@ describe('`lastView` enregistré', () => {
 });
 
 describe('menus', () => {
-  it('une entrée qui nomme un écran rouvre son onglet mémorisé ; une ancienne entrée, son onglet', () => {
-    const navigate = vi.fn();
-    const openScreen = vi.fn();
-    goToNavItem('pilot', navigate, openScreen);
-    expect(openScreen).toHaveBeenCalledWith('pilot');
-    goToNavItem('journal', navigate, openScreen);
-    expect(navigate).toHaveBeenCalledWith('journal');
+  it('barre du bas : Accueil, Actualiser, Comptes, Pilotage (puis « Plus »)', () => {
+    expect(BAR_SCREENS.map(s => SCREEN_SHORT_LABELS[s] ?? SCREEN_LABELS[s])).toEqual(['Accueil', 'Actualiser', 'Comptes', 'Pilotage']);
   });
 
-  it('entrée active : l’endroit exact, sinon la première entrée du même écran', () => {
-    const keys = NAV_ITEMS.map(i => i.key);
-    expect(activeNavKey({ screen: 'pilot', tab: 'subscriptions' }, keys)).toBe('subscriptions');
-    expect(activeNavKey({ screen: 'accounts', tab: 'movements' }, keys)).toBe('journal');
-    expect(activeNavKey({ screen: 'taxes', tab: 'calendar' }, keys)).toBe('donations');
-    expect(activeNavKey({ screen: 'pilot', tab: 'subscriptions' }, ['dashboard', 'pilot'])).toBe('pilot');
-    expect(activeNavKey({ screen: 'analyses', tab: 'agenda' }, ['dashboard', 'pilot'])).toBeUndefined();
+  it('« Plus » : Analyses, Impôts, Paramètres ; menu latéral : six écrans puis Paramètres', () => {
+    expect(MORE_SCREENS.map(s => SCREEN_LABELS[s])).toEqual(['Analyses', 'Impôts', 'Paramètres']);
+    expect(SIDE_SCREENS.map(s => SCREEN_LABELS[s])).toEqual(['Accueil', 'Actualiser les soldes', 'Comptes', 'Pilotage', 'Analyses', 'Impôts']);
+  });
+
+  it('chaque écran a une place dans les deux menus, et une seule', () => {
+    const mobile = [...BAR_SCREENS, ...MORE_SCREENS];
+    const desktop = [...SIDE_SCREENS, 'settings'];
+    for (const list of [mobile, desktop]) {
+      expect(new Set(list).size).toBe(list.length);
+      expect([...list].sort()).toEqual(['accounts', 'analyses', 'dashboard', 'pilot', 'settings', 'taxes', 'update']);
+      expect(list.every(isScreen)).toBe(true);
+    }
   });
 });

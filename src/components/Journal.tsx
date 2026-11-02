@@ -3,7 +3,7 @@
 // Journal des modifications : tous les mouvements (votre part, part des parents,
 // valorisations, soldes initiaux), changements de taux et restitution, du plus récent au
 // plus ancien. Un mouvement se supprime (avec annulation), le dernier changement de taux
-// d'un compte s'annule. Dans Comptes › Mouvements, le virement et les échéances récurrentes
+// d'un compte s'annule. Dans Comptes › Mouvements, « Faire un virement » et les échéances récurrentes
 // (toolsSlot) viennent avant la liste.
 // ================================================
 import React, { useMemo, useState } from 'react';
@@ -40,7 +40,7 @@ interface Props {
   trackingStartDate?: string;
   onSetTrackingStart: (date: string | undefined) => void;
   onToggleAdjustment: (accountId: string, movementId: string) => void;
-  /** Comptes › Mouvements : virement et échéances récurrentes, entre l’en-tête et le journal. */
+  /** Comptes › Mouvements : « Faire un virement » et échéances récurrentes, entre l’en-tête et le journal. */
   toolsSlot?: React.ReactNode;
 }
 

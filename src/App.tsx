@@ -40,7 +40,8 @@ import { SyncBanners, useSyncToasts } from './app/SyncBanners';
 import { SyncDialogsHost, useSyncDialogs } from './app/SyncDialogs';
 import { LoginScreen } from './app/LoginScreen';
 import { AppShell } from './app/AppShell';
-import { encodePlace, visiblePlace, type ScreenTab, type View } from './navigation';
+import { encodePlace, visiblePlace, type ScreenTab } from './navigation';
+import type { QuickAddKind } from './components/QuickAddModal';
 
 // Barre du bas (mobile) mémoïsée : re-rendue seulement au changement d'écran ou du menu « Plus ».
 const StableBottomNav = memo(BottomNav);
@@ -70,9 +71,12 @@ const AppRoot: React.FC = () => {
   const [shareMarker, setShareMarker] = useState(() => new URLSearchParams(window.location.search).get('partage'));
   const endShare = useCallback(() => setShareMarker(null), []);
   const [moreNavOpen, setMoreNavOpen] = useState(false);
-  const [quickAddOpen, setQuickAddOpen] = useState(false);
-  const openQuickAdd = useCallback(() => setQuickAddOpen(true), []);
-  const closeQuickAdd = useCallback(() => setQuickAddOpen(false), []);
+  // Feuille « Ajouter un mouvement » : fermée (null) ou ouverte sur un choix (dépôt par défaut,
+  // Virement depuis « Faire un virement » ou `?action=transfer`).
+  const [quickAddKind, setQuickAddKind] = useState<QuickAddKind | null>(null);
+  const openQuickAdd = useCallback((kind: QuickAddKind = 'IN') => setQuickAddKind(kind), []);
+  const openTransfer = useCallback(() => setQuickAddKind('TRANSFER'), []);
+  const closeQuickAdd = useCallback(() => setQuickAddKind(null), []);
   // « Demander à Pécule » depuis la navigation : la fenêtre (et sa conversation) est retirée à
   // la déconnexion, et ne se rouvre pas d'elle-même ensuite. Le verrou, posé par-dessus, la
   // laisse en place comme les autres fenêtres.
@@ -112,7 +116,6 @@ const AppRoot: React.FC = () => {
   // Données pas encore là (ou rechargées depuis Drive) : la structure de l'app avec des cartes
   // en attente. La copie hors ligne, elle, reste affichée pendant qu'on rejoint Drive.
   const booting = (data.isLoadingData && !data.offlineDataAt) || (!data.dataShown && !data.loadFailed);
-  const hiddenScreens = useMemo<View[]>(() => (derived.showParentalScreen ? [] : ['parental']), [derived.showParentalScreen]);
   // Onglet masqué (mode solo : « Parents ») : l'endroit retombe sur l'onglet par défaut.
   const hiddenTabs = useMemo<ScreenTab[]>(() => (derived.showParentalScreen ? [] : ['parents']), [derived.showParentalScreen]);
   const place = useMemo(() => visiblePlace(nav.place, hiddenTabs), [nav.place, hiddenTabs]);
@@ -157,19 +160,19 @@ const AppRoot: React.FC = () => {
     return (
       <LastSavedAtContext.Provider value={data.lastSavedAt}>
         <AppShell
-          place={place} onNavigate={setView} onOpenScreen={openScreen} showParentalScreen={derived.showParentalScreen}
+          place={place} onNavigate={setView} onOpenScreen={openScreen}
           syncPhase={syncPhase(data.syncStatus, data.syncConflict, data.lastSavedAt)} lastSavedAt={data.lastSavedAt}
           hasPendingEdits={hasPendingEdits()} onRetrySync={data.retrySync} onReconnect={() => void auth.reconnect()}
           isDark={isDark} onToggleTheme={toggleTheme} discreet={discreet} onToggleDiscreet={toggleDiscreet} onRequestLogout={auth.requestLogout} mainRef={mainRef}
-          navAction={<>{data.accounts.length > 0 && <QuickAddNavButton onClick={openQuickAdd} />}<AskNavButton onClick={openAsk} className={data.accounts.length > 0 ? 'mt-3' : ''} /></>}
+          navAction={<>{data.accounts.length > 0 && <QuickAddNavButton onClick={() => openQuickAdd()} />}<AskNavButton onClick={openAsk} className={data.accounts.length > 0 ? 'mt-3' : ''} /></>}
           overlays={<>
             {/* Ajout rapide flottant (téléphone), masqué là où l'écran a déjà son propre ajout ou
                 sa barre d'enregistrement (voir showQuickAddFab). Sur ordinateur : navAction. */}
             {data.accounts.length > 0 && showQuickAddFab(place) && (
-              <QuickAddFab scrollRef={mainRef} resetKey={encodePlace(place)} onClick={openQuickAdd} />
+              <QuickAddFab scrollRef={mainRef} resetKey={encodePlace(place)} onClick={() => openQuickAdd()} />
             )}
-            {quickAddOpen && <Lazy><QuickAddModal open={quickAddOpen} accounts={data.accounts} onClose={closeQuickAdd} onSubmit={actions.quickAdd} /></Lazy>}
-            <StableBottomNav place={place} onNavigate={setView} onOpenScreen={openScreen} moreOpen={moreNavOpen} setMoreOpen={setMoreNavOpen} hidden={hiddenScreens} onAsk={openAsk} />
+            {quickAddKind && <Lazy><QuickAddModal open accounts={data.accounts} initialKind={quickAddKind} onClose={closeQuickAdd} onSubmit={actions.quickAdd} onTransfer={actions.transfer} /></Lazy>}
+            <StableBottomNav place={place} onOpenScreen={openScreen} moreOpen={moreNavOpen} setMoreOpen={setMoreNavOpen} onAsk={openAsk} />
             {askOpen && <Lazy><AskPeculeSheet data={fullData} geminiApiKey={data.geminiApiKey} taxEstimate={derived.taxEstimate} monthPlan={derived.monthPlan}
               onClose={closeAsk} onOpenSettings={section => { openSettingsSection(section); setView('settings'); }} /></Lazy>}
             {/* Une fois après chaque mise à jour : ce qui a changé. */}
@@ -182,7 +185,7 @@ const AppRoot: React.FC = () => {
           <BackupDeletionNotice active={data.dataShown && !data.isLoadingData} onOpenSettings={() => setView('settings')} />
           <ScreenRouter key={discreet ? 'montants-masques' : 'montants'} place={place} setView={setView} onSelectTab={selectTab} hiddenTabs={hiddenTabs} data={screenData} derived={derived} actions={actions}
             fiscalWatch={fiscalWatch} accountForm={accountForm} onSignedOutEverywhere={auth.signedOutEverywhere} onRequestLogout={auth.requestLogout}
-            shareMarker={shareMarker} shareReady={data.dataShown && !data.isLoadingData} onShareDone={endShare} />
+            shareMarker={shareMarker} shareReady={data.dataShown && !data.isLoadingData} onShareDone={endShare} onOpenTransfer={openTransfer} />
         </AppShell>
       </LastSavedAtContext.Provider>
     );

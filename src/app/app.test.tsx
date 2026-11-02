@@ -57,6 +57,14 @@ describe('liens directs', () => {
     expect(window.location.search).toBe('?demo=1');
   });
 
+  it('« Faire un virement » (`?action=transfer`) : la feuille du bouton « Mouvement » sur Virement', () => {
+    window.history.replaceState({}, '', '/?action=transfer');
+    const openQuickAdd = vi.fn();
+    renderHook(() => useDeepLinks(true, vi.fn(), openQuickAdd));
+    expect(openQuickAdd).toHaveBeenCalledWith('TRANSFER');
+    expect(window.location.search).toBe('');
+  });
+
   it('« J’ai reçu ma paie » (raccourci, notification) : Pilotage et rituel demandés, adresse nettoyée', () => {
     const onRequest = vi.fn();
     window.addEventListener(OPEN_PAY_SHEET_EVENT, onRequest);
@@ -515,7 +523,7 @@ describe('écran mémoïsé', () => {
       return <>
         <button onClick={() => setN(n + 1)}>etat-app {n}</button>
         <button onClick={() => setD({ ...data, doc: { ...doc } })}>donnees</button>
-        <ScreenRouter place={home} setView={setView} onSelectTab={onSelectTab} hiddenTabs={noTabs} data={d} derived={derived} actions={actions} fiscalWatch={fiscalWatch} accountForm={accountForm} onSignedOutEverywhere={onSignedOut} onRequestLogout={onSignedOut} shareMarker={null} shareReady onShareDone={onShareDone} />
+        <ScreenRouter place={home} setView={setView} onSelectTab={onSelectTab} hiddenTabs={noTabs} data={d} derived={derived} actions={actions} fiscalWatch={fiscalWatch} accountForm={accountForm} onSignedOutEverywhere={onSignedOut} onRequestLogout={onSignedOut} shareMarker={null} shareReady onShareDone={onShareDone} onOpenTransfer={onShareDone} />
       </>;
     };
     render(<UiProviders><Parent /></UiProviders>);
@@ -539,7 +547,7 @@ describe('partage vers Pécule (aiguillage)', () => {
       const [marker, setMarker] = useState<string | null>('1');
       return <ScreenRouter place={place} setView={v => setPlace(placeOf(v))} onSelectTab={() => {}} hiddenTabs={[]} data={data} derived={{} as DerivedData} actions={{ importStatement: () => null } as unknown as AccountActions}
         fiscalWatch={{ proposals: [] } as unknown as FiscalWatch} accountForm={accountForm} onSignedOutEverywhere={() => {}} onRequestLogout={() => {}}
-        shareMarker={marker} shareReady onShareDone={() => { onShareDone(); setMarker(null); }} />;
+        shareMarker={marker} shareReady onShareDone={() => { onShareDone(); setMarker(null); }} onOpenTransfer={() => {}} />;
     };
     render(<UiProviders><Parent /></UiProviders>);
     const host = lastProps.ShareTargetHost as { marker: string; ready: boolean; onPayslip: (f: File) => void; onDone: () => void };
@@ -566,7 +574,7 @@ describe('écrans à onglets', () => {
     for (const k of Object.keys(renders)) delete renders[k];
     render(<UiProviders><ScreenRouter place={place} setView={() => {}} onSelectTab={onSelectTab} hiddenTabs={hiddenTabs} data={data} derived={derived}
       actions={{} as AccountActions} fiscalWatch={{ proposals: [] } as unknown as FiscalWatch} accountForm={accountForm}
-      onSignedOutEverywhere={() => {}} onRequestLogout={() => {}} shareMarker={null} shareReady onShareDone={() => {}} /></UiProviders>);
+      onSignedOutEverywhere={() => {}} onRequestLogout={() => {}} shareMarker={null} shareReady onShareDone={() => {}} onOpenTransfer={() => {}} /></UiProviders>);
     return onSelectTab;
   };
   const tabNames = (label: string) => screen.getAllByRole('tab').filter(t => t.closest('[role="tablist"]')?.getAttribute('aria-label') === label).map(t => t.textContent);

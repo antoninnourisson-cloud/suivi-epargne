@@ -1,13 +1,11 @@
 // @vitest-environment jsdom
-// Comptes › Mouvements (virement, échéances récurrentes) et Abonnements (Material 3) : panneaux
-// repliables accessibles, erreurs dites dans le formulaire, virement annulable, dépôt confié à
-// l'ajout rapide, capital des parents jamais viré ; abonnements ajoutés, modifiés (ancien prix gardé), mis en pause et supprimés avec
-// « Annuler ».
+// Comptes › Mouvements (« Faire un virement », échéances récurrentes) et Abonnements (Material
+// 3) : le virement est confié au bouton « Mouvement », panneau repliable accessible ;
+// abonnements ajoutés, modifiés (ancien prix gardé), mis en pause et supprimés avec « Annuler ».
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { useState } from 'react';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { AccountType, type SavingsAccount, type Subscription } from '../types';
-import type { CommandPatch } from '../lib/commands';
 import { ToastContext } from './Toast';
 import { TransferManager } from './TransferManager';
 import { Subscriptions } from './Subscriptions';
@@ -22,13 +20,9 @@ const accounts: SavingsAccount[] = [
 ];
 
 const renderTransfers = (accs = accounts) => {
-  const addToast = vi.fn<AddToast>(() => 'id');
-  const props = {
-    onCommit: vi.fn<(patch: CommandPatch) => void>(),
-    onUpdateRecurring: vi.fn(), recurringMovements: [],
-  };
-  render(<ToastContext.Provider value={addToast}><TransferManager accounts={accs} {...props} /></ToastContext.Provider>);
-  return { ...props, addToast };
+  const props = { onOpenTransfer: vi.fn(), onUpdateRecurring: vi.fn(), recurringMovements: [] };
+  render(<TransferManager accounts={accs} {...props} />);
+  return props;
 };
 
 describe('TransferManager', () => {
@@ -37,43 +31,21 @@ describe('TransferManager', () => {
     expect(screen.queryByRole('button')).toBeNull();
   });
 
-  it('deux panneaux repliés, sans onglets ; dépôt ou retrait : un seul chemin, l’ajout rapide (pas de second formulaire ici)', () => {
-    renderTransfers();
+  it('« Faire un virement » ouvre la feuille du bouton « Mouvement » (pas de second formulaire ici)', () => {
+    const p = renderTransfers();
     expect(screen.queryByRole('tablist')).toBeNull();
-    const panels = ['Virement entre deux comptes', 'Échéances récurrentes'].map(name => screen.getByRole('button', { name }));
-    expect(panels.map(b => b.getAttribute('aria-expanded'))).toEqual(['false', 'false']);
-    fireEvent.click(panels[1]);
-    expect(screen.getByRole('region', { name: 'Échéances récurrentes' })).toBeTruthy();
-    expect(screen.queryByLabelText('Montant du dépôt')).toBeNull();
+    expect(screen.queryByLabelText('Montant du virement')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Faire un virement' }));
+    expect(p.onOpenTransfer).toHaveBeenCalledOnce();
   });
 
-  it('virement : jamais au-delà de votre part (le capital des parents reste)', () => {
-    const p = renderTransfers();
-    fireEvent.click(screen.getByRole('button', { name: 'Virement entre deux comptes' }));
-    fireEvent.change(screen.getByLabelText('Compte de départ'), { target: { value: 'la' } });
-    fireEvent.change(screen.getByLabelText("Compte d'arrivée"), { target: { value: 'ldds' } });
-    fireEvent.change(screen.getByLabelText('Montant du virement'), { target: { value: 'abc' } });
-    fireEvent.submit(screen.getByRole('button', { name: 'Enregistrer le virement' }).closest('form')!);
-    expect(screen.getByRole('alert').textContent).toMatch(/Montant non reconnu/);
-    fireEvent.change(screen.getByLabelText('Montant du virement'), { target: { value: '9000' } });
-    fireEvent.submit(screen.getByRole('button', { name: 'Enregistrer le virement' }).closest('form')!);
-    expect(screen.getByRole('alert').textContent).toMatch(/Fonds insuffisants : votre part sur Livret A/);
-    expect(p.onCommit).not.toHaveBeenCalled();
-    fireEvent.change(screen.getByLabelText('Montant du virement'), { target: { value: '500' } });
-    fireEvent.submit(screen.getByRole('button', { name: 'Enregistrer le virement' }).closest('form')!);
-    // Commande appliquée : 500 € quittent votre part du Livret A (le capital des parents reste)
-    // et arrivent sur le LDDS, en deux lignes appariées.
-    expect(p.onCommit).toHaveBeenCalledTimes(1);
-    const next = p.onCommit.mock.calls[0][0].accounts!;
-    expect(next.find(a => a.id === 'la')).toMatchObject({ ownedAmount: 7700, parentalCapital: 7000, totalAmount: 14700 });
-    expect(next.find(a => a.id === 'ldds')).toMatchObject({ ownedAmount: 3500, totalAmount: 3500 });
-    // « Annuler » dans le message de confirmation, comme pour l'ajout rapide.
-    const toast = p.addToast.mock.calls[0][0];
-    expect(toast.message).toMatch(/^Virement de 500,00\s€ : Livret A → LDDS$/);
-    expect(toast.action?.label).toBe('Annuler');
-    toast.action!.onClick();
-    expect(p.onCommit).toHaveBeenCalledTimes(2);
-    expect(p.onCommit.mock.calls[1][0].accounts).toEqual(accounts);
+  it('échéances récurrentes : panneau replié ; un seul compte, pas de virement possible', () => {
+    renderTransfers([accounts[0]]);
+    expect(screen.queryByRole('button', { name: 'Faire un virement' })).toBeNull();
+    const panel = screen.getByRole('button', { name: 'Échéances récurrentes' });
+    expect(panel.getAttribute('aria-expanded')).toBe('false');
+    fireEvent.click(panel);
+    expect(screen.getByRole('region', { name: 'Échéances récurrentes' })).toBeTruthy();
   });
 });
 

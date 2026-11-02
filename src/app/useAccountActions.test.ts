@@ -113,6 +113,28 @@ describe('comptes', () => {
 });
 
 describe('mouvements', () => {
+  it('virement (bouton « Mouvement » › Virement) : jamais au-delà de votre part ; enregistré avec « Annuler »', () => {
+    const la = account('la', { name: 'Livret A', totalAmount: 15200, ownedAmount: 8200, parentalCapital: 7000 });
+    const ldds = account('ldds', { name: 'LDDS', type: AccountType.LDDS, totalAmount: 3000, ownedAmount: 3000 });
+    const { result, setters, lastToast, accountsWritten, addToast } = setup(withAccounts(la, ldds));
+    let refused: string | null = null;
+    // Le capital des parents n'est pas mobilisable : refus renvoyé à la feuille, rien d'écrit.
+    act(() => { refused = result.current.transfer({ sourceId: 'la', destId: 'ldds', amount: 9000, date: '2026-10-02' }); });
+    expect(refused).toMatch(/Fonds insuffisants : votre part sur Livret A/);
+    act(() => { refused = result.current.transfer({ sourceId: 'disparu', destId: 'ldds', amount: 10, date: '2026-10-02' }); });
+    expect(refused).toMatch(/introuvable/);
+    expect(setters.setAccounts).not.toHaveBeenCalled();
+    expect(addToast).not.toHaveBeenCalled();
+    act(() => { refused = result.current.transfer({ sourceId: 'la', destId: 'ldds', amount: 500, date: '2026-10-02' }); });
+    expect(refused).toBeNull();
+    // 500 € quittent votre part du Livret A (le capital des parents reste) et arrivent sur le LDDS.
+    expect(accountsWritten(0).find(a => a.id === 'la')).toMatchObject({ ownedAmount: 7700, parentalCapital: 7000, totalAmount: 14700 });
+    expect(accountsWritten(0).find(a => a.id === 'ldds')).toMatchObject({ ownedAmount: 3500, totalAmount: 3500 });
+    expect(lastToast().message).toMatch(/^Virement de 500,00\s€ : Livret A → LDDS$/);
+    act(() => lastToast().action!.onClick());
+    expect(accountsWritten(1)).toEqual([la, ldds]);
+  });
+
   it('virement interne : la fenêtre annonce les lignes liées, supprimées ensemble', () => {
     const doc = withAccounts(
       account('a', { totalAmount: 70, ownedAmount: 70, movements: [{ id: 'o', date: '2026-10-01', amount: 30, label: 'Virement', type: 'OUT', linkId: 'L' }] }),

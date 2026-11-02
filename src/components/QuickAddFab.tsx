@@ -13,7 +13,7 @@ import type { Place } from '../navigation';
  * enregistrement (Actualiser, Abonnements, Dons, Fiches de paie), ou un mouvement n'a rien à
  * y faire (Comptes › Parents, Paramètres). Deux boutons « Ajouter » côte à côte laisseraient
  * deviner lequel ajoute quoi. Comptes › Mouvements le garde : c'est là qu'on voit les
- * mouvements, et le virement s'y fait dans son propre panneau.
+ * mouvements, et « Faire un virement » y ouvre la même feuille.
  */
 const HIDDEN_ON: ReadonlySet<string> = new Set(['update', 'settings', 'parents', 'subscriptions', 'payslips', 'donations']);
 

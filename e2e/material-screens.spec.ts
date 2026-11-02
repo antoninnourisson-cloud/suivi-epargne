@@ -44,10 +44,22 @@ test.describe('écrans Material 3 (démo)', () => {
       if (view === 'accounts') await page.getByLabel('Rechercher un mouvement').fill('a');
       expect.soft(await overflowOf(), view).toEqual({ scroll: 0, wide: [], scrollers: [] });
       // Les panneaux et choix d'un écran se mesurent aussi : chacun a son propre contenu.
-      const parts = view === 'transfers' ? ['Virement entre deux comptes', 'Échéances récurrentes'] : view === 'history' ? ['Charges fixes'] : [];
+      const parts = view === 'transfers' ? ['Échéances récurrentes'] : view === 'history' ? ['Charges fixes'] : [];
       for (const part of parts) {
         await page.locator('main').getByRole('button', { name: part, exact: true }).click();
         expect.soft(await overflowOf(), `${view} / ${part}`).toEqual({ scroll: 0, wide: [], scrollers: [] });
+      }
+      // Le formulaire de virement est dans la feuille « Ajouter un mouvement » : elle se mesure aussi.
+      if (view === 'transfers') {
+        await page.locator('main').getByRole('button', { name: 'Faire un virement', exact: true }).click();
+        const sheet = page.getByRole('dialog', { name: 'Ajouter un mouvement' });
+        await expect(sheet.getByLabel("Compte d'arrivée")).toBeVisible();
+        expect.soft(await sheet.evaluate(el => {
+          const wide = Array.from(el.querySelectorAll<HTMLElement>('*')).filter(c => c.getBoundingClientRect().right > window.innerWidth + 1);
+          return { scroll: el.scrollWidth - el.clientWidth, wide: wide.length };
+        }), 'transfers / Faire un virement').toEqual({ scroll: 0, wide: 0 });
+        await page.keyboard.press('Escape');
+        await expect(sheet).toHaveCount(0);
       }
     }
   });

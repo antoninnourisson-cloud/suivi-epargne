@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 // Ajout rapide : saisie protégée d'un toucher hors de la feuille, part des parents jamais
-// retirable, libellés proposés, bouton d'ajout selon l'écran (téléphone / ordinateur).
+// retirable ni virée, virement entre deux comptes, libellés proposés, bouton d'ajout selon l'écran (téléphone / ordinateur).
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { AccountType, type SavingsAccount } from '../types';
-import { QuickAddModal } from './QuickAddModal';
+import { QuickAddModal, type TransferRequest } from './QuickAddModal';
 import { QuickAddFab, QuickAddNavButton, showQuickAddFab } from './QuickAddFab';
 import { placeOf } from '../navigation';
 import { Modal } from './Modal';
@@ -79,7 +79,7 @@ describe('QuickAddModal', () => {
   it('un retrait ne peut pas entamer la part des parents', () => {
     const { onSubmit } = setup();
     fireEvent.click(screen.getByRole('button', { name: 'Retrait' }));
-    expect(screen.getByRole('group', { name: 'Sens du mouvement' })).toBeTruthy();
+    expect(screen.getByRole('group', { name: 'Type de mouvement' })).toBeTruthy();
     fireEvent.change(screen.getByLabelText('Montant'), { target: { value: '9000' } });
     expect(screen.getByRole('alert').textContent).toMatch(/la part de vos parents ne peut pas être retirée/);
     const add = screen.getByRole('button', { name: 'Ajouter' }) as HTMLButtonElement;
@@ -87,6 +87,65 @@ describe('QuickAddModal', () => {
     fireEvent.change(screen.getByLabelText('Montant'), { target: { value: '200' } });
     fireEvent.click(add);
     expect(onSubmit).toHaveBeenCalledWith('la', 200, 'OUT', 'Retrait', expect.any(String));
+  });
+});
+
+describe('QuickAddModal, virement', () => {
+  const setupTransfer = (props: Partial<React.ComponentProps<typeof QuickAddModal>> = {}) => {
+    const onClose = vi.fn();
+    const onSubmit = vi.fn();
+    const onTransfer = vi.fn<(r: TransferRequest) => string | null>(() => null);
+    render(<QuickAddModal open accounts={accounts} onClose={onClose} onSubmit={onSubmit} onTransfer={onTransfer} {...props} />);
+    return { onClose, onSubmit, onTransfer };
+  };
+
+  it('« Faire un virement » : la feuille s’ouvre sur Virement, compte d’arrivée à choisir (jamais le compte de départ)', () => {
+    setupTransfer({ initialKind: 'TRANSFER' });
+    expect(screen.getByRole('button', { name: 'Virement' }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.queryByLabelText('Libellé (facultatif)')).toBeNull();
+    const from = screen.getByLabelText('Compte de départ') as HTMLSelectElement;
+    const to = screen.getByLabelText("Compte d'arrivée") as HTMLSelectElement;
+    expect(from.value).toBe('la');
+    expect(to.value).toBe('');
+    expect((to.querySelector('option[value="la"]') as HTMLOptionElement).disabled).toBe(true);
+    const save = screen.getByRole('button', { name: 'Enregistrer le virement' }) as HTMLButtonElement;
+    expect(save.disabled).toBe(true);
+    expect(document.getElementById(save.getAttribute('aria-describedby') ?? '')?.textContent).toBe("Choisissez le compte d'arrivée pour pouvoir enregistrer.");
+    // Le compte de départ choisi comme arrivée : l'arrivée est à rechoisir.
+    fireEvent.change(to, { target: { value: 'ldds' } });
+    fireEvent.change(from, { target: { value: 'ldds' } });
+    expect(to.value).toBe('');
+  });
+
+  it('jamais au-delà de votre part ; enregistré : la feuille se ferme', () => {
+    const { onTransfer, onClose, onSubmit } = setupTransfer();
+    fireEvent.click(screen.getByRole('button', { name: 'Virement' }));
+    fireEvent.change(screen.getByLabelText("Compte d'arrivée"), { target: { value: 'ldds' } });
+    fireEvent.change(screen.getByLabelText('Montant'), { target: { value: '9000' } });
+    expect(screen.getByRole('alert').textContent).toMatch(/la part de vos parents ne peut pas être retirée/);
+    const save = screen.getByRole('button', { name: 'Enregistrer le virement' }) as HTMLButtonElement;
+    expect(save.disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText('Montant'), { target: { value: '500' } });
+    fireEvent.click(save);
+    expect(onTransfer).toHaveBeenCalledWith({ sourceId: 'la', destId: 'ldds', amount: 500, date: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/) });
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it('virement refusé par la commande : la raison est écrite, la feuille reste ouverte', () => {
+    const { onTransfer, onClose } = setupTransfer({ initialKind: 'TRANSFER' });
+    onTransfer.mockReturnValueOnce('Fonds insuffisants.');
+    fireEvent.change(screen.getByLabelText("Compte d'arrivée"), { target: { value: 'ldds' } });
+    fireEvent.change(screen.getByLabelText('Montant'), { target: { value: '10' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Enregistrer le virement' }));
+    expect(screen.getByRole('alert').textContent).toMatch(/Fonds insuffisants/);
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('un seul compte : pas de choix « Virement » (la feuille s’ouvre sur Dépôt)', () => {
+    setupTransfer({ accounts: [accounts[0]], initialKind: 'TRANSFER' });
+    expect(screen.queryByRole('button', { name: 'Virement' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Dépôt' }).getAttribute('aria-pressed')).toBe('true');
   });
 });
 

@@ -19,7 +19,7 @@ import { recommendPayDistribution } from '../lib/payDistribution';
 import { savingsMonthOfPay } from '../lib/payCalendar';
 import {
   type CommandError, type CommandOk, type CommandPatch, type CommandState,
-  saveAccount, deleteAccount, quickAdd, planMovementDeletion, deleteMovement, removeCancellingMovements,
+  saveAccount, deleteAccount, quickAdd, linkedTransfer, planMovementDeletion, deleteMovement, removeCancellingMovements,
   recordRestitution, undoRestitution, revertRateChange, renameMovement, toggleMovementAdjustment,
   importStatement, type StatementImportItem,
   recordPay, uncheckPayLine, updatePay, deletePay, type RecordPayInput, type UpdatePayInput,
@@ -71,6 +71,19 @@ export const useAccountActions = (doc: AppDoc, setters: Setters, addToast: AddTo
       commit,
       quickAdd: (accountId: string, amount: number, type: 'IN' | 'OUT', label: string, date: string) =>
         addMovement(accountId, amount, type, label, date),
+
+      /**
+       * Virement entre deux de vos comptes (bouton « Mouvement » › Virement) : part propre
+       * seulement, le capital des parents n'est pas mobilisable ; annulable des deux côtés.
+       * Renvoie le refus à afficher dans la feuille, `null` si le virement est enregistré.
+       */
+      transfer: ({ sourceId, destId, amount, date }: { sourceId: string; destId: string; amount: number; date: string }): string | null => {
+        const r = linkedTransfer(commandStateRef.current, { sourceId, destId, amount, date });
+        if (!r.ok) return r.code === 'not-found' ? "Le compte de départ ou d'arrivée est introuvable." : r.error;
+        commit(r.next);
+        toast({ message: r.message, kind: 'success', action: undoAction(r) });
+        return null;
+      },
 
       // --- PAIE (lib/commands/pay) ---
       /**
