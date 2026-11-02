@@ -15,6 +15,18 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '2026.11.02',
+    date: '2026-11-02',
+    title: 'Des menus plus simples',
+    items: [
+      "Moins de menus : la barre du bas garde Accueil, Actualiser, Comptes et Pilotage, et « Plus » ne propose plus que quatre entrées (Demander à Pécule, Analyses, Impôts, Paramètres). Le menu de l'ordinateur tient en six écrans, sans défiler.",
+      "Comptes, Pilotage, Analyses et Impôts s'ouvrent sur des onglets. Comptes : Soldes, Mouvements, Parents. Pilotage : Ce mois, Abonnements, Fiches de paie. Analyses : Évolution, Rendement, Agenda, Et si…. Impôts : Dons et déclaration, Calendrier fiscal. Chaque écran rouvre le dernier onglet regardé.",
+      "Le virement entre deux comptes se fait maintenant dans le bouton « Mouvement » : choisissez Virement, à côté de Dépôt et Retrait. L'écran Virements n'existe plus ; « Faire un virement » reste dans Comptes › Mouvements.",
+      "Où trouver quoi : le Journal et les Récurrents sont dans Comptes › Mouvements, la Part parentale dans Comptes › Parents, l'Historique dans Analyses › Évolution, l'Horloge fiscale dans Impôts › Calendrier fiscal.",
+      "Les anciens liens, notifications et raccourcis fonctionnent toujours : ils ouvrent directement le bon onglet.",
+    ],
+  },
+  {
     version: '2026.10.30-4',
     date: '2026-10-30',
     title: "« J'ai reçu ma paie »",

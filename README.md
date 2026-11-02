@@ -72,7 +72,7 @@ Pécule (anciennement *Suivi Épargne*) est une application web installable (PWA
 - **Projection** à 6 et 12 mois d'après le rythme réel des 90 derniers jours, avec une alerte si le rythme dérive.
 - Prélèvements des 7 prochains jours, évolution empilée par compte, répartition par établissement.
 - Pastille sur l'icône de l'app installée : nombre de choses à faire.
-- **Demander à Pécule** (Accueil, panneau « Plus » sur téléphone, menu latéral sur ordinateur) : questions en français sur ses propres chiffres (« Combien ai-je épargné ce trimestre ? »), suggestions, conversation à plusieurs tours. Gemini répond avec la clé de l'appareil (calculs confiés à son exécution de code, réinterrogé sans si le modèle la refuse) d'après un résumé compact et déterministe des données (`src/lib/askSnapshot.ts` : comptes, épargne sur 24 mois et totaux déjà calculés, soldes mensuels, 60 jours à venir, virements, abonnements, paie nette, intérêts, impôt, restitution ; ni e-mail, ni identifiant Drive, ni clé, ni texte libre ; taille plafonnée). Lecture seule ; conversation en mémoire seulement, effacée à la fermeture et à la déconnexion (le verrouillage la garde en mémoire, derrière le verrou).
+- **Demander à Pécule** (Accueil, feuille « Plus » sur téléphone, menu latéral sur ordinateur) : questions en français sur ses propres chiffres (« Combien ai-je épargné ce trimestre ? »), suggestions, conversation à plusieurs tours. Gemini répond avec la clé de l'appareil (calculs confiés à son exécution de code, réinterrogé sans si le modèle la refuse) d'après un résumé compact et déterministe des données (`src/lib/askSnapshot.ts` : comptes, épargne sur 24 mois et totaux déjà calculés, soldes mensuels, 60 jours à venir, virements, abonnements, paie nette, intérêts, impôt, restitution ; ni e-mail, ni identifiant Drive, ni clé, ni texte libre ; taille plafonnée). Lecture seule ; conversation en mémoire seulement, effacée à la fermeture et à la déconnexion (le verrouillage la garde en mémoire, derrière le verrou).
 
 ### Comptes et mouvements
 - **Part propre et capital des parents** distingués sur chaque compte. Le capital parental est intouchable, ses intérêts reviennent à l'utilisateur.
@@ -83,10 +83,11 @@ Pécule (anciennement *Suivi Épargne*) est une application web installable (PWA
 - **Mode discret** : bouton œil (en-tête et menu latéral) ou Paramètres › Affichage ; tous les montants formatés deviennent « •••• € » (réglage de l'appareil, coupé par défaut). Confort d'affichage seulement : pourcentages et courbes restent visibles, les données et ce qui part vers Drive ou Gemini ne changent pas.
 - **Routine du mois** (Accueil) : « Routine de novembre », trois étapes déduites des données (paie reçue et répartie : déclaration, virements et bilan, qui ouvre le rituel ; fiche de paie du mois ; soldes actualisés), repliée en une ligne une fois faite (`src/lib/monthRoutine.ts`).
 - **Étiquettes** libres (un projet : voyage, apport…), avec le total par étiquette.
-- **Journal des modifications** : mouvements, taux, restitution. Annulation, mouvements de test qui s'annulent repérés, marquage « Pas de l'épargne », « Repartir de zéro » à une date sans rien effacer.
+- **Navigation** (`src/navigation.ts`) : 7 écrans (Accueil, Actualiser, Comptes, Pilotage, Analyses, Impôts, Paramètres). Barre du bas : Accueil, Actualiser, Comptes, Pilotage, Plus ; « Plus » : Demander à Pécule, Analyses, Impôts, Paramètres ; menu latéral : Ajouter un mouvement, Demander à Pécule, six écrans, Paramètres, Déconnexion. Onglets : Comptes (Soldes, Mouvements, Parents ; Parents masqué en mode solo), Pilotage (Ce mois, Abonnements, Fiches de paie), Analyses (Évolution, Rendement, Agenda, Et si…), Impôts (Dons et déclaration, Calendrier fiscal). Chaque ancienne adresse (`?view=`) est un alias qui ouvre son onglet ; l'onglet mémorisé ne sert qu'aux gestes de menu.
+- **Journal des modifications** (Comptes › Mouvements) : mouvements, taux, restitution. Annulation, mouvements de test qui s'annulent repérés, marquage « Pas de l'épargne », « Repartir de zéro » à une date sans rien effacer.
 - **Recherche** dans tous les mouvements, étiquettes, virements internes liés, mouvements récurrents mensuels.
 - **Ajout rapide** : bouton flottant et raccourcis de l'icône installée (ajouter, actualiser, virements de paie).
-- **Virements** : onglets « Virement » (entre vos comptes, annulable) et « Récurrents » ; le bouton « Dépôt ou retrait » ouvre le même ajout rapide que le bouton flottant.
+- **Virements** : le virement entre vos comptes (annulable, refusé au-delà de votre part) se fait dans le bouton « Mouvement », choix Virement ; « Faire un virement » (Comptes › Mouvements) ouvre la même feuille, et les mouvements récurrents sont dans le même onglet.
 - **Taux des livrets datés** (date d'effet), mis à jour pour tous les livrets concernés d'un coup. **Conseil quinzaine** avant un retrait de livret.
 
 ### Paie et budget
@@ -111,12 +112,12 @@ Pécule (anciennement *Suivi Épargne*) est une application web installable (PWA
 - **Bons mois** : au moins 500 € mis de côté sur le mois d'épargne, de la paie reçue à la suivante (« Novembre : bon mois » ; seuil réglable, désactivable), série de bons mois et un joker par an.
 - **Jalons** (premier bon mois, épargne de précaution, livret plein, 10 000 €…), signalés une seule fois.
 - **Point de paie** (« Bilan d'octobre », en tête du rituel) à chaque paie : prévu et réalisé, compte par compte. **Contrôle des fiches de paie** : une fiche qui s'écarte nettement de la médiane des six précédentes est signalée.
-- **Simulateur « Et si… »** (Analyses) : un achat, une pause ou un autre montant d'épargne, projeté sur 1 à 5 ans avec une fourchette tirée de vos propres mois passés (votre rythme d'épargne, hors variations des marchés). Les intérêts des livrets réglementés s'ajoutent au solde chaque 31 décembre, comme à la banque (même règle pour le plan solo et la projection selon la répartition, `src/lib/yearlyInterest.ts`).
+- **Simulateur « Et si… »** (Analyses › Et si…) : un achat, une pause ou un autre montant d'épargne, projeté sur 1 à 5 ans avec une fourchette tirée de vos propres mois passés (votre rythme d'épargne, hors variations des marchés). Les intérêts des livrets réglementés s'ajoutent au solde chaque 31 décembre, comme à la banque (même règle pour le plan solo et la projection selon la répartition, `src/lib/yearlyInterest.ts`).
 
 ### Agenda, bilans et parents
-- **Agenda des douze mois** : paies, prélèvements, révisions de taux, rendez-vous fiscaux, maturités, fermeture du LEP, restitution.
-- **« Votre année »** (Historique) : l'année d'épargne racontée en quelques pages (mis de côté, intérêts, bons mois, meilleur mois, jalons, cap sur l'année suivante).
-- **Clôture de l'année** (Historique, proposée en janvier-février) : une liste ordonnée au lieu de rappels épars (soldes au 31 décembre, intérêts crédités, relevés des placements, restitution, « Votre année », déclaration, paramètres fiscaux de la nouvelle année, archive JSON + CSV), puis « Clôturer » pour arrêter les rappels.
+- **Agenda des douze mois** (Analyses › Agenda) : paies, prélèvements, révisions de taux, rendez-vous fiscaux, maturités, fermeture du LEP, restitution.
+- **« Votre année »** (Analyses › Évolution) : l'année d'épargne racontée en quelques pages (mis de côté, intérêts, bons mois, meilleur mois, jalons, cap sur l'année suivante).
+- **Clôture de l'année** (Analyses › Évolution, proposée en janvier-février) : une liste ordonnée au lieu de rappels épars (soldes au 31 décembre, intérêts crédités, relevés des placements, restitution, « Votre année », déclaration, paramètres fiscaux de la nouvelle année, archive JSON + CSV), puis « Clôturer » pour arrêter les rappels.
 - **Abonnements** : rappel avant prélèvement, revue annuelle (coût, hausses, date limite de résiliation).
 - **Restitution du capital parental** : date conseillée (le 1er janvier garde toute l'année d'intérêts), montants par compte, rappels, enregistrement en un clic et relevé exportable, puis **mode solo** et **plan solo 2027-2030**.
 
@@ -308,7 +309,7 @@ Avant chaque mise à jour visible, ajoute une entrée **en tête** de [`src/chan
 │   │   ├── ui/             composants Material : Card, StatTile, MoneyText, DataTable, Tabs…
 │   │   ├── charts/         cadre commun des graphiques (phrase de synthèse, « Voir les données »)
 │   │   ├── motivation/     bons mois, jalons, point de paie, réglages
-│   │   ├── pilot/          Pilotage : budget, remplissage des livrets, horloge fiscale…
+│   │   ├── pilot/          Pilotage : budget, remplissage des livrets…
 │   │   ├── simulator/      « Et si… » : éditeur de scénario, graphique
 │   │   ├── update/         Actualiser les soldes, une ligne par compte
 │   │   ├── year/           « Votre année » et clôture de l'année
