@@ -5,7 +5,7 @@
 // entre dans l'app : chargement Drive, import, restauration locale, synchronisation entre
 // onglets, et lecture par le serveur de notifications.
 // ================================================
-import { AccountType, AppDoc, ExpenseSnapshot, FiscalConfig, GlobalAppData, PayChecklist, PayRecord, PortfolioSnapshot, TaxBracket, YearClosingRecord } from '../types';
+import { AccountType, AppDoc, ExpenseSnapshot, FiscalConfig, GlobalAppData, PayBalance, PayBalanceSource, PayChecklist, PayRecord, PortfolioSnapshot, TaxBracket, YearClosingRecord } from '../types';
 import { DEFAULT_DECOTE, DEFAULT_FISCAL_CONFIG, DEFAULT_WORK_BENEFITS } from '../constants';
 import { normalizeAccounts, dedupeMonthlySnapshots, migrateFiscalConfig, computeMonthlyPay } from './finance';
 import { round2 } from './money';
@@ -226,6 +226,25 @@ const sanitizeDone = (v: unknown) =>
   (isObj(v) ? Object.fromEntries(Object.entries(v).filter(([, d]) => isObj(d))) : {}) as PayChecklist['done'];
 const sanitizeLines = (v: unknown) => arr<unknown>(v).filter(l => isObj(l) && typeof l.key === 'string') as unknown as PayRecord['lines'];
 
+const BALANCE_SOURCES: readonly PayBalanceSource[] = ['typed', 'known', 'estimated', 'unknown'];
+/**
+ * Solde du compte courant d'une paie : écarté si ce qui restait avant la paie est illisible ;
+ * un solde vu illisible est retiré, une source inconnue vaut « inconnu » (compté 0). Champs
+ * inconnus conservés.
+ */
+const sanitizePayBalance = (v: unknown): PayBalance | undefined => {
+  if (!isObj(v)) return undefined;
+  const before = finite(v.before);
+  if (before === undefined) return undefined;
+  const out: Record<string, unknown> = { ...v, before };
+  if (out.seen !== undefined) {
+    const seen = finite(out.seen);
+    if (seen === undefined) delete out.seen; else out.seen = seen;
+  }
+  if (!BALANCE_SOURCES.includes(out.source as PayBalanceSource)) out.source = 'unknown';
+  return out as unknown as PayBalance;
+};
+
 /**
  * Paies reçues remises d'aplomb : une paie sans identifiant ou sans date de réception lisible
  * est écartée (comme un mouvement illisible) ; un montant illisible vaut 0, un mois d'épargne
@@ -244,6 +263,10 @@ const sanitizePays = (v: unknown): PayRecord[] => arr<unknown>(v).flatMap(p => {
   if (out.kind !== undefined && out.kind !== 'extra') delete out.kind;
   for (const k of ['reviewedAt', 'payslipId'] as const) {
     if (out[k] !== undefined && typeof out[k] !== 'string') delete out[k];
+  }
+  if (out.balance !== undefined) {
+    const balance = sanitizePayBalance(out.balance);
+    if (balance) out.balance = balance; else delete out.balance;
   }
   out.lines = sanitizeLines(p.lines);
   out.done = sanitizeDone(p.done);
@@ -331,6 +354,8 @@ export const migrate = (raw: unknown): AppDoc => {
     const adj = sanitizePayAdjustment(config.payAdjustment);
     if (adj) config.payAdjustment = adj; else delete config.payAdjustment;
   }
+  // Compte où arrive la paie : un identifiant illisible est retiré (le seul compte courant sert).
+  if (config.payAccountId !== undefined && (typeof config.payAccountId !== 'string' || !config.payAccountId)) delete config.payAccountId;
   // Plafond épargne retraite de l'avis d'impôt : écarté s'il est illisible (redemandé).
   if (config.retirementCeiling !== undefined && !datedFigure(config.retirementCeiling, 'amount')) delete config.retirementCeiling;
   // Clôtures d'année : entrées illisibles écartées, champs inconnus conservés.

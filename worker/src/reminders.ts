@@ -12,7 +12,6 @@ import {
   computeMonthlySavingsCapacity,
   computePlacementStrategy,
   findDueSubscriptions,
-  computePayTransfers,
   payPeriodOf,
   activeSavingsSplit,
   computeMonthSavedAmount,
@@ -36,7 +35,7 @@ import { isReminderEnabled } from '../../src/lib/notificationPrefs';
 import { computeMonthTarget } from '../../src/lib/payAdjustment';
 import { isPayReviewDone, liveDone } from '../../src/lib/payRecords';
 import { savingsMonthOfPay, validPayday } from '../../src/lib/payCalendar';
-import { recommendPayDistribution } from '../../src/lib/payDistribution';
+import { payBalanceBefore, recommendPayDistribution, usualPayDistribution } from '../../src/lib/payDistribution';
 import { buildTaxReturnReminder } from '../../src/lib/taxReturn';
 import type { PushMessage } from './webpush';
 
@@ -205,12 +204,8 @@ export const computeReminders = (data: GlobalAppData, today: CivilDate | Date, a
       payPeriod.key !== savingsMonth ? { legacyKeys: [`${prefix}:${payPeriod.key}`] } : {};
     const pay = (data.pays ?? []).find(p => p.kind !== 'extra' && savingsMonthOfPay(p) === savingsMonth);
     const daysSincePay = todayN - dayNumberOfLocal(payPeriod.payDate);
-    const transfers = () => computePayTransfers({
-      expenses: data.expenses || [],
-      subscriptions: data.subscriptions,
-      leisureBudget: data.config.leisureBudget ?? 0,
-      projectSavings: data.config.projectSavings ?? 0,
-    });
+    // Virements du plan de la paie habituelle (règle de la paie : plaisir = ce qui reste).
+    const transfers = () => usualPayDistribution(data, now).transfers;
     // Estimation du Pilotage tant que la paie n'est pas déclarée (même objectif que l'Accueil).
     const estimate = () => {
       const amount = computeMonthTarget(data, now).total;
@@ -260,9 +255,10 @@ export const computeReminders = (data: GlobalAppData, today: CivilDate | Date, a
         // Plan figé de la paie, sinon celui que la carte « Ma paie » affiche pour le montant reçu.
         const lines = pay.lines.length > 0
           ? pay.lines
-          : recommendPayDistribution(data, { amount: pay.amount, bonus: pay.bonus, toSave: pay.toSave, receivedOn: pay.receivedOn }).lines;
+          : recommendPayDistribution(data, { amount: pay.amount, bonus: pay.bonus, toSave: pay.toSave, before: payBalanceBefore(pay), receivedOn: pay.receivedOn }).lines;
         const done = liveDone(pay.done, accounts);
-        const pending = lines.filter(l => !done[l.key]);
+        // Le plaisir reste sur le compte courant : rien à virer, jamais compté.
+        const pending = lines.filter(l => !done[l.key] && l.key !== 't:leisure');
         if (pending.length > 0) {
           out.push({
             key: `payday-followup:${savingsMonth}`,

@@ -4,9 +4,8 @@ import { SavingsAccount, Expense, AccountType, FiscalConfig, WorkBenefits, Paysl
 import { PayChecklist } from './PayChecklist';
 import { SavingsSplitEditor } from './SavingsSplitEditor';
 import { computeIncome, computePlacementStrategy, payslipSuperNet, subscriptionsAsExpenses, computePayTransfers, computeRecentSavingsRate, activeSavingsSplit } from '../lib/finance';
-import { combineMonthTarget } from '../lib/payAdjustment';
 import { openPay } from '../lib/payRecords';
-import { recommendPayDistribution } from '../lib/payDistribution';
+import { allocatePay, allocationSentence, payBalanceBefore, recommendPayDistribution } from '../lib/payDistribution';
 import type { PayRitualProps } from './pilot/PayReceivedSheet';
 import type { PayCalendarData } from '../lib/payCalendar';
 import { parseFrenchNumber, safeNumber } from '../lib/numbers';
@@ -16,13 +15,12 @@ import { Calculator, Receipt, Info, Plus, Trash2, Coins, FileCheck2, Wand2, Bell
 import { elideDe, formatEUR, formatPeriod, formatRate } from '../lib/format';
 import { useUndoableRemove } from './Toast';
 import { focusAfterRemoval } from './focusAfterRemoval';
-import { buildWaterfall, heroContext, AmountSource } from '../lib/pilotView';
+import { howItsComputed, planSentence, payRuleSentence } from '../lib/pilotView';
 import { Button, IconButton, MoneyText, PageHeader, TextField, fieldClass } from './ui';
 import { Disclosure } from './pilot/Disclosure';
 import { BudgetWaterfall } from './pilot/BudgetWaterfall';
 import { BookletFill } from './pilot/BookletFill';
 import { SurvivalCard } from './pilot/SurvivalCard';
-
 
 /**
  * Réglages du Pilotage, enregistrés dans le fichier de données (config). Un réglage de plus
@@ -30,7 +28,7 @@ import { SurvivalCard } from './pilot/SurvivalCard';
  */
 export type PilotConfig = Pick<AppDoc['config'],
   'grossAnnual' | 'leisureBudget' | 'projectSavings' | 'taxRateManual' | 'extraMonthlyIncome'
-  | 'paydayDay' | 'paydayAmount' | 'savingsSplit' | 'savingsSplitFrom'>;
+  | 'paydayDay' | 'paydayAmount' | 'payAccountId' | 'savingsSplit' | 'savingsSplitFrom'>;
 
 interface AssistantPilotProps {
   accounts: SavingsAccount[];
@@ -201,18 +199,22 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
     const manualFixed = expenses.reduce((sum, e) => sum + e.amount, 0);
     const subscriptionsFixed = subscriptionCharges.reduce((sum, e) => sum + e.amount, 0);
     const totalFixed = manualFixed + subscriptionsFixed;
-    const theoreticalCapacity = effectiveSuperNetForCalc - totalFixed - leisureBudget - projectSavings;
-    // Estimation avant la paie : montant du rappel de paie (même chiffre que la notification
-    // et l'agenda), sinon calcul. Même règle que la jauge de l'Accueil et la relance de paie
-    // (lib/payAdjustment) ; une fois la paie déclarée, la carte « Ma paie » suit le montant reçu.
-    const target = combineMonthTarget({ computed: theoreticalCapacity, paydayAmount });
-    const source: AmountSource = target.source;
-    return { manualFixed, totalFixed, subscriptionsFixed, theoreticalCapacity, finalCapacity: target.capacity, totalToInvest: target.total, source };
-  }, [effectiveSuperNetForCalc, expenses, subscriptionCharges, leisureBudget, projectSavings, paydayAmount]);
+    // Estimation avant la paie : la règle de la paie (lib/payDistribution) appliquée à la paie
+    // habituelle, sans reste du mois dernier ; montant fixe d'épargne compris. Même règle que
+    // la jauge de l'Accueil et la relance de paie (lib/payAdjustment) ; une fois la paie
+    // déclarée, la carte « Ma paie » suit le montant reçu.
+    const fixedTransfers = computePayTransfers({ expenses, subscriptions, leisureBudget: 0, projectSavings: 0 });
+    const allocation = allocatePay({
+      received: effectiveSuperNetForCalc, expectedPay: effectiveSuperNetForCalc,
+      fixed: fixedTransfers.reduce((sum, t) => sum + t.amount, 0),
+      projects: projectSavings, startBalance: leisureBudget, fixedSavings: paydayAmount,
+    });
+    return { manualFixed, totalFixed, subscriptionsFixed, allocation, theoreticalCapacity: allocation.computedTarget, totalToInvest: allocation.savings };
+  }, [effectiveSuperNetForCalc, expenses, subscriptions, subscriptionCharges, leisureBudget, projectSavings, paydayAmount]);
 
   const payTransfers = useMemo(
-    () => computePayTransfers({ expenses, subscriptions, leisureBudget, projectSavings }),
-    [expenses, subscriptions, leisureBudget, projectSavings]
+    () => computePayTransfers({ expenses, subscriptions, leisureBudget: Math.max(0, budgetData.allocation.leisure), projectSavings: budgetData.allocation.projects }),
+    [expenses, subscriptions, budgetData.allocation]
   );
 
   const strategy = useMemo(
@@ -275,30 +277,12 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
   const payLabel = display.isReal
     ? (effectiveSuperNet === undefined ? 'Paie nette après impôt (estimation)' : 'Net réel perçu (fiche de paie)')
     : 'Paie nette après impôt';
-  const waterfall = useMemo(() => buildWaterfall({
-    pay: effectiveSuperNetForCalc,
-    payLabel,
-    manualFixed: budgetData.manualFixed,
-    subscriptionsFixed: budgetData.subscriptionsFixed,
-    leisureBudget,
-    projectSavings,
-    theoreticalCapacity: budgetData.theoreticalCapacity,
-    source: budgetData.source,
-    retained: budgetData.finalCapacity,
-    externalSavings: 0,
-    totalToInvest: budgetData.totalToInvest,
-  }), [effectiveSuperNetForCalc, payLabel, budgetData, leisureBudget, projectSavings]);
-  const heroSentence = heroContext({
-    pay: effectiveSuperNetForCalc,
-    source: budgetData.source,
-    theoreticalCapacity: budgetData.theoreticalCapacity,
-    externalSavings: 0,
-    totalToInvest: budgetData.totalToInvest,
-    finalCapacity: budgetData.finalCapacity,
-  });
-  const shortfall = Math.max(0, -budgetData.finalCapacity, -budgetData.theoreticalCapacity, paydayAmount !== undefined ? paydayAmount - Math.max(0, budgetData.theoreticalCapacity) : 0);
+  const waterfall = useMemo(() => howItsComputed(budgetData.allocation, payLabel), [budgetData.allocation, payLabel]);
+  const heroSentence = [planSentence(budgetData.allocation), allocationSentence(budgetData.allocation)].filter(Boolean).join(' ');
+  const shortfall = budgetData.allocation.missingFixed;
   const customSplit = activeSavingsSplit({ savingsSplit, savingsSplitFrom }) !== undefined;
-  const plannedSpending = budgetData.totalFixed + leisureBudget + projectSavings;
+  // Ce qui ne part pas en épargne (virements fixes, projets, plaisir) : paie − dépenses = à placer.
+  const plannedSpending = budgetData.allocation.fixed + budgetData.allocation.projects + Math.max(0, budgetData.allocation.leisure);
   // Même précision pour les trois montants de l'en-tête, pour que « paie − dépenses = à placer »
   // tombe juste de tête : à l'euro si tout est rond, sinon au centime partout.
   const heroDecimals = [effectiveSuperNetForCalc, plannedSpending, budgetData.totalToInvest]
@@ -310,7 +294,7 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
   const declaredPay = payRitual ? openPay(payRitual.doc).pay : undefined;
   const received = useMemo(
     () => (declaredPay && payRitual ? recommendPayDistribution(payRitual.doc, {
-      amount: declaredPay.amount, bonus: declaredPay.bonus, toSave: declaredPay.toSave, kind: declaredPay.kind, receivedOn: declaredPay.receivedOn,
+      amount: declaredPay.amount, bonus: declaredPay.bonus, toSave: declaredPay.toSave, kind: declaredPay.kind, before: payBalanceBefore(declaredPay), receivedOn: declaredPay.receivedOn,
     }) : undefined),
     [declaredPay, payRitual]);
 
@@ -347,9 +331,10 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
         ritual={payRitual}
       />
 
-      {/* b. D'où vient ce chiffre (l'estimation). */}
-      <Disclosure title="D'où vient ce chiffre" icon={Sigma} summary={<MoneyText value={budgetData.totalToInvest} />}>
+      {/* b. Comment c'est calculé (l'estimation) et la règle des coupes. */}
+      <Disclosure title="Comment c'est calculé" icon={Sigma} summary={<MoneyText value={budgetData.totalToInvest} />}>
         <BudgetWaterfall rows={waterfall} />
+        <p className="mt-3 text-sm text-on-surface-variant">{payRuleSentence(budgetData.allocation)}</p>
         <p className="mt-3 text-xs text-on-surface-variant">Le détail de votre salaire (brut, charges, impôt) et tous les montants se règlent dans « Mes paramètres », plus bas.</p>
       </Disclosure>
 

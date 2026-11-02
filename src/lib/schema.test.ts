@@ -203,3 +203,28 @@ describe('migrate : fichier abîmé', () => {
     }
   });
 });
+
+describe('migrate : compte courant de la paie (refonte du Pilotage)', () => {
+  const pay = (over: Record<string, unknown>) => ({ id: 'pay-2026-11', receivedOn: '2026-10-27', savingsMonth: '2026-11', amount: 2000, lines: [], done: {}, ...over });
+
+  it('garde un solde lisible, champs inconnus compris ; une ancienne paie sans solde reste telle quelle', () => {
+    const ok = { before: 30, seen: 2030, source: 'typed', note: 'banque' };
+    expect(migrate({ pays: [pay({ balance: ok })] }).pays![0].balance).toEqual(ok);
+    expect(migrate({ pays: [pay({ balance: { before: -50, source: 'estimated' } })] }).pays![0].balance).toEqual({ before: -50, source: 'estimated' });
+    expect('balance' in migrate({ pays: [pay({})] }).pays![0]).toBe(false);
+  });
+
+  it('écarte un solde illisible, retire un solde vu illisible, une source inconnue vaut « inconnu »', () => {
+    expect('balance' in migrate({ pays: [pay({ balance: { before: 'beaucoup', source: 'typed' } })] }).pays![0]).toBe(false);
+    expect('balance' in migrate({ pays: [pay({ balance: 30 })] }).pays![0]).toBe(false);
+    expect(migrate({ pays: [pay({ balance: { before: 30, seen: Number.NaN, source: 'typed' } })] }).pays![0].balance).toEqual({ before: 30, source: 'typed' });
+    expect(migrate({ pays: [pay({ balance: { before: 30, source: 'deviné' } })] }).pays![0].balance).toEqual({ before: 30, source: 'unknown' });
+  });
+
+  it('garde le compte où arrive la paie s\'il est lisible ; le solde de départ garde la clé leisureBudget', () => {
+    expect(migrate({ config: { payAccountId: 'cc' } }).config.payAccountId).toBe('cc');
+    expect('payAccountId' in migrate({ config: { payAccountId: '' } }).config).toBe(false);
+    expect('payAccountId' in migrate({ config: { payAccountId: 42 } }).config).toBe(false);
+    expect(migrate({ config: { leisureBudget: 400 } }).config.leisureBudget).toBe(400);
+  });
+});

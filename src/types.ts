@@ -213,15 +213,28 @@ export interface PayRecord {
   amount: number;            // net reçu, prime comprise
   bonus?: number;            // dont prime ou exceptionnel (placé en entier par défaut)
   kind?: 'extra';            // versement en plus : s'ajoute au mois en cours, n'en ouvre pas
-  toSave?: number;           // « À placer sur cette paie » forcé (ex-PayAdjustment.capacity)
+  toSave?: number;           // ancien « À placer sur cette paie » forcé, hors prime (ex-PayAdjustment.capacity) : lu, plus écrit
+  // Compte courant au moment de la paie : `before` = ce qui restait avant la paie (négatif :
+  // découvert), compté dans la répartition ; `seen` = solde lu, paie comprise. Absent (paies
+  // plus anciennes) : 0, la répartition reste celle d'avant.
+  balance?: PayBalance;
   lines: PayChecklistLine[]; // répartition conseillée, figée (vide : pas encore figée)
   done: PayChecklist['done']; // ce qui a été fait, lignes ajoutées comprises
   reviewedAt?: string;       // 'YYYY-MM-DD' : bilan du mois d'épargne validé
   payslipId?: string;        // fiche de paie liée, si importée
 }
 
+// D'où vient le solde : saisi, solde connu de Pécule, estimation (solde connu + paie), ou
+// inconnu (« Je ne sais pas » : compté 0).
+export type PayBalanceSource = 'typed' | 'known' | 'estimated' | 'unknown';
+export interface PayBalance {
+  seen?: number;
+  before: number;
+  source: PayBalanceSource;
+}
+
 // Ancien format (schéma v2), converti en PayRecord par migrate() puis retiré : réglages de
-// la paie en cours. Reste la forme combinée par le Pilotage (lib/payAdjustment, combineMonthTarget).
+// la paie en cours. Lu seulement par migrate() (lib/payAdjustment, sanitizePayAdjustment).
 export interface PayAdjustment {
   period: string;           // 'YYYY-MM' : mois de la paie concernée (payPeriodOf)
   capacity?: number;        // « Capacité d'épargne du mois » saisie (remplace le calcul)
@@ -355,6 +368,8 @@ export interface GlobalAppData {
   workBenefits?: WorkBenefits;
   config: {
     grossAnnual: number;
+    // « Solde de départ du mois » : ce que le compte courant doit avoir juste après la paie
+    // (l'argent plaisir du mois ; ancien « budget argent plaisir », même clé, même montant).
     leisureBudget: number;
     projectSavings: number;
     taxRateManual: number;
@@ -366,8 +381,10 @@ export interface GlobalAppData {
     pickerApiKey?: string;
     // Rappel push le jour de paie avec le plan de placement du Pilotage. Absent = désactivé.
     paydayDay?: number; // 1-31 (ramené au dernier jour des mois plus courts)
-    // Montant à placer chaque mois. Absent = capacité d'épargne calculée par le Pilotage.
+    // Épargne visée par paie, montant fixe. Absent = calculée par le Pilotage (lib/payDistribution).
     paydayAmount?: number;
+    // Compte courant où arrive la paie (SavingsAccount.id). Absent = le seul compte courant.
+    payAccountId?: string;
     // Répartition personnalisée de l'épargne (ex. 50 % Livret A, 50 % Assurance Vie) au
     // lieu du plan automatique « meilleur taux d'abord ». Facultative.
     savingsSplit?: { accountId: string; pct: number }[];

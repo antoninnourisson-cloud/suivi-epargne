@@ -68,7 +68,9 @@ describe('buildAgenda', () => {
     const payDay = new Date(2026, 9, 27, 9); // 27 octobre 2026, jour de paie
     // Prime versée à part le 20 octobre, rangée dans l'épargne de novembre : elle s'ajoute.
     const extra = { id: 'pay-2026-11', receivedOn: '2026-10-20', savingsMonth: '2026-11', amount: 300, kind: 'extra' as const, lines: [], done: {} };
-    const data = base({ config: { ...base().config, paydayDay: 27, paydayAmount: 1000 }, pays: [extra] });
+    // Paie habituelle de 1 000 € (fiche de référence) : de quoi placer les 1 000 € fixés.
+    const salary = { payslips: [{ id: 'ref', fileId: 'f', fileName: 'fiche.pdf', addedAt: '2026-01-01', reviewed: true, extracted: { netPaid: 1000 } }], activePayslipId: 'ref' } as Partial<GlobalAppData>;
+    const data = base({ ...salary, config: { ...base().config, paydayDay: 27, paydayAmount: 1000 }, pays: [extra] });
     const paydays = buildAgenda(data, payDay).events.filter(e => e.kind === 'payday');
     expect(paydays.map(e => [e.date, e.title, e.amount])).toEqual([
       ['2026-10-27', 'Paie attendue · épargne de novembre', 1300],
@@ -76,7 +78,7 @@ describe('buildAgenda', () => {
       ['2026-12-27', 'Paie attendue · épargne de janvier', 1000],
     ]);
     // Avant la paie, le versement en plus du mois d'épargne suivant ne s'applique pas encore.
-    expect(buildAgenda(base({ config: data.config, pays: [{ ...extra, receivedOn: '2026-10-28', savingsMonth: '2026-12' }] }), NOW).events.find(e => e.kind === 'payday'))
+    expect(buildAgenda(base({ ...salary, config: data.config, pays: [{ ...extra, receivedOn: '2026-10-28', savingsMonth: '2026-12' }] }), NOW).events.find(e => e.kind === 'payday'))
       .toMatchObject({ date: '2026-10-27', amount: 1000 });
   });
 

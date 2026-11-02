@@ -48,7 +48,7 @@ interface PayChecklistProps {
   steps: PlacementStep[];
   /** À placer : estimation, ou répartition conseillée pour la paie reçue. */
   totalToInvest: number;
-  shortfall: number; // > 0 : les virements dépassent la paie
+  shortfall: number; // > 0 : la paie ne couvre pas les virements fixes
   checklist?: PayChecklistData;
   // Coche une ligne (commande recordPay : la paie du mois d'épargne, créée au besoin, fige
   // `lines` et enregistre le versement d'une ligne d'épargne) ; false si c'est refusé.
@@ -295,7 +295,7 @@ export const PayChecklist: React.FC<PayChecklistProps> = ({
       )}
 
       {shortfall > 0 && (
-        <p role="status" className="mt-4 text-sm font-medium text-error flex items-center gap-2"><Info className="w-4 h-4 shrink-0" aria-hidden="true" /> Il manque {formatEUR(shortfall)} : les virements et l'épargne prévus dépassent la paie.</p>
+        <p role="status" className="mt-4 text-sm font-medium text-error flex items-center gap-2"><Info className="w-4 h-4 shrink-0" aria-hidden="true" /> Il manque {formatEUR(shortfall)} pour les virements fixes : à prendre sur votre épargne disponible.</p>
       )}
       {frozen && doneCount === 0 && (
         <Button variant="text" onClick={onReset} className="mt-4 -ml-3 max-sm:h-12">

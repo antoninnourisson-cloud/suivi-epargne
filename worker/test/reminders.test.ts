@@ -10,6 +10,12 @@ const base = (over: Partial<GlobalAppData> = {}): GlobalAppData => ({
   ...over,
 });
 const APP = 'https://example.github.io/app/';
+// Paie habituelle connue (fiche de paie de référence) : la règle de la paie ne place que ce
+// que la paie permet. Chaque jeu de test qui fixe un montant d'épargne a la paie qui le couvre.
+const salary = (netPaid: number): Partial<GlobalAppData> => ({
+  payslips: [{ id: 'ref', fileId: 'f', fileName: 'fiche.pdf', addedAt: '2026-01-01', reviewed: true, extracted: { netPaid } }] as GlobalAppData['payslips'],
+  activePayslipId: 'ref',
+});
 
 describe('computeReminders', () => {
   const livret = {
@@ -67,6 +73,7 @@ describe('computeReminders', () => {
     const lep = { ...livret, id: 'lep', name: 'LEP', type: AccountType.LEP, totalAmount: 9600, ownedAmount: 9600, interestRate: 3.5 };
     const livA = { ...livret, totalAmount: 1000, ownedAmount: 1000, interestRate: 2.4 };
     const withPayday = (paydayDay: number, paydayAmount?: number) => base({
+      ...(paydayAmount !== undefined ? salary(paydayAmount) : {}),
       accounts: [lep, livA],
       config: { ...base().config, paydayDay, paydayAmount },
     });
@@ -152,6 +159,7 @@ describe('computeReminders', () => {
 
     it('détaille toute la paie dans le rappel du jour de paie', () => {
       const data = base({
+        ...salary(900 + 11 + 200 + 750 + 500),
         accounts: [livret],
         expenses: [{ id: 'e', name: 'Revolut commun', amount: 900 }],
         subscriptions: [{ id: 's', name: 'Spotify', amount: 11, debitAccount: 'Revolut perso', frequency: 'monthly', anchorDate: '2026-01-10', active: true }],
@@ -174,6 +182,7 @@ describe('computeReminders', () => {
       ],
     };
     const data = (config: Partial<GlobalAppData['config']> = {}) => base({
+      ...salary(650),
       accounts: [acc],
       config: { ...base().config, paydayDay: 27, paydayAmount: 650, ...config },
     });
@@ -324,6 +333,7 @@ describe('computeReminders', () => {
 
   describe('relance de la paie (J+3)', () => {
     const data = (done?: Record<string, { amount: number; movementId?: string }>) => base({
+      ...salary(1400),
       accounts: [livret],
       expenses: [{ id: 'e', name: 'Revolut commun', amount: 900 }],
       config: { ...base().config, paydayDay: 27, paydayAmount: 500 },
@@ -495,7 +505,7 @@ describe('fuseau Europe/Paris', () => {
 
   it('la fenêtre de paie suit le jour parisien', () => {
     const lep = { ...livret, id: 'lep', name: 'LEP', type: AccountType.LEP, totalAmount: 9600, ownedAmount: 9600, interestRate: 3.5 };
-    const data = base({ accounts: [lep], config: { ...base().config, paydayDay: 1, paydayAmount: 100 } });
+    const data = base({ ...salary(100), accounts: [lep], config: { ...base().config, paydayDay: 1, paydayAmount: 100 } });
     const keys = (d: Date) => computeReminders(data, d, APP).map(r => r.key);
     expect(keys(new Date('2026-09-30T22:30:00Z'))).toContain('payday:2026-10');
     expect(keys(new Date('2026-09-30T21:30:00Z'))).not.toContain('payday:2026-10');

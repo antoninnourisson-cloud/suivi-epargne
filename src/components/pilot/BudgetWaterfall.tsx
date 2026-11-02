@@ -1,4 +1,4 @@
-// « D'où vient ce chiffre » : de la paie au montant à placer, ligne par ligne. Chaque
+// « Comment c'est calculé » : de la paie à l'épargne, ligne par ligne. Chaque
 // montant porte son signe écrit (− / +), la couleur ne sert que d'appui.
 import React from 'react';
 import { WaterfallRow } from '../../lib/pilotView';

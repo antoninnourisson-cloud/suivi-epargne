@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { combineMonthTarget, computeMonthTarget, sanitizePayAdjustment } from './payAdjustment';
+import { computeMonthTarget, sanitizePayAdjustment } from './payAdjustment';
 import { openPay } from './payRecords';
 import { emptyData, migrate } from './schema';
 import { computeMonthlyPay, computeMonthlySavingsCapacity } from './finance';
@@ -33,19 +33,6 @@ describe('réglages de la paie en cours migrés', () => {
   });
 });
 
-describe('combineMonthTarget', () => {
-  it('capacité saisie > montant du rappel de paie > calcul, plus la somme en plus', () => {
-    expect(combineMonthTarget({ computed: 773.34 })).toEqual({ computed: 773.34, capacity: 773.34, extra: 0, total: 773.34, source: 'calc' });
-    expect(combineMonthTarget({ computed: 773.34, paydayAmount: 800 })).toMatchObject({ capacity: 800, total: 800, source: 'payday' });
-    expect(combineMonthTarget({ computed: 773.34, paydayAmount: 800, adjustment: { period: '2026-09', capacity: 600 } })).toMatchObject({ capacity: 600, total: 600, source: 'manual' });
-    expect(combineMonthTarget({ computed: 773.34, adjustment: { period: '2026-09', extra: 500 } })).toMatchObject({ capacity: 773.34, extra: 500, total: 1273.34, source: 'calc' });
-  });
-
-  it("n'est jamais négatif", () => {
-    expect(combineMonthTarget({ computed: -200, adjustment: { period: '2026-09', extra: 50 } }).total).toBe(0);
-  });
-});
-
 describe('computeMonthTarget', () => {
   // Paie déclarée dans le rituel : l'objectif suit le montant REÇU (lib/payDistribution).
   it('paie déclarée : à placer selon le montant reçu, prime et versements en plus du mois compris', () => {
@@ -59,8 +46,15 @@ describe('computeMonthTarget', () => {
     // Reçu = estimé : même objectif qu'avant la déclaration.
     expect(computeMonthTarget(received({}), OCT_28)).toMatchObject({ source: 'calc' });
     expect(computeMonthTarget(received({}), OCT_28).total).toBeCloseTo(Math.max(0, computed), 2);
-    // 100 € de moins : l'épargne baisse d'autant ; une prime de 300 € s'ajoute en entier.
-    expect(computeMonthTarget(received({ amount: pay - 100 }), OCT_28).total).toBeCloseTo(Math.max(0, computed - 100), 2);
+    // 100 € de moins : le plaisir (300 €, minimum 200 €) absorbe, l'épargne tient ; 300 € de
+    // moins : plaisir au minimum, projets (200 €) coupés ; 400 € de moins : l'épargne baisse
+    // de 100 €. Une prime de 300 € s'ajoute en entier.
+    expect(computeMonthTarget(received({ amount: pay - 100 }), OCT_28).total).toBeCloseTo(Math.max(0, computed), 2);
+    expect(computeMonthTarget(received({ amount: pay - 300 }), OCT_28).total).toBeCloseTo(Math.max(0, computed), 2);
+    expect(computeMonthTarget(received({ amount: pay - 400 }), OCT_28).total).toBeCloseTo(Math.max(0, computed - 100), 2);
+    // Reste du compte courant noté avec la paie : il rejoint l'épargne ; « Je ne sais pas » : 0.
+    expect(computeMonthTarget(received({ balance: { before: 40, seen: pay + 40, source: 'typed' } }), OCT_28).total).toBeCloseTo(Math.max(0, computed) + 40, 2);
+    expect(computeMonthTarget(received({ balance: { before: 40, source: 'unknown' } }), OCT_28).total).toBeCloseTo(Math.max(0, computed), 2);
     expect(computeMonthTarget(received({ amount: pay + 300, bonus: 300 }), OCT_28)).toMatchObject({ extra: 300 });
     // « À placer sur cette paie » saisi : il remplace le calcul.
     expect(computeMonthTarget(received({ toSave: 640 }), OCT_28)).toMatchObject({ capacity: 640, total: 640, source: 'manual' });
@@ -83,6 +77,10 @@ describe('computeMonthTarget', () => {
   it('le montant du rappel de paie reste la base quand rien n’est saisi pour cette paie', () => {
     const data = withConfig({ paydayDay: 27, paydayAmount: 650, payAdjustment: { period: '2026-08', capacity: 100 } });
     expect(computeMonthTarget(data, OCT_19)).toMatchObject({ capacity: 650, extra: 0, total: 650, source: 'payday' });
+    // Sans paie déclarée : le plan de la paie habituelle, avec ce montant fixe.
+    expect(computeMonthTarget(withConfig({ paydayDay: 27, paydayAmount: 650 }), OCT_19)).toMatchObject({ total: 650, source: 'payday' });
+    expect(computeMonthTarget(withConfig({ paydayDay: 27 }), OCT_19)).toMatchObject({ source: 'calc' });
+    expect(computeMonthTarget(withConfig({ paydayDay: 27 }), OCT_19).computed).toBeCloseTo(computeMonthlySavingsCapacity(withConfig({ paydayDay: 27 })), 2);
   });
 });
 

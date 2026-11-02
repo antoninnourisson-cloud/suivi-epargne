@@ -15,7 +15,7 @@ import { localTodayISO, parseISODate } from '../lib/dates';
 import { elideDe, formatMonth, plainEUR } from '../lib/format';
 import { computeMonthlyPay } from '../lib/finance';
 import { liveDone, openPay, payForPayslipPeriod, payMovements, payslipPeriodOf, withPayReviewed } from '../lib/payRecords';
-import { recommendPayDistribution } from '../lib/payDistribution';
+import { payBalanceBefore, recommendPayDistribution } from '../lib/payDistribution';
 import { savingsMonthOfPay } from '../lib/payCalendar';
 import {
   type CommandError, type CommandOk, type CommandPatch, type CommandState,
@@ -194,7 +194,7 @@ export const useAccountActions = (doc: AppDoc, setters: Setters, addToast: AddTo
             if (!current) return;
             // Plan pas encore figé : il suit le nouveau montant (updatePay ne le remplace que si rien n'est fait).
             const lines = current.lines.length > 0
-              ? recommendPayDistribution(docRef.current, { amount: net, bonus: current.bonus, toSave: current.toSave, kind: current.kind, receivedOn: current.receivedOn }).lines
+              ? recommendPayDistribution(docRef.current, { amount: net, bonus: current.bonus, toSave: current.toSave, kind: current.kind, before: payBalanceBefore(current), receivedOn: current.receivedOn }).lines
               : undefined;
             const r = updatePay(commandStateRef.current, { payId: pay.id, amount: net, ...(lines ? { lines } : {}) });
             if (!r.ok) { showCommandError(r); return; }

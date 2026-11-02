@@ -19,7 +19,7 @@ import { ArrowLeft, ArrowRightLeft, CalendarDays, CheckCheck, FileText, Info, Ke
 import { AccountType, type GlobalAppData, type PayChecklistLine, type PayslipRecord } from '../../types';
 import type { RecordPayInput } from '../../lib/commands';
 import { computeMonthlyPay, computeMonthlySavingsCapacity } from '../../lib/finance';
-import { recommendPayDistribution, payGapSentence } from '../../lib/payDistribution';
+import { recommendPayDistribution, allocationSentence } from '../../lib/payDistribution';
 import { savingsMonthOf, shiftMonth } from '../../lib/payCalendar';
 import { isPayReviewDone, liveDone, payslipForMonth, payslipPeriodOf, suggestedPayKind } from '../../lib/payRecords';
 import { computeGoodMonths, computePayReview, motivationSettings } from '../../lib/motivation';
@@ -153,7 +153,7 @@ export const PayReceivedSheet: React.FC<SheetProps> = ({ doc, geminiApiKey, pick
   const rowOf = (l: PayChecklistLine): RowState => rows[l.key] ?? { checked: false, amount: toInputAmount(l.amount), accountId: l.accountId, already: false };
   const patchRow = (l: PayChecklistLine, patch: Partial<RowState>) => setRows(r => ({ ...r, [l.key]: { ...rowOf(l), ...patch } }));
   const suggestions = frozen ? [] : dist.steps.filter(st => st.alert && st.hint);
-  const gapSentence = frozen ? undefined : payGapSentence(dist, { toSave, kind });
+  const gapSentence = frozen ? undefined : allocationSentence(dist.allocation);
 
   // « À placer » saisi : il remplace le calcul (prime comprise, comme le total affiché).
   const commitToSave = (text: string) => {
@@ -533,7 +533,7 @@ export const PayReceivedSheet: React.FC<SheetProps> = ({ doc, geminiApiKey, pick
             </>
           )}
           {!frozen && dist.shortfall > 0 && (
-            <p role="status" className="mt-4 text-sm font-medium text-error flex items-center gap-2"><Info className="w-4 h-4 shrink-0" aria-hidden="true" /> Il manque {formatEUR(dist.shortfall)} : les virements et l'épargne prévus dépassent la paie.</p>
+            <p role="status" className="mt-4 text-sm font-medium text-error flex items-center gap-2"><Info className="w-4 h-4 shrink-0" aria-hidden="true" /> Il manque {formatEUR(dist.shortfall)} pour les virements fixes : à prendre sur votre épargne disponible.</p>
           )}
 
           <div className="mt-6 max-w-xs">

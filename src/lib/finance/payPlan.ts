@@ -18,10 +18,11 @@ export interface PayTransfer {
 }
 
 /**
- * Ce qui part de la paie AVANT l'épargne, dans l'ordre des virements : chaque charge
- * saisie (ex. « Revolut commun »), les abonnements mensuels (avec leur compte s'ils
- * partent tous du même), l'épargne projets, puis l'argent plaisir qui reste sur le compte.
- * Ce qui reste est l'épargne, répartie par computePlacementStrategy.
+ * Virements de la paie hors épargne : chaque charge saisie (ex. « Revolut commun »), les
+ * abonnements mensuels (avec leur compte s'ils partent tous du même), l'épargne projets,
+ * puis l'argent plaisir qui reste sur le compte courant. Les montants de l'épargne projets
+ * et du plaisir sont ceux de la règle de la paie (lib/payDistribution, allocatePay) : le
+ * plaisir est ce qui reste réellement sur le compte, pas le solde de départ du mois.
  */
 export const computePayTransfers = (input: {
   expenses: Expense[];
@@ -48,14 +49,22 @@ export const computePayTransfers = (input: {
 // Lignes de la liste des virements de paie (app et rappel serveur)
 // ---------------------------------------------------------------------------
 
-/** Virements sortants puis versements d'épargne, dans l'ordre de la liste à cocher. */
+const isFixedTransfer = (t: PayTransfer) => t.key !== 't:projects' && t.key !== 't:leisure';
+const transferLine = (t: PayTransfer): PayChecklistLine => ({ key: t.key, label: t.label, amount: round2(t.amount), kind: 'transfer' });
+
+/**
+ * Lignes dans l'ordre des virements : virements fixes, épargne par compte, épargne projets,
+ * puis le plaisir (ce qui reste sur le compte courant).
+ */
 export const buildPayLines = (transfers: PayTransfer[], steps: PlacementStep[]): PayChecklistLine[] => [
-  ...transfers.map(t => ({ key: t.key, label: t.label, amount: round2(t.amount), kind: 'transfer' as const })),
+  ...transfers.filter(isFixedTransfer).map(transferLine),
   ...steps.filter(st => !st.alert && st.accountId).map(st => ({
     key: `s:${st.accountId}`, label: st.accountName, amount: round2(st.fillAmount), kind: 'saving' as const,
     accountId: st.accountId,
     detail: `${st.type}${st.rate ? ` · ${st.rate.toLocaleString('fr-FR', { maximumFractionDigits: 2 })} %` : ''}`,
   })),
+  ...transfers.filter(t => t.key === 't:projects').map(transferLine),
+  ...transfers.filter(t => t.key === 't:leisure').map(transferLine),
 ];
 
 // ---------------------------------------------------------------------------

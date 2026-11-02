@@ -166,22 +166,29 @@ describe('Rituel : répartition et enregistrement', () => {
     expect(input.done).toEqual([{ key: added!.key, amount: 50 }]);
   });
 
-  it('paie plus basse que prévu : l’épargne baisse d’autant et Pécule le dit ; plus haute : elle monte', () => {
+  it('paie plus basse que prévu : le plaisir baisse d’abord, jusqu’à son minimum, puis l’épargne, et Pécule le dit ; plus haute : l’épargne monte', () => {
     const doc = makeDoc();
     const expected = Math.round(computeMonthlyPay(doc) * 100) / 100;
     setup(doc);
     toPlan();
     const base = toSaveValue();
+    // Solde de départ 200 € (minimum 133 €) : 50 € de moins, le plaisir absorbe tout.
+    fireEvent.click(screen.getByRole('button', { name: 'Retour' }));
+    fireEvent.change(amountField(), { target: { value: String(expected - 50).replace('.', ',') } });
+    toPlan();
+    expect(toSaveValue()).toBeCloseTo(base, 2);
+    expect(screen.getByText(/^Paie inférieure de 50\s€ à l'habitude : le plaisir passe à 150\s€ au lieu de 200\s€ \(minimum 133\s€\)\. Épargne tenue\.$/)).toBeTruthy();
+    // 100 € de moins : le plaisir à son minimum, l'épargne baisse des 33 € qui manquent.
     fireEvent.click(screen.getByRole('button', { name: 'Retour' }));
     fireEvent.change(amountField(), { target: { value: String(expected - 100).replace('.', ',') } });
     toPlan();
-    expect(toSaveValue()).toBeCloseTo(base - 100, 2);
-    expect(screen.getByText(/Paie inférieure de 100\s€ à l'estimation/)).toBeTruthy();
+    expect(toSaveValue()).toBeCloseTo(base - 33, 2);
+    expect(screen.getByText(/^Paie inférieure de 100\s€ à l'habitude : le plaisir descend à son minimum \(133\s€\) et l'épargne baisse de 33\s€\./)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Retour' }));
     fireEvent.change(amountField(), { target: { value: String(expected + 150).replace('.', ',') } });
     toPlan();
     expect(toSaveValue()).toBeCloseTo(base + 150, 2);
-    expect(screen.getByText(/Paie supérieure de 150\s€ à l'estimation/)).toBeTruthy();
+    expect(screen.getByText(/^Le compte courant démarre à 200\s€ : 150\s€ de plus vont à l'épargne \(paie supérieure de 150\s€ à l'habitude\)\.$/)).toBeTruthy();
   });
 
   it('« À placer » saisi : il remplace le conseil et part avec la paie ; « Revenir au conseil »', () => {

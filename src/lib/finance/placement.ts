@@ -4,6 +4,7 @@ import { FiscalConfig, AccountType, SavingsAccount, GlobalAppData, PayslipExtrac
 import { DEFAULT_FISCAL_CONFIG, DEFAULT_WORK_BENEFITS } from '../../constants';
 import { formatISODay } from '../dates';
 import { formatEUR } from '../format';
+import { round2 } from '../money';
 import { computeIncome, computeSavingsCapacity } from './income';
 import { totalFixedCharges } from './subscriptions';
 
@@ -100,6 +101,26 @@ export const activeSavingsSplit = (
 };
 
 /**
+ * Montants au centime : chaque part est arrondie, et l'écart d'arrondi va à la plus grosse
+ * part, pour que la somme des comptes vaille exactement le total (100 € en trois tiers :
+ * 33,34 + 33,33 + 33,33). Les suggestions sans argent derrière (infoOnly) ne comptent pas.
+ */
+const roundedSteps = (steps: PlacementStep[], total: number): PlacementStep[] => {
+  const counted = steps.filter(st => !st.infoOnly).length;
+  if (counted === 0 || !(total > 0)) return steps;
+  const out = steps.map(st => (st.infoOnly ? st : { ...st, fillAmount: round2(st.fillAmount) }));
+  const cents = (n: number) => Math.round(n * 100);
+  const diff = cents(round2(total)) - out.reduce((s, st) => s + (st.infoOnly ? 0 : cents(st.fillAmount)), 0);
+  // Seul un écart d'arrondi (au plus un centime par part) est corrigé.
+  if (diff !== 0 && Math.abs(diff) <= counted) {
+    let largest = -1;
+    out.forEach((st, i) => { if (!st.infoOnly && (largest < 0 || st.fillAmount > out[largest].fillAmount)) largest = i; });
+    out[largest] = { ...out[largest], fillAmount: (cents(out[largest].fillAmount) + diff) / 100 };
+  }
+  return out;
+};
+
+/**
  * Répartition personnalisée : chaque compte reçoit sa part (pourcentages ramenés à 100 si
  * besoin). Un livret plein ne prend que la place qui lui reste ; l'excédent va sur un
  * compte de la répartition sans plafond, sinon il suit le plan automatique.
@@ -167,7 +188,7 @@ export const computePlacementStrategy = (
 ): PlacementStep[] => {
   if (split && split.length > 0) {
     const custom = splitPlacement(totalToInvest, accounts, fiscalConfig, split);
-    if (custom) return custom;
+    if (custom) return roundedSteps(custom, totalToInvest);
   }
   let remainingMoney = totalToInvest;
   const steps: PlacementStep[] = [];
@@ -259,5 +280,5 @@ export const computePlacementStrategy = (
     const where = names.length <= 1 ? names.join('') : `${names.slice(0, -1).join(', ')} et ${names[names.length - 1]}`;
     ldds.hint = `Vos livrets sont pleins : un LDDS (même taux que le Livret A, disponible à tout moment, sans impôt) accueillerait ${formatEUR2(ldds.fillAmount)} sans les bloquer. En attendant, ce surplus va sur ${where}.`;
   }
-  return steps;
+  return roundedSteps(steps, totalToInvest);
 };

@@ -229,7 +229,11 @@ describe('tournée quotidienne des rappels', () => {
 
   describe('rappels de paie au mois d’épargne (mise en service)', () => {
     const payTitles = () => push.sent.map(x => x.message.title).filter(t => t.startsWith('Paie reçue'));
-    const withPayday = () => ({ ...dataFile({ paydayDay: 27, paydayAmount: 300 }), recurringMovements: [] });
+    // Paie habituelle de 300 € (fiche de référence) : de quoi placer les 300 € fixés.
+    const withPayday = () => ({
+      ...dataFile({ paydayDay: 27, paydayAmount: 300 }), recurringMovements: [],
+      payslips: [{ id: 'ref', fileId: 'f', fileName: 'fiche.pdf', addedAt: '2026-01-01', reviewed: true, extracted: { netPaid: 300 } }], activePayslipId: 'ref',
+    });
 
     it('rappel déjà parti sous l’ancienne clé (mois de versement) : pas de doublon le lendemain', async () => {
       await subscribeDevice();
