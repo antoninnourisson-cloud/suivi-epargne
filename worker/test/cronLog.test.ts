@@ -172,7 +172,7 @@ describe('crons → suivi', () => {
 
   it("/status reprend le dernier relevé réussi tant que le cron n'a pas été suivi", async () => {
     const kv = new MemoryKV();
-    await kv.put('health:site', JSON.stringify({ checkedAt: new Date().toISOString(), ok: true, failing: [], hsts: true }));
+    await kv.put('health:site', JSON.stringify({ checkedAt: new Date().toISOString(), ok: true, failing: [] }));
     await kv.put(LATEST_KEY, JSON.stringify({ checkedAt: '2026-10-26T05:00:03.000Z', ok: true, values: {} }));
     const body = await (await worker.fetch(new Request('https://api.example.workers.dev/status'), makeEnv(kv))).json();
     expect(body).toMatchObject({ fiscalWatch: { lastSuccessAt: '2026-10-26T05:00:03.000Z', lastFailureAt: null, ok: true }, history: [] });

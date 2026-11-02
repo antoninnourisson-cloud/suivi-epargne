@@ -147,7 +147,6 @@ jobs:
           # (jq : `//` remplace aussi false, d'où les tests explicites.)
           site_state=$(jq -r 'if (.site | type) != "object" then "absent" elif .site.ok == true then "ok" else "ko" end' status.json 2>/dev/null || echo absent)
           site_failing=$(jq -r '(.site.failing // []) | join(", ")' status.json 2>/dev/null || true)
-          site_hsts=$(jq -r 'if .site.hsts == true then "true" else "false" end' status.json 2>/dev/null || echo false)
           site_filtered=$(jq -r 'if ((.site.failing // []) | length) > 0 and all(.site.failing[]; test("\\((403|injoignable)\\)$")) then "true" else "false" end' status.json 2>/dev/null || echo false)
           edge_unverified=false
           for p in "" presentation.html confidentialite.html; do
@@ -164,7 +163,7 @@ jobs:
 
           # En-têtes de sécurité (Worker edge/) : HSTS attendu sur l'accueil.
           headers=$("${CURL[@]}" -I "$SITE/" || true)
-          if echo "$headers" | grep -qi '^strict-transport-security:' || [ "$site_hsts" = true ]; then ok "En-tête HSTS"
+          if echo "$headers" | grep -qi '^strict-transport-security:'; then ok "En-tête HSTS"
           elif [ "$edge_unverified" = true ]; then notice "En-tête HSTS non vérifiable aujourd'hui (même raison)"
           else fail "En-tête Strict-Transport-Security absent : le Worker edge (pecule-edge) ne s'applique plus ?"; fi
 

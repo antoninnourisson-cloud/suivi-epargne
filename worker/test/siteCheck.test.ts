@@ -4,8 +4,8 @@ import { MemoryKV } from './kvFake';
 
 // index.html tel que Vite le produit (base relative './').
 const INDEX = '<!doctype html><title>Pécule</title><script type="module" crossorigin src="./assets/index-Ab12.js"></script>';
-const page = (status: number, body = '<title>Pécule</title>', hsts = true) =>
-  new Response(body, { status, headers: hsts ? { 'strict-transport-security': 'max-age=31536000' } : {} });
+const page = (status: number, body = '<title>Pécule</title>') =>
+  new Response(body, { status });
 const script = (status = 200, type = 'application/javascript; charset=utf-8') =>
   new Response('console.log(1)', { status, headers: { 'content-type': type } });
 
@@ -20,7 +20,7 @@ describe('contrôle du site par le serveur', () => {
   it('toutes les pages répondent et contiennent « Pécule », le script principal se charge ; HSTS vu sur l\'accueil', async () => {
     const fetcher = site();
     const r = await checkSite('https://pecule-app.com/', fetcher, new Date('2026-10-14T07:00:00Z'));
-    expect(r).toEqual({ checkedAt: '2026-10-14T07:00:00.000Z', ok: true, failing: [], hsts: true });
+    expect(r).toEqual({ checkedAt: '2026-10-14T07:00:00.000Z', ok: true, failing: [] });
     expect(fetcher).toHaveBeenCalledTimes(4);
     expect(fetcher).toHaveBeenCalledWith('https://pecule-app.com/assets/index-Ab12.js', expect.anything());
   });
@@ -29,12 +29,11 @@ describe('contrôle du site par le serveur', () => {
     const fetcher = (async (url: string) => {
       if (url.endsWith('presentation.html')) return page(403, 'Forbidden');
       if (url.endsWith('confidentialite.html')) throw new TypeError('réseau');
-      return page(200, 'page vide', false);
+      return page(200, 'page vide');
     }) as unknown as typeof fetch;
     const r = await checkSite('https://pecule-app.com', fetcher);
     expect(r.ok).toBe(false);
     expect(r.failing).toEqual(['/ (200)', '/ (script principal introuvable)', '/confidentialite.html (injoignable)', '/presentation.html (403)']);
-    expect(r.hsts).toBe(false);
   });
 
   describe('écran blanc : index.html répond mais le script principal ne se charge pas', () => {

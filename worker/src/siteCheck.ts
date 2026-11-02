@@ -18,9 +18,10 @@ export interface SiteCheck {
   ok: boolean;
   /** Pages en échec (code HTTP ou contenu inattendu). */
   failing: string[];
-  /** En-tête HSTS présent sur l'accueil (Worker d'en-têtes actif). */
-  hsts: boolean;
 }
+// Pas d'en-tête HSTS ici : servi sur api.pecule-app.com, le Worker est sur la même zone que le
+// site et ses requêtes vont droit à GitHub Pages, sans passer par pecule-edge. La surveillance
+// (monitor.yml) vérifie l'en-tête elle-même.
 
 /**
  * Adresse du script principal cité par index.html (`<script type="module" src="…">`),
@@ -67,24 +68,20 @@ const checkMainScript = async (html: string, base: string, fetcher: typeof fetch
 export const checkSite = async (appUrl: string, fetcher: typeof fetch = fetch, now = new Date()): Promise<SiteCheck> => {
   const base = appUrl.endsWith('/') ? appUrl : `${appUrl}/`;
   const failing: string[] = [];
-  let hsts = false;
   await Promise.all(SITE_PAGES.map(async page => {
     try {
       const res = await fetcher(base + page, REQUEST);
       const body = res.ok ? await res.text() : '';
       if (!res.ok || !body.includes('Pécule')) failing.push(`/${page} (${res.status})`);
-      if (page === '') {
-        hsts = !!res.headers.get('strict-transport-security');
-        if (res.ok) {
-          const scriptFailure = await checkMainScript(body, base, fetcher);
-          if (scriptFailure) failing.push(scriptFailure);
-        }
+      if (page === '' && res.ok) {
+        const scriptFailure = await checkMainScript(body, base, fetcher);
+        if (scriptFailure) failing.push(scriptFailure);
       }
     } catch {
       failing.push(`/${page} (injoignable)`);
     }
   }));
-  return { checkedAt: now.toISOString(), ok: failing.length === 0, failing: failing.sort(), hsts };
+  return { checkedAt: now.toISOString(), ok: failing.length === 0, failing: failing.sort() };
 };
 
 /** Dernier contrôle s'il a moins de 15 min, sinon un nouveau (gardé dans KV). */

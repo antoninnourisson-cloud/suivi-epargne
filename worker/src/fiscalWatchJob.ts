@@ -31,7 +31,7 @@ const MAX_OUTPUT_TOKENS = 700;
 /** Fenêtre de contexte du modèle, marge comprise. */
 const CONTEXT_TOKENS = 24_000;
 
-export const FISCAL_WATCH_CRON = '0 5 * * 1';
+export const FISCAL_WATCH_CRON = '0 5 * * MON';
 export const LATEST_KEY = 'fiscal-watch:latest';
 export const ATTEMPT_KEY = 'fiscal-watch:attempt';
 export const FAILURE_KEY = 'fiscal-watch:last-failure';

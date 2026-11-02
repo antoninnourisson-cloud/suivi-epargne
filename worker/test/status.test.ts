@@ -12,7 +12,7 @@ const makeEnv = (kv: MemoryKV) => ({
 
 const status = (env: Env) => worker.fetch(new Request('https://api.example.workers.dev/status'), env);
 // Contrôle du site déjà fait il y a moins de 15 min : /status le reprend sans requête réseau.
-const SITE = { checkedAt: new Date().toISOString(), ok: true, failing: [], hsts: true };
+const SITE = { checkedAt: new Date().toISOString(), ok: true, failing: [] };
 const withSite = async (kv: MemoryKV) => { await kv.put('health:site', JSON.stringify(SITE)); return kv; };
 
 describe('GET /status', () => {
