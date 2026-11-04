@@ -43,6 +43,21 @@ describe('aide à la déclaration : intérêts imposables', () => {
     const cc = acc({ id: 'cc', type: AccountType.COMPTE_COURANT, ownedAmount: 2000, totalAmount: 2000, interestRate: 0 });
     const lines = buildTaxReturnChecklist(data([cc]), 2025);
     expect(lines.some(l => l.id.startsWith('interest'))).toBe(false);
+    expect(lines.some(l => l.id.startsWith('cto-'))).toBe(false);
+  });
+
+  it('compte-titres : l’IFU (2DC, 2TR, 2CK pré-remplis ; 3VG / 3VH à saisir) et l’option 2OP', () => {
+    const cto = acc({ id: 'cto', name: 'Compte-titres', type: AccountType.CTO, ownedAmount: 3000, totalAmount: 3000 });
+    const lines = buildTaxReturnChecklist(data([cto]), 2025);
+    expect(line(lines, 'cto-income')).toMatchObject({ box: '2DC · 2TR · 2CK', confidence: 'check', section: 'savings' });
+    expect(line(lines, 'cto-income')!.note).toMatch(/IFU.*pré-remplis/);
+    expect(line(lines, 'cto-gains')).toMatchObject({ box: '3VG / 3VH', confidence: 'todo' });
+    expect(line(lines, 'cto-gains')!.note).toMatch(/Jamais pré-remplies/);
+    expect(line(lines, 'cto-gains')!.link!.url).toMatch(/^https:\/\/www\.impots\.gouv\.fr\//);
+    expect(line(lines, 'interest-option')?.box).toBe('2OP');
+    // Vidé avant l'année et sans mouvement dans l'année, ou tenu à l'étranger : pas d'IFU.
+    expect(line(buildTaxReturnChecklist(data([{ ...cto, totalAmount: 0, ownedAmount: 0 }]), 2025), 'cto-income')).toBeUndefined();
+    expect(line(buildTaxReturnChecklist(data([{ ...cto, heldAbroad: true }]), 2025), 'cto-income')).toBeUndefined();
   });
 });
 

@@ -75,6 +75,10 @@ export const TAX_LINKS = {
   deadlines: { label: 'Dates limites (impots.gouv.fr)', url: 'https://www.impots.gouv.fr/toutes-les-questions/particulier/quelle-date-dois-je-faire-ma-declaration' },
   realExpenses: { label: 'Forfait ou frais réels (service-public.fr)', url: 'https://www.service-public.gouv.fr/particuliers/vosdroits/F1989' },
   savingsIncome: { label: "Revenus d'épargne (service-public.fr)", url: 'https://www.service-public.gouv.fr/particuliers/vosdroits/F2613' },
+  // Vérifié le 2026-11-04 : intérêts et dividendes en principe pré-remplis d'après l'IFU,
+  // plus-values jamais (à saisir, en additionnant les IFU de chaque banque) ; 2DC, 2CK :
+  // brochure IR 2026, p. 121-136 ; 3VG / 3VH : notice 2074 (revenus 2025).
+  ifu: { label: 'Le relevé fiscal de la banque, IFU (impots.gouv.fr)', url: 'https://www.impots.gouv.fr/particulier/questions/jai-des-placements-la-banque-celle-ci-ma-adresse-un-justificatif-que-dois-je' },
   per: { label: 'Épargne retraite (service-public.fr)', url: 'https://www.service-public.gouv.fr/particuliers/vosdroits/F14709' },
   donations: { label: 'Dons aux associations (service-public.fr)', url: 'https://www.service-public.gouv.fr/particuliers/vosdroits/F426' },
   foreignAccounts: { label: "Comptes à l'étranger (service-public.fr)", url: 'https://www.service-public.gouv.fr/particuliers/actualites/A18891' },
@@ -193,10 +197,27 @@ export const buildTaxReturnChecklist = (
       link: TAX_LINKS.savingsIncome, topic: "les intérêts d'un compte à l'étranger (2047)",
     });
   }
-  if (interestRows.length > 0) {
+  // --- Compte-titres : l'IFU de la banque (2DC, 2TR, 2CK ; 3VG / 3VH) ---
+  // Un compte-titres tenu à l'étranger n'a pas d'IFU français : voir la partie « étranger ».
+  const ctos = accounts.filter(a => a.type === AccountType.CTO && !a.heldAbroad
+    && (a.totalAmount > 0.005 || a.movements.some(m => inYear(m, incomeYear))));
+  if (ctos.length > 0) {
+    const names = elideDe(listFr(ctos.map(a => a.name)));
+    lines.push({
+      id: 'cto-income', section: 'savings', box: '2DC · 2TR · 2CK', label: 'Compte-titres : dividendes et intérêts', confidence: 'check',
+      note: `Au printemps, la banque ${names} envoie un relevé fiscal (IFU). Dividendes (2DC), intérêts (2TR) et acompte de 12,8 % déjà retenu (2CK) sont en principe pré-remplis : comparez-les à l'IFU. Un montant faux se raye et se corrige dans la case blanche.`,
+      link: TAX_LINKS.ifu, topic: 'les dividendes et intérêts du compte-titres (IFU)',
+    });
+    lines.push({
+      id: 'cto-gains', section: 'savings', box: '3VG / 3VH', label: 'Compte-titres : plus-values ou moins-values', confidence: 'todo',
+      note: "Jamais pré-remplies : reportez le gain net de l'année indiqué sur l'IFU en 3VG, ou la perte en 3VH. Avec plusieurs banques, additionnez les montants de chaque IFU.",
+      link: TAX_LINKS.ifu, topic: 'les plus-values du compte-titres (3VG / 3VH)',
+    });
+  }
+  if (interestRows.length > 0 || ctos.length > 0) {
     lines.push({
       id: 'interest-option', section: 'savings', box: '2OP', label: 'Imposition au barème (facultatif)', confidence: 'info',
-      note: 'Par défaut, ces intérêts sont imposés à 12,8 %. Si votre tranche d\'imposition est à 0 % ou 11 %, cocher la case 2OP peut coûter moins ; ce choix vaut alors pour tous vos revenus de placement de l\'année.',
+      note: 'Par défaut, ces revenus sont imposés à 12,8 %. Si votre tranche d\'imposition est à 0 % (ou à 11 % sans décote), cocher la case 2OP peut coûter moins ; Rendement fait le calcul. Ce choix vaut alors pour tous vos revenus de placement de l\'année.',
       link: TAX_LINKS.savingsIncome,
     });
   }

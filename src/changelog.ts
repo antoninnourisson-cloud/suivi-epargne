@@ -15,6 +15,14 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '2026.11.04-9',
+    date: '2026-11-04',
+    title: 'Déclaration : le compte-titres',
+    items: [
+      "Aide à la déclaration : avec un compte-titres, deux lignes rappellent le relevé fiscal de la banque (IFU). Dividendes (2DC), intérêts (2TR) et acompte (2CK) sont en principe pré-remplis, à comparer à l'IFU ; les plus-values (3VG) ou moins-values (3VH) ne le sont jamais et se reportent à la main.",
+    ],
+  },
+  {
     version: '2026.11.04-8',
     date: '2026-11-04',
     title: 'Option pour le barème : calcul exact',
