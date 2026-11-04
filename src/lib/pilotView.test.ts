@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import fc from 'fast-check';
-import { howItsComputed, payBarParts, payRuleSentence, placementReason, planSentence } from './pilotView';
+import { howItsComputed, livePayBar, payBarParts, payRuleSentence, placementReason, planSentence } from './pilotView';
 import { allocatePay, type AllocatePayInput } from './payDistribution';
 import { DISCREET_AMOUNT, setDiscreetAmounts } from './format';
 import { AccountType } from '../types';
@@ -48,6 +48,37 @@ describe('payBarParts : la barre de la paie', () => {
     setDiscreetAmounts(true);
     expect(payBarParts(run()).label).not.toMatch(/\d/);
     expect(payBarParts(run()).label).toContain(DISCREET_AMOUNT);
+  });
+});
+
+describe('livePayBar : la barre pendant qu\'on modifie les montants', () => {
+  it('montants inchangés : la barre conseillée ; une part modifiée suit, le plaisir d\'équilibre montre son prévu', () => {
+    const advised = payBarParts(run({ before: 30 }));
+    expect(livePayBar(advised, { fixed: 1050, savings: 480, projects: 100, leisure: 400 })).toEqual(advised);
+    // 100 € de plus en épargne : le plaisir, ligne d'équilibre, passe à 300 € (prévu 400 €).
+    const live = livePayBar(advised, { fixed: 1050, savings: 580, projects: 100, leisure: 300 });
+    expect(live.parts.map(p => [p.key, p.amount, p.planned])).toEqual([
+      ['fixed', 1050, undefined], ['savings', 580, undefined], ['projects', 100, undefined], ['leisure', 300, 400],
+    ]);
+    expect(live.total).toBe(2030);
+    expect(nb(live.label)).toBe('Répartition de 2 030 € : virements fixes 1 050 €, épargne 580 €, épargne projets 100 €, plaisir 300 € (prévu 400 €).');
+  });
+
+  it('une part coupée par la règle garde le prévu de la règle ; plaisir négatif : 0 et ce qu\'il manque', () => {
+    const advised = payBarParts(run({ received: 1350, before: -50 }));
+    const live = livePayBar(advised, { savings: 10, leisure: 240 });
+    expect(live.parts.find(p => p.key === 'savings')).toMatchObject({ amount: 10, planned: 450 });
+    expect(live.parts.find(p => p.key === 'leisure')).toMatchObject({ amount: 240, planned: 400 });
+    const short = livePayBar(advised, { savings: 400, leisure: -150.004 });
+    expect(short.parts.find(p => p.key === 'leisure')).toMatchObject({ amount: 0, planned: 400 });
+    expect(short.missingFixed).toBe(150);
+    expect(nb(short.label)).toMatch(/Il manque 150 € pour les virements fixes\.$/);
+  });
+
+  it('versement en plus dont une partie n\'est pas placée : « Reste sur le compte courant »', () => {
+    const advised = payBarParts(allocatePay({ received: 300, kind: 'extra', ...usual }));
+    const live = livePayBar(advised, { savings: 250, leisure: 50 });
+    expect(live.parts.map(p => [p.key, p.label, p.amount])).toEqual([['savings', 'Épargne', 250], ['leisure', 'Reste sur le compte courant', 50]]);
   });
 });
 

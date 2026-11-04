@@ -3,7 +3,8 @@ import fc from 'fast-check';
 import { AccountType, type AppDoc, type PayslipRecord, type SavingsAccount } from '../types';
 import { emptyData } from './schema';
 import {
-  allocatePay, allocationSentence, leisureFloorOf, payBalanceBefore, recommendPayDistribution, usualPayDistribution,
+  allocatePay, allocationSentence, balanceForAmount, balanceIncludesPay, currentAccountPrefill, leisureFloorOf, payAccountOf,
+  payBalanceBefore, recommendPayDistribution, usualPayDistribution,
   type AllocatePayInput,
 } from './payDistribution';
 import { DISCREET_AMOUNT, setDiscreetAmounts } from './format';
@@ -367,5 +368,52 @@ describe('payBalanceBefore', () => {
     expect(payBalanceBefore({ balance: { before: 30, source: 'unknown' } })).toBe(0);
     expect(payBalanceBefore({ kind: 'extra', balance: { before: 30, source: 'typed' } })).toBe(0);
     expect(payBalanceBefore({ balance: { before: Number.NaN, source: 'typed' } })).toBe(0);
+  });
+});
+
+describe('compte courant du rituel', () => {
+  const cc = (id: string, over: Partial<SavingsAccount> = {}): SavingsAccount => ({
+    id, name: `Compte ${id}`, institution: 'B', type: AccountType.COMPTE_COURANT, totalAmount: 430, ownedAmount: 430, parentalCapital: 0, movements: [], ...over,
+  });
+  const livret: SavingsAccount = { id: 'la', name: 'Livret A', institution: 'B', type: AccountType.LIVRET_A, totalAmount: 1000, ownedAmount: 1000, parentalCapital: 0, movements: [] };
+  const data = (accounts: SavingsAccount[], payAccountId?: string) => ({ accounts, config: { ...emptyData().config, ...(payAccountId ? { payAccountId } : {}) } });
+
+  it('compte où arrive la paie : celui choisi, sinon le premier compte courant, sinon aucun', () => {
+    expect(payAccountOf(data([livret, cc('a'), cc('b')]))?.id).toBe('a');
+    expect(payAccountOf(data([livret, cc('a'), cc('b')], 'b'))?.id).toBe('b');
+    expect(payAccountOf(data([livret, cc('a')], 'disparu'))?.id).toBe('a');
+    expect(payAccountOf(data([livret]))).toBeUndefined();
+  });
+
+  it('préremplissage : constaté après la paie tel quel, récent estimé (+ paie), plus de 15 jours ou jamais : rien', () => {
+    const input = { receivedOn: '2026-10-27', amount: 2000, today: '2026-10-30' };
+    // Constaté le 29, après la paie du 27 : il la comprend déjà.
+    expect(currentAccountPrefill(data([cc('a', { balanceCheckedAt: '2026-10-29' })]), input))
+      .toMatchObject({ seen: 430, source: 'known', checkedOn: '2026-10-29', days: 1, known: 430 });
+    // Constaté le jour même de la paie : il peut dater d'avant son arrivée, donc estimation.
+    expect(currentAccountPrefill(data([cc('a', { balanceCheckedAt: '2026-10-27' })]), input)).toMatchObject({ seen: 2430, source: 'estimated', days: 3 });
+    // Il y a 15 jours : encore proposé ; 16 jours : trop ancien.
+    expect(currentAccountPrefill(data([cc('a', { balanceCheckedAt: '2026-10-15' })]), input)).toMatchObject({ seen: 2430, source: 'estimated', days: 15 });
+    const old = currentAccountPrefill(data([cc('a', { balanceCheckedAt: '2026-10-14' })]), input);
+    expect(old).toMatchObject({ checkedOn: '2026-10-14', days: 16 });
+    expect(old.seen).toBeUndefined();
+    const never = currentAccountPrefill(data([cc('a')]), input);
+    expect(never.account?.id).toBe('a');
+    expect(never.seen).toBeUndefined();
+    expect(currentAccountPrefill(data([livret]), input)).toEqual({});
+    // Découvert connu : l'estimation le garde (−50 € + 1 350 €).
+    expect(currentAccountPrefill(data([cc('a', { totalAmount: -50, ownedAmount: -50, balanceCheckedAt: '2026-10-25' })]), { ...input, amount: 1350 }).seen).toBe(1300);
+  });
+
+  it('la paie est-elle dans le solde lu ; le montant change : ce qui restait suit seulement dans ce cas', () => {
+    expect(balanceIncludesPay({ seen: 2030, before: 30 })).toBe(true);
+    expect(balanceIncludesPay({ seen: 30, before: 30 })).toBe(false);
+    expect(balanceIncludesPay({ before: 30 })).toBe(true);
+    expect(balanceForAmount({ seen: 2030, before: 30, source: 'typed' }, 2000, 1990.5)).toEqual({ seen: 2030, before: 39.5, source: 'typed' });
+    const without = { seen: 30, before: 30, source: 'typed' as const };
+    expect(balanceForAmount(without, 2000, 1990)).toBe(without);
+    const unknown = { before: 0, source: 'unknown' as const };
+    expect(balanceForAmount(unknown, 2000, 1990)).toBe(unknown);
+    expect(balanceForAmount(undefined, 2000, 1990)).toBeUndefined();
   });
 });

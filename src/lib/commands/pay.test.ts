@@ -353,3 +353,101 @@ describe('deletePay : supprimer la paie', () => {
     expect(sample.movements).toHaveLength(1);
   });
 });
+
+describe('compte courant de la paie : solde lu, puis ce qui y reste après « Tout est fait »', () => {
+  const current = (over: Partial<SavingsAccount> = {}): SavingsAccount => ({
+    id: 'cc', name: 'Compte courant', institution: 'B', type: AccountType.COMPTE_COURANT, totalAmount: 430, ownedAmount: 430, parentalCapital: 0, movements: [], balanceCheckedAt: '2026-10-20', ...over,
+  });
+  const withCurrent = (over: Partial<SavingsAccount> = {}, pays: PayRecord[] = []): CommandState => {
+    const s = state(pays);
+    return { ...s, accounts: [...s.accounts, current(over)] };
+  };
+  // Paie de 2 000 €, 30 € restaient : 2 030 € à répartir. Les abonnements (carte) et le plaisir restent sur le compte.
+  const planLines: PayChecklistLine[] = [
+    { key: 't:e:loyer', label: 'Loyer', amount: 800, kind: 'transfer' },
+    { key: 't:subscriptions', label: 'Abonnements (Carte)', amount: 40, kind: 'transfer' },
+    { key: 's:la', label: 'Livret A', amount: 500, kind: 'saving', accountId: 'la' },
+    { key: 't:projects', label: 'Épargne projets', amount: 100, kind: 'transfer' },
+    { key: 't:leisure', label: 'Argent plaisir', amount: 590, kind: 'transfer' },
+  ];
+  const all = planLines.map(l => ({ key: l.key, amount: l.amount }));
+  const balance = { seen: 2030.004, before: 30.001, source: 'typed' as const };
+  const pay = { receivedOn: '2026-10-27', amount: 2000, balance };
+
+  it('le solde lu est gardé avec la paie (arrondi au centime) ; « Tout est fait » note ce qui reste : plaisir + abonnements', () => {
+    const s0 = withCurrent();
+    const r = ok(recordPay(s0, { pay, lines: planLines, done: all, transferDate: '2026-10-28', currentAccountId: 'cc', ids: { movements: ['m1'] } }));
+    const s1 = applyPatch(s0, r.next);
+    expect(s1.pays![0].balance).toEqual({ seen: 2030, before: 30, source: 'typed' });
+    // 30 + 2 000 − (800 + 500 + 100) = 630 € (590 € de plaisir + 40 € d'abonnements par carte).
+    expect(acc(s1, 'cc')).toMatchObject({ ownedAmount: 630, totalAmount: 630, parentalCapital: 0, balanceCheckedAt: '2026-10-28' });
+    expect(acc(s1, 'cc').movements).toHaveLength(1);
+    expect(acc(s1, 'cc').movements[0]).toMatchObject({ date: '2026-10-28', amount: 200, type: 'IN' });
+    expect(r.message).toMatch(/· Compte courant : 630\s€$/);
+    // Une seule annulation : paie, versement ET constat du compte courant (date comprise).
+    expect(applyPatch(s1, r.undo(s1))).toEqual(s0);
+    // Jamais constaté auparavant : l'annulation retire aussi la date.
+    const n0 = withCurrent({ balanceCheckedAt: undefined });
+    const rn = ok(recordPay(n0, { pay, lines: planLines, done: all, transferDate: '2026-10-28', currentAccountId: 'cc' }));
+    const n1 = applyPatch(n0, rn.next);
+    const back = applyPatch(n1, rn.undo(n1));
+    expect(acc(back, 'cc').balanceCheckedAt).toBeUndefined();
+    expect(acc(back, 'cc')).toMatchObject({ ownedAmount: 430, movements: [] });
+  });
+
+  it('solde déjà juste : seul le constat est daté (aucun mouvement), annulé aussi', () => {
+    const s0 = withCurrent({ totalAmount: 630, ownedAmount: 630 });
+    const r = ok(recordPay(s0, { pay, lines: planLines, done: all, transferDate: '2026-10-28', currentAccountId: 'cc' }));
+    const s1 = applyPatch(s0, r.next);
+    expect(acc(s1, 'cc')).toMatchObject({ ownedAmount: 630, balanceCheckedAt: '2026-10-28', movements: [] });
+    expect(applyPatch(s1, r.undo(s1))).toEqual(s0);
+  });
+
+  it('pas de constat : solde inconnu, sans compte courant demandé, découvert après la paie ou versement en plus', () => {
+    const s0 = withCurrent();
+    const unknown = ok(recordPay(s0, { pay: { ...pay, balance: { before: 12, seen: 5, source: 'unknown' } }, lines: planLines, done: all, transferDate: '2026-10-28', currentAccountId: 'cc' }));
+    expect(acc(applyPatch(s0, unknown.next), 'cc')).toEqual(acc(s0, 'cc'));
+    // « Je ne sais pas » : seule la source est gardée.
+    expect(applyPatch(s0, unknown.next).pays![0].balance).toEqual({ before: 0, source: 'unknown' });
+    const noAccount = ok(recordPay(s0, { pay, lines: planLines, done: all, transferDate: '2026-10-28' }));
+    expect(acc(applyPatch(s0, noAccount.next), 'cc')).toEqual(acc(s0, 'cc'));
+    const overdraft = ok(recordPay(s0, { pay: { ...pay, balance: { seen: 1300, before: -700, source: 'typed' } }, lines: planLines, done: all, transferDate: '2026-10-28', currentAccountId: 'cc' }));
+    expect(acc(applyPatch(s0, overdraft.next), 'cc')).toEqual(acc(s0, 'cc'));
+    const extra = ok(recordPay(s0, { pay: { ...pay, kind: 'extra' }, lines: planLines.slice(2, 3), done: [all[2]], transferDate: '2026-10-28', currentAccountId: 'cc' }));
+    const e1 = applyPatch(s0, extra.next);
+    expect(e1.pays![0].balance).toBeUndefined();
+    expect(acc(e1, 'cc')).toEqual(acc(s0, 'cc'));
+  });
+
+  it('enregistrement partiel : les lignes non cochées ne sont pas comptées comme sorties', () => {
+    const s0 = withCurrent();
+    const r = ok(recordPay(s0, { pay, lines: planLines, done: [all[0]], transferDate: '2026-10-28', currentAccountId: 'cc' }));
+    // 30 + 2 000 − 800 : le reste n'est pas encore viré.
+    expect(acc(applyPatch(s0, r.next), 'cc').ownedAmount).toBe(1230);
+  });
+
+  it('solde illisible refusé ; une paie modifiée garde son solde, « avant la paie » suit le montant si le solde le comprenait', () => {
+    const s0 = withCurrent();
+    expect(recordPay(s0, { pay: { ...pay, balance: { before: Number.NaN, source: 'typed' } }, lines: planLines, done: [], transferDate: '2026-10-28' }))
+      .toMatchObject({ ok: false, error: 'Solde du compte courant invalide.' });
+    expect(recordPay(s0, { pay: { ...pay, balance: { before: 1, source: 'deviné' as never } }, lines: planLines, done: [], transferDate: '2026-10-28' })).toMatchObject({ ok: false });
+    const s1 = applyPatch(s0, ok(recordPay(s0, { pay, lines: planLines, done: [], transferDate: '2026-10-28' })).next);
+    // Montant corrigé (fiche de paie) : 2 030 € lus, 1 990 € de paie, donc 40 € restaient.
+    const s2 = applyPatch(s1, ok(updatePay(s1, { payId: 'pay-2026-11', amount: 1990 })).next);
+    expect(s2.pays![0].balance).toEqual({ seen: 2030, before: 40, source: 'typed' });
+    // Même chose par le rituel (recordPay sans solde) ; un solde lu sans la paie ne bouge pas.
+    const s3 = applyPatch(s1, ok(recordPay(s1, { pay: { id: 'pay-2026-11', amount: 1980 }, lines: planLines, done: [], transferDate: '2026-10-28' })).next);
+    expect(s3.pays![0].balance).toEqual({ seen: 2030, before: 50, source: 'typed' });
+    const apart = applyPatch(s1, ok(updatePay(s1, { payId: 'pay-2026-11', balance: { seen: 30, before: 30, source: 'typed' } })).next);
+    expect(applyPatch(apart, ok(updatePay(apart, { payId: 'pay-2026-11', amount: 1990 })).next).pays![0].balance).toEqual({ seen: 30, before: 30, source: 'typed' });
+    expect('balance' in applyPatch(s1, ok(updatePay(s1, { payId: 'pay-2026-11', balance: null })).next).pays![0]).toBe(false);
+    expect(updatePay(s1, { payId: 'pay-2026-11', balance: { before: Number.POSITIVE_INFINITY, source: 'typed' } })).toMatchObject({ ok: false, code: 'invalid' });
+  });
+
+  it('ancienne paie sans solde : rien n\'est ajouté', () => {
+    const old: PayRecord = { id: 'p', receivedOn: '2026-10-27', savingsMonth: '2026-11', amount: 2500, lines: [], done: {} };
+    const s0 = withCurrent({}, [old]);
+    expect('balance' in applyPatch(s0, ok(updatePay(s0, { payId: 'p', amount: 2400 })).next).pays![0]).toBe(false);
+    expect('balance' in applyPatch(s0, ok(recordPay(s0, { pay: { id: 'p' }, lines: [], done: [], transferDate: '2026-10-28' })).next).pays![0]).toBe(false);
+  });
+});

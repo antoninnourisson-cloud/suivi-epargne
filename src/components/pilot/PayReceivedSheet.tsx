@@ -4,31 +4,38 @@
 //  0. Bilan du mois d'épargne précédent (la carte « Point de paie »), s'il n'est pas validé :
 //     « Continuer » le valide.
 //  1. Votre paie : montant reçu (net payé de la fiche du mois si elle est importée, sinon la
-//     paie estimée), date, prime éventuelle, mois d'épargne (règle du 15, « Changer »), et
+//     paie estimée), date, prime éventuelle, mois d'épargne (règle du 15, « Changer »),
 //     l'import de la fiche de paie sur place (mêmes composants et mêmes contrôles que l'écran
-//     Fiches de paie : la fiche y apparaît ensuite).
-//  2. Répartition conseillée pour CE montant (lib/payDistribution) : chaque ligne se coche,
-//     son montant et son compte se corrigent, « + Autre compte » ; « Tout est fait comme
-//     conseillé » ou « Enregistrer » (seulement les cases cochées) passent par UNE commande
-//     (recordPay), avec un seul « Annuler ».
+//     Fiches de paie : la fiche y apparaît ensuite), et le bloc « Compte courant » : le solde
+//     lu maintenant, paie comprise (prérempli d'après le solde connu s'il est récent), d'où
+//     Pécule déduit ce qui restait avant la paie ; « Je ne sais pas » : compté 0.
+//  2. « Que faire de votre paie » (lib/payDistribution) : paie + reste du compte courant à
+//     répartir, la barre, puis les lignes dans l'ordre des virements (virements fixes,
+//     épargne par compte, épargne projets) ; le plaisir, ce qui reste sur le compte courant,
+//     est la ligne d'équilibre, sans case. Montants et comptes se corrigent (« Rétablir les
+//     montants conseillés »), « + Autre compte » ; « Tout est fait comme conseillé » ou
+//     « Enregistrer » (seulement les cases cochées) passent par UNE commande (recordPay), avec
+//     un seul « Annuler ». « Tout est fait » enregistre aussi le solde du compte courant.
 // « Modifier la paie » rouvre la même feuille sur la paie déclarée (étapes 1 et 2) : les
 // lignes déjà faites restent faites, le plan reste figé s'il l'est.
 // ================================================
 import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, ArrowRightLeft, CalendarDays, CheckCheck, FileText, Info, KeyRound, PenLine, PiggyBank, Plus, Trash2, Wallet, X } from 'lucide-react';
-import { AccountType, type GlobalAppData, type PayChecklistLine, type PayslipRecord } from '../../types';
+import { ArrowLeft, CalendarDays, CheckCheck, FileText, Info, KeyRound, PenLine, Plus, Trash2, Wallet, X } from 'lucide-react';
+import { AccountType, type GlobalAppData, type PayBalance, type PayChecklistLine, type PayslipRecord } from '../../types';
 import type { RecordPayInput } from '../../lib/commands';
 import { computeMonthlyPay, computeMonthlySavingsCapacity } from '../../lib/finance';
-import { recommendPayDistribution, allocationSentence } from '../../lib/payDistribution';
+import { allocationSentence, balanceIncludesPay, currentAccountPrefill, recommendPayDistribution } from '../../lib/payDistribution';
 import { savingsMonthOf, shiftMonth } from '../../lib/payCalendar';
 import { isPayReviewDone, liveDone, payslipForMonth, payslipPeriodOf, suggestedPayKind } from '../../lib/payRecords';
 import { computeGoodMonths, computePayReview, motivationSettings } from '../../lib/motivation';
 import { localTodayISO, parseISODate } from '../../lib/dates';
 import { parseFrenchNumber } from '../../lib/numbers';
+import { round2 } from '../../lib/money';
 import { elideDe, formatEUR, formatMonth, frenchDay, toInputAmount } from '../../lib/format';
-import { placementReason } from '../../lib/pilotView';
+import { livePayBar, payBarParts, placementReason, type PayBarKey } from '../../lib/pilotView';
 import { Modal } from '../Modal';
 import { Button, IconButton, MoneyText, TextField, fieldClass } from '../ui';
+import { PartSwatch, PayBar } from './PayBar';
 import { PayReviewCard } from '../motivation/PayReviewCard';
 import { usePayslipImport } from '../payslips/usePayslipImport';
 import { PayslipDraftCard, PayslipPickButtons } from '../payslips/PayslipImportParts';
@@ -73,6 +80,13 @@ const dayLabel = (iso: string, today: string) => {
 };
 /** Mois d'épargne en toutes lettres (avec l'année si ce n'est pas celle d'aujourd'hui). */
 const monthLabel = (key: string, today: string) => formatMonth(key, key.slice(0, 4) !== today.slice(0, 4));
+/** Solde du compte courant : peut être négatif (« −50 », signe moins typographique accepté). */
+const parseBalance = (text: string): number | null => parseFrenchNumber(text.replace(/[−–]/g, '-'));
+const ageLabel = (days: number) => (days <= 0 ? "aujourd'hui" : days === 1 ? 'hier' : `il y a ${days} jours`);
+
+const isFixedLine = (l: PayChecklistLine) => l.kind === 'transfer' && l.key !== 't:projects' && l.key !== 't:leisure';
+const LEISURE_LINE = 't:leisure';
+const LEISURE_LABEL = 'Argent plaisir (reste sur le compte courant)';
 
 export const PayReceivedSheet: React.FC<SheetProps> = ({ doc, geminiApiKey, pickerApiKey, onRecordPay, onDeletePay, onValidateReview, onSavePayslip, onOpenKeys, onClose, editPayId }) => {
   const today = localTodayISO();
@@ -120,7 +134,43 @@ export const PayReceivedSheet: React.FC<SheetProps> = ({ doc, geminiApiKey, pick
   const amount = parseAmount(amountText);
   const bonusRaw = bonusText.trim() === '' ? 0 : parseAmount(bonusText);
   const bonusTooHigh = amount !== null && bonusRaw !== null && bonusRaw > amount;
-  const step1Ok = amount !== null && bonusRaw !== null && !bonusTooHigh && dateOk;
+
+  // Compte courant : solde lu maintenant, paie comprise (prérempli si le solde connu est
+  // récent). `null` : pas touché, la proposition suit le montant ; '' : « Je ne sais pas ».
+  const prefill = useMemo(
+    () => currentAccountPrefill(doc, { receivedOn: dateOk ? receivedOn : today, amount: amount ?? 0, today }),
+    [doc, receivedOn, dateOk, amount, today]);
+  const savedBalance = existing?.balance;
+  const savedSeenText = savedBalance && savedBalance.source !== 'unknown' && savedBalance.seen !== undefined ? toInputAmount(savedBalance.seen) : '';
+  // Paie déjà déclarée : son solde (une ancienne paie sans solde reste à « Je ne sais pas » : même répartition).
+  const [balanceText, setBalanceText] = useState<string | null>(existing ? savedSeenText : null);
+  const [includesPay, setIncludesPay] = useState(savedBalance ? balanceIncludesPay(savedBalance) : true);
+  const balanceShown = balanceText ?? (prefill.seen !== undefined ? toInputAmount(prefill.seen) : '');
+  const seenRaw = balanceShown.trim() === '' ? undefined : parseBalance(balanceShown);
+  const balanceInvalid = kind !== 'extra' && seenRaw === null;
+  const seen = seenRaw ?? undefined;
+  const balance: PayBalance = seen === undefined
+    ? { before: 0, source: 'unknown' }
+    : {
+        seen,
+        before: round2(includesPay ? seen - (amount ?? 0) : seen),
+        source: balanceText === null ? prefill.source ?? 'typed'
+          : existing && savedBalance && balanceText === savedSeenText ? savedBalance.source : 'typed',
+      };
+  const before = kind === 'extra' ? 0 : balance.before;
+  // D'où vient le chiffre proposé, et son âge (un solde trop ancien n'est pas proposé).
+  const balanceHelp = seen === undefined
+    ? (balanceText === '' || existing
+        ? 'Sans votre solde, Pécule suppose que le compte courant était vide avant la paie.'
+        : prefill.checkedOn && prefill.days !== undefined
+          ? `Dernier solde connu ${ageLabel(prefill.days)} : trop ancien. Regardez votre banque.`
+          : 'Le solde affiché par votre banque, maintenant.')
+    : balanceText === null && prefill.source === 'known' && prefill.checkedOn
+      ? `Solde enregistré le ${dayLabel(prefill.checkedOn, today)}.`
+      : balanceText === null && prefill.source === 'estimated' && prefill.checkedOn && prefill.days !== undefined && prefill.known !== undefined
+        ? `Estimation : ${formatEUR(prefill.known)} le ${dayLabel(prefill.checkedOn, today)} (${ageLabel(prefill.days)}), plus votre paie. Vérifiez dans votre banque.`
+        : 'Le solde affiché par votre banque, maintenant.';
+  const step1Ok = amount !== null && bonusRaw !== null && !bonusTooHigh && dateOk && !balanceInvalid;
 
   // Fiche de paie sur place : relue, enregistrée dans la liste des fiches, puis son net payé
   // devient le montant reçu.
@@ -136,32 +186,49 @@ export const PayReceivedSheet: React.FC<SheetProps> = ({ doc, geminiApiKey, pick
   const slipGap = slipNet !== undefined ? Math.round((slipNet - expected) * 100) / 100 : undefined;
 
   // --- Étape 2 : la répartition ---
-  const [toSave, setToSave] = useState<number | undefined>(existing?.toSave);
   const bonus = bonusRaw ?? 0;
+  // L'ancien « À placer » d'une paie déjà déclarée est toujours lu (le rituel ne l'écrit plus).
   const dist = useMemo(
-    () => recommendPayDistribution(doc, { amount: amount ?? 0, bonus, toSave, kind, receivedOn: dateOk ? receivedOn : today }),
-    [doc, amount, bonus, toSave, kind, receivedOn, dateOk, today]);
+    () => recommendPayDistribution(doc, { amount: amount ?? 0, bonus, toSave: existing?.toSave, kind, before, receivedOn: dateOk ? receivedOn : today }),
+    [doc, amount, bonus, existing?.toSave, kind, before, receivedOn, dateOk, today]);
   const doneBefore = useMemo(() => (existing ? liveDone(existing.done, doc.accounts) : {}), [existing, doc.accounts]);
   const frozen = !!existing && existing.lines.length > 0 && Object.keys(doneBefore).length > 0;
   const lines: PayChecklistLine[] = frozen ? existing!.lines : dist.lines;
   const [rows, setRows] = useState<Record<string, RowState>>({});
   const [added, setAdded] = useState<AddedRow[]>([]);
   const [transferDate, setTransferDate] = useState(today);
-  const [toSaveText, setToSaveText] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const savingAccounts = doc.accounts.filter(a => a.type !== AccountType.COMPTE_COURANT && a.type !== AccountType.IMMOBILIER);
   const rowOf = (l: PayChecklistLine): RowState => rows[l.key] ?? { checked: false, amount: toInputAmount(l.amount), accountId: l.accountId, already: false };
   const patchRow = (l: PayChecklistLine, patch: Partial<RowState>) => setRows(r => ({ ...r, [l.key]: { ...rowOf(l), ...patch } }));
   const suggestions = frozen ? [] : dist.steps.filter(st => st.alert && st.hint);
-  const gapSentence = frozen ? undefined : allocationSentence(dist.allocation);
+  const allocation = dist.allocation;
+  const gapSentence = frozen ? undefined : allocationSentence(allocation);
 
-  // « À placer » saisi : il remplace le calcul (prime comprise, comme le total affiché).
-  const commitToSave = (text: string) => {
-    const v = parseAmount(text);
-    if (v === null) return;
-    setToSave(Math.max(0, Math.round((v - dist.bonus) * 100) / 100));
-    setToSaveText(null);
-    setRows({});
+  // Groupes, dans l'ordre des virements ; le plaisir est la ligne d'équilibre.
+  const fixedLines = lines.filter(isFixedLine);
+  const savingLines = lines.filter(l => l.kind === 'saving');
+  const projectLine = lines.find(l => l.key === 't:projects');
+  const leisureLine = lines.find(l => l.key === LEISURE_LINE);
+  const valueOf = (l: PayChecklistLine) => doneBefore[l.key]?.amount ?? parseAmount(rowOf(l).amount) ?? 0;
+  const sum = (ls: PayChecklistLine[]) => round2(ls.reduce((s, l) => s + valueOf(l), 0));
+  const fixedSum = sum(fixedLines);
+  const savingSum = round2(sum(savingLines) + added.reduce((s, a) => s + (parseAmount(a.amount) ?? 0), 0));
+  const projectsSum = projectLine ? valueOf(projectLine) : 0;
+  const available = round2((amount ?? 0) + before);
+  const leisureLive = round2(available - fixedSum - savingSum - projectsSum);
+  const bar = useMemo(() => livePayBar(payBarParts(allocation), {
+    ...(kind === 'extra' ? {} : { fixed: fixedSum, projects: projectsSum }),
+    savings: savingSum, leisure: leisureLive,
+  }), [allocation, kind, fixedSum, projectsSum, savingSum, leisureLive]);
+  const modified = added.length > 0 || lines.some(l => l.key !== LEISURE_LINE && !doneBefore[l.key]
+    && (rowOf(l).amount !== toInputAmount(l.amount) || (rowOf(l).accountId ?? '') !== (l.accountId ?? '')));
+  const resetAmounts = () => {
+    setRows(r => Object.fromEntries(Object.entries(r).map(([k, v]) => {
+      const l = lines.find(x => x.key === k);
+      return [k, l ? { ...v, amount: toInputAmount(l.amount), accountId: l.accountId } : v];
+    })));
+    setAdded([]);
   };
 
   // Le titre de chaque étape reçoit le focus (annoncé par les lecteurs d'écran).
@@ -183,8 +250,18 @@ export const PayReceivedSheet: React.FC<SheetProps> = ({ doc, geminiApiKey, pick
     setError(null);
     if (!ISO_DAY.test(transferDate)) { setError('Date des virements invalide.'); return; }
     const done: RecordPayInput['done'] = [];
-    for (const l of lines) {
+    // Le plaisir : ce qui reste vraiment, d'après les montants saisis (pas de case : fait avec le reste).
+    const leisureAmount = round2(Math.max(0, leisureLive));
+    const sentLines = frozen || kind === 'extra' ? lines : [
+      ...lines.filter(l => l.key !== LEISURE_LINE),
+      ...(leisureAmount > 0 ? [{ ...(leisureLine ?? { key: LEISURE_LINE, label: LEISURE_LABEL, kind: 'transfer' as const }), amount: leisureAmount }] : []),
+    ];
+    for (const l of sentLines) {
       if (doneBefore[l.key]) continue;
+      if (l.key === LEISURE_LINE) {
+        if (all) done.push({ key: l.key, amount: leisureAmount });
+        continue;
+      }
       const row = rowOf(l);
       if (!all && !row.checked) continue;
       const v = parseAmount(row.amount);
@@ -198,7 +275,7 @@ export const PayReceivedSheet: React.FC<SheetProps> = ({ doc, geminiApiKey, pick
       const v = parseAmount(a.amount);
       if (v === null) { setError(`Montant non reconnu pour « ${account.name} ».`); return; }
       let key = `a:${account.id}`;
-      for (let n = 2; [...lines, ...extraLines].some(l => l.key === key); n++) key = `a:${account.id}-${n}`;
+      for (let n = 2; [...sentLines, ...extraLines].some(l => l.key === key); n++) key = `a:${account.id}-${n}`;
       extraLines.push({ key, label: account.name, amount: v, kind: 'saving', accountId: account.id, added: true });
       if (all || a.checked) done.push({ key, amount: v });
     }
@@ -207,14 +284,15 @@ export const PayReceivedSheet: React.FC<SheetProps> = ({ doc, geminiApiKey, pick
         ...(existing ? { id: existing.id } : {}),
         receivedOn, savingsMonth: month, amount: amount!,
         bonus: kind === 'extra' ? undefined : bonus,
-        ...(kind === 'extra' ? { kind } : {}),
-        // Modifier la paie : sans montant saisi, retour au calcul.
-        toSave: existing ? (toSave ?? null) : toSave,
+        // Ancienne paie sans solde, laissée à « Je ne sais pas » : rien n'est ajouté.
+        ...(kind === 'extra' ? { kind } : existing && !savedBalance && balance.source === 'unknown' ? {} : { balance }),
         ...(payslip ? { payslipId: payslip.id } : {}),
       },
-      lines: [...lines, ...extraLines],
+      lines: [...sentLines, ...extraLines],
       done,
       transferDate,
+      // « Tout est fait » : Pécule note ce qui reste vraiment sur le compte courant.
+      ...(all && kind !== 'extra' && balance.source !== 'unknown' && prefill.account ? { currentAccountId: prefill.account.id } : {}),
     };
     const refused = onRecordPay(input);
     if (refused) { setError(refused); return; }
@@ -222,10 +300,32 @@ export const PayReceivedSheet: React.FC<SheetProps> = ({ doc, geminiApiKey, pick
   };
 
   const monthName = monthLabel(month, today);
-  const savingLines = lines.filter(l => l.kind === 'saving');
-  const transferLines = lines.filter(l => l.kind === 'transfer');
   const stepCount = review ? 3 : 2;
   const stepIndex = review ? step + 1 : step;
+
+  // Ce que l'épargne conseillée contient de plus que l'épargne visée (calculé sur le résultat).
+  const savingsNote = kind === 'extra' ? undefined : [
+    ...(allocation.surplus >= 0.5
+      ? [Math.abs(allocation.surplus - allocation.before) < 0.5
+          ? `dont ${formatEUR(allocation.surplus)} de reste du mois dernier`
+          : `dont ${formatEUR(allocation.surplus)} en plus de l'épargne visée`]
+      : []),
+    ...(allocation.bonus > 0
+      ? [allocation.cuts.bonus > 0
+          ? `prime placée en partie (${formatEUR(allocation.bonusPlaced)} sur ${formatEUR(allocation.bonus)})`
+          : `dont prime ${formatEUR(allocation.bonus)}`]
+      : []),
+  ].join(', ') || undefined;
+
+  const groupHeading = (key: PayBarKey, label: string, amount: number, note?: string) => (
+    <div className="mt-6 border-b border-outline-variant pb-2">
+      <h3 id={`${ids}-g-${key}`} className="flex items-baseline justify-between gap-3 text-sm font-medium text-on-surface">
+        <span className="flex items-center gap-2 min-w-0"><PartSwatch part={key} />{label}</span>
+        <MoneyText value={amount} />
+      </h3>
+      {note && <p className="mt-0.5 ml-5 text-xs text-on-surface-variant">{note}</p>}
+    </div>
+  );
 
   const renderLine = (l: PayChecklistLine) => {
     const before = doneBefore[l.key];
@@ -256,7 +356,7 @@ export const PayReceivedSheet: React.FC<SheetProps> = ({ doc, geminiApiKey, pick
               {before
                 ? <>Déjà fait : <MoneyText value={before.amount} /></>
                 : invalid ? 'Montant non reconnu (exemple : 1 234,56)'
-                  : <>Conseillé : <MoneyText value={l.amount} /></>}
+                  : <>Conseillé : <MoneyText value={l.amount} />{l.key === 't:projects' && !frozen && allocation.plannedProjects - l.amount >= 0.005 && <> (prévu <MoneyText value={allocation.plannedProjects} />)</>}</>}
             </p>
             {!before && l.kind === 'saving' && (
               <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2">
@@ -402,6 +502,41 @@ export const PayReceivedSheet: React.FC<SheetProps> = ({ doc, geminiApiKey, pick
             )}
 
             {kind !== 'extra' && (
+              <section aria-labelledby={`${ids}-current`} className="rounded-2xl border border-outline-variant p-4">
+                <h3 id={`${ids}-current`} className="text-sm font-medium text-on-surface flex items-center gap-2">
+                  <Wallet className="w-4 h-4 text-on-surface-variant" aria-hidden="true" /> Compte courant{prefill.account ? ` · ${prefill.account.name}` : ''}
+                </h3>
+                <div className="mt-3 max-w-xs">
+                  <TextField
+                    label="Solde maintenant, paie comprise"
+                    suffix="€"
+                    inputMode="decimal"
+                    className="tabular-nums"
+                    value={balanceShown}
+                    onChange={e => setBalanceText(e.target.value)}
+                    error={balanceInvalid ? 'Montant non reconnu (exemple : 430,50 ou −50).' : undefined}
+                    supporting={balanceHelp}
+                  />
+                </div>
+                <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1">
+                  <label className="inline-flex items-center gap-2 min-h-12 sm:min-h-10 text-sm text-on-surface cursor-pointer">
+                    <input type="checkbox" checked={includesPay} onChange={e => setIncludesPay(e.target.checked)} className="w-5 h-5 accent-primary" />
+                    Ma paie apparaît déjà dans ce solde
+                  </label>
+                  {seen !== undefined && (
+                    <Button variant="text" size="sm" onClick={() => setBalanceText('')} className="-ml-3 sm:ml-0">Je ne sais pas</Button>
+                  )}
+                </div>
+                <p role="status" className="mt-1 text-sm text-on-surface">
+                  {seen === undefined || balanceInvalid ? null
+                    : balance.before >= 0.005 ? <>Il restait <MoneyText value={balance.before} /> du mois dernier.</>
+                      : balance.before <= -0.005 ? <>Découvert de <MoneyText value={-balance.before} /> avant la paie.</>
+                        : 'Rien ne restait du mois dernier.'}
+                </p>
+              </section>
+            )}
+
+            {kind !== 'extra' && (
               <section aria-labelledby={`${ids}-slip`} className="rounded-2xl border border-outline-variant p-4">
                 <h3 id={`${ids}-slip`} className="text-sm font-medium text-on-surface flex items-center gap-2">
                   <FileText className="w-4 h-4 text-on-surface-variant" aria-hidden="true" /> Fiche de paie {elideDe(formatMonth(slipPeriod))}
@@ -454,86 +589,97 @@ export const PayReceivedSheet: React.FC<SheetProps> = ({ doc, geminiApiKey, pick
 
       {step === 2 && (
         <>
-          {heading('Répartition conseillée')}
-          <div className="rounded-2xl bg-secondary-container text-on-secondary-container p-4">
-            <div className="flex flex-wrap items-end justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-sm">Paie reçue le {dayLabel(receivedOn, today)} : <MoneyText value={amount ?? 0} /> · Épargne {elideDe(monthName)}</p>
-                {frozen ? (
-                  <p className="mt-2 text-sm">Plan figé : une partie est déjà faite. Les lignes restantes se cochent ci-dessous.</p>
-                ) : (
-                  <div className="mt-2 max-w-48">
-                    <TextField
-                      label="À placer"
-                      suffix="€"
-                      inputMode="decimal"
-                      className="tabular-nums"
-                      value={toSaveText ?? toInputAmount(dist.toSave)}
-                      onChange={e => setToSaveText(e.target.value)}
-                      onBlur={e => commitToSave(e.target.value)}
-                      onKeyDown={e => { if (e.key === 'Enter') commitToSave((e.target as HTMLInputElement).value); }}
-                    />
-                  </div>
-                )}
-              </div>
-              {!frozen && toSave !== undefined && (
-                <Button variant="text" size="sm" onClick={() => { setToSave(undefined); setToSaveText(null); setRows({}); }}>Revenir au conseil</Button>
-              )}
-            </div>
-            {gapSentence && <p className="mt-3 text-sm">{gapSentence}</p>}
-            {!frozen && dist.bonus > 0 && <p className="mt-1 text-sm">Dont prime placée en entier : <MoneyText value={dist.bonus} />.</p>}
+          {heading(kind === 'extra' ? 'Que faire de ce versement' : 'Que faire de votre paie')}
+          <div className="rounded-2xl bg-surface-container p-4">
+            <p className="text-xs text-on-surface-variant">{kind === 'extra' ? 'Versement reçu' : 'Paie reçue'} le {dayLabel(receivedOn, today)} · Épargne {elideDe(monthName)}</p>
+            <p className="mt-1 text-base text-on-surface">
+              {kind === 'extra'
+                ? <><MoneyText value={amount ?? 0} className="font-medium" /> reçus en plus : tout est placé</>
+                : before >= 0.005
+                  ? <><MoneyText value={amount ?? 0} /> de paie + <MoneyText value={before} /> déjà sur le compte = <MoneyText value={available} className="font-medium" /> à répartir</>
+                  : before <= -0.005
+                    ? <><MoneyText value={amount ?? 0} /> de paie − <MoneyText value={-before} /> de découvert = <MoneyText value={available} className="font-medium" /> à répartir</>
+                    : <><MoneyText value={amount ?? 0} className="font-medium" /> de paie à répartir</>}
+            </p>
+            {kind !== 'extra' && balance.source === 'unknown' && (
+              <p className="mt-1 text-xs text-on-surface-variant">Sans votre solde, Pécule suppose que le compte courant était vide avant la paie.</p>
+            )}
+            <PayBar bar={bar} notes={modified || frozen ? {} : { savings: savingsNote }} className="mt-4" />
+            {frozen && <p className="mt-3 text-sm text-on-surface">Plan figé : une partie est déjà faite. Les lignes restantes se cochent ci-dessous.</p>}
+            {/* La phrase explique le conseil : elle se tait une fois les montants changés. */}
+            {gapSentence && !modified && <p className="mt-3 text-sm text-on-surface">{gapSentence}</p>}
+            {modified && (
+              <Button variant="text" size="sm" onClick={resetAmounts} className="mt-2 -ml-3">Rétablir les montants conseillés</Button>
+            )}
           </div>
 
-          {savingLines.length > 0 && (
-            <>
-              <h3 className="mt-6 flex items-center gap-2 border-b border-outline-variant pb-2 text-sm font-medium text-on-surface"><PiggyBank className="w-4 h-4 text-on-surface-variant" aria-hidden="true" /> Sur vos comptes d'épargne</h3>
-              <ul className="divide-y divide-outline-variant">{savingLines.map(renderLine)}</ul>
-            </>
-          )}
-          {suggestions.map(st => (
-            <p key={st.accountName} className="mt-2 text-sm text-on-tertiary-container bg-tertiary-container rounded-xl p-3 flex items-start gap-2">
-              <Info className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />{st.hint}
-            </p>
-          ))}
-          {savingLines.length === 0 && suggestions.length === 0 && <p className="mt-4 text-sm text-on-surface-variant">Rien à placer sur cette paie.</p>}
-
-          {added.length > 0 && (
-            <ul aria-label="Autres comptes" className="divide-y divide-outline-variant">
-              {added.map(a => {
-                const invalid = parseAmount(a.amount) === null;
-                const patch = (p: Partial<AddedRow>) => setAdded(list => list.map(x => (x.id === a.id ? { ...x, ...p } : x)));
-                return (
-                  <li key={a.id} className="py-2 flex flex-wrap items-center gap-3">
-                    <input type="checkbox" checked={a.checked} onChange={e => patch({ checked: e.target.checked })} aria-label="Versement fait sur l'autre compte" className="w-5 h-5 accent-primary" />
-                    <select value={a.accountId} onChange={e => patch({ accountId: e.target.value })} aria-label="Autre compte crédité" className="h-12 sm:h-10 px-2 rounded-xs bg-transparent border border-outline text-sm text-on-surface flex-1 min-w-0">
-                      {savingAccounts.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}
-                    </select>
-                    <label className="flex items-center gap-1">
-                      <span className="sr-only">Montant versé sur l'autre compte</span>
-                      <input type="text" inputMode="decimal" value={a.amount} onChange={e => patch({ amount: e.target.value })} aria-invalid={invalid || undefined}
-                        className="w-24 h-12 sm:h-10 px-2 text-right text-sm tabular-nums rounded-xs bg-transparent border border-outline text-on-surface aria-[invalid=true]:border-error aria-[invalid=true]:border-2" />
-                      <span className="text-sm text-on-surface-variant" aria-hidden="true">€</span>
-                    </label>
-                    <IconButton icon={X} label="Retirer cet autre compte" onClick={() => setAdded(list => list.filter(x => x.id !== a.id))} />
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-          {savingAccounts.length > 0 && (
-            <Button variant="text" size="sm" className="mt-1 -ml-3" onClick={() => setAdded(list => [...list, { id: `${Date.now()}-${list.length}`, accountId: (savingAccounts.find(a => !lines.some(l => l.accountId === a.id)) ?? savingAccounts[0]).id, amount: '', checked: true }])}>
-              <Plus className="w-4 h-4" aria-hidden="true" /> Autre compte
-            </Button>
+          {fixedLines.length > 0 && (
+            <section aria-labelledby={`${ids}-g-fixed`}>
+              {groupHeading('fixed', 'Virements fixes', fixedSum)}
+              <ul className="divide-y divide-outline-variant">{fixedLines.map(renderLine)}</ul>
+            </section>
           )}
 
-          {transferLines.length > 0 && (
-            <>
-              <h3 className="mt-6 flex items-center gap-2 border-b border-outline-variant pb-2 text-sm font-medium text-on-surface"><ArrowRightLeft className="w-4 h-4 text-on-surface-variant" aria-hidden="true" /> Virements de la paie, déduits avant l'épargne</h3>
-              <ul className="divide-y divide-outline-variant">{transferLines.map(renderLine)}</ul>
-            </>
+          <section aria-labelledby={`${ids}-g-savings`}>
+            {groupHeading('savings', 'Épargne', savingSum, modified || frozen ? undefined : savingsNote)}
+            {savingLines.length > 0 && <ul className="divide-y divide-outline-variant">{savingLines.map(renderLine)}</ul>}
+            {suggestions.map(st => (
+              <p key={st.accountName} className="mt-2 text-sm text-on-tertiary-container bg-tertiary-container rounded-xl p-3 flex items-start gap-2">
+                <Info className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />{st.hint}
+              </p>
+            ))}
+            {savingLines.length === 0 && suggestions.length === 0 && added.length === 0 && <p className="mt-3 text-sm text-on-surface-variant">Rien à placer sur cette paie.</p>}
+            {added.length > 0 && (
+              <ul aria-label="Autres comptes" className="divide-y divide-outline-variant">
+                {added.map(a => {
+                  const invalid = parseAmount(a.amount) === null;
+                  const patch = (p: Partial<AddedRow>) => setAdded(list => list.map(x => (x.id === a.id ? { ...x, ...p } : x)));
+                  return (
+                    <li key={a.id} className="py-2 flex flex-wrap items-center gap-3">
+                      <input type="checkbox" checked={a.checked} onChange={e => patch({ checked: e.target.checked })} aria-label="Versement fait sur l'autre compte" className="w-5 h-5 accent-primary" />
+                      <select value={a.accountId} onChange={e => patch({ accountId: e.target.value })} aria-label="Autre compte crédité" className="h-12 sm:h-10 px-2 rounded-xs bg-transparent border border-outline text-sm text-on-surface flex-1 min-w-0">
+                        {savingAccounts.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}
+                      </select>
+                      <label className="flex items-center gap-1">
+                        <span className="sr-only">Montant versé sur l'autre compte</span>
+                        <input type="text" inputMode="decimal" value={a.amount} onChange={e => patch({ amount: e.target.value })} aria-invalid={invalid || undefined}
+                          className="w-24 h-12 sm:h-10 px-2 text-right text-sm tabular-nums rounded-xs bg-transparent border border-outline text-on-surface aria-[invalid=true]:border-error aria-[invalid=true]:border-2" />
+                        <span className="text-sm text-on-surface-variant" aria-hidden="true">€</span>
+                      </label>
+                      <IconButton icon={X} label="Retirer cet autre compte" onClick={() => setAdded(list => list.filter(x => x.id !== a.id))} />
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+            {savingAccounts.length > 0 && (
+              <Button variant="text" size="sm" className="mt-1 -ml-3" onClick={() => setAdded(list => [...list, { id: `${Date.now()}-${list.length}`, accountId: (savingAccounts.find(a => !lines.some(l => l.accountId === a.id)) ?? savingAccounts[0]).id, amount: '', checked: true }])}>
+                <Plus className="w-4 h-4" aria-hidden="true" /> Autre compte
+              </Button>
+            )}
+          </section>
+
+          {(projectLine || (kind !== 'extra' && allocation.plannedProjects > 0)) && (
+            <section aria-labelledby={`${ids}-g-projects`}>
+              {groupHeading('projects', 'Épargne projets', projectsSum)}
+              {projectLine
+                ? <ul className="divide-y divide-outline-variant">{renderLine(projectLine)}</ul>
+                : <p className="mt-3 text-sm text-on-surface-variant">Suspendue ce mois-ci : <MoneyText value={0} /> (prévu <MoneyText value={allocation.plannedProjects} />).</p>}
+            </section>
           )}
-          {!frozen && dist.shortfall > 0 && (
-            <p role="status" className="mt-4 text-sm font-medium text-error flex items-center gap-2"><Info className="w-4 h-4 shrink-0" aria-hidden="true" /> Il manque {formatEUR(dist.shortfall)} pour les virements fixes : à prendre sur votre épargne disponible.</p>
+
+          {kind !== 'extra' ? (
+            <section aria-labelledby={`${ids}-g-leisure`}>
+              {groupHeading('leisure', 'Plaisir : reste sur le compte courant', Math.max(0, leisureLive))}
+              <p className="mt-3 text-sm text-on-surface-variant">Rien à virer : c'est l'argent du mois, sur le compte courant. Il suit les montants ci-dessus.</p>
+              {leisureLive < 0 ? (
+                <p role="status" className="mt-2 text-sm font-medium text-error flex items-start gap-2"><Info className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" /> Il manque {formatEUR(-leisureLive)} pour les virements fixes : à prendre sur votre épargne disponible.</p>
+              ) : allocation.floor > 0 && leisureLive < allocation.floor - 0.005 ? (
+                <p role="status" className="mt-2 text-sm font-medium text-error flex items-start gap-2"><Info className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" /> En dessous de votre minimum de {formatEUR(allocation.floor)}.</p>
+              ) : null}
+            </section>
+          ) : leisureLive >= 0.005 && (
+            <p className="mt-4 text-sm text-on-surface-variant">Reste sur le compte courant : <MoneyText value={leisureLive} />.</p>
           )}
 
           <div className="mt-6 max-w-xs">

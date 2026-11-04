@@ -43,7 +43,7 @@ test('déclarer la paie depuis le Pilotage, corriger une ligne, enregistrer puis
   const dialog = await ritual(page);
   await dialog.getByLabel('Montant reçu').fill('2400');
   await dialog.getByRole('button', { name: 'Voir la répartition' }).click();
-  await expect(dialog.getByRole('heading', { name: 'Répartition conseillée' })).toBeFocused();
+  await expect(dialog.getByRole('heading', { name: 'Que faire de votre paie' })).toBeFocused();
   await dialog.getByRole('checkbox', { name: /^Livret A/ }).check();
   await dialog.getByRole('textbox', { name: 'Montant fait pour Livret A' }).fill('123');
   await dialog.getByRole('button', { name: 'Enregistrer', exact: true }).click();
@@ -63,6 +63,42 @@ test('déclarer la paie depuis le Pilotage, corriger une ligne, enregistrer puis
   expect(errors).toEqual([]);
 });
 
+test('compte courant : solde prérempli, reste du mois dernier à répartir, montants corrigés puis rétablis, solde noté et annulé', async ({ page }) => {
+  await openDemo(page);
+  await card(page).getByRole('button', { name: "J'ai reçu ma paie" }).click();
+  const dialog = await ritual(page);
+  const current = dialog.getByRole('region', { name: /^Compte courant/ });
+  // Le solde connu de la démo date de 2 jours : estimation, solde + paie.
+  await expect(current).toContainText(/Estimation : 3\s900\s€ le .* \(il y a 2 jours\), plus votre paie\./);
+  await dialog.getByLabel('Montant reçu').fill('2400');
+  await dialog.getByLabel('Solde maintenant, paie comprise').fill('2 430');
+  await expect(current.getByRole('status')).toHaveText(/^Il restait 30\s€ du mois dernier\.$/);
+  await dialog.getByRole('button', { name: 'Voir la répartition' }).click();
+  await expect(dialog.getByText(/^2\s400\s€ de paie \+ 30\s€ déjà sur le compte = 2\s430\s€ à répartir$/)).toBeVisible();
+  await expect(dialog.getByRole('img', { name: /^Répartition de 2\s430\s€ : virements fixes/ })).toBeVisible();
+  // Le plaisir est la ligne d'équilibre : pas de case, son montant suit les autres.
+  const leisure = dialog.getByRole('region', { name: /^Plaisir : reste sur le compte courant/ });
+  await expect(leisure.getByRole('checkbox')).toHaveCount(0);
+  const before = euros((await leisure.getByRole('heading').textContent())!.replace(/^[^\d]*/, ''));
+  const livret = dialog.getByRole('textbox', { name: 'Montant fait pour Livret A' });
+  const advised = await livret.inputValue();
+  await livret.fill(String(euros(advised) + 10).replace('.', ','));
+  await expect.poll(async () => euros((await leisure.getByRole('heading').textContent())!.replace(/^[^\d]*/, ''))).toBeCloseTo(before - 10, 2);
+  await dialog.getByRole('button', { name: 'Rétablir les montants conseillés' }).click();
+  await expect(livret).toHaveValue(advised);
+  await expect(dialog.getByRole('button', { name: 'Rétablir les montants conseillés' })).toHaveCount(0);
+
+  await dialog.getByRole('button', { name: 'Tout est fait comme conseillé' }).click();
+  await expect(dialog).toBeHidden();
+  // « Tout est fait » note aussi ce qui reste sur le compte courant ; un seul « Annuler » défait tout.
+  const status = page.getByRole('status').filter({ hasText: 'Compte courant :' });
+  await expect(status).toBeVisible();
+  await status.getByRole('button', { name: 'Annuler' }).click();
+  await expect(card(page).getByRole('button', { name: "J'ai reçu ma paie" })).toBeVisible();
+  await card(page).getByRole('button', { name: "J'ai reçu ma paie" }).click();
+  await expect((await ritual(page)).getByRole('region', { name: /^Compte courant/ })).toContainText(/Estimation : 3\s900\s€/);
+});
+
 test('lien direct : prime placée en entier, « Tout est fait », et l’Accueil reprend l’objectif', async ({ page, isMobile }) => {
   await openDemo(page, 'view=pilot&action=pay');
   // Le lien est retiré de l'adresse (un rechargement ne rouvre pas la feuille).
@@ -72,8 +108,9 @@ test('lien direct : prime placée en entier, « Tout est fait », et l’Accueil
   await dialog.getByRole('button', { name: 'Dont prime ou exceptionnel' }).click();
   await dialog.getByRole('textbox', { name: 'Dont prime ou exceptionnel' }).fill('500');
   await dialog.getByRole('button', { name: 'Voir la répartition' }).click();
-  await expect(dialog.getByText(/Dont prime placée en entier : 500/)).toBeVisible();
-  const toSave = euros(await dialog.getByLabel('À placer').inputValue());
+  await expect(dialog.getByText(/dont prime 500\s€/).first()).toBeVisible();
+  // L'épargne conseillée : le sous-total du groupe Épargne (prime et reste du compte courant compris).
+  const toSave = euros((await dialog.getByRole('heading', { level: 3, name: /^Épargne\s*\d/ }).textContent())!);
   await dialog.getByRole('button', { name: 'Tout est fait comme conseillé' }).click();
   await expect(dialog).toBeHidden();
 

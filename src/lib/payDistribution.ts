@@ -17,13 +17,14 @@
 // Calcul en centimes entiers : la somme des parts vaut exactement l'argent à répartir.
 // Fonction pure, partagée par l'app et le serveur.
 // ================================================
-import type { GlobalAppData, PayChecklistLine, PayRecord } from '../types';
+import { AccountType, type GlobalAppData, type PayBalance, type PayBalanceSource, type PayChecklistLine, type PayRecord, type SavingsAccount } from '../types';
+import { CURRENT_ACCOUNT_FRESH_DAYS, lastBalanceCheck } from './freshness';
 import {
   activeSavingsSplit, buildPayLines, computeMonthlyPay, computePayTransfers, computePlacementStrategy,
   PayTransfer, PlacementStep,
 } from './finance';
 import { DEFAULT_FISCAL_CONFIG } from '../constants';
-import { formatISODay, parseISODate } from './dates';
+import { MS_PER_DAY, formatISODay, parseISODate } from './dates';
 import { formatEUR } from './format';
 import { round2 } from './money';
 
@@ -230,6 +231,61 @@ export const payBalanceBefore = (pay: Pick<PayRecord, 'balance' | 'kind'> | unde
   const b = pay?.balance;
   if (!b || pay?.kind === 'extra' || b.source === 'unknown') return 0;
   return finite(b.before) ?? 0;
+};
+
+/**
+ * Le montant reçu change (fiche de paie, « Modifier la paie ») : si le solde lu comprenait la
+ * paie, ce qui restait avant la paie suit (solde lu − nouveau montant) ; sinon rien ne bouge.
+ */
+export const balanceForAmount = (b: PayBalance | undefined, oldAmount: number, newAmount: number): PayBalance | undefined => {
+  if (!b || b.source === 'unknown' || b.seen === undefined) return b;
+  const included = Math.abs(b.seen - b.before - oldAmount) < 0.005 && Math.abs(b.seen - b.before) >= 0.005;
+  return included ? { ...b, before: round2(b.seen - newAmount) } : b;
+};
+
+/** Le solde lu comprend-il la paie (case « Ma paie apparaît déjà dans ce solde ») ? */
+export const balanceIncludesPay = (b: Pick<PayBalance, 'seen' | 'before'>): boolean =>
+  b.seen === undefined || Math.abs(b.seen - b.before) >= 0.005;
+
+/** Compte courant où arrive la paie : celui choisi (config.payAccountId), sinon le premier compte courant. */
+export const payAccountOf = (data: Pick<GlobalAppData, 'accounts' | 'config'>): SavingsAccount | undefined => {
+  const current = (data.accounts || []).filter(a => a.type === AccountType.COMPTE_COURANT);
+  return current.find(a => a.id === data.config?.payAccountId) ?? current[0];
+};
+
+export interface CurrentAccountPrefill {
+  account?: SavingsAccount;
+  /** Solde proposé, paie comprise ; absent : rien à proposer (trop ancien, inconnu, pas de compte). */
+  seen?: number;
+  source?: Exclude<PayBalanceSource, 'typed' | 'unknown'>;
+  /** Dernier solde constaté ('YYYY-MM-DD') et son âge en jours. */
+  checkedOn?: string;
+  days?: number;
+  /** Solde constaté (sans la paie). */
+  known?: number;
+}
+
+/**
+ * Ce que le rituel propose pour « Solde maintenant, paie comprise » :
+ *  - solde constaté APRÈS le jour de la paie : tel quel (il comprend la paie) ;
+ *  - constaté avant (ou le jour même : il peut dater d'avant son arrivée), il y a
+ *    CURRENT_ACCOUNT_FRESH_DAYS jours au plus : estimation, solde connu + paie ;
+ *  - plus ancien, jamais constaté, ou aucun compte courant : rien.
+ */
+export const currentAccountPrefill = (
+  data: Pick<GlobalAppData, 'accounts' | 'config'>,
+  input: { receivedOn: string; amount: number; today: string },
+): CurrentAccountPrefill => {
+  const account = payAccountOf(data);
+  if (!account) return {};
+  const checkedOn = lastBalanceCheck(account, input.today);
+  if (!checkedOn) return { account };
+  const days = Math.round((parseISODate(input.today).getTime() - parseISODate(checkedOn).getTime()) / MS_PER_DAY);
+  const known = round2(account.totalAmount);
+  const base = { account, checkedOn, days, known };
+  if (checkedOn > input.receivedOn) return { ...base, seen: known, source: 'known' };
+  if (days > CURRENT_ACCOUNT_FRESH_DAYS) return base;
+  return { ...base, seen: round2(known + (finite(input.amount) ?? 0)), source: 'estimated' };
 };
 
 /** Virements fixes de la paie (charges saisies puis abonnements), dans l'ordre des virements. */

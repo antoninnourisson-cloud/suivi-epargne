@@ -54,8 +54,10 @@ const setup = (doc: GlobalAppData, patch: Partial<PayRitualProps> & { editPayId?
 };
 
 const amountField = () => screen.getByLabelText('Montant reçu') as HTMLInputElement;
+/** Espaces insécables (formateurs) remis en espaces simples. */
+const nbsp = (s: string | null | undefined) => (s ?? '').replace(/[\u00a0\u202f]/g, ' ').trim();
 const toPlan = () => fireEvent.click(screen.getByRole('button', { name: 'Voir la répartition' }));
-const toSaveValue = () => Number((screen.getByLabelText('À placer') as HTMLInputElement).value.replace(/\s/g, '').replace(',', '.'));
+const toSaveValue = () => Number((screen.getByRole('textbox', { name: 'Montant fait pour Livret A' }) as HTMLInputElement).value.replace(/\s/g, '').replace(',', '.'));
 
 describe('Rituel « J’ai reçu ma paie » : votre paie', () => {
   it('fenêtre nommée, montant prérempli avec la paie estimée, reçue aujourd’hui, épargne de novembre', () => {
@@ -128,7 +130,7 @@ describe('Rituel : répartition et enregistrement', () => {
     fireEvent.change(amountField(), { target: { value: '2500' } });
     toPlan();
     // Le titre de l'étape reçoit le focus.
-    expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Répartition conseillée' }));
+    expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Que faire de votre paie' }));
     fireEvent.change(screen.getByLabelText('Virements faits le'), { target: { value: '2026-10-29' } });
     fireEvent.click(screen.getByRole('button', { name: 'Tout est fait comme conseillé' }));
     expect(props.onRecordPay).toHaveBeenCalledTimes(1);
@@ -191,15 +193,46 @@ describe('Rituel : répartition et enregistrement', () => {
     expect(screen.getByText(/^Le compte courant démarre à 200\s€ : 150\s€ de plus vont à l'épargne \(paie supérieure de 150\s€ à l'habitude\)\.$/)).toBeTruthy();
   });
 
-  it('« À placer » saisi : il remplace le conseil et part avec la paie ; « Revenir au conseil »', () => {
+  it('montants modifiables : le plaisir est la ligne d’équilibre (sans case), la barre suit, « Rétablir les montants conseillés »', () => {
     const props = setup(makeDoc());
+    fireEvent.change(amountField(), { target: { value: '2500' } });
     toPlan();
-    const field = screen.getByLabelText('À placer');
-    fireEvent.change(field, { target: { value: '400' } });
-    fireEvent.blur(field, { target: { value: '400' } });
-    expect(toSaveValue()).toBe(400);
+    const base = toSaveValue();
+    const leisure = () => screen.getByRole('region', { name: /^Plaisir : reste sur le compte courant/ });
+    expect(nbsp(leisure().textContent)).toMatch(/Plaisir : reste sur le compte courant200 €/);
+    expect(screen.queryByRole('checkbox', { name: /plaisir/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Rétablir les montants conseillés' })).toBeNull();
+    expect(screen.getByText(/^Le compte courant démarre à 200/)).toBeTruthy();
+    const bar = screen.getByRole('img');
+    expect(nbsp(bar.getAttribute('aria-label'))).toMatch(/^Répartition de 2 500 € : virements fixes 800 €, épargne [\d ,]+ €, plaisir 200 €\.$/);
+    // 100 € de plus sur le Livret A : le plaisir passe à 100 €, sous son minimum (2/3 de 200 €).
+    const field = screen.getByRole('textbox', { name: 'Montant fait pour Livret A' });
+    fireEvent.change(field, { target: { value: String(base + 100).replace('.', ',') } });
+    expect(nbsp(leisure().textContent)).toMatch(/courant100 €/);
+    // La phrase du conseil se tait une fois les montants changés.
+    expect(screen.queryByText(/^Le compte courant démarre/)).toBeNull();
+    expect(nbsp(within(leisure()).getByRole('status').textContent)).toBe('En dessous de votre minimum de 133 €.');
+    expect(nbsp(screen.getByRole('img').getAttribute('aria-label'))).toMatch(/plaisir 100 € \(prévu 200 €\)\.$/);
+    // Rétablir : le conseil revient, le bouton disparaît.
+    fireEvent.click(screen.getByRole('button', { name: 'Rétablir les montants conseillés' }));
+    expect(toSaveValue()).toBeCloseTo(base, 2);
+    expect(screen.queryByRole('button', { name: 'Rétablir les montants conseillés' })).toBeNull();
+    // 300 € de plus : il manque 100 € pour les virements fixes ; la barre garde un plaisir à 0.
+    fireEvent.change(screen.getByRole('textbox', { name: 'Montant fait pour Livret A' }), { target: { value: String(base + 300).replace('.', ',') } });
+    expect(nbsp(within(leisure()).getByRole('status').textContent)).toMatch(/Il manque 100 € pour les virements fixes/);
+    expect(nbsp(screen.getByRole('img').getAttribute('aria-label'))).toMatch(/plaisir 0 € \(prévu 200 €\)\. Il manque 100 € pour les virements fixes\.$/);
+    // Montant raisonnable, puis « Enregistrer » : seulement la case cochée, le plaisir n'est pas fait.
+    fireEvent.change(screen.getByRole('textbox', { name: 'Montant fait pour Livret A' }), { target: { value: String(base + 50).replace('.', ',') } });
+    fireEvent.click(screen.getByRole('checkbox', { name: /^Livret A/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
-    expect(props.onRecordPay.mock.calls[0][0].pay.toSave).toBe(400);
+    const partial = props.onRecordPay.mock.calls[0][0];
+    expect(partial.done).toEqual([{ key: 's:la', amount: Math.round((base + 50) * 100) / 100 }]);
+    expect(partial.lines.find(l => l.key === 't:leisure')?.amount).toBe(150);
+    // « Tout est fait » : le plaisir est fait avec ce qui reste vraiment ; la somme vaut l'argent à répartir.
+    fireEvent.click(screen.getByRole('button', { name: 'Tout est fait comme conseillé' }));
+    const all = props.onRecordPay.mock.calls[1][0];
+    expect(all.done.find(d => d.key === 't:leisure')).toEqual({ key: 't:leisure', amount: 150 });
+    expect(Math.round(all.done.reduce((s, d) => s + d.amount, 0) * 100)).toBe(250000);
   });
 
   it('refus de la commande : affiché dans la feuille, qui reste ouverte', () => {
@@ -259,12 +292,110 @@ describe('Rituel : bilan, deuxième paie, modification', () => {
     expect(loyer.checked && loyer.disabled).toBe(true);
     fireEvent.click(screen.getByRole('button', { name: 'Tout est fait comme conseillé' }));
     const input = props.onRecordPay.mock.calls[0][0];
-    expect(input.pay).toMatchObject({ id: 'pay-2026-11', toSave: 500 });
+    expect(input.pay).toMatchObject({ id: 'pay-2026-11' });
+    // L'ancien « à placer » reste sur la paie (la commande le garde) ; pas de solde ajouté à une ancienne paie.
+    expect('toSave' in input.pay || 'balance' in input.pay).toBe(false);
     expect(input.done).toEqual([{ key: 's:la', amount: 500 }]);
     cleanup();
     const again = setup(doc, { editPayId: 'pay-2026-11' });
     fireEvent.click(screen.getByRole('button', { name: 'Supprimer cette paie' }));
     expect(again.onClose).toHaveBeenCalled();
     expect(again.onDeletePay).toHaveBeenCalledWith('pay-2026-11');
+  });
+});
+
+describe('Rituel : le compte courant', () => {
+  // Compte courant « Boursorama » à 430 €, constaté le 25 octobre (il y a 5 jours).
+  const withCurrent = (over: Partial<SavingsAccount> = {}) => {
+    const doc = makeDoc();
+    return { ...doc, accounts: [...doc.accounts, account('cc', 'Boursorama', AccountType.COMPTE_COURANT, { totalAmount: 430, ownedAmount: 430, balanceCheckedAt: '2026-10-25', ...over })] };
+  };
+  const balanceField = () => screen.getByLabelText('Solde maintenant, paie comprise') as HTMLInputElement;
+  const region = () => screen.getByRole('region', { name: 'Compte courant · Boursorama' });
+
+  it('solde récent : estimation prérempli (solde connu + paie), avec sa source et son âge', () => {
+    setup(withCurrent());
+    fireEvent.change(amountField(), { target: { value: '2000' } });
+    expect(balanceField().value).toBe('2430');
+    expect(nbsp(region().textContent)).toMatch(/Estimation : 430 € le 25 octobre \(il y a 5 jours\), plus votre paie\. Vérifiez dans votre banque\./);
+    expect(nbsp(within(region()).getByRole('status').textContent)).toBe('Il restait 430 € du mois dernier.');
+  });
+
+  it('solde constaté après la paie : repris tel quel ; plus de 15 jours : rien de proposé', () => {
+    setup(withCurrent({ balanceCheckedAt: '2026-10-29' }));
+    fireEvent.change(screen.getByLabelText('Reçue le'), { target: { value: '2026-10-27' } });
+    expect(balanceField().value).toBe('430');
+    expect(nbsp(region().textContent)).toMatch(/Solde enregistré le 29 octobre\./);
+    cleanup();
+    setup(withCurrent({ balanceCheckedAt: '2026-09-20' }));
+    expect(balanceField().value).toBe('');
+    expect(region().textContent).toMatch(/Dernier solde connu il y a 40 jours : trop ancien\. Regardez votre banque\./);
+    expect(within(region()).getByRole('status').textContent).toBe('');
+  });
+
+  it('solde saisi : « 2 000 € de paie + 30 € déjà sur le compte = 2 030 € à répartir », et « Tout est fait » note le compte courant', () => {
+    const props = setup(withCurrent());
+    fireEvent.change(amountField(), { target: { value: '2000' } });
+    fireEvent.change(balanceField(), { target: { value: '2 030' } });
+    expect(nbsp(within(region()).getByRole('status').textContent)).toBe('Il restait 30 € du mois dernier.');
+    toPlan();
+    expect(screen.getByText((_, el) => el?.tagName === 'P' && /^2 000 € de paie \+ 30 € déjà sur le compte = 2 030 € à répartir$/.test(nbsp(el.textContent)))).toBeTruthy();
+    expect(nbsp(screen.getByRole('img').getAttribute('aria-label'))).toMatch(/^Répartition de 2 030 €/);
+    fireEvent.click(screen.getByRole('button', { name: 'Tout est fait comme conseillé' }));
+    const input = props.onRecordPay.mock.calls[0][0];
+    expect(input.pay.balance).toEqual({ seen: 2030, before: 30, source: 'typed' });
+    expect(input.currentAccountId).toBe('cc');
+    // Argent conservé au centime : les lignes valent la paie + le reste.
+    expect(Math.round(input.done.reduce((s, d) => s + d.amount, 0) * 100)).toBe(203000);
+  });
+
+  it('paie pas encore dans le solde, découvert : « Découvert de 50 € avant la paie »', () => {
+    const props = setup(withCurrent());
+    fireEvent.change(amountField(), { target: { value: '2000' } });
+    fireEvent.change(balanceField(), { target: { value: '−50' } });
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Ma paie apparaît déjà dans ce solde' }));
+    expect(nbsp(within(region()).getByRole('status').textContent)).toBe('Découvert de 50 € avant la paie.');
+    toPlan();
+    expect(screen.getByText((_, el) => el?.tagName === 'P' && /^2 000 € de paie − 50 € de découvert = 1 950 € à répartir$/.test(nbsp(el.textContent)))).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
+    const input = props.onRecordPay.mock.calls[0][0];
+    expect(input.pay.balance).toEqual({ seen: -50, before: -50, source: 'typed' });
+    // « Enregistrer » (partiel) : pas de constat du compte courant.
+    expect(input.currentAccountId).toBeUndefined();
+  });
+
+  it('« Je ne sais pas » : champ vidé, compté 0, dit à l’étape 2, rien de noté sur le compte courant', () => {
+    const props = setup(withCurrent());
+    fireEvent.click(screen.getByRole('button', { name: 'Je ne sais pas' }));
+    expect(balanceField().value).toBe('');
+    expect(region().textContent).toMatch(/Sans votre solde, Pécule suppose que le compte courant était vide avant la paie\./);
+    expect(screen.queryByRole('button', { name: 'Je ne sais pas' })).toBeNull();
+    toPlan();
+    expect(screen.getByText('Sans votre solde, Pécule suppose que le compte courant était vide avant la paie.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Tout est fait comme conseillé' }));
+    const input = props.onRecordPay.mock.calls[0][0];
+    expect(input.pay.balance).toEqual({ before: 0, source: 'unknown' });
+    expect(input.currentAccountId).toBeUndefined();
+  });
+
+  it('solde illisible : on ne passe pas à la répartition ; versement en plus : pas de bloc compte courant', () => {
+    setup(withCurrent());
+    fireEvent.change(balanceField(), { target: { value: 'beaucoup' } });
+    expect(screen.getByText('Montant non reconnu (exemple : 430,50 ou −50).')).toBeTruthy();
+    expect((screen.getByRole('button', { name: 'Voir la répartition' }) as HTMLButtonElement).disabled).toBe(true);
+    cleanup();
+    const pays: PayRecord[] = [{ id: 'pay-2026-11', receivedOn: '2026-10-27', savingsMonth: '2026-11', amount: 2500, lines: [], done: {} }];
+    setup({ ...withCurrent(), pays });
+    expect(screen.queryByLabelText('Solde maintenant, paie comprise')).toBeNull();
+  });
+
+  it('modifier une paie : son solde est repris (et non le solde connu)', () => {
+    const pays: PayRecord[] = [{ id: 'pay-2026-11', receivedOn: '2026-10-27', savingsMonth: '2026-11', amount: 2000, balance: { seen: 30, before: 30, source: 'typed' }, lines: [], done: {} }];
+    const props = setup({ ...withCurrent(), pays }, { editPayId: 'pay-2026-11' });
+    expect(balanceField().value).toBe('30');
+    expect((screen.getByRole('checkbox', { name: 'Ma paie apparaît déjà dans ce solde' }) as HTMLInputElement).checked).toBe(false);
+    toPlan();
+    fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
+    expect(props.onRecordPay.mock.calls[0][0].pay.balance).toEqual({ seen: 30, before: 30, source: 'typed' });
   });
 });

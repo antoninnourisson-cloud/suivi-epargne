@@ -48,10 +48,36 @@ export const payBarParts = (a: PayAllocation): PayBar => {
         ...(a.plannedProjects > 0 ? [{ key: 'projects' as const, label: 'Épargne projets', amount: a.projects, ...cutOf(a.projects, a.plannedProjects) }] : []),
         { key: 'leisure', label: 'Plaisir', amount: Math.max(0, a.leisure), ...cutOf(Math.max(0, a.leisure), a.plannedLeisure) },
       ];
+  return { parts, total: a.available, missingFixed: a.missingFixed, label: barLabel(parts, a.available, a.missingFixed) };
+};
+
+const barLabel = (parts: PayBarPart[], total: number, missingFixed: number): string => {
   const described = parts.map(p => `${p.label.toLowerCase()} ${formatEUR(p.amount)}${p.planned !== undefined ? ` (prévu ${formatEUR(p.planned)})` : ''}`);
-  const label = `Répartition de ${formatEUR(a.available)} : ${described.join(', ')}.`
-    + (a.missingFixed > 0 ? ` Il manque ${formatEUR(a.missingFixed)} pour les virements fixes.` : '');
-  return { parts, total: a.available, missingFixed: a.missingFixed, label };
+  return `Répartition de ${formatEUR(total)} : ${described.join(', ')}.`
+    + (missingFixed > 0 ? ` Il manque ${formatEUR(missingFixed)} pour les virements fixes.` : '');
+};
+
+/**
+ * La barre du rituel pendant qu'on modifie les montants : chaque part prend son montant saisi
+ * (le plaisir, ligne d'équilibre, ce qui reste ; négatif, il manque pour les virements fixes).
+ * Une part sous son objectif (le prévu de la règle, sinon le conseil) le montre « (prévu …) ».
+ */
+export const livePayBar = (advised: PayBar, amounts: Partial<Record<PayBarKey, number>>): PayBar => {
+  const leisure = amounts.leisure;
+  const missingFixed = leisure !== undefined && leisure < 0 ? Math.round(-leisure * 100) / 100 : 0;
+  const parts = advised.parts.map(p => {
+    const v = amounts[p.key];
+    if (v === undefined) return p;
+    const amount = Math.max(0, Math.round(v * 100) / 100);
+    const target = p.planned ?? p.amount;
+    const { planned: _p, ...rest } = p;
+    return { ...rest, amount, ...(target - amount >= 0.005 ? { planned: target } : {}) };
+  });
+  // Versement en plus dont une partie reste sur le compte courant.
+  if (leisure !== undefined && leisure >= 0.005 && !parts.some(p => p.key === 'leisure')) {
+    parts.push({ key: 'leisure', label: 'Reste sur le compte courant', amount: Math.round(leisure * 100) / 100 });
+  }
+  return { parts, total: advised.total, missingFixed, label: barLabel(parts, advised.total, missingFixed) };
 };
 
 // ---------------------------------------------------------------------------

@@ -3,11 +3,16 @@
 // versements d'épargne cochés (IN, « Virement de paie », date des virements, rattachés à la
 // paie par `payId`) ; les virements de la paie (charges, plaisir…) sont de simples coches, et
 // « Déjà enregistré » coche sans rien créer. Une seule annulation remet tout à l'identique :
-// soldes (instantané, voir restoreBalances) ET paie.
+// soldes (instantané, voir restoreBalances) ET paie. La paie garde le solde du compte courant
+// lu dans le rituel (`balance`) ; « Tout est fait comme conseillé » enregistre aussi ce qui
+// reste vraiment sur ce compte (annulé avec le reste).
 // Le plan conseillé (lines) est calculé par l'appelant (lib/payDistribution) : il est figé
 // dès qu'une ligne est faite, et ne se remplace que tant que rien n'est fait.
-import type { AccountMovement, PayChecklist, PayChecklistLine, PayRecord, SavingsAccount } from '../../types';
+import type { AccountMovement, PayBalance, PayChecklist, PayChecklistLine, PayRecord, SavingsAccount } from '../../types';
 import { applyMovement, isRestitutionMovement, restoreBalances, snapshotBalances } from '../accountOps';
+import { balanceForAmount } from '../payDistribution';
+import { planBalanceUpdate } from './balances';
+import { laterDay } from './accounts';
 import { EPS, round2 } from '../money';
 import { formatEUR, formatSignedEUR } from '../format';
 import { savingsMonthOf, savingsMonthOfPay } from '../payCalendar';
@@ -21,6 +26,16 @@ const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
 const MONTH_KEY = /^\d{4}-(0[1-9]|1[0-2])$/;
 const isDay = (v: unknown): v is string => typeof v === 'string' && ISO_DAY.test(v);
 const amountOk = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v >= 0;
+const finiteOk = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+const balanceOk = (b: PayBalance): boolean =>
+  finiteOk(b.before) && (b.seen === undefined || finiteOk(b.seen)) && ['typed', 'known', 'estimated', 'unknown'].includes(b.source);
+/** Solde arrondi au centime (« Je ne sais pas » : rien d'autre que la source). */
+const cleanBalance = (b: PayBalance): PayBalance => (b.source === 'unknown'
+  ? { before: 0, source: 'unknown' }
+  : { ...(b.seen !== undefined ? { seen: round2(b.seen) } : {}), before: round2(b.before), source: b.source });
+
+/** Lignes dont l'argent reste sur le compte courant : abonnements payés par carte, plaisir. */
+const STAYS_ON_CURRENT = new Set(['t:subscriptions', 't:leisure']);
 
 type Done = PayChecklist['done'];
 
@@ -36,6 +51,8 @@ export interface PayInput {
   /** « À placer sur cette paie » saisi ; `null` : retour au calcul (« Modifier la paie »). */
   toSave?: number | null;
   payslipId?: string;
+  /** Compte courant au moment de la paie (bloc « Compte courant » du rituel) ; `null` : retiré. */
+  balance?: PayBalance | null;
 }
 
 /** Une ligne faite : montant réel, compte réellement crédité s'il change, ou déjà enregistrée. */
@@ -53,6 +70,13 @@ export interface RecordPayInput {
   done: PayLineDone[];
   /** Date des virements ('YYYY-MM-DD') : date des versements créés. */
   transferDate: string;
+  /**
+   * « Tout est fait comme conseillé » : compte courant où arrive la paie. Son solde est
+   * enregistré à ce qui y reste vraiment (reste d'avant la paie + paie − lignes sorties du
+   * compte ; les abonnements par carte et le plaisir y restent), à la date des virements.
+   * Seulement si le solde d'avant la paie est connu ; annulé avec le reste.
+   */
+  currentAccountId?: string;
   /** Identifiants imposés (tests) : paie, puis versements dans l'ordre des lignes faites. */
   ids?: { pay?: string; movements?: string[] };
 }
@@ -121,6 +145,7 @@ export const recordPay = (state: CommandState, input: RecordPayInput): CommandRe
     if (v !== undefined && v !== null && !amountOk(v)) return fail('invalid', k === 'bonus' ? 'Prime invalide.' : 'Montant à placer invalide.');
   }
   if (input.pay.savingsMonth !== undefined && !MONTH_KEY.test(input.pay.savingsMonth)) return fail('invalid', 'Mois d\'épargne invalide.');
+  if (input.pay.balance && !balanceOk(input.pay.balance)) return fail('invalid', 'Solde du compte courant invalide.');
 
   // Coches encore valables : un versement supprimé à la main laisse sa ligne à refaire.
   const doneBefore: Done = existing ? liveDone(existing.done, state.accounts) : {};
@@ -164,10 +189,14 @@ export const recordPay = (state: CommandState, input: RecordPayInput): CommandRe
   }
 
   const base: Partial<PayRecord> = existing ?? {};
-  const { bonus: _b, toSave: _t, kind: _k, ...rest } = base;
+  const { bonus: _b, toSave: _t, kind: _k, balance: _bal, ...rest } = base;
   const bonus = input.pay.bonus !== undefined ? input.pay.bonus : base.bonus;
   const toSave = input.pay.toSave !== undefined ? input.pay.toSave ?? undefined : base.toSave;
   const kind = input.pay.kind ?? base.kind;
+  // Versement en plus : le compte courant n'est ni demandé ni compté.
+  const balance = kind === 'extra' ? undefined
+    : input.pay.balance !== undefined ? (input.pay.balance ? cleanBalance(input.pay.balance) : undefined)
+      : balanceForAmount(base.balance, base.amount ?? amount, amount);
   // Mois d'épargne : celui choisi, sinon celui déjà retenu pour cette date, sinon la règle du 15.
   const savingsMonth = input.pay.savingsMonth
     ?? (existing && existing.receivedOn === receivedOn ? savingsMonthOfPay(existing) : savingsMonthOf(receivedOn));
@@ -179,32 +208,63 @@ export const recordPay = (state: CommandState, input: RecordPayInput): CommandRe
     ...(kind === 'extra' ? { kind } : {}),
     ...(toSave !== undefined ? { toSave: round2(toSave) } : {}),
     ...(payslipId ? { payslipId } : {}),
+    ...(balance ? { balance } : {}),
     lines, done,
   };
   const nextPays = replaceOrAdd(pays, pay);
-  const snap = snapshotBalances(state.accounts, [...new Set(created.map(c => c.accountId))]);
-  const accounts = created.length === 0 ? state.accounts : state.accounts.map(acc => created
+  let accounts = created.length === 0 ? state.accounts : state.accounts.map(acc => created
     .filter(c => c.accountId === acc.id)
     .reduce((cur, c) => applyMovement(cur, c.movement, 1, { trackDeposits: true }), acc));
+
+  // Ce qui reste vraiment sur le compte courant, une fois tout fait (pas de constat inventé).
+  const current = input.currentAccountId && balance && balance.source !== 'unknown'
+    ? accounts.find(a => a.id === input.currentAccountId) : undefined;
+  let currentChange: { accountId: string; checkedBefore?: string; createdIds: string[]; stays: number } | undefined;
+  if (current) {
+    const out = lines.reduce((s, l) => (STAYS_ON_CURRENT.has(l.key) || !done[l.key] ? s : s + done[l.key].amount), 0);
+    const stays = round2(balance!.before + round2(amount) - out);
+    const planned = stays >= current.parentalCapital - EPS
+      ? planBalanceUpdate(current, { accountId: current.id, date: input.transferDate, owned: round2(stays - current.parentalCapital), parental: current.parentalCapital, confirm: true })
+      : { error: 'découvert' };
+    if (!planned || !('error' in planned)) {
+      const next = planned ? planned.account : { ...current, balanceCheckedAt: laterDay(current.balanceCheckedAt, input.transferDate) };
+      currentChange = { accountId: current.id, checkedBefore: current.balanceCheckedAt, createdIds: planned ? planned.created.map(m => m.id) : [], stays };
+      accounts = accounts.map(a => (a.id === current.id ? next : a));
+    }
+  }
+
+  const touched = [...new Set([...created.map(c => c.accountId), ...(currentChange ? [currentChange.accountId] : [])])];
+  const snap = snapshotBalances(state.accounts, touched);
   const movementIds = created.map(c => c.movement.id);
   const total = round2(created.reduce((s, c) => s + c.movement.amount, 0));
   const one = created.length === 1 ? created[0] : undefined;
   // Le montant figure dans le message : une faute de frappe se voit (et s'annule) tout de suite.
-  const message = one
+  const message = (one
     ? `${PAY_DEPOSIT_LABEL} : ${formatSignedEUR(one.movement.amount)} sur ${state.accounts.find(a => a.id === one.accountId)!.name}`
     : created.length > 1 ? `Paie enregistrée : ${created.length} versements, ${formatEUR(total)} placés`
-      : todo.length > 0 ? 'Fait' : 'Paie enregistrée';
+      : todo.length > 0 ? 'Fait' : 'Paie enregistrée')
+    + (currentChange ? ` · ${current!.name} : ${formatEUR(currentChange.stays)}` : '');
   const undoPays = restorePays(state.pays, nextPays, payId);
+  const createdIds = [...movementIds, ...(currentChange?.createdIds ?? [])];
   return {
     ok: true,
     payId,
     movementIds,
-    next: { pays: nextPays, ...(created.length > 0 ? { accounts } : {}) },
+    next: { pays: nextPays, ...(touched.length > 0 ? { accounts } : {}) },
     message,
-    undo: current => ({
-      pays: undoPays(current),
-      ...(created.length > 0 ? { accounts: restoreBalances(current.accounts, snap, movementIds) } : {}),
-    }),
+    undo: cur => {
+      if (touched.length === 0) return { pays: undoPays(cur) };
+      const restored = restoreBalances(cur.accounts, snap, createdIds);
+      return {
+        pays: undoPays(cur),
+        // Date du dernier constat du compte courant remise comme avant.
+        accounts: !currentChange || restored === cur.accounts ? restored : restored.map(a => {
+          if (a.id !== currentChange!.accountId) return a;
+          const { balanceCheckedAt: _now, ...r } = a;
+          return currentChange!.checkedBefore ? { ...r, balanceCheckedAt: currentChange!.checkedBefore } : r;
+        }),
+      };
+    },
   };
 };
 
@@ -251,6 +311,8 @@ export interface UpdatePayInput {
   lines?: PayChecklistLine[];
   /** Fiche de paie liée ; `null` : plus de lien. */
   payslipId?: string | null;
+  /** Compte courant au moment de la paie ; `null` : retiré. Absent : gardé (« avant la paie » suit le montant si le solde lu comprenait la paie). */
+  balance?: PayBalance | null;
 }
 
 /**
@@ -272,18 +334,23 @@ export const updatePay = (state: CommandState, input: UpdatePayInput): CommandRe
   const receivedOn = input.receivedOn ?? pay.receivedOn;
   const chosenByHand = savingsMonthOfPay(pay) !== savingsMonthOf(pay.receivedOn);
   const savingsMonth = input.savingsMonth ?? (chosenByHand ? savingsMonthOfPay(pay) : savingsMonthOf(receivedOn));
-  const { bonus: _b, toSave: _t, payslipId: _s, ...rest } = pay;
+  const { bonus: _b, toSave: _t, payslipId: _s, balance: _bal, ...rest } = pay;
   const bonus = input.bonus === undefined ? pay.bonus : input.bonus || undefined;
   const payslipId = input.payslipId === undefined ? pay.payslipId : input.payslipId ?? undefined;
   const toSave = input.toSave === undefined ? pay.toSave : input.toSave ?? undefined;
+  if (input.balance && !balanceOk(input.balance)) return fail('invalid', 'Solde du compte courant invalide.');
+  const amount = input.amount !== undefined ? round2(input.amount) : pay.amount;
+  const balance = pay.kind === 'extra' ? undefined
+    : input.balance !== undefined ? (input.balance ? cleanBalance(input.balance) : undefined)
+      : balanceForAmount(pay.balance, pay.amount, amount);
   const nothingDone = Object.keys(liveDone(pay.done, state.accounts)).length === 0;
   const updated: PayRecord = {
     ...rest,
-    receivedOn, savingsMonth,
-    amount: input.amount !== undefined ? round2(input.amount) : pay.amount,
+    receivedOn, savingsMonth, amount,
     ...(bonus ? { bonus: round2(bonus) } : {}),
     ...(toSave !== undefined ? { toSave: round2(toSave) } : {}),
     ...(payslipId ? { payslipId } : {}),
+    ...(balance ? { balance } : {}),
     ...(input.lines && nothingDone ? { lines: input.lines, done: {} } : {}),
   };
   const nextPays = pays.map(p => (p.id === pay.id ? updated : p));
