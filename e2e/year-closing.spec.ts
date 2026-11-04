@@ -55,8 +55,8 @@ test.describe("Clôture de l'année (démo, janvier)", () => {
       '7. Paramètres fiscaux 2027', '8. Garder une archive sur cet appareil', "9. Clôturer l'année 2026",
     ]);
     // Fraîcheur compte par compte : le LEP n'a pas été vérifié depuis le 31 décembre.
-    await expect(step(page, 'balances')).toContainText(/LEP\s*· dernier solde constaté le/);
-    await expect(step(page, 'balances')).toContainText(/Livret A\s*· vérifié le 31 décembre 2026/);
+    await expect(step(page, 'balances')).toContainText(/LEP\s*dernier solde constaté le/);
+    await expect(step(page, 'balances')).toContainText(/Livret A\s*vérifié le 31 décembre 2026/);
     await expect(step(page, 'restitution')).toContainText(/Prévue le 1er janvier : 9\s500\s€ à rendre/);
     await expect(step(page, 'restitution')).toContainText(/y compris les \d+\s€ produits par le capital de vos parents/);
 

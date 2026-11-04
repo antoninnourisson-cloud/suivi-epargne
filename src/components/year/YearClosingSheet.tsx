@@ -67,7 +67,7 @@ const Line: React.FC<{ name: string; done: boolean; status?: string; children?: 
     <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
       <StepStatus done={done} small />
       <span className="font-medium text-on-surface">{name}</span>
-      {status && <span className="text-on-surface-variant">· {status}</span>}
+      {status && <span className="basis-full pl-6 text-on-surface-variant">{status}</span>}
     </p>
     {children && <div className="mt-2 space-y-2">{children}</div>}
   </li>
@@ -291,7 +291,7 @@ export const YearClosingSheet: React.FC<YearClosingSheetProps> = ({
                 <li key={it.key} className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
                   <StepStatus done={it.done} small />
                   <span className="font-medium text-on-surface">{it.label}</span>
-                  <span className="text-on-surface-variant">· {it.detail}</span>
+                  <span className="basis-full pl-6 text-on-surface-variant">{it.detail}</span>
                   {it.button && <span className="ml-auto">{button(it.button, 'text')}</span>}
                 </li>
               ))}
