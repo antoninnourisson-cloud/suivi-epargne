@@ -53,7 +53,14 @@ export const SECURITY_HEADERS: Readonly<Record<string, string>> = {
 const FRAME_ANCESTORS_CSP = "frame-ancestors 'none'";
 
 export const IMMUTABLE = 'public, max-age=31536000, immutable';
-export const REVALIDATE = 'no-cache';
+// « no-transform » : Cloudflare n'insère plus ses scripts dans les pages (Web Analytics et
+// « JavaScript Detections », non désactivable sur l'offre gratuite). La CSP les bloquait
+// déjà (ils n'ont jamais tourné), mais chaque ouverture envoyait deux rapports inutiles
+// sur /csp-report (constaté le 4 novembre 2026). La page de confidentialité annonce
+// d'ailleurs « aucun outil de mesure d'audience ».
+// https://developers.cloudflare.com/web-analytics/get-started/
+// https://developers.cloudflare.com/bots/reference/javascript-detections/
+export const REVALIDATE = 'no-cache, no-transform';
 
 // Nom haché par Vite : « nom-XXXXXXXX.ext » (8 caractères base64url ; le nom peut contenir des tirets).
 const HASHED_ASSET = /^\/assets\/[^/]+-[A-Za-z0-9_-]{8}\.[a-z0-9]+$/;
