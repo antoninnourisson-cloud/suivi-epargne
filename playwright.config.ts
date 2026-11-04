@@ -27,8 +27,11 @@ export default defineConfig({
     serviceWorkers: 'block',
     ...(CI ? {} : { channel: 'chrome' }),
   },
+  // Pécule s'utilise surtout sur téléphone : chaque parcours tourne au format téléphone, et
+  // le format ordinateur ne garde que ce qui lui est propre (menu latéral, clavier, largeur
+  // fixée), marqué `{ tag: '@ordinateur' }`.
   projects: [
-    { name: 'ordinateur', use: { ...devices['Desktop Chrome'], ...(CI ? {} : { channel: 'chrome' }) } },
+    { name: 'ordinateur', grep: /@ordinateur/, use: { ...devices['Desktop Chrome'], ...(CI ? {} : { channel: 'chrome' }) } },
     { name: 'mobile', use: { ...devices['Pixel 7'], ...(CI ? {} : { channel: 'chrome' }) } },
   ],
   webServer: E2E_DIST

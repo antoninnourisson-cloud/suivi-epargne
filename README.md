@@ -243,7 +243,7 @@ npm test               # tests Vitest : app + serveur (worker/test) + edge (edge
 npm run test:coverage  # idem, avec les seuils de couverture de vitest.config.ts (comme la CI)
                        # (chiffres ci-dessous)
 npm run test:watch     # tests en continu
-npm run e2e            # tests de bout en bout Playwright (ordinateur et mobile), serveur de dev
+npm run e2e            # tests de bout en bout Playwright (téléphone ; ordinateur pour les parcours @ordinateur), serveur de dev
                        # E2E_TARGET=build : les mêmes sur le build de production (comme la CI)
 npm run build          # build de production dans dist/
 npm run preview        # sert le build localement

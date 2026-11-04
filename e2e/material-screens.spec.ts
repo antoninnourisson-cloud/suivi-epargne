@@ -19,7 +19,7 @@ const SCREENS: [view: string, title: string][] = [
 ];
 
 test.describe('écrans Material 3 (démo)', () => {
-  test('aucun défilement horizontal à 320 px de large', async ({ page, isMobile }) => {
+  test('aucun défilement horizontal à 320 px de large', { tag: '@ordinateur' }, async ({ page, isMobile }) => {
     test.skip(isMobile, 'une seule largeur, fixée ici');
     test.setTimeout(120_000); // neuf écrans, le serveur de dev compile chacun à la première ouverture
     await page.setViewportSize({ width: 320, height: 700 });
@@ -95,7 +95,7 @@ test.describe('écrans Material 3 (démo)', () => {
     await expect(toast).toBeHidden();
   });
 
-  test('ordinateur : le bouton d’ajout est dans le menu latéral, pas sur les champs', async ({ page, isMobile }) => {
+  test('ordinateur : le bouton d’ajout est dans le menu latéral, pas sur les champs', { tag: '@ordinateur' }, async ({ page, isMobile }) => {
     test.skip(isMobile, 'menu latéral de l’ordinateur');
     await openDemo(page, 'subscriptions');
     await expect(page.getByRole('heading', { name: 'Abonnements', level: 3, exact: true })).toBeAttached();

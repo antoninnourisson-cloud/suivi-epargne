@@ -131,7 +131,7 @@ test.describe('Ma paie (démo)', () => {
 });
 
 test.describe('Accessibilité des écrans d’argent (démo)', () => {
-  test('aucun défilement horizontal à 320 px, écrans sans débordement', async ({ page, isMobile }) => {
+  test('aucun défilement horizontal à 320 px, écrans sans débordement', { tag: '@ordinateur' }, async ({ page, isMobile }) => {
     test.skip(isMobile, 'une seule largeur, fixée ici');
     await page.setViewportSize({ width: 320, height: 700 });
     for (const [view, title] of [['donations', 'Dons et impôts'], ['parental', 'Part parentale'], ['payslips', 'Fiches de paie']]) {

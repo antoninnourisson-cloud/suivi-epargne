@@ -78,7 +78,7 @@ test.describe('Affichage (démo)', () => {
   });
 
   for (const height of [800, 720]) {
-    test(`sur ordinateur (1280×${height}), seul le contenu défile : le menu latéral reste en place`, async ({ page, isMobile }) => {
+    test(`sur ordinateur (1280×${height}), seul le contenu défile : le menu latéral reste en place`, { tag: '@ordinateur' }, async ({ page, isMobile }) => {
       test.skip(isMobile, 'menu latéral sur ordinateur seulement');
       await page.setViewportSize({ width: 1280, height });
       await openDemo(page);

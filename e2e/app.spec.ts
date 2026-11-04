@@ -80,7 +80,7 @@ test.describe('Pécule en mode démo', () => {
     await expect(dialog.getByRole('button', { name: 'Ajouter', exact: true })).toBeDisabled();
   });
 
-  test('clavier : lien d\'évitement et focus sur le titre de l\'écran', async ({ page, isMobile }) => {
+  test('clavier : lien d\'évitement et focus sur le titre de l\'écran', { tag: '@ordinateur' }, async ({ page, isMobile }) => {
     test.skip(isMobile, 'navigation au clavier testée sur ordinateur');
     await openDemo(page);
     await page.keyboard.press('Tab');

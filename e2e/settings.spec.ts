@@ -76,7 +76,7 @@ test.describe('Paramètres (démo)', () => {
     await expect(cardButton(page, 'Veille fiscale')).toHaveAttribute('aria-expanded', 'false');
   });
 
-  test('la version dans la barre latérale ouvre « À propos »', async ({ page, isMobile }) => {
+  test('la version dans la barre latérale ouvre « À propos »', { tag: '@ordinateur' }, async ({ page, isMobile }) => {
     test.skip(isMobile, 'barre latérale affichée sur ordinateur seulement');
     await page.addInitScript(v => { try { localStorage.setItem('last_seen_version', v); } catch { /* ignoré */ } }, LATEST_VERSION);
     await page.goto('/?demo=1');

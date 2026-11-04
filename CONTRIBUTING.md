@@ -35,7 +35,7 @@ Ouvrez ensuite <http://localhost:5173/?demo=1> : l'app se charge avec des donné
    npm run build
    ```
 
-   Pour `npm run e2e`, installez une fois le navigateur : `npx playwright install chromium`. Un nouvel écran ou un nouveau parcours ajoute son test dans `e2e/`.
+   Pour `npm run e2e`, installez une fois le navigateur : `npx playwright install chromium`. Un nouvel écran ou un nouveau parcours ajoute son test dans `e2e/` : il tourne au format téléphone ; un parcours propre à l'ordinateur (menu latéral, clavier, grande largeur) porte `{ tag: '@ordinateur' }`.
 
 4. Remplissez le modèle de pull request (ce qui change, comment vous l'avez vérifié).
 
