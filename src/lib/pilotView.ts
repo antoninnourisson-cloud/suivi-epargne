@@ -5,6 +5,7 @@ import type { PlacementStep } from './finance';
 import type { PayAllocation } from './payDistribution';
 import { AccountType } from '../types';
 import { formatEUR } from './format';
+import { EXTRA_NATURE_TITLE } from './extraNature';
 
 // ---------------------------------------------------------------------------
 // La barre de la paie : quatre parts, dans l'ordre des priorités
@@ -154,7 +155,8 @@ const EPS = 0.005;
 export const howItsComputed = (a: PayAllocation, payLabel = 'Paie habituelle'): WaterfallRow[] => {
   if (a.kind === 'extra') {
     return [
-      { key: 'received', label: 'Versement en plus', amount: a.received, kind: 'start', note: "Rien à virer : tout va à l'épargne." },
+      { key: 'received', label: a.nature ? EXTRA_NATURE_TITLE[a.nature] : 'Versement en plus', amount: a.received, kind: 'start',
+        note: a.nature === 'refund' ? "Il reste sur le compte courant : c'est de l'argent plaisir." : "Rien à virer : tout va à l'épargne." },
       { key: 'total', label: 'Épargne de ce versement', amount: a.savings, kind: 'total' },
     ];
   }

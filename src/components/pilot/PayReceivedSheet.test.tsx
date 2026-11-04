@@ -267,12 +267,75 @@ describe('Rituel : bilan, deuxième paie, modification', () => {
     const props = setup(makeDoc({ pays }));
     expect(screen.getByRole('radio', { name: /Versement en plus/ })).toHaveProperty('checked', true);
     fireEvent.change(amountField(), { target: { value: '300' } });
+    fireEvent.click(screen.getByRole('radio', { name: /^Autre/ }));
     toPlan();
     expect(screen.queryByText("Virements de la paie, déduits avant l'épargne")).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Tout est fait comme conseillé' }));
     const input = props.onRecordPay.mock.calls[0][0];
     expect(input.pay).toMatchObject({ kind: 'extra', amount: 300 });
     expect(input.done.reduce((s, d) => s + d.amount, 0)).toBeCloseTo(300, 2);
+  });
+
+  it('argent reçu en plus : la nature se choisit en premier ; un remboursement reste sur le compte courant', () => {
+    const pays: PayRecord[] = [{ id: 'pay-2026-11', receivedOn: '2026-10-27', savingsMonth: '2026-11', amount: 2500, lines: [], done: {} }];
+    const props = setup(makeDoc({ pays }));
+    expect(screen.getByRole('dialog', { name: 'Argent reçu' })).toBeTruthy();
+    const natures = within(screen.getByRole('group', { name: 'Quel argent avez-vous reçu ?' })).getAllByRole('radio');
+    expect(natures.map(r => nbsp(r.closest('label')?.querySelector('span span')?.textContent))).toEqual(['Remboursement', 'Vente', 'Cadeau', 'Autre']);
+    // Montant vide (pas la paie estimée) ; sans nature, pas de répartition.
+    expect(amountField().value).toBe('');
+    fireEvent.change(amountField(), { target: { value: '40' } });
+    expect((screen.getByRole('button', { name: 'Voir la répartition' }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole('radio', { name: /^Remboursement/ }));
+    expect(screen.getByRole('heading', { level: 2, name: 'Remboursement reçu' })).toBeTruthy();
+    expect(screen.getByText(/il reste sur le compte courant, c'est de l'argent plaisir/)).toBeTruthy();
+    toPlan();
+    expect(screen.getByRole('heading', { level: 2, name: 'Que faire de ce remboursement' })).toBeTruthy();
+    expect(nbsp(screen.getByText(/remboursés :/).textContent)).toBe('40 € remboursés : conseillé de les laisser sur le compte courant');
+    expect(screen.queryByRole('textbox', { name: 'Montant fait pour Livret A' })).toBeNull();
+    expect(screen.getByText(/^Rien à placer : un remboursement/)).toBeTruthy();
+    expect(nbsp(screen.getByText(/^Reste sur le compte courant \(argent plaisir\)/).textContent)).toBe('Reste sur le compte courant (argent plaisir) : 40 €.');
+    // On peut quand même en placer une partie : « Autre compte ».
+    fireEvent.click(screen.getByRole('button', { name: 'Autre compte' }));
+    fireEvent.change(screen.getByRole('textbox', { name: "Montant versé sur l'autre compte" }), { target: { value: '15' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
+    const input = props.onRecordPay.mock.calls[0][0];
+    expect(input.pay).toMatchObject({ kind: 'extra', nature: 'refund', amount: 40 });
+    expect(input.done).toEqual([{ key: 'a:la', amount: 15 }]);
+  });
+
+  it('cadeau : « Pour une occasion ? » dit en une phrase s’il faut le déclarer, sans chiffre inventé', () => {
+    const pays: PayRecord[] = [{ id: 'pay-2026-11', receivedOn: '2026-10-27', savingsMonth: '2026-11', amount: 2500, lines: [], done: {} }];
+    const props = setup(makeDoc({ pays }));
+    expect(screen.queryByRole('group', { name: /Pour une occasion/ })).toBeNull();
+    fireEvent.click(screen.getByRole('radio', { name: /^Cadeau/ }));
+    expect(screen.getByRole('heading', { level: 2, name: 'Cadeau reçu' })).toBeTruthy();
+    const occasion = screen.getByRole('group', { name: 'Pour une occasion (anniversaire, fêtes, mariage) ?' });
+    fireEvent.click(within(occasion).getByRole('radio', { name: 'Oui' }));
+    expect(within(occasion).getByRole('status').textContent).toBe("C'est un présent d'usage : rien à déclarer s'il reste raisonnable par rapport aux moyens de la personne qui donne.");
+    fireEvent.click(within(occasion).getByRole('radio', { name: 'Non' }));
+    const sentence = within(occasion).getByRole('status');
+    expect(sentence.textContent).toMatch(/^Un don d'argent se déclare en ligne par la personne qui le reçoit, même sans impôt à payer\./);
+    expect(within(sentence).getByRole('link', { name: /Don manuel sur impots\.gouv\.fr/ }).getAttribute('href')).toBe('https://www.impots.gouv.fr/particulier/don-manuel');
+    expect(sentence.textContent).not.toMatch(/\d/);
+    fireEvent.change(amountField(), { target: { value: '150' } });
+    toPlan();
+    expect(screen.getByRole('heading', { level: 2, name: 'Que faire de ce cadeau' })).toBeTruthy();
+    expect(toSaveValue()).toBe(150);
+    fireEvent.click(screen.getByRole('button', { name: 'Tout est fait comme conseillé' }));
+    expect(props.onRecordPay.mock.calls[0][0].pay).toMatchObject({ kind: 'extra', nature: 'gift', amount: 150 });
+  });
+
+  it('ancien versement en plus sans nature : rouvert en « Autre », modifiable', () => {
+    const pays: PayRecord[] = [
+      { id: 'pay-2026-11', receivedOn: '2026-10-27', savingsMonth: '2026-11', amount: 2500, lines: [], done: {} },
+      { id: 'pay-2026-11-2', receivedOn: '2026-10-29', savingsMonth: '2026-11', amount: 300, kind: 'extra', lines: [], done: {} },
+    ];
+    setup(makeDoc({ pays }), { editPayId: 'pay-2026-11-2' });
+    expect(screen.getByRole('dialog', { name: "Modifier l'argent reçu" })).toBeTruthy();
+    expect(screen.getByRole('radio', { name: /^Autre/ })).toHaveProperty('checked', true);
+    expect(screen.getByRole('heading', { level: 2, name: 'Autre argent reçu' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Supprimer ce versement/ })).toBeTruthy();
   });
 
   it('modifier une paie : lignes déjà faites gardées, montant à placer remis au calcul, suppression', () => {

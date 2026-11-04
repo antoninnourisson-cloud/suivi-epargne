@@ -213,6 +213,7 @@ export interface PayRecord {
   amount: number;            // net reçu, prime comprise
   bonus?: number;            // dont prime ou exceptionnel (placé en entier par défaut)
   kind?: 'extra';            // versement en plus : s'ajoute au mois en cours, n'en ouvre pas
+  nature?: ExtraNature;      // versement en plus seulement : sa nature (absente : « Autre »)
   toSave?: number;           // ancien « À placer sur cette paie » forcé, hors prime (ex-PayAdjustment.capacity) : lu, plus écrit
   // Compte courant au moment de la paie : `before` = ce qui restait avant la paie (négatif :
   // découvert), compté dans la répartition ; `seen` = solde lu, paie comprise. Absent (paies
@@ -223,6 +224,10 @@ export interface PayRecord {
   reviewedAt?: string;       // 'YYYY-MM-DD' : bilan du mois d'épargne validé
   payslipId?: string;        // fiche de paie liée, si importée
 }
+
+// Nature de l'argent reçu en plus de la paie (lib/extraNature) : un remboursement reste sur
+// le compte courant, une vente, un cadeau ou autre chose est placé.
+export type ExtraNature = 'refund' | 'sale' | 'gift' | 'other';
 
 // D'où vient le solde : saisi, solde connu de Pécule, estimation (solde connu + paie), ou
 // inconnu (« Je ne sais pas » : compté 0).

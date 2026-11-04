@@ -18,10 +18,15 @@
 //     un seul « Annuler ». « Tout est fait » enregistre aussi le solde du compte courant.
 // « Modifier la paie » rouvre la même feuille sur la paie déclarée (étapes 1 et 2) : les
 // lignes déjà faites restent faites, le plan reste figé s'il l'est.
+// « Autre argent reçu » (versement en plus) : sa nature se choisit en premier (Remboursement,
+// Vente, Cadeau, Autre, lib/extraNature). Un remboursement reste sur le compte courant (rien
+// placé par défaut, « + Autre compte » reste possible) ; le reste est placé. Pour un cadeau,
+// « Pour une occasion ? » dit en une phrase s'il faut le déclarer (impots.gouv.fr, don manuel).
 // ================================================
 import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, CalendarDays, CheckCheck, FileText, Info, KeyRound, PenLine, Plus, Trash2, Wallet, X } from 'lucide-react';
-import { AccountType, type GlobalAppData, type PayBalance, type PayChecklistLine, type PayslipRecord } from '../../types';
+import { ArrowLeft, CalendarDays, CheckCheck, ExternalLink, FileText, Info, KeyRound, PenLine, Plus, Trash2, Wallet, X } from 'lucide-react';
+import { AccountType, type ExtraNature, type GlobalAppData, type PayBalance, type PayChecklistLine, type PayslipRecord } from '../../types';
+import { EXTRA_NATURES, EXTRA_NATURE_EXAMPLE, EXTRA_NATURE_LABEL, EXTRA_NATURE_TITLE, extraNatureOf } from '../../lib/extraNature';
 import type { RecordPayInput } from '../../lib/commands';
 import { computeMonthlyPay, computeMonthlySavingsCapacity } from '../../lib/finance';
 import { allocationSentence, balanceIncludesPay, currentAccountPrefill, recommendPayDistribution } from '../../lib/payDistribution';
@@ -88,6 +93,17 @@ const isFixedLine = (l: PayChecklistLine) => l.kind === 'transfer' && l.key !== 
 const LEISURE_LINE = 't:leisure';
 const LEISURE_LABEL = 'Argent plaisir (reste sur le compte courant)';
 
+/** Page officielle du don manuel (déclaration en ligne d'un don d'argent). */
+export const GIFT_DECLARATION_URL = 'https://www.impots.gouv.fr/particulier/don-manuel';
+/** Titre de l'étape 2 d'un versement en plus, selon sa nature. */
+const EXTRA_PLAN_TITLE: Record<ExtraNature, string> = {
+  refund: 'Que faire de ce remboursement', sale: 'Que faire de cette vente', gift: 'Que faire de ce cadeau', other: 'Que faire de ce versement',
+};
+/** « Cadeau reçu le 4 novembre » : légende du résumé de l'étape 2. */
+const EXTRA_RECEIVED: Record<ExtraNature, string> = {
+  refund: 'Remboursement reçu', sale: 'Vente encaissée', gift: 'Cadeau reçu', other: 'Versement reçu',
+};
+
 export const PayReceivedSheet: React.FC<SheetProps> = ({ doc, geminiApiKey, pickerApiKey, onRecordPay, onDeletePay, onValidateReview, onSavePayslip, onOpenKeys, onClose, editPayId }) => {
   const today = localTodayISO();
   const pays = useMemo(() => doc.pays ?? [], [doc.pays]);
@@ -123,12 +139,18 @@ export const PayReceivedSheet: React.FC<SheetProps> = ({ doc, geminiApiKey, pick
   const suggestion = existing ? existing.kind : suggestedPayKind(pays, month);
   const [kindChoice, setKindChoice] = useState<'extra' | 'regular' | undefined>(undefined);
   const kind: 'extra' | undefined = existing ? existing.kind : (kindChoice ?? (suggestion === 'extra' ? 'extra' : 'regular')) === 'extra' ? 'extra' : undefined;
+  // Versement en plus : sa nature, choisie en premier (un ancien versement sans nature : « Autre »).
+  const [natureChoice, setNatureChoice] = useState<ExtraNature | undefined>(existing?.kind === 'extra' ? extraNatureOf(existing) : undefined);
+  const nature = kind === 'extra' ? natureChoice : undefined;
+  // Cadeau : pour une occasion (anniversaire, fêtes, mariage) ? Pas enregistré, il ne sert qu'à la phrase.
+  const [occasion, setOccasion] = useState<boolean | undefined>(undefined);
   // Fiche relue dans le rituel : gardée ici aussi (la liste des fiches suit au rendu suivant).
   const [savedSlip, setSavedSlip] = useState<PayslipRecord | undefined>(undefined);
   const payslip = kind === 'extra' ? undefined : savedSlip ?? payslipForMonth(doc.payslips, month, existing?.payslipId);
   const slipPeriod = payslipPeriodOf(month);
   const initialAmount = existing?.amount ?? payslipForMonth(doc.payslips, savingsMonthOf(today))?.extracted.netPaid ?? expected;
-  const [amountText, setAmountText] = useState(toInputAmount(Math.round(initialAmount * 100) / 100));
+  // Argent reçu en plus : le montant part vide (la paie estimée n'a rien à voir avec un remboursement de 40 €).
+  const [amountText, setAmountText] = useState(!existing && suggestion === 'extra' ? '' : toInputAmount(Math.round(initialAmount * 100) / 100));
   const [bonusOpen, setBonusOpen] = useState(!!existing?.bonus);
   const [bonusText, setBonusText] = useState(existing?.bonus ? toInputAmount(existing.bonus) : '');
   const amount = parseAmount(amountText);
@@ -170,7 +192,7 @@ export const PayReceivedSheet: React.FC<SheetProps> = ({ doc, geminiApiKey, pick
       : balanceText === null && prefill.source === 'estimated' && prefill.checkedOn && prefill.days !== undefined && prefill.known !== undefined
         ? `Estimation : ${formatEUR(prefill.known)} le ${dayLabel(prefill.checkedOn, today)} (${ageLabel(prefill.days)}), plus votre paie. Vérifiez dans votre banque.`
         : 'Le solde affiché par votre banque, maintenant.';
-  const step1Ok = amount !== null && bonusRaw !== null && !bonusTooHigh && dateOk && !balanceInvalid;
+  const step1Ok = amount !== null && bonusRaw !== null && !bonusTooHigh && dateOk && !balanceInvalid && (kind !== 'extra' || nature !== undefined);
 
   // Fiche de paie sur place : relue, enregistrée dans la liste des fiches, puis son net payé
   // devient le montant reçu.
@@ -189,8 +211,8 @@ export const PayReceivedSheet: React.FC<SheetProps> = ({ doc, geminiApiKey, pick
   const bonus = bonusRaw ?? 0;
   // L'ancien « À placer » d'une paie déjà déclarée est toujours lu (le rituel ne l'écrit plus).
   const dist = useMemo(
-    () => recommendPayDistribution(doc, { amount: amount ?? 0, bonus, toSave: existing?.toSave, kind, before, receivedOn: dateOk ? receivedOn : today }),
-    [doc, amount, bonus, existing?.toSave, kind, before, receivedOn, dateOk, today]);
+    () => recommendPayDistribution(doc, { amount: amount ?? 0, bonus, toSave: existing?.toSave, kind, nature, before, receivedOn: dateOk ? receivedOn : today }),
+    [doc, amount, bonus, existing?.toSave, kind, nature, before, receivedOn, dateOk, today]);
   const doneBefore = useMemo(() => (existing ? liveDone(existing.done, doc.accounts) : {}), [existing, doc.accounts]);
   const frozen = !!existing && existing.lines.length > 0 && Object.keys(doneBefore).length > 0;
   const lines: PayChecklistLine[] = frozen ? existing!.lines : dist.lines;
@@ -285,7 +307,7 @@ export const PayReceivedSheet: React.FC<SheetProps> = ({ doc, geminiApiKey, pick
         receivedOn, savingsMonth: month, amount: amount!,
         bonus: kind === 'extra' ? undefined : bonus,
         // Ancienne paie sans solde, laissée à « Je ne sais pas » : rien n'est ajouté.
-        ...(kind === 'extra' ? { kind } : existing && !savedBalance && balance.source === 'unknown' ? {} : { balance }),
+        ...(kind === 'extra' ? { kind, ...(nature ? { nature } : {}) } : existing && !savedBalance && balance.source === 'unknown' ? {} : { balance }),
         ...(payslip ? { payslipId: payslip.id } : {}),
       },
       lines: [...sentLines, ...extraLines],
@@ -399,7 +421,7 @@ export const PayReceivedSheet: React.FC<SheetProps> = ({ doc, geminiApiKey, pick
   );
 
   return (
-    <Modal open onClose={onClose} label={existing ? 'Modifier la paie' : "J'ai reçu ma paie"} variant="page" closeOnScrim={false} className="sm:max-w-2xl p-4 sm:p-6">
+    <Modal open onClose={onClose} label={existing ? (existing.kind === 'extra' ? "Modifier l'argent reçu" : 'Modifier la paie') : kind === 'extra' ? 'Argent reçu' : "J'ai reçu ma paie"} variant="page" closeOnScrim={false} className="sm:max-w-2xl p-4 sm:p-6">
       {step === 0 && review && (
         <>
           {heading(`Bilan ${elideDe(formatMonth(review.key))}`)}
@@ -410,8 +432,57 @@ export const PayReceivedSheet: React.FC<SheetProps> = ({ doc, geminiApiKey, pick
 
       {step === 1 && (
         <>
-          {heading(existing ? 'Modifier la paie' : 'Votre paie')}
+          {heading(kind === 'extra' ? (nature ? EXTRA_NATURE_TITLE[nature] : 'Argent reçu') : existing ? 'Modifier la paie' : 'Votre paie')}
           <div className="space-y-5">
+            {kind === 'extra' && (
+              <fieldset className="rounded-2xl border border-outline-variant p-4">
+                <legend className="px-1 text-sm font-medium text-on-surface">Quel argent avez-vous reçu ?</legend>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4">
+                  {EXTRA_NATURES.map(n => (
+                    <label key={n} className="flex items-start gap-3 min-h-12 py-2 text-sm text-on-surface cursor-pointer">
+                      <input type="radio" name={`${ids}-nature`} value={n} checked={natureChoice === n} onChange={() => setNatureChoice(n)} className="mt-0.5 w-5 h-5 shrink-0 accent-primary" />
+                      <span>
+                        <span className="block font-medium">{EXTRA_NATURE_LABEL[n]}</span>
+                        <span className="block text-xs text-on-surface-variant">{EXTRA_NATURE_EXAMPLE[n]}</span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+                {nature && (
+                  <p role="status" className="mt-2 text-sm text-on-surface flex items-start gap-2">
+                    <Info className="w-4 h-4 shrink-0 mt-0.5 text-on-surface-variant" aria-hidden="true" />
+                    {nature === 'refund'
+                      ? "Conseil : il reste sur le compte courant, c'est de l'argent plaisir. Vous pouvez quand même en placer une partie."
+                      : "Conseil : tout va à l'épargne, réparti comme d'habitude entre vos livrets. Corrigeable ligne par ligne."}
+                  </p>
+                )}
+              </fieldset>
+            )}
+
+            {nature === 'gift' && (
+              <fieldset className="rounded-2xl border border-outline-variant p-4">
+                <legend className="px-1 text-sm font-medium text-on-surface">Pour une occasion (anniversaire, fêtes, mariage) ?</legend>
+                <div className="flex flex-wrap gap-x-6">
+                  {([[true, 'Oui'], [false, 'Non']] as const).map(([v, label]) => (
+                    <label key={label} className="flex items-center gap-3 min-h-12 text-sm text-on-surface cursor-pointer">
+                      <input type="radio" name={`${ids}-occasion`} checked={occasion === v} onChange={() => setOccasion(v)} className="w-5 h-5 accent-primary" />
+                      {label}
+                    </label>
+                  ))}
+                </div>
+                {occasion !== undefined && (
+                  <p role="status" className="mt-1 text-sm text-on-surface">
+                    {occasion
+                      ? "C'est un présent d'usage : rien à déclarer s'il reste raisonnable par rapport aux moyens de la personne qui donne."
+                      : <>Un don d'argent se déclare en ligne par la personne qui le reçoit, même sans impôt à payer.{' '}
+                          <a href={GIFT_DECLARATION_URL} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 font-medium text-primary underline underline-offset-2 hover:no-underline">
+                            Don manuel sur impots.gouv.fr <ExternalLink className="w-3.5 h-3.5" aria-hidden="true" /><span className="sr-only"> (nouvel onglet)</span>
+                          </a></>}
+                  </p>
+                )}
+              </fieldset>
+            )}
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <TextField
                 label="Montant reçu"
@@ -420,8 +491,8 @@ export const PayReceivedSheet: React.FC<SheetProps> = ({ doc, geminiApiKey, pick
                 className="tabular-nums"
                 value={amountText}
                 onChange={e => setAmountText(e.target.value)}
-                error={amount === null ? 'Montant non reconnu (exemple : 2 512,40).' : undefined}
-                supporting={kind === 'extra' ? 'Prime ou autre versement, placé en entier.' : <>Net arrivé sur votre compte, prime comprise. Paie estimée : <MoneyText value={expected} decimals={0} />.</>}
+                error={amount === null && amountText.trim() !== '' ? 'Montant non reconnu (exemple : 2 512,40).' : undefined}
+                supporting={kind === 'extra' ? 'Le montant arrivé sur votre compte courant.' : <>Net arrivé sur votre compte, prime comprise. Paie estimée : <MoneyText value={expected} decimals={0} />.</>}
               />
               <TextField
                 label="Reçue le"
@@ -481,7 +552,7 @@ export const PayReceivedSheet: React.FC<SheetProps> = ({ doc, geminiApiKey, pick
             {!existing && suggestion === 'extra' && (
               <fieldset className="rounded-2xl border border-outline-variant p-4">
                 <legend className="px-1 text-sm font-medium text-on-surface">Une paie est déjà déclarée pour l'épargne {elideDe(monthName)}</legend>
-                {([['extra', 'Versement en plus (prime, deuxième employeur) : tout est placé'], ['regular', 'Paie régulière (elle remplace la précédente comme début du mois)']] as const).map(([v, label]) => (
+                {([['extra', 'Versement en plus (remboursement, vente, cadeau, prime à part)'], ['regular', 'Paie régulière (elle remplace la précédente comme début du mois)']] as const).map(([v, label]) => (
                   <label key={v} className="flex items-start gap-3 min-h-12 py-2 text-sm text-on-surface cursor-pointer">
                     <input type="radio" name={`${ids}-kind`} value={v} checked={(kindChoice ?? 'extra') === v} onChange={() => setKindChoice(v)} className="mt-0.5 w-5 h-5 accent-primary" />
                     {label}
@@ -567,7 +638,7 @@ export const PayReceivedSheet: React.FC<SheetProps> = ({ doc, geminiApiKey, pick
           <div className="mt-6 flex flex-wrap items-center justify-end gap-2">
             {existing && (
               <Button variant="text" onClick={() => { onClose(); onDeletePay(existing.id); }} className="mr-auto -ml-3 text-error! max-sm:h-12">
-                <Trash2 className="w-4 h-4" aria-hidden="true" /> Supprimer cette paie
+                <Trash2 className="w-4 h-4" aria-hidden="true" /> {existing.kind === 'extra' ? 'Supprimer ce versement' : 'Supprimer cette paie'}
               </Button>
             )}
             <Button variant="text" onClick={onClose} className="max-sm:h-12">Annuler</Button>
@@ -578,12 +649,14 @@ export const PayReceivedSheet: React.FC<SheetProps> = ({ doc, geminiApiKey, pick
 
       {step === 2 && (
         <>
-          {heading(kind === 'extra' ? 'Que faire de ce versement' : 'Que faire de votre paie')}
+          {heading(kind === 'extra' ? EXTRA_PLAN_TITLE[nature ?? 'other'] : 'Que faire de votre paie')}
           <div className="rounded-2xl bg-surface-container p-4">
-            <p className="text-xs text-on-surface-variant">{kind === 'extra' ? 'Versement reçu' : 'Paie reçue'} le {dayLabel(receivedOn, today)} · Épargne {elideDe(monthName)}</p>
+            <p className="text-xs text-on-surface-variant">{kind === 'extra' ? EXTRA_RECEIVED[nature ?? 'other'] : 'Paie reçue'} le {dayLabel(receivedOn, today)} · Épargne {elideDe(monthName)}</p>
             <p className="mt-1 text-base text-on-surface">
               {kind === 'extra'
-                ? <><MoneyText value={amount ?? 0} className="font-medium" /> reçus en plus : tout est placé</>
+                ? nature === 'refund'
+                  ? <><MoneyText value={amount ?? 0} className="font-medium" /> remboursés : conseillé de les laisser sur le compte courant</>
+                  : <><MoneyText value={amount ?? 0} className="font-medium" /> reçus en plus : tout est placé</>
                 : before >= 0.005
                   ? <><MoneyText value={amount ?? 0} /> de paie + <MoneyText value={before} /> déjà sur le compte = <MoneyText value={available} className="font-medium" /> à répartir</>
                   : before <= -0.005
@@ -617,7 +690,13 @@ export const PayReceivedSheet: React.FC<SheetProps> = ({ doc, geminiApiKey, pick
                 <Info className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />{st.hint}
               </p>
             ))}
-            {savingLines.length === 0 && suggestions.length === 0 && added.length === 0 && <p className="mt-3 text-sm text-on-surface-variant">Rien à placer sur cette paie.</p>}
+            {savingLines.length === 0 && suggestions.length === 0 && added.length === 0 && (
+              <p className="mt-3 text-sm text-on-surface-variant">
+                {nature === 'refund'
+                  ? 'Rien à placer : un remboursement rend de l\'argent déjà dépensé. Pour en placer une partie, « Autre compte ».'
+                  : kind === 'extra' ? 'Rien à placer sur ce versement.' : 'Rien à placer sur cette paie.'}
+              </p>
+            )}
             {added.length > 0 && (
               <ul aria-label="Autres comptes" className="divide-y divide-outline-variant">
                 {added.map(a => {
@@ -668,7 +747,7 @@ export const PayReceivedSheet: React.FC<SheetProps> = ({ doc, geminiApiKey, pick
               ) : null}
             </section>
           ) : leisureLive >= 0.005 && (
-            <p className="mt-4 text-sm text-on-surface-variant">Reste sur le compte courant : <MoneyText value={leisureLive} />.</p>
+            <p className="mt-4 text-sm text-on-surface-variant">Reste sur le compte courant{nature === 'refund' ? ' (argent plaisir)' : ''} : <MoneyText value={leisureLive} />.</p>
           )}
 
           <div className="mt-6 max-w-xs">

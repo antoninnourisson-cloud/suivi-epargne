@@ -212,6 +212,28 @@ describe('recordPay : enregistrer la paie et ce qui a été fait', () => {
     expect(acc(s1, 'la').movements[0].payId).toBe('pay-2026-11-2');
   });
 
+  it('argent reçu en plus : sa nature est gardée et nomme le versement (Journal) ; un remboursement sans ligne s’enregistre', () => {
+    const regular: PayRecord = { id: 'pay-2026-11', receivedOn: '2026-10-27', savingsMonth: '2026-11', amount: 2500, lines: [], done: {} };
+    const s0 = state([regular]);
+    const giftLines: PayChecklistLine[] = [{ key: 's:la', label: 'Livret A', amount: 150, kind: 'saving', accountId: 'la' }];
+    const gift = ok(recordPay(s0, { pay: { receivedOn: '2026-11-02', amount: 150, kind: 'extra', nature: 'gift' }, lines: giftLines, done: [{ key: 's:la', amount: 150 }], transferDate: '2026-11-02', ids: { movements: ['g'] } }));
+    const s1 = applyPatch(s0, gift.next);
+    expect(s1.pays![1]).toMatchObject({ kind: 'extra', nature: 'gift', amount: 150 });
+    expect(acc(s1, 'la').movements[0]).toMatchObject({ label: 'Cadeau reçu', amount: 150 });
+    expect(gift.message).toMatch(/^Cadeau reçu : \+150/);
+    // Modifier sans redonner la nature : elle reste.
+    const s2 = applyPatch(s1, ok(recordPay(s1, { pay: { id: s1.pays![1].id, amount: 160 }, lines: [], done: [], transferDate: '2026-11-02' })).next);
+    expect(s2.pays![1]).toMatchObject({ nature: 'gift', amount: 160 });
+    // Remboursement : rien à placer, rien à cocher.
+    const refund = ok(recordPay(s0, { pay: { receivedOn: '2026-11-03', amount: 40, kind: 'extra', nature: 'refund' }, lines: [], done: [], transferDate: '2026-11-03' }));
+    expect(refund.message).toBe('Argent reçu enregistré');
+    expect(refund.movementIds).toEqual([]);
+    expect(applyPatch(s0, refund.next).pays![1]).toMatchObject({ kind: 'extra', nature: 'refund', lines: [], done: {} });
+    // Une paie n'a pas de nature ; une nature illisible est refusée.
+    expect('nature' in applyPatch(s0, ok(recordPay(s0, { pay: { id: 'pay-2026-11', nature: 'gift' }, lines: [], done: [], transferDate: '2026-11-03' })).next).pays![0]).toBe(false);
+    expect(recordPay(s0, { pay: { receivedOn: '2026-11-03', amount: 40, kind: 'extra', nature: 'loto' as never }, lines: [], done: [], transferDate: '2026-11-03' })).toMatchObject({ ok: false });
+  });
+
   it('prime et « à placer » saisis, champs inconnus d\'une paie gardés', () => {
     const existing = { id: 'p', receivedOn: '2026-10-27', savingsMonth: '2026-11', amount: 2500, lines: [], done: {}, reviewedAt: '2026-10-28', futur: 1 } as PayRecord;
     const s0 = state([existing]);

@@ -157,6 +157,26 @@ describe('Carte « Ma paie » : paie déclarée', () => {
     expect(nb(screen.getByText(/dont prime/).textContent)).toBe('dont prime 500 €');
   });
 
+  it('« Voir le détail » montre l’argent reçu en plus du mois, avec sa nature (ancien versement : « Autre »)', () => {
+    const extra = (id: string, over: Partial<PayRecord>): PayRecord => ({ id, receivedOn: '2026-10-29', savingsMonth: '2026-11', amount: 40, kind: 'extra', lines: [], done: {}, ...over });
+    const pays = [pay,
+      extra('r', { nature: 'refund' }),
+      extra('g', { nature: 'gift', amount: 150, lines: [{ key: 's:la', label: 'Livret A', amount: 150, kind: 'saving', accountId: 'la' }], done: { 's:la': { amount: 150 } } }),
+      extra('o', { amount: 300, lines: [{ key: 's:la', label: 'Livret A', amount: 300, kind: 'saving', accountId: 'la' }] }),
+      extra('old', { savingsMonth: '2026-10', receivedOn: '2026-10-02' }),
+    ];
+    render(<PayChecklist {...base} pay={pay} received={received} ritual={ritual({ doc: { ...emptyData(), pays } })} />);
+    const toggle = screen.getByRole('button', { name: /^Voir le détail/ });
+    expect(nb(toggle.textContent)).toMatch(/3 versements en plus/);
+    fireEvent.click(toggle);
+    const list = screen.getByRole('list', { name: 'Argent reçu en plus' });
+    expect(within(list).getAllByRole('listitem').map(li => nb(li.textContent).replace(/Modifier.*$/, ''))).toEqual([
+      'Remboursement reçu le 29 octobre : 40 €Resté sur le compte courant',
+      'Cadeau reçu le 29 octobre : 150 €150 € placés',
+      "Autre argent reçu le 29 octobre : 300 €Rien de placé pour l'instant",
+    ]);
+  });
+
   it('« Autre argent reçu » ouvre le rituel (versement en plus) ; « J’ai reçu ma paie » aussi, chargé à la demande ; Échap le ferme', async () => {
     vi.useRealTimers();
     render(<PayChecklist {...base} paydayDay={27} ritual={ritual()} />);

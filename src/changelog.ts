@@ -15,6 +15,17 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '2026.11.04-2',
+    date: '2026-11-04',
+    title: 'Autre argent reçu : remboursement, vente ou cadeau',
+    items: [
+      "« Autre argent reçu » demande d'abord de quel argent il s'agit : remboursement, vente, cadeau ou autre.",
+      "Un remboursement reste sur le compte courant : un ami qui vous rend 40 € avancés, c'est de l'argent plaisir, rien n'est placé (vous pouvez quand même en placer une partie). Une vente ou un cadeau part en épargne, comme avant.",
+      "Pour un cadeau, Pécule demande s'il est fait pour une occasion (anniversaire, fêtes, mariage) : si oui, rien à déclarer s'il reste raisonnable ; sinon, le don se déclare en ligne, même sans impôt à payer, avec le lien vers impots.gouv.fr.",
+      "« Voir le détail » de « Ma paie » et le Journal montrent la nature de chaque versement : « Cadeau reçu le 2 novembre : 150 € ».",
+    ],
+  },
+  {
     version: '2026.11.04',
     date: '2026-11-04',
     title: 'Pilotage : « Ma paie » et ses réglages',

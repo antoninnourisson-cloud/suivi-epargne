@@ -11,6 +11,7 @@ import { normalizeAccounts, dedupeMonthlySnapshots, migrateFiscalConfig, compute
 import { round2 } from './money';
 import { sanitizePayAdjustment } from './payAdjustment';
 import { expectedPayDate, savingsMonthOf, savingsMonthOfPay } from './payCalendar';
+import { isExtraNature } from './extraNature';
 
 /**
  * Version du format. À augmenter quand un changement rend le fichier illisible pour une
@@ -261,6 +262,8 @@ const sanitizePays = (v: unknown): PayRecord[] => arr<unknown>(v).flatMap(p => {
     if (n === undefined) delete out[k]; else out[k] = n;
   }
   if (out.kind !== undefined && out.kind !== 'extra') delete out.kind;
+  // Nature : seulement sur un versement en plus, et lisible (absente : « Autre »).
+  if (out.nature !== undefined && (out.kind !== 'extra' || !isExtraNature(out.nature))) delete out.nature;
   for (const k of ['reviewedAt', 'payslipId'] as const) {
     if (out[k] !== undefined && typeof out[k] !== 'string') delete out[k];
   }

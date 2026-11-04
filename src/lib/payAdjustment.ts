@@ -4,7 +4,8 @@
 // (lib/payDistribution, allocatePay). Paie pas encore déclarée : le plan de la paie habituelle
 // (épargne visée, ou montant fixe). Paie déclarée dans le rituel « J'ai reçu ma paie » :
 // l'épargne de la paie REÇUE (reste du compte courant, prime et ancien « À placer » compris),
-// plus les versements en plus du même mois. Les anciens réglages de la paie en cours
+// plus les versements en plus du même mois (un remboursement n'y ajoute rien : il reste sur
+// le compte courant ; ce que l'utilisateur en place lui-même compte comme tout versement). Les anciens réglages de la paie en cours
 // (« Capacité d'épargne du mois », « Somme en plus », schéma v2) sont devenus
 // PayRecord.toSave / bonus (lib/schema).
 // Une seule règle pour le Pilotage, la jauge de l'Accueil, l'agenda et le serveur.
@@ -44,7 +45,7 @@ export const computeMonthTarget = (data: GlobalAppData, asOf: Date = new Date())
   const { window, pay } = openPay(data, asOf);
   const extras = round2((data.pays ?? [])
     .filter(p => p.kind === 'extra' && savingsMonthOfPay(p) === window.key)
-    .reduce((sum, p) => sum + recommendPayDistribution(data, { amount: p.amount, toSave: p.toSave, kind: 'extra', receivedOn: p.receivedOn }).toSave, 0));
+    .reduce((sum, p) => sum + recommendPayDistribution(data, { amount: p.amount, toSave: p.toSave, kind: 'extra', nature: p.nature, receivedOn: p.receivedOn }).toSave, 0));
   const d = pay
     ? recommendPayDistribution(data, { amount: pay.amount, bonus: pay.bonus, toSave: pay.toSave, before: payBalanceBefore(pay), receivedOn: pay.receivedOn })
     : usualPayDistribution(data, asOf);

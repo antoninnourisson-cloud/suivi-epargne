@@ -75,6 +75,17 @@ describe('allocatePay : les exemples chiffrés', () => {
     expect(allocatePay({ received: 300, fixedSavings: -5, kind: 'extra', ...usual }).savings).toBe(0);
   });
 
+  it('14 bis. nature de l’argent reçu : un remboursement reste sur le compte courant, le reste est placé', () => {
+    expect(allocatePay({ received: 40, kind: 'extra', nature: 'refund', ...usual })).toMatchObject({ kind: 'extra', nature: 'refund', savings: 0, leisure: 40, available: 40 });
+    for (const nature of ['sale', 'gift', 'other'] as const) {
+      expect(allocatePay({ received: 150, kind: 'extra', nature, ...usual })).toMatchObject({ nature, savings: 150, leisure: 0 });
+    }
+    // Montant choisi : il l'emporte aussi sur un remboursement.
+    expect(allocatePay({ received: 40, fixedSavings: 15, kind: 'extra', nature: 'refund', ...usual })).toMatchObject({ savings: 15, leisure: 25 });
+    // Une paie n'a pas de nature.
+    expect('nature' in allocatePay({ received: 2000, nature: 'refund', ...usual })).toBe(false);
+  });
+
   it('les coupes se comptent sur le résultat (correction 1)', () => {
     // Cas 5 : le plaisir baisse de 150 € (400 → 250), les projets de 100 €, l'épargne de 450 €.
     expect(run({ received: 1350, before: -50 }).cuts).toEqual({ leisure: 150, projects: 100, savings: 450, bonus: 0 });
@@ -277,6 +288,16 @@ describe('répartition conseillée pour la paie reçue', () => {
     expect(d.lines.map(l => [l.key, l.amount])).toEqual([['s:la', 300]]);
     expect(allocationSentence(d.allocation)).toBeUndefined();
     expect(recommendPayDistribution(data(), { amount: 300, kind: 'extra', toSave: 120 }).toSave).toBe(120);
+  });
+
+  it('remboursement : rien à placer, aucune ligne ; une vente ou un cadeau : tout à l’épargne', () => {
+    const refund = recommendPayDistribution(data(), { amount: 40, kind: 'extra', nature: 'refund' });
+    expect(refund).toMatchObject({ toSave: 0, transfers: [] });
+    expect(refund.lines).toEqual([]);
+    expect(refund.allocation).toMatchObject({ nature: 'refund', leisure: 40 });
+    expect(recommendPayDistribution(data(), { amount: 150, kind: 'extra', nature: 'gift' }).lines.map(l => [l.key, l.amount])).toEqual([['s:la', 150]]);
+    // Une paie ignore la nature.
+    expect(recommendPayDistribution(data(), { amount: 2400, nature: 'refund' }).allocation.nature).toBeUndefined();
   });
 
   it('répartition personnalisée respectée à la date de la paie', () => {

@@ -70,6 +70,14 @@ describe('computeMonthTarget', () => {
     expect(computeMonthTarget({ ...base, pays: [extra] }, OCT_28).total).toBeCloseTo(Math.max(0, computed) + 250, 2);
   });
 
+  it('un remboursement ne compte pas dans l’objectif du mois ; un cadeau, si', () => {
+    const base = withConfig({ paydayDay: 27 });
+    const before = computeMonthTarget(base, OCT_28).total;
+    const extra = (nature: PayRecord['nature']): PayRecord => ({ id: 'e', receivedOn: '2026-10-30', savingsMonth: '2026-11', amount: 40, kind: 'extra', nature, lines: [], done: {} });
+    expect(computeMonthTarget({ ...base, pays: [extra('refund')] }, OCT_28)).toMatchObject({ total: before, extra: 0 });
+    expect(computeMonthTarget({ ...base, pays: [extra('gift')] }, OCT_28).total).toBeCloseTo(before + 40, 2);
+  });
+
   it('même objectif que le Pilotage : calcul + réglage de la paie en cours', () => {
     const base = withConfig({ paydayDay: 27 });
     const computed = computeMonthlySavingsCapacity(base);

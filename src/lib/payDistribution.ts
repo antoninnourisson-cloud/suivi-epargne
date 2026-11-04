@@ -14,10 +14,12 @@
 //    virements fixes (l'argent n'existe pas autrement).
 //  - Versement en plus (prime à part, deuxième employeur) : rien à virer, tout à l'épargne ;
 //    le reste du compte courant n'est pas recompté (déjà réparti avec la paie du mois).
+//    Un remboursement (nature 'refund', lib/extraNature) reste sur le compte courant : argent
+//    plaisir, rien placé par défaut (une vente, un cadeau ou autre chose est placé).
 // Calcul en centimes entiers : la somme des parts vaut exactement l'argent à répartir.
 // Fonction pure, partagée par l'app et le serveur.
 // ================================================
-import { AccountType, type GlobalAppData, type PayBalance, type PayBalanceSource, type PayChecklistLine, type PayRecord, type SavingsAccount } from '../types';
+import { AccountType, type ExtraNature, type GlobalAppData, type PayBalance, type PayBalanceSource, type PayChecklistLine, type PayRecord, type SavingsAccount } from '../types';
 import { CURRENT_ACCOUNT_FRESH_DAYS, lastBalanceCheck } from './freshness';
 import {
   activeSavingsSplit, buildPayLines, computeMonthlyPay, computePayTransfers, computePlacementStrategy,
@@ -62,10 +64,14 @@ export interface AllocatePayInput {
   /** Épargne visée fixée (montant fixe du Pilotage, ou « À placer » d'une ancienne paie). */
   fixedSavings?: number;
   kind?: 'extra';
+  /** Versement en plus : sa nature (un remboursement reste sur le compte courant). */
+  nature?: ExtraNature;
 }
 
 export interface PayAllocation {
   kind: 'pay' | 'extra';
+  /** Versement en plus : sa nature, si elle est connue. */
+  nature?: ExtraNature;
   received: number;
   bonus: number;
   /** Reste du compte courant compté (0 pour un versement en plus). */
@@ -113,12 +119,13 @@ export interface PayAllocation {
 export const allocatePay = (input: AllocatePayInput): PayAllocation => {
   const P = Math.max(0, toCents(input.received));
   if (input.kind === 'extra') {
-    // Versement en plus : rien à virer, tout placé (ou le montant choisi, jamais plus que reçu).
+    // Versement en plus : rien à virer, tout placé (ou le montant choisi, jamais plus que reçu) ;
+    // un remboursement reste sur le compte courant.
     const forced = finite(input.fixedSavings);
-    const S = forced === undefined ? P : Math.min(P, Math.max(0, toCents(forced)));
+    const S = forced !== undefined ? Math.min(P, Math.max(0, toCents(forced))) : input.nature === 'refund' ? 0 : P;
     const v = fromCents;
     return {
-      kind: 'extra', received: v(P), bonus: 0, before: 0, available: v(P), expectedPay: 0, gap: 0,
+      kind: 'extra', ...(input.nature ? { nature: input.nature } : {}), received: v(P), bonus: 0, before: 0, available: v(P), expectedPay: 0, gap: 0,
       startBalance: 0, floor: 0, computedTarget: 0, target: v(S), ...(forced !== undefined ? { fixedSavings: v(S) } : {}),
       plannedLeisure: 0, fixed: 0, plannedProjects: 0, projects: 0, savings: v(S), bonusPlaced: 0, leisure: v(P - S),
       surplus: 0, cuts: { leisure: 0, projects: 0, savings: 0, bonus: 0 }, missingFixed: 0, belowFloor: 0,
@@ -194,6 +201,8 @@ export interface PayDistributionInput {
   /** « À placer sur cette paie » d'une ancienne paie : épargne visée hors prime, remplace le calcul. */
   toSave?: number;
   kind?: 'extra';
+  /** Versement en plus : sa nature (un remboursement reste sur le compte courant). */
+  nature?: ExtraNature;
   /** Ce qui reste sur le compte courant avant la paie (payBalanceBefore). Absent : 0. */
   before?: number;
   /** Date de réception ('YYYY-MM-DD') : date d'effet de la répartition personnalisée. */
@@ -307,7 +316,7 @@ export const recommendPayDistribution = (data: GlobalAppData, input: PayDistribu
     received: input.amount, bonus: input.bonus, before: input.before, expectedPay,
     fixed, projects: c.projectSavings ?? 0, startBalance: c.leisureBudget ?? 0,
     fixedSavings: finite(input.toSave) ?? (extra ? undefined : finite(c.paydayAmount)),
-    kind: input.kind,
+    kind: input.kind, ...(extra && input.nature ? { nature: input.nature } : {}),
   });
   const transfers = extra ? [] : computePayTransfers({
     expenses: data.expenses || [], subscriptions: data.subscriptions || [],

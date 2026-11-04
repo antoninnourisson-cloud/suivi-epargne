@@ -207,6 +207,14 @@ describe('migrate : fichier abîmé', () => {
 describe('migrate : compte courant de la paie (refonte du Pilotage)', () => {
   const pay = (over: Record<string, unknown>) => ({ id: 'pay-2026-11', receivedOn: '2026-10-27', savingsMonth: '2026-11', amount: 2000, lines: [], done: {}, ...over });
 
+  it('nature de l’argent reçu : gardée sur un versement en plus, retirée ailleurs ou illisible', () => {
+    expect(migrate({ pays: [pay({ kind: 'extra', nature: 'gift' })] }).pays![0].nature).toBe('gift');
+    expect('nature' in migrate({ pays: [pay({ kind: 'extra', nature: 'loterie' })] }).pays![0]).toBe(false);
+    expect('nature' in migrate({ pays: [pay({ nature: 'refund' })] }).pays![0]).toBe(false);
+    // Ancien versement sans nature : valide tel quel (il se lit « Autre »).
+    expect(migrate({ pays: [pay({ kind: 'extra' })] }).pays![0]).toEqual(pay({ kind: 'extra' }));
+  });
+
   it('garde un solde lisible, champs inconnus compris ; une ancienne paie sans solde reste telle quelle', () => {
     const ok = { before: 30, seen: 2030, source: 'typed', note: 'banque' };
     expect(migrate({ pays: [pay({ balance: ok })] }).pays![0].balance).toEqual(ok);

@@ -8,7 +8,8 @@
 //  2. Paie déclarée : la paie reçue, la barre de cette paie, « 3/7 faits » et la liste « À
 //     faire » (seulement les lignes restantes, dans l'ordre des virements) ; « Modifier la
 //     paie » et « Autre argent reçu » (versement en plus, même rituel).
-//  3. Tout est fait : ce qui a été placé, ce qui reste sur le compte courant, « Voir le détail ».
+//  3. Tout est fait : ce qui a été placé, ce qui reste sur le compte courant, « Voir le détail »
+//     (lignes faites, et l'argent reçu en plus du mois avec sa nature : « Cadeau reçu »…).
 // Cocher une ligne d'épargne ENREGISTRE le versement sur le compte (montant modifiable si le
 // virement réel diffère du plan) ; la décocher l'annule. La ligne Plaisir n'est pas une case :
 // rien à virer, c'est ce qui reste sur le compte courant. « Comment c'est calculé » est le seul
@@ -27,6 +28,7 @@ import { Button, Card, MoneyText } from './ui';
 import { allocationSentence, payBalanceBefore, type PayAllocation, type PayDistribution } from '../lib/payDistribution';
 import { barDecimals, howItsComputed, livePayBar, payBarParts, payRuleSentence, placementReason, planSentence, savingsNoteOf, type PayBarKey } from '../lib/pilotView';
 import { findMovement } from '../lib/payRecords';
+import { EXTRA_NATURE_TITLE, extraNatureOf } from '../lib/extraNature';
 import { lazyWithRetry } from './ErrorBoundary';
 import { OPEN_PAY_SHEET_EVENT, takePaySheetRequest } from './pilot/paySheetRequest';
 import { PayBar } from './pilot/PayBar';
@@ -249,6 +251,8 @@ export const PayChecklist: React.FC<PayChecklistProps> = ({
   const savingsMonth = pay ? savingsMonthOfPay(pay) : payWindow.key;
   const monthName = formatMonth(savingsMonth, !sameYear(`${savingsMonth}-01`, today));
   const before = payBalanceBefore(pay);
+  // Argent reçu en plus du même mois d'épargne (remboursement, vente, cadeau…), avec sa nature.
+  const extras = (ritual?.doc.pays ?? []).filter(p => p.kind === 'extra' && savingsMonthOfPay(p) === savingsMonth);
 
   const headline = !declared ? (
     <>{expectedOn ? `Paie attendue vers le ${dayLabel(expectedOn, today)}` : 'Paie pas encore déclarée'} · environ <MoneyText value={plan.expectedPay} decimals={0} /></>
@@ -288,13 +292,43 @@ export const PayChecklist: React.FC<PayChecklistProps> = ({
         </section>
       )}
 
-      {declared && doneLines.length > 0 && (
+      {declared && (doneLines.length > 0 || extras.length > 0) && (
         <div className="mt-3">
           <Disclosure appearance="inline" headingLevel={4} title="Voir le détail" icon={ListChecks}
-            summary={`${doneLines.length} ${doneLines.length > 1 ? 'lignes faites' : 'ligne faite'}`}>
-            <ul className="divide-y divide-outline-variant">
-              {doneLines.map(renderLine)}
-            </ul>
+            summary={[
+              doneLines.length > 0 ? `${doneLines.length} ${doneLines.length > 1 ? 'lignes faites' : 'ligne faite'}` : undefined,
+              extras.length > 0 ? `${extras.length} ${extras.length > 1 ? 'versements en plus' : 'versement en plus'}` : undefined,
+            ].filter(Boolean).join(' · ')}>
+            {doneLines.length > 0 && (
+              <ul className="divide-y divide-outline-variant">
+                {doneLines.map(renderLine)}
+              </ul>
+            )}
+            {extras.length > 0 && (
+              <>
+                <h5 className="mt-3 text-sm font-medium text-on-surface border-b border-outline-variant pb-2">Argent reçu en plus</h5>
+                <ul aria-label="Argent reçu en plus" className="divide-y divide-outline-variant">
+                  {extras.map(p => {
+                    const placed = round2(Object.values(p.done).reduce((s, d) => s + d.amount, 0));
+                    return (
+                      <li key={p.id} className="py-2 flex items-start justify-between gap-3">
+                        <span className="min-w-0 text-sm text-on-surface">
+                          <span className="block font-medium">{EXTRA_NATURE_TITLE[extraNatureOf(p)]} le {dayLabel(p.receivedOn, today)} : <MoneyText value={p.amount} /></span>
+                          <span className="block text-xs text-on-surface-variant">
+                            {placed >= 0.005 ? <><MoneyText value={placed} /> placés</> : p.lines.length === 0 ? 'Resté sur le compte courant' : 'Rien de placé pour l\'instant'}
+                          </span>
+                        </span>
+                        {ritual && (
+                          <Button variant="text" size="sm" onClick={() => setSheet({ editPayId: p.id })} className="shrink-0 max-sm:h-12">
+                            Modifier<span className="sr-only"> : {EXTRA_NATURE_TITLE[extraNatureOf(p)].toLowerCase()} du {dayLabel(p.receivedOn, today)}</span>
+                          </Button>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </>
+            )}
           </Disclosure>
         </div>
       )}

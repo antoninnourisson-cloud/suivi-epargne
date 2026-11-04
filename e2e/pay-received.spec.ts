@@ -176,3 +176,61 @@ test("Accueil : la routine et la carte du mois d'épargne ouvrent le rituel, pui
   // Bilan validé dans le rituel : la carte de l'Accueil ne revient pas.
   await expect(page.getByRole('region', { name: /^Bilan d/ })).toHaveCount(0);
 });
+
+test('autre argent reçu : la nature d’abord, un cadeau placé (avec la question de l’occasion), un remboursement laissé sur le compte courant', async ({ page, isMobile }) => {
+  // Téléphone d'abord : ce parcours ne tourne que sur le format téléphone.
+  test.skip(!isMobile, 'format téléphone seulement');
+  const errors: string[] = [];
+  page.on('pageerror', e => errors.push(e.message));
+  await openDemo(page);
+  await card(page).getByRole('button', { name: "J'ai reçu ma paie" }).click();
+  const pay = await ritual(page);
+  await pay.getByRole('button', { name: 'Voir la répartition' }).click();
+  await pay.getByRole('button', { name: 'Tout est fait comme conseillé' }).click();
+  await expect(pay).toBeHidden();
+
+  /** « Autre argent reçu » : la feuille du versement en plus, bilan éventuel passé. */
+  const extra = async () => {
+    await card(page).getByRole('button', { name: 'Autre argent reçu' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Argent reçu' });
+    await expect(dialog).toBeVisible();
+    if (await dialog.getByRole('heading', { name: /^Bilan/ }).count()) await dialog.getByRole('button', { name: 'Continuer' }).click();
+    await expect(dialog.getByRole('group', { name: 'Quel argent avez-vous reçu ?' })).toBeVisible();
+    return dialog;
+  };
+
+  // Cadeau : placé en entier ; pas pour une occasion, la déclaration en ligne est dite.
+  let dialog = await extra();
+  await expect(dialog.getByRole('button', { name: 'Voir la répartition' })).toBeDisabled();
+  await dialog.getByRole('radio', { name: /^Cadeau/ }).check();
+  await expect(dialog.getByRole('heading', { level: 2, name: 'Cadeau reçu' })).toBeVisible();
+  const occasion = dialog.getByRole('group', { name: /^Pour une occasion/ });
+  await occasion.getByRole('radio', { name: 'Non' }).check();
+  await expect(occasion.getByRole('link', { name: /Don manuel sur impots\.gouv\.fr/ })).toHaveAttribute('href', 'https://www.impots.gouv.fr/particulier/don-manuel');
+  await occasion.getByRole('radio', { name: 'Oui' }).check();
+  await expect(occasion.getByRole('status')).toContainText("rien à déclarer s'il reste raisonnable");
+  await dialog.getByLabel('Montant reçu').fill('150');
+  await dialog.getByRole('button', { name: 'Voir la répartition' }).click();
+  await expect(dialog.getByRole('heading', { level: 2, name: 'Que faire de ce cadeau' })).toBeVisible();
+  await expect(dialog.getByText(/^150\s€ reçus en plus : tout est placé$/)).toBeVisible();
+  await dialog.getByRole('button', { name: 'Tout est fait comme conseillé' }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page.getByRole('status').filter({ hasText: /Cadeau reçu|Argent reçu enregistré/ }).first()).toBeVisible();
+
+  // Remboursement : rien à placer, il reste sur le compte courant.
+  dialog = await extra();
+  await dialog.getByRole('radio', { name: /^Remboursement/ }).check();
+  await dialog.getByLabel('Montant reçu').fill('40');
+  await dialog.getByRole('button', { name: 'Voir la répartition' }).click();
+  await expect(dialog.getByRole('heading', { level: 2, name: 'Que faire de ce remboursement' })).toBeVisible();
+  await expect(dialog.getByText(/^Rien à placer : un remboursement/)).toBeVisible();
+  await dialog.getByRole('button', { name: 'Tout est fait comme conseillé' }).click();
+  await expect(dialog).toBeHidden();
+
+  // L'historique montre la nature de chaque versement.
+  await card(page).getByRole('button', { name: /^Voir le détail/ }).click();
+  const history = card(page).getByRole('list', { name: 'Argent reçu en plus' });
+  await expect(history.getByRole('listitem').filter({ hasText: /^Cadeau reçu le .* : 150\s€/ })).toContainText('placés');
+  await expect(history.getByRole('listitem').filter({ hasText: /^Remboursement reçu le .* : 40\s€/ })).toContainText('Resté sur le compte courant');
+  expect(errors).toEqual([]);
+});

@@ -8,7 +8,7 @@
 // reste vraiment sur ce compte (annulé avec le reste).
 // Le plan conseillé (lines) est calculé par l'appelant (lib/payDistribution) : il est figé
 // dès qu'une ligne est faite, et ne se remplace que tant que rien n'est fait.
-import type { AccountMovement, PayBalance, PayChecklist, PayChecklistLine, PayRecord, SavingsAccount } from '../../types';
+import type { AccountMovement, ExtraNature, PayBalance, PayChecklist, PayChecklistLine, PayRecord, SavingsAccount } from '../../types';
 import { applyMovement, isRestitutionMovement, restoreBalances, snapshotBalances } from '../accountOps';
 import { balanceForAmount } from '../payDistribution';
 import { planBalanceUpdate } from './balances';
@@ -17,6 +17,7 @@ import { EPS, round2 } from '../money';
 import { formatEUR, formatSignedEUR } from '../format';
 import { savingsMonthOf, savingsMonthOfPay } from '../payCalendar';
 import { liveDone, newPayId, payMovements } from '../payRecords';
+import { EXTRA_NATURE_TITLE, isExtraNature } from '../extraNature';
 import { CommandResult, CommandState, fail } from './types';
 
 /** Libellé des versements créés par la paie (le même qu'avant, cherchable dans le Journal). */
@@ -48,6 +49,8 @@ export interface PayInput {
   amount?: number;
   bonus?: number;
   kind?: 'extra';
+  /** Versement en plus : sa nature (Remboursement, Vente, Cadeau, Autre) ; ignorée pour une paie. */
+  nature?: ExtraNature;
   /** « À placer sur cette paie » saisi ; `null` : retour au calcul (« Modifier la paie »). */
   toSave?: number | null;
   payslipId?: string;
@@ -146,6 +149,11 @@ export const recordPay = (state: CommandState, input: RecordPayInput): CommandRe
   }
   if (input.pay.savingsMonth !== undefined && !MONTH_KEY.test(input.pay.savingsMonth)) return fail('invalid', 'Mois d\'épargne invalide.');
   if (input.pay.balance && !balanceOk(input.pay.balance)) return fail('invalid', 'Solde du compte courant invalide.');
+  if (input.pay.nature !== undefined && !isExtraNature(input.pay.nature)) return fail('invalid', 'Nature de l\'argent reçu invalide.');
+  // Versement en plus : sa nature (donnée, sinon celle déjà notée) nomme ses versements dans le Journal.
+  const extra = (input.pay.kind ?? existing?.kind) === 'extra';
+  const nature = extra ? input.pay.nature ?? existing?.nature : undefined;
+  const depositLabel = nature ? EXTRA_NATURE_TITLE[nature] : PAY_DEPOSIT_LABEL;
 
   // Coches encore valables : un versement supprimé à la main laisse sa ligne à refaire.
   const doneBefore: Done = existing ? liveDone(existing.done, state.accounts) : {};
@@ -177,7 +185,7 @@ export const recordPay = (state: CommandState, input: RecordPayInput): CommandRe
       movementId = input.ids?.movements?.[created.length] ?? crypto.randomUUID();
       created.push({
         accountId: account.id,
-        movement: { id: movementId, date: input.transferDate, amount: value, label: PAY_DEPOSIT_LABEL, type: 'IN', payId },
+        movement: { id: movementId, date: input.transferDate, amount: value, label: depositLabel, type: 'IN', payId },
       });
     }
     done[d.key] = {
@@ -189,7 +197,7 @@ export const recordPay = (state: CommandState, input: RecordPayInput): CommandRe
   }
 
   const base: Partial<PayRecord> = existing ?? {};
-  const { bonus: _b, toSave: _t, kind: _k, balance: _bal, ...rest } = base;
+  const { bonus: _b, toSave: _t, kind: _k, balance: _bal, nature: _n, ...rest } = base;
   const bonus = input.pay.bonus !== undefined ? input.pay.bonus : base.bonus;
   const toSave = input.pay.toSave !== undefined ? input.pay.toSave ?? undefined : base.toSave;
   const kind = input.pay.kind ?? base.kind;
@@ -206,6 +214,7 @@ export const recordPay = (state: CommandState, input: RecordPayInput): CommandRe
     id: payId, receivedOn, savingsMonth, amount: round2(amount),
     ...(bonus ? { bonus: round2(bonus) } : {}),
     ...(kind === 'extra' ? { kind } : {}),
+    ...(nature ? { nature } : {}),
     ...(toSave !== undefined ? { toSave: round2(toSave) } : {}),
     ...(payslipId ? { payslipId } : {}),
     ...(balance ? { balance } : {}),
@@ -240,9 +249,9 @@ export const recordPay = (state: CommandState, input: RecordPayInput): CommandRe
   const one = created.length === 1 ? created[0] : undefined;
   // Le montant figure dans le message : une faute de frappe se voit (et s'annule) tout de suite.
   const message = (one
-    ? `${PAY_DEPOSIT_LABEL} : ${formatSignedEUR(one.movement.amount)} sur ${state.accounts.find(a => a.id === one.accountId)!.name}`
-    : created.length > 1 ? `Paie enregistrée : ${created.length} versements, ${formatEUR(total)} placés`
-      : todo.length > 0 ? 'Fait' : 'Paie enregistrée')
+    ? `${depositLabel} : ${formatSignedEUR(one.movement.amount)} sur ${state.accounts.find(a => a.id === one.accountId)!.name}`
+    : created.length > 1 ? `${extra ? 'Argent reçu enregistré' : 'Paie enregistrée'} : ${created.length} versements, ${formatEUR(total)} placés`
+      : extra ? 'Argent reçu enregistré' : todo.length > 0 ? 'Fait' : 'Paie enregistrée')
     + (currentChange ? ` · ${current!.name} : ${formatEUR(currentChange.stays)}` : '');
   const undoPays = restorePays(state.pays, nextPays, payId);
   const createdIds = [...movementIds, ...(currentChange?.createdIds ?? [])];
