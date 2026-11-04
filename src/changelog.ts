@@ -15,6 +15,14 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '2026.11.04-7',
+    date: '2026-11-04',
+    title: 'Comparaison au Livret A sur de longues périodes',
+    items: [
+      "La comparaison d'un placement au Livret A (Analyses › Rendement) prend les taux officiels depuis 2014 (par exemple 0,5 % en 2021, 3 % en 2023, 1,5 % depuis février 2026) avant le plus ancien changement de taux noté sur votre Livret A. Ce que vous avez noté sur le compte reste prioritaire.",
+    ],
+  },
+  {
     version: '2026.11.04-6',
     date: '2026-11-04',
     title: 'PER : plafond 2027',

@@ -6,7 +6,7 @@
 // valeur actuelle. Sert aussi d'hypothèse de rendement quand aucun taux n'est saisi : jamais
 // un 0 % implicite. Fonctions pures, testées.
 // ================================================
-import { AccountMovement, AccountType, SavingsAccount } from '../types';
+import { AccountMovement, AccountType, RateChange, SavingsAccount } from '../types';
 import { MS_PER_DAY, formatISODay } from './dates';
 import { averageRateBetween, tracksDeposits } from './finance';
 import { round2, signedAmount } from './money';
@@ -126,9 +126,51 @@ export interface LivretAComparison {
 }
 
 /**
+ * Taux officiels du Livret A (et du LDDS) : date d'effet et nouveau taux, en %. Vérifiés le
+ * 2026-11-04 :
+ * - 2014 à 2015 : Banque de France et economie.gouv.fr (1 % au 1er août 2014, 0,75 % au
+ *   1er août 2015, maintenu jusqu'au 31 janvier 2020 par l'arrêté du 27 novembre 2017) ;
+ * - 2020 à 2023 : Banque de France (0,5 % au 1er février 2020, nouvelle formule ; 1 %, 2 %,
+ *   puis 3 % aux 1er février 2022, 1er août 2022 et 1er février 2023) ;
+ * - 2025 à 2026 : Banque de France, « Cadre juridique de l'épargne réglementée », mise à jour
+ *   de juin 2026 (2,4 %, 1,7 %, 1,5 %).
+ * https://www.banque-france.fr/system/files/2026-07/ER2025_A4_Cadre-juridique.pdf
+ * Avant le 1er août 2014 : le plus ancien taux (1 %) s'applique, faute de source vérifiée.
+ */
+export const LIVRET_A_OFFICIAL_RATES: readonly { date: string; rate: number }[] = [
+  { date: '2014-08-01', rate: 1 },
+  { date: '2015-08-01', rate: 0.75 },
+  { date: '2020-02-01', rate: 0.5 },
+  { date: '2022-02-01', rate: 1 },
+  { date: '2022-08-01', rate: 2 },
+  { date: '2023-02-01', rate: 3 },
+  { date: '2025-02-01', rate: 2.4 },
+  { date: '2025-08-01', rate: 1.7 },
+  { date: '2026-02-01', rate: 1.5 },
+];
+
+/**
+ * Historique daté du compte Livret A, complété par les taux officiels AVANT son plus ancien
+ * changement noté (tous, s'il n'en a aucun) : ce que l'utilisateur a saisi prime ensuite.
+ * Convention de `rateHistory` (voir rateAtDate) : l'entrée du jour J porte l'ANCIEN taux,
+ * valable jusqu'à J.
+ */
+export const livretAHistoryWithOfficial = (rateHistory: RateChange[] | undefined): RateChange[] => {
+  const own = rateHistory ?? [];
+  const oldest = own.reduce<string | null>((min, c) => (min === null || c.date < min ? c.date : min), null);
+  const official: RateChange[] = [];
+  for (let i = 1; i < LIVRET_A_OFFICIAL_RATES.length; i++) {
+    const { date } = LIVRET_A_OFFICIAL_RATES[i];
+    if (oldest === null || date < oldest) official.push({ date, rate: LIVRET_A_OFFICIAL_RATES[i - 1].rate });
+  }
+  return [...official, ...own];
+};
+
+/**
  * Livret A sur la même période que `perf` (de `perf.since` à `asOf`), avec les taux datés
- * gardés sur le compte Livret A (révisions de février et d'août). `null` sans Livret A,
- * sans taux connu, ou si la performance n'est pas mesurée.
+ * gardés sur le compte Livret A (révisions de février et d'août), complétés par les taux
+ * officiels avant le plus ancien changement noté. `null` sans Livret A, sans taux connu, ou
+ * si la performance n'est pas mesurée.
  */
 export const livretAOverPeriod = (
   perf: Pick<AccountPerformance, 'since' | 'years' | 'periodReturn'>,
@@ -138,7 +180,9 @@ export const livretAOverPeriod = (
   if (perf.periodReturn === null) return null;
   const livretA = accounts.find(a => a.type === AccountType.LIVRET_A);
   if (!livretA) return null;
-  const annualRate = averageRateBetween(livretA, perf.since, formatISODay(asOf));
+  if (!(livretA.interestRate && livretA.interestRate > 0)) return null;
+  const history = livretAHistoryWithOfficial(livretA.rateHistory);
+  const annualRate = averageRateBetween({ interestRate: livretA.interestRate, rateHistory: history }, perf.since, formatISODay(asOf));
   if (!(annualRate > 0)) return null;
   return { annualRate, periodReturn: annualRate / 100 * perf.years };
 };

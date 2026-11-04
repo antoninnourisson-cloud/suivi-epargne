@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { averageRateBetween } from './finance';
-import { xirr, accountPerformance, livretAOverPeriod, assumedAnnualRate, withAssumedRates, isMarketAccount, OBSERVED_RATE_CAP, OBSERVED_RATE_FLOOR, OBSERVED_RATE_MIN_YEARS } from './performance';
+import { xirr, accountPerformance, livretAOverPeriod, livretAHistoryWithOfficial, LIVRET_A_OFFICIAL_RATES, assumedAnnualRate, withAssumedRates, isMarketAccount, OBSERVED_RATE_CAP, OBSERVED_RATE_FLOOR, OBSERVED_RATE_MIN_YEARS } from './performance';
 import { AccountMovement, AccountType, SavingsAccount } from '../types';
 
 const NOW = new Date(2026, 9, 21);
@@ -206,5 +206,29 @@ describe('Livret A sur la même période', () => {
     expect(livretAOverPeriod(perf, [acc({})])).toBeNull();
     expect(livretAOverPeriod(perf, [{ ...livretA, interestRate: 0, rateHistory: [] }])).toBeNull();
     expect(livretAOverPeriod({ ...perf, periodReturn: null }, [livretA])).toBeNull();
+  });
+
+  it('longue période : les taux officiels avant le plus ancien changement noté', () => {
+    // Compte sans historique, taux du jour 1,5 % : 2021-02-01 → 2023-02-01, soit 365 j à
+    // 0,5 %, 181 j à 1 % et 184 j à 2 % (tableau officiel), et non 1,5 % partout.
+    const bare = { ...livretA, interestRate: 1.5, rateHistory: [] };
+    const asOf = new Date(2023, 1, 1);
+    const cmp = livretAOverPeriod({ since: '2021-02-01', years: 2, periodReturn: 0.05 }, [bare], asOf)!;
+    expect(cmp.annualRate).toBeCloseTo((365 * 0.5 + 181 * 1 + 184 * 2) / 730, 9);
+    // Avant le tableau (1er août 2014) : le plus ancien taux officiel, 1 %.
+    expect(livretAOverPeriod({ since: '2013-01-01', years: 1, periodReturn: 0.05 }, [bare], new Date(2014, 0, 1))!.annualRate).toBeCloseTo(1, 9);
+  });
+
+  it('ce qui est noté sur le compte prime sur le tableau officiel', () => {
+    // Historique saisi à partir de 2025-02-01 : avant, le tableau (3 % depuis 2023-02-01) ;
+    // ensuite, les taux du compte, même s'ils diffèrent du tableau.
+    expect(livretAHistoryWithOfficial([{ date: '2025-02-01', rate: 3.1 }]).filter(c => c.date >= '2023-02-01')).toEqual([
+      { date: '2023-02-01', rate: 2 },
+      { date: '2025-02-01', rate: 3.1 },
+    ]);
+    // Sans historique : tout le tableau, au format « ancien taux jusqu'au jour J ».
+    const all = livretAHistoryWithOfficial(undefined);
+    expect(all).toHaveLength(LIVRET_A_OFFICIAL_RATES.length - 1);
+    expect(all.at(-1)).toEqual({ date: '2026-02-01', rate: 1.7 });
   });
 });
