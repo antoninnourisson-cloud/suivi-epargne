@@ -34,6 +34,12 @@
   a { color: var(--accent); }
   footer { margin-top: 32px; font-size: 14px; color: var(--muted); }
   footer a { margin-right: 16px; }
+  /* Captures du téléphone : trois côte à côte, ou à faire défiler sur un écran étroit. */
+  .shots { display: flex; gap: 12px; margin: 0 0 32px; overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: 4px; }
+  .shots figure { flex: 0 0 min(70%, 236px); margin: 0; scroll-snap-align: start; }
+  .shots img { display: block; width: 100%; height: auto; border-radius: 20px; border: 1px solid var(--line); }
+  .shots figcaption { margin-top: 8px; font-size: 14px; color: var(--muted); text-align: center; }
+  @media (min-width: 720px) { .shots { overflow: visible; } .shots figure { flex: 1 1 0; } }
 </style>
 </head>
 <body>
@@ -46,24 +52,40 @@
     </div>
   </header>
 
-  <p class="lead">Pécule est une application web gratuite pour suivre son épargne personnelle : livrets, assurance vie, PEA, épargne salariale. Elle est calibrée pour la fiscalité française. Il n'y a ni base de données ni compte à créer : vos données restent dans <strong>un seul fichier, sur votre propre Google Drive</strong>.</p>
+  <p class="lead">Pécule est une application web gratuite pour suivre son épargne personnelle : livrets, assurance vie, PEA, épargne salariale. Elle est calibrée pour la fiscalité française et pensée d'abord pour le téléphone. Il n'y a ni base de données ni compte à créer : vos données restent dans <strong>un seul fichier, sur votre propre Google Drive</strong>.</p>
 
   <div class="cta">
     <a class="btn btn-primary" href="./">Ouvrir l'app</a>
     <a class="btn btn-secondary" href="confidentialite.html">Règles de confidentialité</a>
   </div>
 
+  <div class="shots">
+    <figure>
+      <img src="presentation/accueil.jpg" width="1082" height="2202" loading="lazy" alt="Accueil de Pécule sur téléphone : épargne nette de 26 900 €, sa tendance sur 12 mois et la part disponible tout de suite ou avec impôt.">
+      <figcaption>L'Accueil</figcaption>
+    </figure>
+    <figure>
+      <img src="presentation/ma-paie.jpg" width="1082" height="2202" loading="lazy" alt="Carte « Ma paie » : une paie d'environ 1 944 € répartie entre virements fixes, épargne, épargne projets et plaisir.">
+      <figcaption>Ma paie, répartie en un geste</figcaption>
+    </figure>
+    <figure>
+      <img src="presentation/besoin.jpg" width="1082" height="2202" loading="lazy" alt="« Où prendre 20 000 € » : les livrets d'abord, puis l'assurance vie, avec le coût de chaque retrait et l'épargne de précaution qui passe sous son objectif.">
+      <figcaption>J'ai besoin d'argent : où le prendre ?</figcaption>
+    </figure>
+  </div>
+
   <section>
     <h2>Ce que fait Pécule</h2>
     <ul>
       <li><strong>Tous vos comptes d'épargne</strong> au même endroit, avec leurs plafonds, leurs taux et leurs intérêts réellement acquis (règle des quinzaines), et la lecture facultative d'un relevé bancaire pour mettre un solde à jour.</li>
-      <li><strong>Combien placer chaque mois, et où</strong>, d'après votre paie et vos charges fixes.</li>
+      <li><strong>Ma paie</strong> : combien placer chaque mois, et où, d'après votre paie et vos charges fixes ; la paie reçue se répartit en un geste.</li>
+      <li><strong>Les moments de l'année, guidés</strong>, sans menu en plus : l'argent reçu (remboursement, vente, cadeau, avec ce qu'il faut déclarer), « J'ai besoin d'argent : où le prendre ? » (le compte le moins cher d'abord, avec ce que le retrait coûte en euros), les nouveaux taux officiels appliqués à tous vos comptes en un geste, et la clôture de l'année en une seule feuille (intérêts crédités, relevés, objectif de l'année suivante).</li>
       <li><strong>Fiscalité</strong> : impôt sur le revenu estimé, net d'un retrait (PFU, maturité de l'assurance vie et du PEA), éligibilité au LEP, aide à la déclaration de revenus, et une veille hebdomadaire des taux et plafonds officiels qui vous propose les changements.</li>
       <li><strong>À faire, chiffré en euros</strong> : argent qui dort, compte mieux rémunéré qui a de la place, livret bientôt plein.</li>
       <li><strong>Motivation</strong> : bons mois, jalons et point de paie, pour garder le cap sans culpabiliser.</li>
       <li><strong>« Et si… »</strong> : simulez un achat, une pause ou un autre montant d'épargne, et voyez votre épargne dans 1 à 5 ans.</li>
       <li><strong>Agenda et rappels</strong> : jour de paie, révision des taux réglementés, échéances, avec des notifications facultatives.</li>
-      <li><strong>Historique et bilans</strong> : évolution de l'épargne, taux d'épargne mois par mois, « Votre année » en quelques pages, et une clôture guidée de l'année.</li>
+      <li><strong>Historique et bilans</strong> : évolution de l'épargne, taux d'épargne mois par mois, « Votre année » en quelques pages.</li>
       <li><strong>Sauvegardes</strong> : copies mensuelles sur votre Drive et, si vous le souhaitez, une sauvegarde de secours chiffrée avec un code que vous seul détenez.</li>
       <li>Application installable sur téléphone et ordinateur (PWA), utilisable hors ligne.</li>
     </ul>
