@@ -12,6 +12,35 @@ const open = async (page: Page, view: string) => {
 const pdf = { name: 'releve.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4 relevé fictif') };
 
 test.describe('Lire un relevé (démo)', () => {
+  test('fichier OFX lu sur le téléphone : relecture, import, puis annulation', async ({ page }) => {
+    await open(page, 'update');
+    await expect(page.getByRole('heading', { name: 'Actualiser les soldes', level: 2 })).toBeVisible({ timeout: 20_000 });
+    await page.getByRole('button', { name: 'Lire un relevé' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Lire un relevé' });
+    await expect(dialog.getByText("Fichier lu sur votre téléphone : rien n'est envoyé.")).toBeVisible();
+    const d = new Date();
+    const day = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
+    const ofx = `OFXHEADER:100
+DATA:OFXSGML
+VERSION:102
+
+<OFX><BANKMSGSRSV1><STMTTRNRS><STMTRS><CURDEF>EUR
+<BANKACCTFROM><ACCTID>00099887766<ACCTTYPE>SAVINGS</BANKACCTFROM>
+<BANKTRANLIST><STMTTRN><DTPOSTED>${day}<TRNAMT>150.00<FITID>1<NAME>VIR RECU PRIME FICTIVE</STMTTRN></BANKTRANLIST>
+<LEDGERBAL><BALAMT>15350.00<DTASOF>${day}</LEDGERBAL></STMTRS></STMTTRNRS></BANKMSGSRSV1></OFX>`;
+    await dialog.getByTestId('statement-file').setInputFiles({ name: 'releve.ofx', mimeType: 'application/x-ofx', buffer: Buffer.from(ofx) });
+    await expect(dialog.getByRole('heading', { name: 'Relecture du relevé' })).toBeVisible();
+    await dialog.getByLabel('Compte dans Pécule').selectOption('demo-la');
+    await expect(dialog.getByRole('checkbox', { name: /VIR RECU PRIME FICTIVE/ })).toBeChecked();
+    await dialog.getByRole('button', { name: 'Importer' }).click();
+    await expect(dialog).toBeHidden();
+    const livret = page.getByRole('button', { name: /^Livret A/ });
+    await expect(livret).toContainText('Solde actuel : 15 350,00');
+    await page.getByRole('status').filter({ hasText: "d'après le relevé" }).getByRole('button', { name: 'Annuler' }).click();
+    await expect(livret).toContainText('Solde actuel : 15 200,00');
+  });
+
+
   test('relecture, import des soldes et des opérations, puis annulation', async ({ page }) => {
     await open(page, 'update');
     // Premier affichage : le serveur de développement compile l'écran à la demande.

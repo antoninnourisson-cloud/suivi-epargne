@@ -15,6 +15,12 @@ export const STATEMENT_MAX_BYTES = 15 * 1024 * 1024;
 /** Types acceptés : PDF ou image (capture d'écran). */
 export const STATEMENT_ACCEPT = 'application/pdf,image/*';
 
+/** Types proposés par « Lire un relevé » : PDF, capture, ou fichier OFX / CSV (lu sur l'appareil, sans Gemini). */
+export const STATEMENT_FILES_ACCEPT = `${STATEMENT_ACCEPT},.ofx,.qfx,.csv,text/csv,application/x-ofx`;
+
+/** Fichier OFX, QFX ou CSV : lu sur l'appareil par du code pur (lib/statementFiles), sans clé. */
+export const isLocalStatementFile = (file: Pick<File, 'name'>): boolean => /\.(ofx|qfx|csv)$/i.test(file.name);
+
 // Mode démo (`?demo=1`) : en développement et dans le build des tests de bout en bout
 // seulement (même règle que useAuthSession) ; jamais dans le build publié.
 const DEMO_ALLOWED: boolean = import.meta.env.DEV || __E2E_DEMO__;

@@ -15,6 +15,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '2026.11.04-10',
+    date: '2026-11-04',
+    title: 'Relevé en OFX ou CSV',
+    items: [
+      "« Lire un relevé » accepte maintenant un fichier OFX ou CSV de votre banque, en plus du PDF et de la capture d'écran. Le fichier est lu sur votre téléphone : rien n'est envoyé, et aucune clé Gemini n'est nécessaire.",
+      "Pour un CSV dont les colonnes ne sont pas évidentes, une étape « Colonnes du fichier » vous laisse choisir la date, le libellé et le montant. Sans colonne de solde, seules les opérations sont proposées.",
+    ],
+  },
+  {
     version: '2026.11.04-9',
     date: '2026-11-04',
     title: 'Déclaration : le compte-titres',

@@ -20,7 +20,9 @@ import { tracksDeposits } from '../lib/finance';
 import { formatEUR, formatSignedEUR } from '../lib/format';
 import { localTodayISO } from '../lib/dates';
 import { EPS } from '../lib/money';
-import { describeStatementError, isDemoSession, readStatementFile, STATEMENT_ACCEPT } from '../services/statementReader';
+import { describeStatementError, isDemoSession, isLocalStatementFile, readStatementFile, StatementReadError, STATEMENT_FILES_ACCEPT, STATEMENT_MAX_BYTES } from '../services/statementReader';
+import { StatementColumns } from './StatementColumns';
+import type { CsvMapping, CsvTable } from '../lib/statementFiles';
 
 export interface StatementImportProps {
   accounts: SavingsAccount[];
@@ -58,7 +60,9 @@ const olderNote = (closing: string, older: OlderBalance): string =>
 export const StatementImport: React.FC<StatementImportProps> = ({ accounts, geminiApiKey, preferredAccountId, onClose, onImport, onOpenKeys, read, initialFile }) => {
   const demo = isDemoSession();
   const canRead = demo || !!geminiApiKey;
-  const [step, setStep] = useState<'pick' | 'reading' | 'review'>(initialFile && canRead ? 'reading' : 'pick');
+  const [step, setStep] = useState<'pick' | 'reading' | 'columns' | 'review'>(initialFile && (canRead || isLocalStatementFile(initialFile)) ? 'reading' : 'pick');
+  // CSV dont les colonnes ne sont pas sûres : tableau, colonnes proposées et nom du fichier.
+  const [csv, setCsv] = useState<{ table: CsvTable; mapping: CsvMapping; fileName: string } | null>(null);
   const [error, setError] = useState<{ text: string; key?: boolean } | null>(null);
   const [data, setData] = useState<StatementData | null>(null);
   const [choices, setChoices] = useState<StatementAccountChoice[]>([]);
@@ -69,7 +73,7 @@ export const StatementImport: React.FC<StatementImportProps> = ({ accounts, gemi
   // Fenêtre fermée pendant la lecture : la réponse arrivée ensuite est ignorée.
   const alive = useRef(true);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
-  useEffect(() => { if (step === 'review') reviewTitleRef.current?.focus(); }, [step]);
+  useEffect(() => { if (step === 'review' || step === 'columns') reviewTitleRef.current?.focus(); }, [step]);
   const today = localTodayISO();
 
   const choiceFor = (s: StatementAccount, d: StatementData, accountId: string | undefined): StatementAccountChoice =>
@@ -83,27 +87,63 @@ export const StatementImport: React.FC<StatementImportProps> = ({ accounts, gemi
   // Fichier partagé : lu une seule fois (le double montage du mode strict ne le relit pas).
   const initialRead = useRef(false);
   useEffect(() => {
-    if (!initialFile || !canRead || initialRead.current) return;
+    if (!initialFile || !(canRead || isLocalStatementFile(initialFile)) || initialRead.current) return;
     initialRead.current = true;
     void readFile(initialFile);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- une seule lecture, à l'ouverture
   }, [initialFile, canRead]);
 
+  // Relevé lu (par Gemini ou sur l'appareil) : compte proposé, puis relecture.
+  const showReview = (d: StatementData): boolean => {
+    if (d.accounts.length === 0) {
+      setError({ text: "Aucun compte lisible dans ce document. Vérifiez qu'il s'agit bien d'un relevé de compte (le PDF d'origine de la banque, ou une capture nette), ou actualisez vos soldes à la main." });
+      setStep('pick');
+      return false;
+    }
+    const mapping = proposeMapping(d, accounts, preferredAccountId);
+    setData(d);
+    setChoices(d.accounts.map((s, i) => choiceFor(s, d, mapping[i])));
+    setStep('review');
+    return true;
+  };
+
+  // OFX, QFX, CSV : lus ici, sur l'appareil (code chargé à la demande), sans Gemini ni clé.
+  async function readLocal(file: File): Promise<void> {
+    if (file.size === 0) throw new StatementReadError('Ce fichier est vide.', 'file');
+    if (file.size > STATEMENT_MAX_BYTES) throw new StatementReadError('Fichier trop lourd (15 Mo au plus).', 'file');
+    const mod = await import('../lib/statementFiles');
+    try {
+      const r = await mod.readLocalStatement(file);
+      if (!alive.current) return;
+      if (r.kind === 'columns') { setCsv({ table: r.table, mapping: r.mapping, fileName: r.fileName }); setStep('columns'); } else showReview(r.data);
+    } catch (e) {
+      if (e instanceof mod.StatementFileError) throw new StatementReadError(e.message, 'file');
+      throw e;
+    }
+  }
+
+  const confirmColumns = () => {
+    if (!csv) return;
+    void (async () => {
+      const mod = await import('../lib/statementFiles');
+      if (!alive.current) return;
+      try {
+        setError(null);
+        showReview(mod.buildCsvStatement(csv.table, csv.mapping, csv.fileName));
+      } catch (e) {
+        setError({ text: e instanceof mod.StatementFileError ? e.message : 'Ce fichier ne peut pas être lu avec ces colonnes.' });
+      }
+    })();
+  };
+
   async function readFile(file: File) {
     setError(null);
     setStep('reading');
     try {
+      if (isLocalStatementFile(file)) { await readLocal(file); return; }
       const d = await (read ?? (f => readStatementFile(f, geminiApiKey)))(file);
       if (!alive.current) return;
-      if (d.accounts.length === 0) {
-        setError({ text: "Aucun compte lisible dans ce document. Vérifiez qu'il s'agit bien d'un relevé de compte (le PDF d'origine de la banque, ou une capture nette), ou actualisez vos soldes à la main." });
-        setStep('pick');
-        return;
-      }
-      const mapping = proposeMapping(d, accounts, preferredAccountId);
-      setData(d);
-      setChoices(d.accounts.map((s, i) => choiceFor(s, d, mapping[i])));
-      setStep('review');
+      showReview(d);
     } catch (err) {
       if (!alive.current) return;
       const r = describeStatementError(err);
@@ -148,32 +188,38 @@ export const StatementImport: React.FC<StatementImportProps> = ({ accounts, gemi
   const pick = (
     <div className="space-y-4">
       <p className="text-sm text-on-surface-variant">
-        Choisissez le relevé de compte de votre banque (PDF, ou capture d'écran de son application). Pécule propose ensuite les nouveaux soldes et les opérations à ajouter : <strong className="font-medium text-on-surface">rien n'est enregistré avant votre validation</strong>.
+        Choisissez le relevé de compte de votre banque : fichier OFX ou CSV, PDF, ou capture d'écran de son application. Pécule propose ensuite les nouveaux soldes et les opérations à ajouter : <strong className="font-medium text-on-surface">rien n'est enregistré avant votre validation</strong>.
       </p>
       <p className="text-xs text-on-surface-variant">
         {demo
           ? 'Mode démo : un relevé fictif est lu, sans rien envoyer.'
-          : "Le document est envoyé à Google Gemini avec votre clé, directement depuis cet appareil : jamais au serveur de Pécule, et il n'est pas gardé dans vos données."}
+          : "Un PDF ou une capture est envoyé à Google Gemini avec votre clé, directement depuis cet appareil : jamais au serveur de Pécule, et il n'est pas gardé dans vos données."}
       </p>
+      <p className="text-xs text-on-surface-variant">Un fichier OFX ou CSV est lu sur votre téléphone, sans Gemini ni clé. Fichier lu sur votre téléphone : rien n'est envoyé.</p>
       {!demo && (
         <p className="text-xs text-on-surface-variant">
           Un relevé contient votre nom, votre adresse et vos numéros de compte. Avec une clé Gemini gratuite, Google peut utiliser le document pour améliorer ses modèles et le faire relire par des personnes : utilisez une clé d'une offre payante si cela ne vous convient pas.
         </p>
       )}
-      {canRead && <input ref={fileRef} type="file" accept={STATEMENT_ACCEPT} onChange={onFile} className="hidden" tabIndex={-1} aria-hidden="true" data-testid="statement-file" />}
-      {canRead ? (
-        <Button ref={pickRef} onClick={() => fileRef.current?.click()} disabled={step === 'reading'} isLoading={step === 'reading'}>
-          {step !== 'reading' && <Upload className="w-4 h-4" aria-hidden="true" />} Choisir le relevé
-        </Button>
-      ) : (
+      <input ref={fileRef} type="file" accept={STATEMENT_FILES_ACCEPT} onChange={onFile} className="hidden" tabIndex={-1} aria-hidden="true" data-testid="statement-file" />
+      <Button ref={pickRef} onClick={() => fileRef.current?.click()} disabled={step === 'reading'} isLoading={step === 'reading'}>
+        {step !== 'reading' && <Upload className="w-4 h-4" aria-hidden="true" />} Choisir le relevé
+      </Button>
+      {!canRead && (
         <div className="rounded-xl bg-surface-container p-4 space-y-3">
-          <p className="text-sm text-on-surface">La lecture d'un relevé demande une clé Gemini, gardée sur cet appareil seulement.</p>
+          <p className="text-sm text-on-surface">La lecture d'un PDF ou d'une capture demande une clé Gemini, gardée sur cet appareil seulement.</p>
           {openKeys}
         </div>
       )}
       <p role="status" aria-live="polite" className="text-sm text-on-surface-variant flex items-center gap-2 min-h-5">
         {step === 'reading' && <><Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> Lecture du relevé… (jusqu'à une minute pour un long relevé)</>}
       </p>
+    </div>
+  );
+
+  const columns = csv && (
+    <div className="space-y-4">
+      <StatementColumns table={csv.table} mapping={csv.mapping} onChange={mapping => { setError(null); setCsv({ ...csv, mapping }); }} />
     </div>
   );
 
@@ -202,7 +248,7 @@ export const StatementImport: React.FC<StatementImportProps> = ({ accounts, gemi
               <p className="text-sm text-on-surface-variant">
                 {s.closingBalance !== undefined
                   ? <>Nouveau solde : <MoneyText value={s.closingBalance} decimals={2} className="font-medium text-on-surface" /> au {frDay(statementClosingDate(s, data, today))}</>
-                  : 'Nouveau solde non lu'}
+                  : 'Nouveau solde non lu : seules les opérations sont proposées'}
                 {' · '}{plural(s.movements.length, 'opération', 'opérations')}
               </p>
             </div>
@@ -300,14 +346,16 @@ export const StatementImport: React.FC<StatementImportProps> = ({ accounts, gemi
   );
 
   return (
-    <Modal open onClose={onClose} label="Lire un relevé" variant="sheet" className="max-w-2xl p-6" initialFocusRef={canRead ? pickRef : undefined} closeOnScrim={step === 'pick'}>
+    <Modal open onClose={onClose} label="Lire un relevé" variant="sheet" className="max-w-2xl p-6" initialFocusRef={pickRef} closeOnScrim={step === 'pick'}>
       <div className="flex justify-between items-start gap-2 mb-4">
         {step === 'review'
           ? <h2 ref={reviewTitleRef} tabIndex={-1} className="text-2xl font-normal text-on-surface outline-none">Relecture du relevé</h2>
-          : <h2 className="text-2xl font-normal text-on-surface">Lire un relevé</h2>}
+          : step === 'columns'
+            ? <h2 ref={reviewTitleRef} tabIndex={-1} className="text-2xl font-normal text-on-surface outline-none">Colonnes du fichier</h2>
+            : <h2 className="text-2xl font-normal text-on-surface">Lire un relevé</h2>}
         <IconButton icon={X} label="Fermer" onClick={onClose} className="-mr-3" />
       </div>
-      {step === 'review' ? review : pick}
+      {step === 'review' ? review : step === 'columns' && csv ? columns : pick}
       {step !== 'review' && error && (
         <div role="alert" className="mt-3 rounded-xl bg-error-container text-on-error-container p-3 text-sm font-medium space-y-2">
           <p>{error.text}</p>
@@ -315,8 +363,9 @@ export const StatementImport: React.FC<StatementImportProps> = ({ accounts, gemi
         </div>
       )}
       <div className="mt-6 flex flex-wrap justify-end gap-2">
-        {step === 'review' && <Button variant="text" onClick={() => { setStep('pick'); setData(null); setChoices([]); setError(null); }}>Autre relevé</Button>}
+        {(step === 'review' || step === 'columns') && <Button variant="text" onClick={() => { setStep('pick'); setData(null); setChoices([]); setCsv(null); setError(null); }}>Autre relevé</Button>}
         <Button variant="text" onClick={onClose}>Annuler</Button>
+        {step === 'columns' && <Button onClick={confirmColumns}>Continuer</Button>}
         {step === 'review' && (
           <Button onClick={submit} disabled={items.length === 0 || !!blocking} aria-describedby={items.length === 0 ? `${titleId}-why` : undefined}>Importer</Button>
         )}

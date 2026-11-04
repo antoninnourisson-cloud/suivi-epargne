@@ -40,13 +40,57 @@ const setup = (props: Partial<StatementImportProps> = {}) => {
 const pickFile = () => fireEvent.change(screen.getByTestId('statement-file'), { target: { files: [new File(['%PDF'], 'releve.pdf', { type: 'application/pdf' })] } });
 
 describe('StatementImport', () => {
-  it('sans clé Gemini : la lecture le dit et mène aux Paramètres', () => {
+  it('sans clé Gemini : un PDF le dit et mène aux Paramètres', async () => {
     const { onClose, onOpenKeys } = setup({ geminiApiKey: '' });
     expect(screen.getByText(/demande une clé Gemini/)).toBeTruthy();
-    expect(screen.queryByTestId('statement-file')).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: /Ajouter la clé Gemini/ }));
+    expect(screen.getByTestId('statement-file')).toBeTruthy();
+    pickFile();
+    await screen.findByRole('alert');
+    fireEvent.click(screen.getAllByRole('button', { name: /Ajouter la clé Gemini/ })[0]);
     expect(onClose).toHaveBeenCalled();
     expect(onOpenKeys).toHaveBeenCalled();
+  });
+
+  it('sans clé Gemini : un fichier .ofx mène à la relecture, lu sur l appareil', async () => {
+    const read = vi.fn();
+    const { onImport } = setup({ geminiApiKey: '', read });
+    const ofx = `<OFX><BANKMSGSRSV1><STMTTRNRS><STMTRS><CURDEF>EUR<BANKACCTFROM><ACCTID>0001234567<ACCTTYPE>SAVINGS</BANKACCTFROM>
+<BANKTRANLIST><STMTTRN><DTPOSTED>${today.replaceAll('-', '')}<TRNAMT>150.00<FITID>1<NAME>VIR RECU PRIME</STMTTRN></BANKTRANLIST>
+<LEDGERBAL><BALAMT>15350.00<DTASOF>${today.replaceAll('-', '')}</LEDGERBAL></STMTRS></STMTTRNRS></BANKMSGSRSV1></OFX>`;
+    fireEvent.change(screen.getByTestId('statement-file'), { target: { files: [new File([ofx], 'releve.ofx')] } });
+    await screen.findByRole('heading', { name: 'Relecture du relevé' });
+    expect(read).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText('Compte dans Pécule'), { target: { value: 'la' } });
+    expect((screen.getByRole('checkbox', { name: /VIR RECU PRIME/ }) as HTMLInputElement).checked).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Importer' }));
+    expect(onImport).toHaveBeenCalledWith([{ accountId: 'la', date: today, closingBalance: 15350, movements: [{ date: today, label: 'VIR RECU PRIME', amount: 150, type: 'IN' }] }]);
+  });
+
+  it('CSV aux colonnes ambiguës : étape « Colonnes du fichier », puis relecture sans solde', async () => {
+    const { onImport } = setup({ geminiApiKey: '' });
+    const csv = `Date;Libellé;Total
+${today.split('-').reverse().join('/')};VIR RECU PRIME;150,00
+`;
+    fireEvent.change(screen.getByTestId('statement-file'), { target: { files: [new File([csv], 'compte.csv', { type: 'text/csv' })] } });
+    await screen.findByRole('heading', { name: 'Colonnes du fichier' });
+    expect(screen.getByRole('region', { name: /Aperçu des trois premières lignes/ })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Continuer' }));
+    expect((await screen.findByRole('alert')).textContent).toContain('Choisissez');
+    fireEvent.change(screen.getByLabelText('Montant'), { target: { value: '2' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Continuer' }));
+    await screen.findByRole('heading', { name: 'Relecture du relevé' });
+    expect(screen.getByText(/Nouveau solde non lu/)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Compte dans Pécule'), { target: { value: 'cc' } });
+    fireEvent.click(screen.getByRole('checkbox', { name: /VIR RECU PRIME/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Importer' }));
+    expect(onImport).toHaveBeenCalledWith([{ accountId: 'cc', date: today, movements: [{ date: today, label: 'VIR RECU PRIME', amount: 150, type: 'IN' }] }]);
+  });
+
+  it('fichier illisible : message en clair, sans quitter le choix', async () => {
+    setup({ geminiApiKey: '' });
+    fireEvent.change(screen.getByTestId('statement-file'), { target: { files: [new File(['bonjour'], 'releve.ofx')] } });
+    expect((await screen.findByRole('alert')).textContent).toContain("n'est pas un relevé OFX");
+    expect(screen.getByRole('button', { name: /Choisir le relevé/ })).toBeTruthy();
   });
 
   it('propose le compte, décoche le doublon, vérifie le relevé, puis importe', async () => {
