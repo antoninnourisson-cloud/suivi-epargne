@@ -30,6 +30,8 @@ interface QuickAddModalProps {
   onSubmit: (accountId: string, amount: number, type: 'IN' | 'OUT', label: string, date: string) => void;
   /** Virement entre deux comptes (commande linkedTransfer, annulable). Sans lui, pas de choix « Virement ». */
   onTransfer?: (request: TransferRequest) => string | null;
+  /** « J'ai besoin d'argent : où le prendre ? » : ferme cette feuille et ouvre le retrait guidé. */
+  onOpenNeed?: () => void;
 }
 
 type Direction = 'IN' | 'OUT';
@@ -47,7 +49,7 @@ const SUGGESTIONS: Record<Direction, string[]> = {
 /** Puces de 32 px, zone tactile de 48 px (Material 3). */
 const CHIP_TARGET = 'relative after:absolute after:inset-x-0 after:-inset-y-2';
 
-export const QuickAddModal: React.FC<QuickAddModalProps> = ({ open, accounts, initialKind = 'IN', onClose, onSubmit, onTransfer }) => {
+export const QuickAddModal: React.FC<QuickAddModalProps> = ({ open, accounts, initialKind = 'IN', onClose, onSubmit, onTransfer, onOpenNeed }) => {
   const [accountId, setAccountId] = useState('');
   const [destId, setDestId] = useState('');
   const [amount, setAmount] = useState(0);
@@ -133,6 +135,12 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ open, accounts, in
             label="Type de mouvement" options={kinds} value={type} onChange={k => { setTransferError(null); setType(k); }}
             className="w-full [&>button]:flex-1 [&>button]:px-2 max-sm:[&>button]:h-12"
           />
+          {/* Retrait guidé : un lien sous les trois choix, pas un quatrième. */}
+          {onOpenNeed && (
+            <button type="button" onClick={onOpenNeed} className="-mt-2 min-h-12 text-sm font-medium text-primary underline underline-offset-4 decoration-primary/40 hover:decoration-primary text-left">
+              J'ai besoin d'argent : où le prendre ?
+            </button>
+          )}
 
           {transfer ? (<>
             {accountSelect('Compte de départ', accountId, v => { setAccountId(v); if (v === destId) setDestId(''); })}

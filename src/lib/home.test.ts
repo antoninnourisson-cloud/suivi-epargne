@@ -450,4 +450,20 @@ describe('liste « À faire »', () => {
     expect(tr.primary?.action).toEqual({ type: 'show-tax-return' });
     expect(tr.secondary?.action).toEqual({ type: 'mark-tax-return-filed', incomeYear: 2025 });
   });
+
+  it('retrait prévu (« J’ai besoin d’argent ») : une tâche le jour venu, « Enregistrer » ou « Supprimer »', () => {
+    const la = acc('la', AccountType.LIVRET_A, 1000, { name: 'Livret A' });
+    const av = acc('av', AccountType.ASSURANCE_VIE, 3000, { name: 'Assurance vie' });
+    const plan = { id: 'p1', date: '2026-10-16', needDate: '2026-10-20', lines: [{ accountId: 'la', amount: 800 }, { accountId: 'av', amount: 200 }, { accountId: 'parti', amount: 50 }] };
+    const todos = buildHomeTodos(base({ accounts: [la, av], plannedWithdrawals: [plan], can: { ...can, plannedWithdrawals: true } }));
+    const t = todos.find(x => x.key === 'withdrawal-p1')!;
+    expect(t.text).toMatch(/^Retrait prévu : prendre 800\s€ sur le Livret A, 200\s€ sur l'Assurance vie et 50\s€ sur un compte supprimé, pour le 20 octobre\.$/);
+    expect(t.detail).toMatch(/^Fait le 16 octobre ou après/);
+    expect(t.primary).toEqual({ label: 'Enregistrer', action: { type: 'record-planned-withdrawal', id: 'p1' } });
+    expect(t.secondary).toEqual({ label: 'Supprimer', action: { type: 'delete-planned-withdrawal', id: 'p1' } });
+    // Jour même du besoin : pas de conseil ; sans gestionnaire, pas de bouton.
+    const same = buildHomeTodos(base({ accounts: [la], plannedWithdrawals: [{ ...plan, date: '2026-10-20', lines: [plan.lines[0]] }] })).find(x => x.key === 'withdrawal-p1')!;
+    expect(same.detail).toBeUndefined();
+    expect(same.primary).toBeUndefined();
+  });
 });

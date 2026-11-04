@@ -12,6 +12,7 @@ import { round2 } from './money';
 import { sanitizePayAdjustment } from './payAdjustment';
 import { expectedPayDate, savingsMonthOf, savingsMonthOfPay } from './payCalendar';
 import { isExtraNature } from './extraNature';
+import { sanitizePlannedWithdrawals } from './plannedWithdrawals';
 
 /**
  * Version du format. À augmenter quand un changement rend le fichier illisible pour une
@@ -365,6 +366,11 @@ export const migrate = (raw: unknown): AppDoc => {
   if (config.yearClosings !== undefined) {
     const closings = sanitizeYearClosings(config.yearClosings);
     if (closings) config.yearClosings = closings; else delete config.yearClosings;
+  }
+  // Retraits prévus (« J'ai besoin d'argent ») : entrées illisibles écartées, sans changer de version.
+  if (config.plannedWithdrawals !== undefined) {
+    const planned = sanitizePlannedWithdrawals(config.plannedWithdrawals);
+    if (planned) config.plannedWithdrawals = planned; else delete config.plannedWithdrawals;
   }
   // Ancien format : l'avantage Navigo vivait dans config (navigoBase / navigoRate, gardés tels quels).
   // Fichier abîmé ou incomplet : chaque avantage est complété champ par champ.

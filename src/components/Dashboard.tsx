@@ -13,7 +13,8 @@ import type { EmergencyFund } from '../lib/planning';
 import type { AgendaEvent } from '../lib/agenda';
 import type { TaxReturnAlert } from '../lib/taxReturn';
 import { revealElementById } from './revealElement';
-import type { SavingsAccount, PortfolioSnapshot, FiscalConfig, RecurringMovement, Subscription, PayslipRecord, PayRecord } from '../types';
+import type { SavingsAccount, PortfolioSnapshot, FiscalConfig, RecurringMovement, Subscription, PayslipRecord, PayRecord, PlannedWithdrawal } from '../types';
+import { duePlannedWithdrawals } from '../lib/plannedWithdrawals';
 import {
   computeUnlockCost, findFiscalReview, applyTaxScale, findAvRateUpdatesDue, confirmRatesUnchanged, findDueRecurring,
   findStaleRegulatedRates, computeAccountBalanceAtDate, suggestedRestitutionDate, computeAvailabilityBreakdown, ownedAmountAt,
@@ -107,6 +108,10 @@ interface DashboardProps {
   pays?: PayRecord[];
   /** « Demander à Pécule » (entrée et fenêtre chargées à part), sous l'épargne nette. */
   askSlot?: React.ReactNode;
+  /** Retraits prévus (« J'ai besoin d'argent ») : une tâche le jour venu, « Enregistrer » ou « Supprimer ». */
+  plannedWithdrawals?: PlannedWithdrawal[];
+  onRecordPlannedWithdrawal?: (id: string) => void;
+  onDeletePlannedWithdrawal?: (id: string) => void;
 }
 
 const TODO_ICONS: Record<HomeTodoIcon, TodoSpec['icon']> = {
@@ -123,7 +128,7 @@ const SLICE_STYLE: Record<'available' | 'tax' | 'locked', Pick<AvailabilitySegme
   locked: { color: 'bg-outline', hatch: 'dense' },
 };
 
-export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalConfig, onDeleteAccount, recurringMovements = [], onRecordRecurring, monthPlan, monthGoal, monthlyPay = 0, paydayDay, trackingStartDate, subscriptions = [], onUpdateFiscalConfig, onOpenSettings, onUpdateAccounts, payRaise, onAcceptPayRaise, onDismissPayRaise, onNavigate, onAddAccount, lastExportAt, onExport, emergency, onSetEmergencyMonths, agendaNext = [], lepTimeline, taxReturnAlert, payslips = [], gamification, goodMonthThreshold, milestonesSeen, payReviewsDone, rfrByYear, restitutionDoneOn, restitutionPlannedDate, onMarkMilestonesSeen, onValidatePayReview, yearClosing, pays, askSlot }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalConfig, onDeleteAccount, recurringMovements = [], onRecordRecurring, monthPlan, monthGoal, monthlyPay = 0, paydayDay, trackingStartDate, subscriptions = [], onUpdateFiscalConfig, onOpenSettings, onUpdateAccounts, payRaise, onAcceptPayRaise, onDismissPayRaise, onNavigate, onAddAccount, lastExportAt, onExport, emergency, onSetEmergencyMonths, agendaNext = [], lepTimeline, taxReturnAlert, payslips = [], gamification, goodMonthThreshold, milestonesSeen, payReviewsDone, rfrByYear, restitutionDoneOn, restitutionPlannedDate, onMarkMilestonesSeen, onValidatePayReview, yearClosing, pays, askSlot, plannedWithdrawals, onRecordPlannedWithdrawal, onDeletePlannedWithdrawal }) => {
   // Date du jour partagée (useToday) : l'Accueil resté ouvert passe au lendemain à minuit.
   const today = useToday();
   const choices = useHomeChoices(today);
@@ -226,6 +231,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalC
     can: {
       navigate: !!onNavigate, recordRecurring: !!onRecordRecurring, deleteAccount: !!onDeleteAccount, updateFiscalConfig: !!onUpdateFiscalConfig,
       updateAccounts: !!onUpdateAccounts, openSettings: !!onOpenSettings, acceptPayRaise: !!onAcceptPayRaise, dismissPayRaise: !!onDismissPayRaise, exportData: !!onExport,
+      plannedWithdrawals: !!onRecordPlannedWithdrawal && !!onDeletePlannedWithdrawal,
     },
     daysSinceUpdate: daysSinceLastMovement(accounts, now),
     staleBalances: findStaleBalances(accounts, now),
@@ -247,6 +253,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalC
     emergency: emergency ?? null,
     yearClosing: yearClosing ?? null,
     backupCodeCheckDue,
+    plannedWithdrawals: duePlannedWithdrawals(plannedWithdrawals, today),
   });
 
   const run = (a: HomeAction) => {
@@ -272,6 +279,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalC
       case 'export': onExport?.(); break;
       // La clôture est en tête de l'Historique : on l'amène à l'écran.
       case 'open-year-closing': onNavigate?.('history'); revealElementById('year-closing'); break;
+      case 'record-planned-withdrawal': onRecordPlannedWithdrawal?.(a.id); break;
+      case 'delete-planned-withdrawal': onDeletePlannedWithdrawal?.(a.id); break;
     }
   };
   const todos: TodoSpec[] = homeTodos.map(t => ({

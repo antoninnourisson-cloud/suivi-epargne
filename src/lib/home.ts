@@ -9,7 +9,7 @@
 // La disponibilité (« disponible / avec impôt / bloqué ») est celle de lib/finance/availability,
 // fondée sur la date anniversaire comme Rendement et le compte à rebours : il n'y a plus de
 // calcul de maturité propre à l'Accueil.
-import { AccountType, type FiscalConfig, type PayslipRecord, type PortfolioSnapshot, type SavingsAccount, type Subscription } from '../types';
+import { AccountType, type FiscalConfig, type PayslipRecord, type PlannedWithdrawal, type PortfolioSnapshot, type SavingsAccount, type Subscription } from '../types';
 import { payAttribution, savedBetween, savingsTrackingFrom } from './motivation';
 import { expectedPayDate, payWindows, shiftMonth, type PayCalendarData } from './payCalendar';
 import type { View } from '../navigation';
@@ -29,7 +29,7 @@ import {
 import { MS_PER_DAY, daysBetween, formatISODay, parseISODate } from './dates';
 import { round2, signedAmount } from './money';
 import { csvAmount, type CsvCell } from './csv';
-import { elideDe, formatEUR, formatMonth, formatPeriod, frenchDay } from './format';
+import { elideDe, elideLe, formatEUR, formatMonth, formatPeriod, frenchDay } from './format';
 
 // ---------------------------------------------------------------------------
 // Votre épargne à ce jour
@@ -485,7 +485,10 @@ export type HomeAction =
   | { type: 'export' }
   | { type: 'open-year-closing' }
   /** Paramètres, carte « Données » : retaper le code de secours de la sauvegarde chiffrée. */
-  | { type: 'check-backup-code' };
+  | { type: 'check-backup-code' }
+  /** Retrait prévu par « J'ai besoin d'argent » : enregistré (virements, un seul « Annuler »), ou supprimé. */
+  | { type: 'record-planned-withdrawal'; id: string }
+  | { type: 'delete-planned-withdrawal'; id: string };
 
 export interface HomeTodo {
   /** Stable (sert au « Plus tard ») : ne pas changer sans raison. */
@@ -513,6 +516,8 @@ export interface HomeCapabilities {
   acceptPayRaise: boolean;
   dismissPayRaise: boolean;
   exportData: boolean;
+  /** Retraits prévus : « Enregistrer » et « Supprimer » (absent : false). */
+  plannedWithdrawals?: boolean;
 }
 
 export interface HomeTodoInput {
@@ -554,6 +559,8 @@ export interface HomeTodoInput {
    * depuis un an (lib/recoveryCodeCheck, backupCodeCheckDue).
    */
   backupCodeCheckDue?: boolean;
+  /** Retraits prévus (« J'ai besoin d'argent ») dont le jour est venu (lib/needMoney). */
+  plannedWithdrawals?: PlannedWithdrawal[];
 }
 
 const ALERT_ICONS: Record<AlertKind, HomeTodoIcon> = {
@@ -602,6 +609,23 @@ export const buildHomeTodos = (i: HomeTodoInput): HomeTodo[] => {
       text: `Échéance du ${dayMonth(due.dueDate)} : ${r.label}, ${r.type === 'IN' ? '+' : '−'}${eur0(r.amount)} sur ${account}`,
       primary: { label: 'Enregistrer', action: { type: 'record-recurring', due } },
       secondary: { label: 'Pas ce mois-ci', action: { type: 'skip-recurring', recurringId: r.id } },
+    });
+  }
+  // Retrait prévu par « J'ai besoin d'argent » : le jour conseillé est venu.
+  for (const p of i.plannedWithdrawals ?? []) {
+    const takes = p.lines.map(l => {
+      const name = i.accounts.find(a => a.id === l.accountId)?.name;
+      return `${formatEUR(l.amount)} sur ${name ? elideLe(name) : 'un compte supprimé'}`;
+    });
+    const list = takes.length > 1 ? `${takes.slice(0, -1).join(', ')} et ${takes[takes.length - 1]}` : takes[0];
+    out.push({
+      key: `withdrawal-${p.id}`, icon: 'wallet', tone: 'action', pinned: true,
+      text: `Retrait prévu : prendre ${list}, pour le ${dayMonth(p.needDate)}.`,
+      detail: p.date < p.needDate
+        ? `Fait le ${dayMonth(p.date)} ou après, ce retrait garde les intérêts de la quinzaine qui vient de finir.`
+        : undefined,
+      primary: i.can.plannedWithdrawals ? { label: 'Enregistrer', action: { type: 'record-planned-withdrawal', id: p.id } } : undefined,
+      secondary: i.can.plannedWithdrawals ? { label: 'Supprimer', action: { type: 'delete-planned-withdrawal', id: p.id } } : undefined,
     });
   }
   const lep = i.lepTimeline;

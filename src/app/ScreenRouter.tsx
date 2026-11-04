@@ -110,9 +110,11 @@ interface ScreenRouterProps {
   onShareDone: () => void;
   /** « Faire un virement » (Comptes › Mouvements) : la feuille « Ajouter un mouvement » sur Virement. */
   onOpenTransfer: () => void;
+  /** « J'ai besoin d'argent : où le prendre ? » (Comptes › Mouvements, près de « Faire un virement »). */
+  onOpenNeed?: () => void;
 }
 
-export const ScreenRouter = memo(function ScreenRouter({ place, setView, onSelectTab, hiddenTabs, data, derived, actions, fiscalWatch, accountForm, onSignedOutEverywhere, onRequestLogout, shareMarker, shareReady, onShareDone, onOpenTransfer }: ScreenRouterProps) {
+export const ScreenRouter = memo(function ScreenRouter({ place, setView, onSelectTab, hiddenTabs, data, derived, actions, fiscalWatch, accountForm, onSignedOutEverywhere, onRequestLogout, shareMarker, shareReady, onShareDone, onOpenTransfer, onOpenNeed }: ScreenRouterProps) {
   const addToast = useAddToast();
   const dialog = useDialog();
   const { doc } = data;
@@ -169,6 +171,7 @@ export const ScreenRouter = memo(function ScreenRouter({ place, setView, onSelec
           milestonesSeen={c.milestonesSeen} payReviewsDone={c.payReviewsDone} rfrByYear={c.rfrByYear}
           restitutionDoneOn={doc.parentalRestitution?.done?.date} restitutionPlannedDate={doc.parentalRestitution?.plannedDate}
           yearClosing={derived.yearClosing} pays={doc.pays}
+          plannedWithdrawals={c.plannedWithdrawals} onRecordPlannedWithdrawal={actions.recordPlannedWithdrawal} onDeletePlannedWithdrawal={actions.deletePlannedWithdrawal}
           askSlot={<Lazy><AskPeculeEntry data={derived.fullData} geminiApiKey={data.geminiApiKey} taxEstimate={derived.taxEstimate} monthPlan={derived.monthPlan} onOpenSettings={openSettings} /></Lazy>}
           onMarkMilestonesSeen={actions.markMilestonesSeen} onValidatePayReview={actions.validatePayReview} />}
 
@@ -202,7 +205,7 @@ export const ScreenRouter = memo(function ScreenRouter({ place, setView, onSelec
           accounts={doc.accounts} restitution={doc.parentalRestitution} onDeleteMovement={actions.deleteMovement}
           trackingStartDate={c.trackingStartDate} onSetTrackingStart={actions.setTrackingStart}
           onToggleAdjustment={actions.toggleAdjustment} onRemoveCancelling={actions.removeCancelling} onRevertRate={actions.revertRate}
-          toolsSlot={<TransferManager accounts={doc.accounts} onOpenTransfer={onOpenTransfer} recurringMovements={doc.recurringMovements} onUpdateRecurring={data.setRecurringMovements} />} />}
+          toolsSlot={<TransferManager accounts={doc.accounts} onOpenTransfer={onOpenTransfer} onOpenNeed={onOpenNeed} recurringMovements={doc.recurringMovements} onUpdateRecurring={data.setRecurringMovements} />} />}
         {tab === 'calendar' && <FiscalCalendar accounts={doc.accounts} fiscalConfig={doc.fiscalConfig} />}
         {tab === 'agenda' && <Agenda data={derived.fullData} onOpen={v => { if (!isView(v)) return; if (v === 'settings') openSettingsSection('fiscal'); setView(v); }} />}
         {tab === 'parents' && <ParentalShare

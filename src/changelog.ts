@@ -15,6 +15,16 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '2026.11.04-3',
+    date: '2026-11-04',
+    title: "J'ai besoin d'argent : où le prendre ?",
+    items: [
+      "Dans le bouton « Mouvement » (et dans Comptes › Mouvements), le lien « J'ai besoin d'argent : où le prendre ? » : indiquez le montant et le jour, Pécule propose où le prendre en coûtant le moins, vos livrets d'abord, le LEP en dernier, puis seulement l'assurance vie et le PEA. La part de vos parents n'est jamais touchée.",
+      "Chaque ligne dit ce qu'elle coûte en euros : « Prendre 800 € sur le Livret A : environ 2 € d'intérêts perdus d'ici la fin de l'année », l'impôt pour un placement. Si votre épargne de précaution passe sous son objectif, Pécule le dit.",
+      "Pour aujourd'hui, tout est viré sur le compte courant en une fois, avec un seul « Annuler ». Pour plus tard, Pécule choisit le meilleur jour (le 1er ou le 16 pour un livret) et vous le rappelle ce jour-là dans « À faire » sur l'Accueil.",
+    ],
+  },
+  {
     version: '2026.11.04-2',
     date: '2026-11-04',
     title: 'Autre argent reçu : remboursement, vente ou cadeau',

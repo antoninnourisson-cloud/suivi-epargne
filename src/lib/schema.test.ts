@@ -236,3 +236,15 @@ describe('migrate : compte courant de la paie (refonte du Pilotage)', () => {
     expect(migrate({ config: { leisureBudget: 400 } }).config.leisureBudget).toBe(400);
   });
 });
+
+describe('migrate : retraits prévus (« J’ai besoin d’argent »)', () => {
+  const plan = { id: 'p1', date: '2026-11-16', needDate: '2026-11-20', lines: [{ accountId: 'la', amount: 800 }] };
+  it('garde un retrait prévu lisible, retire le reste, sans changer de version', () => {
+    const ok = migrate({ config: { plannedWithdrawals: [plan, { id: 'abîmé' }] } });
+    expect(ok.config.plannedWithdrawals).toEqual([plan]);
+    expect(ok.schemaVersion).toBe(migrate({}).schemaVersion);
+    expect('plannedWithdrawals' in migrate({ config: { plannedWithdrawals: [{ id: 'abîmé' }] } }).config).toBe(false);
+    expect('plannedWithdrawals' in migrate({ config: { plannedWithdrawals: 'non' } }).config).toBe(false);
+    expect('plannedWithdrawals' in migrate({ config: {} }).config).toBe(false);
+  });
+});

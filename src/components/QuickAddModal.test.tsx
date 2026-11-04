@@ -196,3 +196,17 @@ describe('bouton d’ajout rapide', () => {
     expect(onClick).toHaveBeenCalledTimes(2);
   });
 });
+
+describe('QuickAddModal, « J’ai besoin d’argent »', () => {
+  it('un lien sous Dépôt, Retrait et Virement (pas un quatrième choix) ouvre le retrait guidé', () => {
+    const onOpenNeed = vi.fn();
+    render(<QuickAddModal open accounts={accounts} onClose={vi.fn()} onSubmit={vi.fn()} onTransfer={() => null} onOpenNeed={onOpenNeed} />);
+    expect(screen.getByRole('group', { name: 'Type de mouvement' }).querySelectorAll('button')).toHaveLength(3);
+    fireEvent.click(screen.getByRole('button', { name: "J'ai besoin d'argent : où le prendre ?" }));
+    expect(onOpenNeed).toHaveBeenCalledTimes(1);
+  });
+  it('absent sans gestionnaire', () => {
+    render(<QuickAddModal open accounts={accounts} onClose={vi.fn()} onSubmit={vi.fn()} />);
+    expect(screen.queryByRole('button', { name: /besoin d'argent/ })).toBeNull();
+  });
+});

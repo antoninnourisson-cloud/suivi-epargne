@@ -229,6 +229,16 @@ export interface PayRecord {
 // le compte courant, une vente, un cadeau ou autre chose est placé.
 export type ExtraNature = 'refund' | 'sale' | 'gift' | 'other';
 
+// Retrait prévu (« J'ai besoin d'argent », lib/needMoney) : `date` est le jour conseillé pour le
+// faire (jamais après `needDate`, le jour du besoin) ; chaque ligne prend sur votre part d'un compte.
+export interface PlannedWithdrawalLine { accountId: string; amount: number }
+export interface PlannedWithdrawal {
+  id: string;
+  date: string;
+  needDate: string;
+  lines: PlannedWithdrawalLine[];
+}
+
 // D'où vient le solde : saisi, solde connu de Pécule, estimation (solde connu + paie), ou
 // inconnu (« Je ne sais pas » : compté 0).
 export type PayBalanceSource = 'typed' | 'known' | 'estimated' | 'unknown';
@@ -427,6 +437,9 @@ export interface GlobalAppData {
     // Clôture de l'année (lib/yearClosing), par année (« 2026 ») : étapes cochées à la main et
     // date de clôture. Une année clôturée n'a plus de rappel de clôture (Accueil, agenda, serveur).
     yearClosings?: Record<string, YearClosingRecord>;
+    // Retraits prévus par « J'ai besoin d'argent » (lib/needMoney) pour une date future : une
+    // tâche de l'Accueil le jour venu, retirée une fois faite ou supprimée.
+    plannedWithdrawals?: PlannedWithdrawal[];
   };
   // Les anciens fichiers peuvent contenir `goals` (objectifs d'épargne) : jamais lu, gardé tel
   // quel par migrate() comme tout champ inconnu.

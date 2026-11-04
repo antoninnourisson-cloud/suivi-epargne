@@ -6,16 +6,16 @@
 // Les actions ont une identité stable (elles lisent l'état le plus récent dans une réf) : les
 // écrans mémoïsés ne sont pas re-rendus quand seul App change.
 import { useMemo, useRef } from 'react';
-import type { AppDoc, PayChecklistLine, PayslipRecord, RecurringMovement, SavingsAccount } from '../types';
+import type { AppDoc, PayChecklistLine, PayslipRecord, PlannedWithdrawal, PlannedWithdrawalLine, RecurringMovement, SavingsAccount } from '../types';
 import type { PortfolioData } from '../hooks/usePortfolioData';
 import type { FiscalProposal } from '../lib/fiscalWatch';
 import type { CancellingGroup } from '../lib/accountOps';
 import { isRestitutionMovement } from '../lib/accountOps';
 import { localTodayISO, parseISODate } from '../lib/dates';
-import { elideDe, formatMonth, plainEUR } from '../lib/format';
+import { elideDe, formatMonth, frenchDay, plainEUR } from '../lib/format';
 import { computeMonthlyPay } from '../lib/finance';
 import { liveDone, openPay, payForPayslipPeriod, payMovements, payslipPeriodOf, withPayReviewed } from '../lib/payRecords';
-import { balanceForAmount, payBalanceBefore, recommendPayDistribution } from '../lib/payDistribution';
+import { balanceForAmount, payAccountOf, payBalanceBefore, recommendPayDistribution } from '../lib/payDistribution';
 import { savingsMonthOfPay } from '../lib/payCalendar';
 import {
   type CommandError, type CommandOk, type CommandPatch, type CommandState,
@@ -23,6 +23,7 @@ import {
   recordRestitution, undoRestitution, revertRateChange, renameMovement, toggleMovementAdjustment,
   importStatement, type StatementImportItem,
   recordPay, uncheckPayLine, updatePay, deletePay, type RecordPayInput, type UpdatePayInput,
+  recordNeedWithdrawal,
 } from '../lib/commands';
 import type { AddToast, DialogApi } from './UiProviders';
 
@@ -64,6 +65,16 @@ export const useAccountActions = (doc: AppDoc, setters: Setters, addToast: AddTo
       return r.movementId;
     };
 
+    // Retraits prévus (config) : retiré, ou remis à sa place après un « Annuler ».
+    const removePlanned = (id: string) => {
+      const list = (docRef.current.config.plannedWithdrawals ?? []).filter(p => p.id !== id);
+      s().patchConfig({ plannedWithdrawals: list.length > 0 ? list : undefined });
+    };
+    const restorePlanned = (plan: PlannedWithdrawal) => {
+      const list = docRef.current.config.plannedWithdrawals ?? [];
+      if (!list.some(p => p.id === plan.id)) s().patchConfig({ plannedWithdrawals: [...list, plan] });
+    };
+
     // Paie ouverte (mois d'épargne en cours), lue sur les paies les plus récentes.
     const currentOpenPay = () => openPay({ ...docRef.current, pays: commandStateRef.current.pays });
 
@@ -83,6 +94,44 @@ export const useAccountActions = (doc: AppDoc, setters: Setters, addToast: AddTo
         commit(r.next);
         toast({ message: r.message, kind: 'success', action: undoAction(r) });
         return null;
+      },
+
+      // --- « J'AI BESOIN D'ARGENT » (lib/needMoney, lib/commands/withdrawal) ---
+      /**
+       * Besoin d'aujourd'hui : chaque ligne virée sur le compte courant de la paie (sinon un
+       * simple retrait), en une fois, avec un seul « Annuler ». Refus renvoyé, sinon `null`.
+       */
+      recordNeed: (lines: PlannedWithdrawalLine[], date: string): string | null => {
+        const r = recordNeedWithdrawal(commandStateRef.current, { lines, date, destId: payAccountOf(docRef.current)?.id });
+        if (!r.ok) return r.error;
+        commit(r.next);
+        toast({ message: r.message, kind: 'success', action: undoAction(r) });
+        return null;
+      },
+      /** Besoin futur : le retrait prévu attend son jour (tâche de l'Accueil). */
+      planNeed: (plan: PlannedWithdrawal) => {
+        s().patchConfig({ plannedWithdrawals: [...(docRef.current.config.plannedWithdrawals ?? []), plan] });
+        toast({
+          message: `Retrait prévu le ${frenchDay(parseISODate(plan.date))} : Pécule vous le rappellera sur l'Accueil`, kind: 'success',
+          action: { label: 'Annuler', onClick: () => removePlanned(plan.id) },
+        });
+      },
+      /** Tâche de l'Accueil : le retrait prévu enregistré aujourd'hui, la tâche retirée ; un seul « Annuler » remet tout. */
+      recordPlannedWithdrawal: (id: string) => {
+        const plan = (docRef.current.config.plannedWithdrawals ?? []).find(p => p.id === id);
+        if (!plan) return;
+        const r = recordNeedWithdrawal(commandStateRef.current, { lines: plan.lines, date: localTodayISO(), destId: payAccountOf(docRef.current)?.id });
+        if (!r.ok) { showCommandError(r); return; }
+        commit(r.next);
+        removePlanned(id);
+        toast({ message: r.message, kind: 'success', action: { label: 'Annuler', onClick: () => { commit(r.undo(commandStateRef.current)); restorePlanned(plan); } } });
+      },
+      /** Tâche de l'Accueil : « Supprimer » (avec « Annuler »). */
+      deletePlannedWithdrawal: (id: string) => {
+        const plan = (docRef.current.config.plannedWithdrawals ?? []).find(p => p.id === id);
+        if (!plan) return;
+        removePlanned(id);
+        toast({ message: 'Retrait prévu supprimé', action: { label: 'Annuler', onClick: () => restorePlanned(plan) } });
       },
 
       // --- PAIE (lib/commands/pay) ---

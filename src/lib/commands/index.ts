@@ -12,3 +12,4 @@ export * from './balances';
 export * from './edits';
 export * from './statement';
 export * from './pay';
+export * from './withdrawal';

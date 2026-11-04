@@ -37,6 +37,8 @@ export const YearClosingCard = lazyWithRetry(() => import('../components/year/Ye
 export const ConflictDialog = lazyWithRetry(() => import('../components/sync/ConflictDialog').then(m => ({ default: m.ConflictDialog })));
 export const LogoutDialog = lazyWithRetry(() => import('../components/sync/LogoutDialog').then(m => ({ default: m.LogoutDialog })));
 export const QuickAddModal = lazyWithRetry(() => import('../components/agendaQuickAdd').then(m => ({ default: m.QuickAddModal })));
+// « J'ai besoin d'argent : où le prendre ? » : depuis le bouton « Mouvement » et Comptes › Mouvements.
+export const NeedMoneySheet = lazyWithRetry(() => import('../components/need/NeedMoneySheet').then(m => ({ default: m.NeedMoneySheet })));
 export const StatementImport = lazyWithRetry(() => import('../components/StatementImport').then(m => ({ default: m.StatementImport })));
 // « Partager vers Pécule » : seulement quand l'app est ouverte par un partage (`?partage=`).
 export const ShareTargetHost = lazyWithRetry(() => import('../components/share/ShareTargetHost').then(m => ({ default: m.ShareTargetHost })));
