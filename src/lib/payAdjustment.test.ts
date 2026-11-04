@@ -55,6 +55,11 @@ describe('computeMonthTarget', () => {
     // Reste du compte courant noté avec la paie : il rejoint l'épargne ; « Je ne sais pas » : 0.
     expect(computeMonthTarget(received({ balance: { before: 40, seen: pay + 40, source: 'typed' } }), OCT_28).total).toBeCloseTo(Math.max(0, computed) + 40, 2);
     expect(computeMonthTarget(received({ balance: { before: 40, source: 'unknown' } }), OCT_28).total).toBeCloseTo(Math.max(0, computed), 2);
+    // Objectif de la jauge de l'Accueil = l'épargne de la règle, sur le RÉSULTAT : 250 € restants
+    // et une paie inférieure de 300 € : le plaisir passe à 250 €, l'épargne ne gagne rien ;
+    // 300 € restants et une paie inférieure de 100 € : 200 € de plus à placer.
+    expect(computeMonthTarget(received({ amount: pay - 300, balance: { before: 250, seen: pay - 50, source: 'typed' } }), OCT_28).total).toBeCloseTo(Math.max(0, computed), 2);
+    expect(computeMonthTarget(received({ amount: pay - 100, balance: { before: 300, seen: pay + 200, source: 'typed' } }), OCT_28).total).toBeCloseTo(Math.max(0, computed) + 200, 2);
     expect(computeMonthTarget(received({ amount: pay + 300, bonus: 300 }), OCT_28)).toMatchObject({ extra: 300 });
     // « À placer sur cette paie » saisi : il remplace le calcul.
     expect(computeMonthTarget(received({ toSave: 640 }), OCT_28)).toMatchObject({ capacity: 640, total: 640, source: 'manual' });

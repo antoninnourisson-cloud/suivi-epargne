@@ -109,8 +109,10 @@ export const NotificationSettings: React.FC<{ paydayDay?: number; onOpenPayday?:
 
       {onOpenPayday && (
         <p className="text-sm text-on-surface flex flex-wrap items-center gap-x-2 gap-y-1">
-          <span>Rappel du jour de paie : <span className="font-medium">{paydayDay ? `le ${paydayDay} du mois` : 'désactivé'}</span></span>
-          <Button variant="text" onClick={onOpenPayday} className="-ml-3 sm:ml-0">Modifier dans le Pilotage</Button>
+          {/* Le jour se règle dans Pilotage › Ce mois › Réglages de la paie › Paie habituelle,
+              qui s'ouvre directement (choix « Pas de jour fixe » : aucun rappel). */}
+          <span>Rappel du jour de paie : <span className="font-medium">{paydayDay ? `le ${paydayDay} du mois` : 'aucun (pas de jour fixe)'}</span></span>
+          <Button variant="text" onClick={onOpenPayday} className="-ml-3 sm:ml-0">Modifier : Pilotage › Paie habituelle</Button>
         </p>
       )}
 

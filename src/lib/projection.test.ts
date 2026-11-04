@@ -196,6 +196,24 @@ describe('computeBadgeCount', () => {
     };
     expect(computeBadgeCount(data, new Date(2026, 9, 28))).toBe(1);
   });
+
+  it('jamais la ligne Plaisir : elle reste sur le compte courant, rien à virer', () => {
+    const lines = [
+      { key: 't:Commun', label: 'Commun', amount: 900, kind: 'transfer' as const },
+      { key: 't:leisure', label: 'Argent plaisir (reste sur le compte courant)', amount: 400, kind: 'transfer' as const },
+    ];
+    const declared = (done: string[]): GlobalAppData => ({
+      accounts: [], expenses: [], history: [],
+      pays: [{ id: 'pay-2026-11', receivedOn: '2026-10-27', savingsMonth: '2026-11', amount: 2000, lines, done: Object.fromEntries(done.map(k => [k, { amount: 900 }])) }],
+      config: { grossAnnual: 0, leisureBudget: 400, projectSavings: 0, taxRateManual: 0, extraMonthlyIncome: 0, paydayDay: 27 },
+      fiscalConfig: { ...CFG, paramsReviewedYear: 2026 },
+    });
+    expect(computeBadgeCount(declared([]), new Date(2026, 9, 28))).toBe(1);
+    expect(computeBadgeCount(declared(['t:Commun']), new Date(2026, 9, 28))).toBe(0);
+    // Paie attendue, seul le solde de départ du mois est réglé (rien à virer ni à placer) : 0.
+    const expected: GlobalAppData = { ...declared([]), pays: [], config: { ...declared([]).config, paydayAmount: 0 } };
+    expect(computeBadgeCount(expected, new Date(2026, 9, 28))).toBe(0);
+  });
 });
 
 describe('projectSavings et restitution', () => {

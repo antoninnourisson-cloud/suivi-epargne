@@ -115,7 +115,7 @@ describe('Réglages de la paie', () => {
     expect(patch).toHaveBeenLastCalledWith({ payAccountId: 'cc2' });
   });
 
-  it('« Modifier dans le Pilotage » (Notifications) : Paie habituelle s’ouvre, à son ancre stable', () => {
+  it('« Modifier : Pilotage › Paie habituelle » (Notifications) : Paie habituelle s’ouvre, à son ancre stable', () => {
     requestPaySettings();
     renderPilot();
     const toggle = screen.getByRole('button', { name: /^Paie habituelle/ });

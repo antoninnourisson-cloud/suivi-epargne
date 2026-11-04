@@ -41,7 +41,7 @@ export const computePayTransfers = (input: {
     out.push({ key: 't:subscriptions', label: only ? `Abonnements (${only})` : 'Abonnements mensuels', amount: subsTotal });
   }
   if (input.projectSavings > 0) out.push({ key: 't:projects', label: 'Épargne projets', amount: input.projectSavings });
-  if (input.leisureBudget > 0) out.push({ key: 't:leisure', label: 'Argent plaisir (reste sur le compte courant)', amount: input.leisureBudget });
+  if (input.leisureBudget > 0) out.push({ key: PAY_LEISURE_LINE, label: 'Argent plaisir (reste sur le compte courant)', amount: input.leisureBudget });
   return out;
 };
 
@@ -49,7 +49,16 @@ export const computePayTransfers = (input: {
 // Lignes de la liste des virements de paie (app et rappel serveur)
 // ---------------------------------------------------------------------------
 
-const isFixedTransfer = (t: PayTransfer) => t.key !== 't:projects' && t.key !== 't:leisure';
+/** Ligne du plaisir : ce qui reste sur le compte courant, rien à virer ni à cocher. */
+export const PAY_LEISURE_LINE = 't:leisure';
+
+/**
+ * Ligne à faire (et à cocher) : toutes sauf le plaisir. Seules ces lignes comptent dans
+ * « 3/7 faits », la pastille de l'icône, la routine du mois et la relance du serveur.
+ */
+export const isPayTodoLine = (l: { key: string }): boolean => l.key !== PAY_LEISURE_LINE;
+
+const isFixedTransfer = (t: PayTransfer) => t.key !== 't:projects' && t.key !== PAY_LEISURE_LINE;
 const transferLine = (t: PayTransfer): PayChecklistLine => ({ key: t.key, label: t.label, amount: round2(t.amount), kind: 'transfer' });
 
 /**
@@ -64,7 +73,7 @@ export const buildPayLines = (transfers: PayTransfer[], steps: PlacementStep[]):
     detail: `${st.type}${st.rate ? ` · ${st.rate.toLocaleString('fr-FR', { maximumFractionDigits: 2 })} %` : ''}`,
   })),
   ...transfers.filter(t => t.key === 't:projects').map(transferLine),
-  ...transfers.filter(t => t.key === 't:leisure').map(transferLine),
+  ...transfers.filter(t => t.key === PAY_LEISURE_LINE).map(transferLine),
 ];
 
 // ---------------------------------------------------------------------------

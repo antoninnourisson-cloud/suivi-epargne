@@ -246,7 +246,7 @@ export const ScreenRouter = memo(function ScreenRouter({ place, setView, onSelec
             onSignedOutEverywhere={onSignedOutEverywhere} /></Lazy>}
           motivationSlot={<Lazy><MotivationSettings gamification={c.gamification} goodMonthThreshold={c.goodMonthThreshold} onChange={patch => data.patchConfig(patch)} /></Lazy>}
           paydayDay={c.paydayDay}
-          // « Modifier dans le Pilotage » : Ce mois › Réglages de la paie › Paie habituelle, ouvert.
+          // « Modifier : Pilotage › Paie habituelle » : Ce mois › Réglages de la paie › Paie habituelle, ouvert.
           onOpenPayday={() => { requestPaySettings(); setView('pilot'); revealElementById(PAY_SETTINGS_INCOME_ID); }}
           // Champ par champ, à partir de l'état le plus récent : une saisie ne défait jamais ce
           // qui a changé entre-temps (veille fiscale, avis, import).

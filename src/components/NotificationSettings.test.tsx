@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
-// Types de notifications : celui du capital des parents n'est plus proposé en mode solo.
+// Types de notifications : celui du capital des parents n'est plus proposé en mode solo ;
+// rappel du jour de paie, réglé dans Pilotage › Paie habituelle.
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 
 vi.mock('../services/backendService', () => ({ isBackendEnabled: () => true }));
 vi.mock('../services/pushService', () => ({
@@ -22,5 +23,15 @@ describe('NotificationSettings', () => {
     rerender(<NotificationSettings prefs={{}} onChangePrefs={() => {}} hasParental={false} />);
     expect(screen.queryByRole('checkbox', { name: PARENTS })).toBeNull();
     expect(screen.getByRole('checkbox', { name: 'Clôture et bilan de l\'année (janvier)' })).toBeTruthy();
+  });
+
+  it('rappel du jour de paie : dit le jour (ou « pas de jour fixe ») et mène à Paie habituelle', () => {
+    const open = vi.fn();
+    const { rerender } = render(<NotificationSettings paydayDay={27} onOpenPayday={open} />);
+    expect(screen.getByText(/^Rappel du jour de paie/).textContent).toBe('Rappel du jour de paie : le 27 du mois');
+    fireEvent.click(screen.getByRole('button', { name: 'Modifier : Pilotage › Paie habituelle' }));
+    expect(open).toHaveBeenCalledTimes(1);
+    rerender(<NotificationSettings onOpenPayday={open} />);
+    expect(screen.getByText(/^Rappel du jour de paie/).textContent).toBe('Rappel du jour de paie : aucun (pas de jour fixe)');
   });
 });

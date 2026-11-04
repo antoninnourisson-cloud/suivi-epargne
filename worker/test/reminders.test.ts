@@ -88,7 +88,7 @@ describe('computeReminders', () => {
       expect(r[0].message.title).toMatch(/^Paie reçue \? Environ 650\s€ à placer$/);
       expect(r[0].message.url).toBe(`${APP}?view=pilot&action=pay`);
       // Plafond LEP par défaut 10 000 € : 400 € de place, le reste sur le Livret A.
-      expect(r[0].message.body).toMatch(/400.*LEP.*250.*Livret A/);
+      expect(r[0].message.body).toMatch(/Épargne 650\s€ : 400\s€ sur LEP, 250\s€ sur Livret A/);
     });
 
     it('reste valable 3 jours puis se tait', () => {
@@ -157,7 +157,7 @@ describe('computeReminders', () => {
       expect(computeReminders(data, new Date(2026, 9, 4, 9), APP).some(x => x.key.startsWith('recap:'))).toBe(false);
     });
 
-    it('détaille toute la paie dans le rappel du jour de paie', () => {
+    it("dit quoi faire de toute la paie, dans l'ordre des virements, sans rien savoir du compte courant", () => {
       const data = base({
         ...salary(900 + 11 + 200 + 750 + 500),
         accounts: [livret],
@@ -166,7 +166,9 @@ describe('computeReminders', () => {
         config: { ...base().config, leisureBudget: 750, projectSavings: 200, paydayDay: 28, paydayAmount: 500 },
       });
       const r = computeReminders(data, new Date(2026, 8, 28, 9), APP).find(x => x.key === 'payday:2026-10');
-      expect(r?.message.body).toMatch(/900.*Revolut commun · 11.*Abonnements \(Revolut perso\) · 200.*Épargne projets · 750.*Argent plaisir.*Épargne : 500.*Livret A/);
+      // Virements fixes en un total (charges + abonnements), épargne, projets, puis le compte
+      // courant, qui démarre le mois au solde de départ (estimation : rien ne restait dessus).
+      expect(r?.message.body).toMatch(/^Virements fixes 911\s€ · Épargne 500\s€ sur Livret A · Projets 200\s€ · Plaisir : le compte courant démarre à 750\s€\. Gardez le solde de votre compte courant sous la main\.( Bilan de septembre : |$)/);
       expect(r?.message.url).toBe(`${APP}?view=pilot&action=pay`);
     });
   });
@@ -367,6 +369,18 @@ describe('computeReminders', () => {
       expect(r?.message.url).toBe(`${APP}?view=pilot&action=pay`);
       expect(at(data(), 28)).toBeUndefined();
       expect(computeReminders(migrate(data()), new Date(2026, 9, 3, 9), APP).some(x => x.key.startsWith('payday-followup:'))).toBe(false); // 3 octobre : rattrapage terminé
+    });
+
+    it("la ligne Plaisir n'est jamais un virement à faire", () => {
+      const leisure = { key: 't:leisure', label: 'Argent plaisir (reste sur le compte courant)', amount: 400, kind: 'transfer' as const };
+      const saving = { key: 's:la', label: 'Livret A', amount: 500, kind: 'saving' as const, accountId: 'la' };
+      const checklist = (done: Record<string, { amount: number }>): GlobalAppData => ({ ...data(), payChecklist: { month: '2026-09', lines: [saving, leisure], done } });
+      expect(at(checklist({}), 30)?.message).toMatchObject({ title: '1 virement à faire', body: 'Livret A. Cochez-les dans « Ma paie » une fois faits.' });
+      expect(at(checklist({ 's:la': { amount: 500 } }), 30)).toBeUndefined();
+      // Paie attendue, seul le solde de départ du mois est réglé : ni rappel, ni relance.
+      const onlyLeisure = base({ ...salary(400), accounts: [livret], config: { ...base().config, leisureBudget: 400, paydayDay: 27 } });
+      expect(computeReminders(onlyLeisure, new Date(2026, 8, 27, 9), APP).some(x => x.key.startsWith('payday'))).toBe(false);
+      expect(at(onlyLeisure, 30)).toBeUndefined();
     });
 
     it('se tait quand tout est fait', () => {

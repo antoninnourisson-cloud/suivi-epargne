@@ -266,7 +266,7 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
     }) : undefined),
     [declaredPay, payRitual]);
 
-  // « Modifier dans le Pilotage » (Paramètres › Notifications) : le groupe Paie habituelle
+  // « Modifier : Pilotage › Paie habituelle » (Paramètres › Notifications) : le groupe Paie habituelle
   // s'ouvre, que le Pilotage vienne d'être monté ou soit déjà affiché.
   const [incomeOpen, setIncomeOpen] = useState(() => takePaySettingsRequest());
   useEffect(() => {

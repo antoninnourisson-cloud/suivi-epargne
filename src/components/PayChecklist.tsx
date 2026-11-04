@@ -16,7 +16,7 @@
 // ================================================
 import React, { Suspense, useCallback, useEffect, useId, useState } from 'react';
 import { PayChecklist as PayChecklistData, PayChecklistLine, PayRecord, SavingsAccount } from '../types';
-import { PlacementStep, buildPayLines, payPeriodOf } from '../lib/finance';
+import { PAY_LEISURE_LINE, PlacementStep, buildPayLines, isPayTodoLine, payPeriodOf } from '../lib/finance';
 import { currentSavingsMonth, savingsMonthOfPay, validPayday, type PayCalendarData } from '../lib/payCalendar';
 import { formatISODay, parseISODate } from '../lib/dates';
 import { elideDe, formatEUR, formatMonth, frenchDay, toInputAmount } from '../lib/format';
@@ -37,12 +37,11 @@ import type { PayRitualProps } from './pilot/PayReceivedSheet';
 // Le rituel n'est chargé qu'à l'ouverture : le Pilotage reste léger.
 const PayReceivedSheet = lazyWithRetry(() => import('./pilot/PayReceivedSheet'));
 
-const LEISURE_LINE = 't:leisure';
 const PROJECTS_LINE = 't:projects';
 
 /** Groupe d'une ligne, dans l'ordre des virements : fixes, épargne, projets, plaisir. */
 const groupOf = (l: PayChecklistLine): PayBarKey =>
-  l.kind === 'saving' ? 'savings' : l.key === PROJECTS_LINE ? 'projects' : l.key === LEISURE_LINE ? 'leisure' : 'fixed';
+  l.kind === 'saving' ? 'savings' : l.key === PROJECTS_LINE ? 'projects' : l.key === PAY_LEISURE_LINE ? 'leisure' : 'fixed';
 const GROUP_RANK: Record<PayBarKey, number> = { fixed: 0, savings: 1, projects: 2, leisure: 3 };
 
 interface PayChecklistProps {
@@ -105,7 +104,7 @@ export const PayChecklist: React.FC<PayChecklistProps> = ({
   const lines = !declared ? [] : frozen ? frozen.lines : buildPayLines(received!.transfers, received!.steps);
   const done = frozen?.done ?? {};
   // La ligne Plaisir n'est pas une case : seules les autres comptent dans « 3/7 faits ».
-  const checkable = lines.filter(l => l.key !== LEISURE_LINE)
+  const checkable = lines.filter(isPayTodoLine)
     .map((l, i) => ({ l, i })).sort((a, b) => GROUP_RANK[groupOf(a.l)] - GROUP_RANK[groupOf(b.l)] || a.i - b.i).map(x => x.l);
   const todo = checkable.filter(l => !done[l.key]);
   const doneLines = checkable.filter(l => done[l.key]);
