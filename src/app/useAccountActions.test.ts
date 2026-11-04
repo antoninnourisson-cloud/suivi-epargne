@@ -376,3 +376,135 @@ describe('paie reçue (commandes de la paie)', () => {
     expect(accountsWritten(2)[0].movements[0].payId).toBeUndefined();
   });
 });
+
+describe('rituels : retraits prévus, taux, clôture de l’année', () => {
+  const plan = { id: 'p1', date: '2026-11-16', needDate: '2026-11-20', lines: [{ accountId: 'a', amount: 40 }] };
+  const withPlans = (...plans: typeof plan[]): AppDoc => ({ ...withAccounts(account('a')), config: { ...emptyData().config, plannedWithdrawals: plans } });
+
+  it('besoin d’aujourd’hui refusé : le message revient, rien d’écrit', () => {
+    const { result, setters } = setup(withAccounts(account('a')));
+    let err: string | null = null;
+    act(() => { err = result.current.recordNeed([{ accountId: 'a', amount: 0 }], '2026-11-04'); });
+    expect(err).toBe('Aucun montant à retirer.');
+    expect(setters.setAccounts).not.toHaveBeenCalled();
+  });
+
+  it('besoin d’aujourd’hui sans compte courant : simple retrait, « Annuler » remet le solde', () => {
+    const { result, accountsWritten, lastToast } = setup(withAccounts(account('a')));
+    let err: string | null = 'x';
+    act(() => { err = result.current.recordNeed([{ accountId: 'a', amount: 40 }], '2026-11-04'); });
+    expect(err).toBeNull();
+    expect(accountsWritten(0)[0]).toMatchObject({ totalAmount: 60 });
+    act(() => lastToast().action!.onClick());
+    expect(accountsWritten(1)[0]).toMatchObject({ totalAmount: 100 });
+  });
+
+  it('besoin futur : le retrait prévu est gardé, « Annuler » le retire', () => {
+    const { result, setters, lastToast } = setup(withAccounts(account('a')));
+    act(() => result.current.planNeed(plan));
+    expect(setters.patchConfig).toHaveBeenLastCalledWith({ plannedWithdrawals: [plan] });
+    act(() => lastToast().action!.onClick());
+    expect(setters.patchConfig).toHaveBeenLastCalledWith({ plannedWithdrawals: undefined });
+  });
+
+  it('tâche du retrait prévu : inconnue, rien ; enregistrée puis annulée, le retrait revient', () => {
+    const { result, setters, lastToast, accountsWritten, addToast } = setup(withPlans(plan));
+    act(() => result.current.recordPlannedWithdrawal('inconnu'));
+    act(() => result.current.deletePlannedWithdrawal('inconnu'));
+    expect(addToast).not.toHaveBeenCalled();
+    act(() => result.current.recordPlannedWithdrawal('p1'));
+    expect(accountsWritten(0)[0]).toMatchObject({ totalAmount: 60 });
+    expect(setters.patchConfig).toHaveBeenLastCalledWith({ plannedWithdrawals: undefined });
+    act(() => lastToast().action!.onClick());
+    expect(accountsWritten(1)[0]).toMatchObject({ totalAmount: 100 });
+    // Le document du test n'a pas changé : le retrait prévu y est encore, rien à remettre.
+    expect(setters.patchConfig).toHaveBeenCalledTimes(1);
+  });
+
+  it('tâche du retrait prévu refusée : message d’erreur, la tâche reste', () => {
+    const big = { ...plan, lines: [{ accountId: 'a', amount: 500 }] };
+    const { result, setters, lastToast } = setup(withPlans(big));
+    act(() => result.current.recordPlannedWithdrawal('p1'));
+    expect(lastToast()).toMatchObject({ kind: 'error' });
+    expect(setters.patchConfig).not.toHaveBeenCalled();
+  });
+
+  it('retrait prévu supprimé, puis remis par « Annuler »', () => {
+    const { result, setters, lastToast, rerender } = setup(withPlans(plan));
+    act(() => result.current.deletePlannedWithdrawal('p1'));
+    expect(setters.patchConfig).toHaveBeenLastCalledWith({ plannedWithdrawals: undefined });
+    rerender({ d: withAccounts(account('a')) });
+    act(() => lastToast().action!.onClick());
+    expect(setters.patchConfig).toHaveBeenLastCalledWith({ plannedWithdrawals: [plan] });
+  });
+
+  it('taux : refus renvoyé ; appliqués puis annulés, avec le rappel de l’écran', () => {
+    const av = account('av', { type: AccountType.ASSURANCE_VIE, interestRate: 2.6 });
+    const { result, setters, lastToast, accountsWritten } = setup(withAccounts(av));
+    let err: string | null = null;
+    act(() => { err = result.current.applyRates({ groups: [], accounts: [{ accountId: 'av', rate: 99, date: '2026-11-04' }] }); });
+    expect(err).toEqual(expect.any(String));
+    expect(setters.setAccounts).not.toHaveBeenCalled();
+    const onUndo = vi.fn();
+    act(() => { err = result.current.applyRates({ groups: [], accounts: [{ accountId: 'av', rate: 3, date: '2026-11-04' }] }, onUndo); });
+    expect(err).toBeNull();
+    expect(accountsWritten(0)[0]).toMatchObject({ interestRate: 3 });
+    act(() => lastToast().action!.onClick());
+    expect(accountsWritten(1)[0]).toMatchObject({ interestRate: 2.6 });
+    expect(onUndo).toHaveBeenCalledTimes(1);
+  });
+
+  describe('clôture de l’année', () => {
+    const av = account('av', { type: AccountType.ASSURANCE_VIE, interestRate: 2.6 });
+    const noInput = { updates: [], rates: [], date: '2027-01-10' };
+
+    it('rien saisi et pas d’objectif : « Rien à enregistrer. »', () => {
+      const { result, addToast } = setup(withAccounts(av));
+      let err: string | null = null;
+      act(() => { err = result.current.recordYearClosing(noInput, null); });
+      expect(err).toBe('Rien à enregistrer.');
+      expect(addToast).not.toHaveBeenCalled();
+    });
+
+    it('taux illisible : le refus revient', () => {
+      const { result, setters } = setup(withAccounts(av));
+      let err: string | null = null;
+      act(() => { err = result.current.recordYearClosing({ ...noInput, rates: [{ accountId: 'av', rate: 50 }] }, { year: 2027, amount: 9000 }); });
+      expect(err).toBe('Un taux doit être compris entre 0 et 20 %.');
+      expect(setters.setAccounts).not.toHaveBeenCalled();
+      expect(setters.patchConfig).not.toHaveBeenCalled();
+    });
+
+    it('objectif seul : enregistré, puis « Annuler » remet les objectifs d’avant', () => {
+      const doc = { ...withAccounts(av), config: { ...emptyData().config, yearGoals: { '2026': 8000 } } };
+      const { result, setters, lastToast } = setup(doc);
+      let err: string | null = 'x';
+      act(() => { err = result.current.recordYearClosing(noInput, { year: 2027, amount: 9000 }); });
+      expect(err).toBeNull();
+      expect(setters.patchConfig).toHaveBeenLastCalledWith({ yearGoals: { '2026': 8000, '2027': 9000 } });
+      expect(lastToast().message).toMatch(/^Objectif 2027 : 9\s000 €$/);
+      act(() => lastToast().action!.onClick());
+      expect(setters.patchConfig).toHaveBeenLastCalledWith({ yearGoals: { '2026': 8000 } });
+      expect(setters.setAccounts).not.toHaveBeenCalled();
+    });
+
+    it('« Taux inchangé » et objectif retiré : une seule annonce, un seul « Annuler »', () => {
+      const doc = { ...withAccounts(av), config: { ...emptyData().config, yearGoals: { '2027': 9000 } } };
+      const { result, setters, lastToast, accountsWritten } = setup(doc);
+      act(() => { result.current.recordYearClosing({ ...noInput, rates: [{ accountId: 'av', rate: 2.6 }] }, { year: 2027, amount: null }); });
+      expect(accountsWritten(0)[0]).toMatchObject({ rateReviewedAt: '2027-01-10' });
+      expect(setters.patchConfig).toHaveBeenLastCalledWith({ yearGoals: undefined });
+      expect(lastToast().message).toContain('Objectif 2027 retiré');
+      act(() => lastToast().action!.onClick());
+      expect(accountsWritten(1)[0].rateReviewedAt).toBeUndefined();
+      expect(setters.patchConfig).toHaveBeenLastCalledWith({ yearGoals: { '2027': 9000 } });
+    });
+
+    it('saisies sans objectif : le message de la commande seul', () => {
+      const { result, setters, lastToast } = setup(withAccounts(av));
+      act(() => { result.current.recordYearClosing({ ...noInput, rates: [{ accountId: 'av', rate: 3 }] }, null); });
+      expect(lastToast().message).not.toContain('Objectif');
+      expect(setters.patchConfig).not.toHaveBeenCalled();
+    });
+  });
+});
