@@ -132,6 +132,16 @@ describe('Partager vers Pécule', () => {
     expect(props.onOpenKeys).toHaveBeenCalled();
   });
 
+  it('relevé OFX ou CSV : « Lire un relevé » directement, même sans clé Gemini', async () => {
+    const csv = new File(['Date;Libellé;Montant'], 'releve.csv', { type: 'text/csv' });
+    take.mockResolvedValue(csv);
+    setup({ data: { doc: emptyData(), geminiApiKey: '', patchConfig: vi.fn(), setFiscalConfig: vi.fn() } });
+    expect(await screen.findByTestId('statement')).toBeTruthy();
+    expect(stubProps.StatementImport).toMatchObject({ initialFile: csv });
+    expect(screen.queryByRole('dialog', { name: 'Que voulez-vous importer ?' })).toBeNull();
+    expect(screen.queryByText(/clé Gemini/)).toBeNull();
+  });
+
   it('fichier introuvable (déjà lu, ou plus d’une heure)', async () => {
     take.mockResolvedValue(null);
     const { props } = setup();
@@ -149,6 +159,6 @@ describe('Partager vers Pécule', () => {
     expect(window.location.search).toBe('');
     cleanup();
     setup({ marker: 'type' });
-    expect((await screen.findByRole('dialog')).textContent).toMatch(/PDF et les images/);
+    expect((await screen.findByRole('dialog')).textContent).toMatch(/PDF, les images .*relevés OFX ou CSV/);
   });
 });

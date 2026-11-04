@@ -126,7 +126,10 @@ export default defineConfig({
           method: 'POST',
           enctype: 'multipart/form-data',
           params: {
-            files: [{ name: 'fichiers', accept: ['application/pdf', 'image/png', 'image/jpeg', 'image/webp'] }],
+            // Types MIME seulement (le filtre d'intention Android n'en connaît pas d'autres).
+            // Relevés OFX et CSV : souvent sans type précis sur Android (octet-stream) ; le
+            // service worker les reconnaît à leur extension et refuse le reste (public/share-sw.js).
+            files: [{ name: 'fichiers', accept: ['application/pdf', 'image/png', 'image/jpeg', 'image/webp', 'text/csv', 'text/comma-separated-values', 'application/x-ofx', 'application/vnd.intu.qfx', 'application/octet-stream'] }],
           },
         },
         // Appui long sur l'icône de l'app -> action directe, sans repasser par la nav.

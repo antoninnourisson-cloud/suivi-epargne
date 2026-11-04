@@ -16,13 +16,19 @@
   // Même limite que la lecture d'un relevé ou d'un avis d'imposition dans l'app.
   var MAX_BYTES = 15 * 1024 * 1024;
   var MAX_AGE_MS = 60 * 60 * 1000;
-  var TYPES = ['application/pdf', 'image/png', 'image/jpeg', 'image/webp'];
+  // Relevés OFX et CSV : lus sur l'appareil par l'app (lib/statementFiles), sans clé.
+  var TYPES = ['application/pdf', 'image/png', 'image/jpeg', 'image/webp', 'text/csv', 'application/x-ofx'];
 
   // Type annoncé, sinon d'après l'extension (certaines apps envoient un type vide ou générique).
+  // Un relevé OFX ou CSV arrive souvent sans type précis (octet-stream, text/plain, variantes) :
+  // son extension fait foi.
   function fileType(file) {
     var type = (file.type || '').toLowerCase();
-    if (type && type !== 'application/octet-stream') return type;
     var name = (file.name || '').toLowerCase();
+    if (/\.(ofx|qfx)$/.test(name)) return 'application/x-ofx';
+    if (/\.csv$/.test(name)) return 'text/csv';
+    if (type === 'text/comma-separated-values') return 'text/csv';
+    if (type && type !== 'application/octet-stream') return type;
     if (/\.pdf$/.test(name)) return 'application/pdf';
     if (/\.png$/.test(name)) return 'image/png';
     if (/\.jpe?g$/.test(name)) return 'image/jpeg';

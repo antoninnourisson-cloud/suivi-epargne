@@ -15,6 +15,14 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '2026.11.04-11',
+    date: '2026-11-04',
+    title: 'Partager un relevé OFX ou CSV',
+    items: [
+      "« Partager vers Pécule » accepte aussi un relevé OFX ou CSV, depuis l'app Fichiers ou celle de votre banque : « Lire un relevé » s'ouvre directement, sans clé Gemini, et le fichier est lu sur votre téléphone. Après la mise à jour, Android peut mettre un moment à proposer Pécule pour ces fichiers.",
+    ],
+  },
+  {
     version: '2026.11.04-10',
     date: '2026-11-04',
     title: 'Relevé en OFX ou CSV',

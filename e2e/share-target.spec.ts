@@ -135,4 +135,29 @@ test.describe('Partager vers Pécule (service worker du build)', () => {
     await expect(sheet.getByText('Fiche partagée.pdf')).toBeVisible();
     expect(await sharedCount(page)).toBe(0);
   });
+
+  test('relevé OFX partagé sans type précis : reconnu à son extension, ouvert dans « Lire un relevé »', async ({ page }) => {
+    await page.goto('/');
+    await expect.poll(() => page.evaluate(async () => (await navigator.serviceWorker.ready).active?.state), { timeout: 20_000 }).toBe('activated');
+    await expect.poll(() => page.evaluate(() => !!navigator.serviceWorker.controller), { timeout: 20_000 }).toBe(true);
+    const ofx = [
+      'OFXHEADER:100', 'DATA:OFXSGML', 'VERSION:102', '', '<OFX><BANKMSGSRSV1><STMTTRNRS><STMTRS><CURDEF>EUR',
+      '<BANKACCTFROM><BANKID>12345<ACCTID>00012345678<ACCTTYPE>CHECKING</BANKACCTFROM>',
+      '<BANKTRANLIST><STMTTRN><TRNTYPE>DEBIT<DTPOSTED>20261102<TRNAMT>-42.50<FITID>A1<NAME>Courses</STMTTRN></BANKTRANLIST>',
+      '<LEDGERBAL><BALAMT>1234.56<DTASOF>20261103</LEDGERBAL></STMTRS></STMTTRNRS></BANKMSGSRSV1></OFX>',
+    ].join('\n');
+    const url = await page.evaluate(async text => {
+      const form = new FormData();
+      form.append('fichiers', new File([text], 'releve.ofx', { type: 'application/octet-stream' }));
+      return (await fetch('./partager', { method: 'POST', body: form })).url;
+    }, ofx);
+    expect(url).toMatch(/\?partage=1$/);
+    await page.goto('/?demo=1&partage=1');
+    // Pas de choix « fiche de paie, relevé, avis » : un OFX est forcément un relevé, lu sans clé.
+    const sheet = page.getByRole('dialog', { name: 'Lire un relevé' });
+    await expect(sheet).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole('dialog', { name: 'Que voulez-vous importer ?' })).toHaveCount(0);
+    await expect(sheet.getByText(/Courses/)).toBeVisible({ timeout: 20_000 });
+    expect(await sharedCount(page)).toBe(0);
+  });
 });

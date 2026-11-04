@@ -11,7 +11,7 @@ import { Modal } from '../Modal';
 import { Button, IconButton } from '../ui';
 import { StatementImport } from '../StatementImport';
 import { TaxNoticePanel } from '../TaxNoticePanel';
-import { isDemoSession } from '../../services/statementReader';
+import { isDemoSession, isLocalStatementFile } from '../../services/statementReader';
 import { discardSharedFile, parseShareMarker, takeSharedFile, type ShareMarker } from '../../services/sharedFile';
 import { stripParam } from '../../app/useAppNavigation';
 
@@ -41,7 +41,7 @@ type Phase =
   | { kind: 'refused'; reason: Exclude<ShareMarker, 'received'> };
 
 const REFUSED_TEXT: Record<Exclude<ShareMarker, 'received'>, string> = {
-  type: 'Pécule ne lit que les PDF et les images (PNG, JPEG, WebP). Le fichier partagé n\'a pas été gardé.',
+  type: 'Pécule ne lit que les PDF, les images (PNG, JPEG, WebP) et les relevés OFX ou CSV. Le fichier partagé n\'a pas été gardé.',
   size: 'Ce fichier est trop lourd : 15 Mo au plus. Il n\'a pas été gardé.',
   failed: 'Le fichier partagé n\'a pas pu être reçu. Partagez-le à nouveau.',
 };
@@ -92,6 +92,8 @@ export const ShareTargetHost: React.FC<ShareTargetHostProps> = props => {
     void taken.current.then(file => {
       if (!alive) return;
       if (!file) setPhase({ kind: 'missing' });
+      // Relevé OFX ou CSV : forcément un relevé, lu sur l'appareil, même sans clé.
+      else if (isLocalStatementFile(file)) setPhase({ kind: 'statement', file });
       // Sans clé, rien ne peut être lu : le fichier, déjà effacé de l'appareil, est abandonné.
       else if (!canRead) setPhase({ kind: 'no-key' });
       else setPhase({ kind: 'choose', file });
