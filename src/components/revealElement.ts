@@ -18,7 +18,7 @@ export const revealElementById = (id: string, { delayMs = 300, timeoutMs = 3000 
       return;
     }
     el.scrollIntoView({ block: 'start', behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
-    const heading = el.querySelector<HTMLElement>('h1, h2, h3');
+    const heading = el.querySelector<HTMLElement>('h1, h2, h3, h4');
     if (heading) {
       heading.tabIndex = -1;
       heading.focus({ preventScroll: true });

@@ -70,8 +70,11 @@ export const useDerivedData = (doc: AppDoc, fullData: AppDoc, discreet = false) 
   // eslint-disable-next-line react-hooks/exhaustive-deps -- textes avec des montants : réécrits au passage en mode discret
   const taxReturnAlert = useMemo(() => (seasonalMod ? seasonalMod.buildTaxReturnAlert(fullData, today) : null), [seasonalMod, fullData, today, discreet]);
   // Épargne de précaution : charges fixes + argent plaisir, multipliés par le nombre de mois choisi.
-  const emergency = useMemo(
-    () => computeEmergencyFund(doc.accounts, totalFixedCharges(doc.expenses, doc.subscriptions) + (c.leisureBudget || 0), c.emergencyMonths ?? DEFAULT_EMERGENCY_MONTHS),
+  // Durée de survie : la même épargne, en mois de charges fixes seules.
+  const emergency = useMemo(() => {
+    const fixed = totalFixedCharges(doc.expenses, doc.subscriptions);
+    return computeEmergencyFund(doc.accounts, fixed + (c.leisureBudget || 0), c.emergencyMonths ?? DEFAULT_EMERGENCY_MONTHS, fixed);
+  },
     [doc.accounts, doc.expenses, doc.subscriptions, c.leisureBudget, c.emergencyMonths],
   );
   // Impôt annuel estimé (après décote) et revenu imposable des salaires (le principal et

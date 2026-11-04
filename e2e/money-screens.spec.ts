@@ -102,16 +102,31 @@ test.describe('Fiches de paie (démo)', () => {
 test.describe('Ma paie (démo)', () => {
   test('toucher le nom du compte coche la ligne, et la ligne a une cible d’au moins 48 px', async ({ page, isMobile }) => {
     await openDemo(page, 'pilot');
-    const livret = page.getByRole('checkbox', { name: 'Livret A' });
+    // Rien à cocher avant la paie : on la déclare (rituel), sans rien cocher.
+    const card = page.locator('#pay-checklist');
+    await expect(card.getByRole('checkbox')).toHaveCount(0);
+    await card.getByRole('button', { name: "J'ai reçu ma paie" }).click();
+    const dialog = page.getByRole('dialog', { name: "J'ai reçu ma paie" });
+    await expect(dialog.getByRole('heading', { level: 2 })).toBeVisible();
+    if (await dialog.getByRole('heading', { name: /^Bilan/ }).count()) await dialog.getByRole('button', { name: 'Continuer' }).click();
+    await dialog.getByRole('button', { name: 'Voir la répartition' }).click();
+    await dialog.getByRole('button', { name: 'Enregistrer', exact: true }).click();
+    await expect(dialog).toBeHidden();
+    const livret = card.getByRole('region', { name: 'À faire' }).getByRole('checkbox', { name: 'Livret A' });
     await expect(livret).not.toBeChecked();
-    const row = page.locator('label').filter({ has: livret });
+    const row = card.getByRole('region', { name: 'À faire' }).locator('label').filter({ has: page.getByRole('checkbox', { name: 'Livret A' }) });
     if (isMobile) expect((await row.boundingBox())!.height).toBeGreaterThanOrEqual(48);
     // Clic sur le texte d'état, à côté de la case de 20 px.
     await row.getByText('Cocher enregistre le versement sur le compte').click();
-    await expect(livret).toBeChecked();
-    await expect(page.getByText(/^\d+\/\d+ faits$/)).toBeVisible();
-    await livret.uncheck();
+    // Faite, la ligne passe dans « Voir le détail », d'où elle se décoche.
+    await expect(page.getByText(/^1\/\d+ faits$/)).toBeVisible();
+    await expect(livret).toHaveCount(0);
+    await card.getByRole('button', { name: /^Voir le détail/ }).click();
+    const doneBox = card.getByRole('checkbox', { name: 'Livret A' });
+    await expect(doneBox).toBeChecked();
+    await doneBox.uncheck();
     await expect(livret).not.toBeChecked();
+    await expect(page.getByText(/^0\/\d+ faits$/)).toBeVisible();
   });
 });
 

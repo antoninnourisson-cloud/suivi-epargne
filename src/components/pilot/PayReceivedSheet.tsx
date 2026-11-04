@@ -32,7 +32,7 @@ import { localTodayISO, parseISODate } from '../../lib/dates';
 import { parseFrenchNumber } from '../../lib/numbers';
 import { round2 } from '../../lib/money';
 import { elideDe, formatEUR, formatMonth, frenchDay, toInputAmount } from '../../lib/format';
-import { livePayBar, payBarParts, placementReason, type PayBarKey } from '../../lib/pilotView';
+import { livePayBar, payBarParts, placementReason, savingsNoteOf, type PayBarKey } from '../../lib/pilotView';
 import { Modal } from '../Modal';
 import { Button, IconButton, MoneyText, TextField, fieldClass } from '../ui';
 import { PartSwatch, PayBar } from './PayBar';
@@ -304,18 +304,7 @@ export const PayReceivedSheet: React.FC<SheetProps> = ({ doc, geminiApiKey, pick
   const stepIndex = review ? step + 1 : step;
 
   // Ce que l'épargne conseillée contient de plus que l'épargne visée (calculé sur le résultat).
-  const savingsNote = kind === 'extra' ? undefined : [
-    ...(allocation.surplus >= 0.5
-      ? [Math.abs(allocation.surplus - allocation.before) < 0.5
-          ? `dont ${formatEUR(allocation.surplus)} de reste du mois dernier`
-          : `dont ${formatEUR(allocation.surplus)} en plus de l'épargne visée`]
-      : []),
-    ...(allocation.bonus > 0
-      ? [allocation.cuts.bonus > 0
-          ? `prime placée en partie (${formatEUR(allocation.bonusPlaced)} sur ${formatEUR(allocation.bonus)})`
-          : `dont prime ${formatEUR(allocation.bonus)}`]
-      : []),
-  ].join(', ') || undefined;
+  const savingsNote = savingsNoteOf(allocation);
 
   const groupHeading = (key: PayBarKey, label: string, amount: number, note?: string) => (
     <div className="mt-6 border-b border-outline-variant pb-2">

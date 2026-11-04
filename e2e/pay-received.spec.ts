@@ -49,17 +49,24 @@ test('déclarer la paie depuis le Pilotage, corriger une ligne, enregistrer puis
   await dialog.getByRole('button', { name: 'Enregistrer', exact: true }).click();
   await expect(dialog).toBeHidden();
 
-  // Carte « Ma paie » : la paie reçue, la ligne faite, le reste à faire.
+  // Carte « Ma paie » : la paie reçue, le reste à faire (sans la ligne Plaisir), la ligne faite dans le détail.
   const status = page.getByRole('status').filter({ hasText: 'Virement de paie' });
   await expect(status).toContainText('123');
   await expect(card(page).getByText(/^Paie reçue le/)).toBeVisible();
-  await expect(card(page).getByRole('checkbox', { name: 'Livret A' })).toBeChecked();
   await expect(card(page).getByText(/^1\/\d+ faits$/)).toBeVisible();
+  const todo = card(page).getByRole('region', { name: 'À faire' });
+  await expect(todo.getByRole('checkbox').first()).toBeVisible();
+  await expect(todo.getByRole('checkbox', { name: 'Livret A' })).toHaveCount(0);
+  await expect(card(page).getByRole('checkbox', { name: /plaisir/i })).toHaveCount(0);
+  await expect(card(page).getByRole('button', { name: 'Autre argent reçu' })).toBeVisible();
+  await card(page).getByRole('button', { name: /^Voir le détail/ }).click();
+  await expect(card(page).getByRole('checkbox', { name: 'Livret A' })).toBeChecked();
 
-  // Un seul « Annuler » défait tout : paie et versement.
+  // Un seul « Annuler » défait tout : paie et versement. Avant la paie, rien à cocher.
   await status.getByRole('button', { name: 'Annuler' }).click();
   await expect(card(page).getByRole('button', { name: "J'ai reçu ma paie" })).toBeVisible();
-  await expect(card(page).getByRole('checkbox', { name: 'Livret A' })).not.toBeChecked();
+  await expect(card(page).getByRole('checkbox')).toHaveCount(0);
+  await expect(card(page).getByText(/^Paie attendue vers le/)).toBeVisible();
   expect(errors).toEqual([]);
 });
 
@@ -114,10 +121,13 @@ test('lien direct : prime placée en entier, « Tout est fait », et l’Accueil
   await dialog.getByRole('button', { name: 'Tout est fait comme conseillé' }).click();
   await expect(dialog).toBeHidden();
 
-  await expect(card(page).getByText('Tout est fait')).toBeVisible();
-  const hero = card(page).getByRole('region', { name: 'Paie reçue' });
-  await expect(hero).toContainText('Dont prime placée en entier');
-  await expect.poll(async () => euros((await hero.textContent())!.match(/À placer sur cette paie\s*([\d\s ,]+)€/)?.[1] ?? '')).toBeCloseTo(toSave, 2);
+  // Carte « Ma paie » : tout est fait ; ce qui est placé (prime comprise, placée en entier) vaut l'épargne du rituel.
+  await expect(card(page).getByText('Tout est fait', { exact: true })).toBeVisible();
+  const headline = card(page).getByText(/^Tout est fait · .* placés · le compte courant démarre à/);
+  await expect.poll(async () => euros((await headline.textContent())!.match(/fait · ([\d\s  ,]+)€ placés/)?.[1] ?? '')).toBeCloseTo(toSave, 2);
+  const savingsLegend = card(page).locator('dl > div').filter({ has: page.locator('dt', { hasText: /^Épargne$/ }) });
+  await expect(savingsLegend).toContainText(/dont prime 500\s€/);
+  await expect(card(page).getByRole('img', { name: /^Répartition de / })).toBeVisible();
 
   // L'Accueil affiche le même objectif que la carte.
   await goTo(page, 'Accueil', isMobile);

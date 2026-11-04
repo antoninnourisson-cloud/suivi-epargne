@@ -5,22 +5,21 @@ import { PayChecklist } from './PayChecklist';
 import { SavingsSplitEditor } from './SavingsSplitEditor';
 import { computeIncome, computePlacementStrategy, payslipSuperNet, subscriptionsAsExpenses, computePayTransfers, computeRecentSavingsRate, activeSavingsSplit } from '../lib/finance';
 import { openPay } from '../lib/payRecords';
-import { allocatePay, allocationSentence, payBalanceBefore, recommendPayDistribution } from '../lib/payDistribution';
+import { allocatePay, leisureFloorOf, payBalanceBefore, recommendPayDistribution } from '../lib/payDistribution';
 import type { PayRitualProps } from './pilot/PayReceivedSheet';
-import type { PayCalendarData } from '../lib/payCalendar';
+import { validPayday, type PayCalendarData } from '../lib/payCalendar';
 import { parseFrenchNumber, safeNumber } from '../lib/numbers';
 import { NumberInput } from './NumberInput';
 import { isBackendEnabled } from '../services/backendService';
-import { Calculator, Receipt, Info, Plus, Trash2, Coins, FileCheck2, Wand2, BellRing, PieChart, SlidersHorizontal, Sigma } from 'lucide-react';
+import { Calculator, Receipt, Info, Plus, Trash2, Coins, FileCheck2, Wand2, BellRing, PieChart, PiggyBank, SlidersHorizontal, Target } from 'lucide-react';
 import { elideDe, formatEUR, formatPeriod, formatRate } from '../lib/format';
 import { useUndoableRemove } from './Toast';
 import { focusAfterRemoval } from './focusAfterRemoval';
-import { howItsComputed, planSentence, payRuleSentence } from '../lib/pilotView';
-import { Button, IconButton, MoneyText, PageHeader, TextField, fieldClass } from './ui';
+import { fixedSavingsNote } from '../lib/pilotView';
+import { Button, IconButton, MoneyText, PageHeader, SegmentedButton, TextField, fieldClass } from './ui';
 import { Disclosure } from './pilot/Disclosure';
-import { BudgetWaterfall } from './pilot/BudgetWaterfall';
 import { BookletFill } from './pilot/BookletFill';
-import { SurvivalCard } from './pilot/SurvivalCard';
+import { OPEN_PAY_SETTINGS_EVENT, PAY_SETTINGS_INCOME_ID, takePaySettingsRequest } from './pilot/paySettingsRequest';
 
 /**
  * Réglages du Pilotage, enregistrés dans le fichier de données (config). Un réglage de plus
@@ -45,7 +44,10 @@ interface AssistantPilotProps {
   activePayslip?: PayslipRecord;
   onClearActivePayslip: () => void;
   subscriptions: Subscription[];
+  /** « Gérer » : l'onglet Abonnements du Pilotage. */
   onOpenSubscriptions: () => void;
+  /** Rappel de paie : Paramètres › Notifications (affiché seulement avec le serveur). */
+  onOpenNotifications?: () => void;
   payChecklist?: PayChecklistData;
   /** Cocher, décocher une ligne, recalculer le plan (commandes de la paie, useAccountActions). */
   onPayLineCheck: (lines: PayChecklistLine[], line: PayChecklistLine, amount: number, alreadyRecorded: boolean) => boolean;
@@ -63,10 +65,10 @@ interface AssistantPilotProps {
 export const AssistantPilot: React.FC<AssistantPilotProps> = ({
   accounts, expenses, onUpdateExpenses, config, onPatchConfig,
   fiscalConfig, workBenefits, activePayslip, onClearActivePayslip,
-  subscriptions, onOpenSubscriptions, payChecklist, onPayLineCheck, onPayLineUncheck, onPayPlanReset,
+  subscriptions, onOpenSubscriptions, onOpenNotifications, payChecklist, onPayLineCheck, onPayLineUncheck, onPayPlanReset,
   payCalendar, payRitual,
 }) => {
-  const { grossAnnual, leisureBudget, projectSavings, taxRateManual, extraMonthlyIncome, paydayDay, paydayAmount, savingsSplit, savingsSplitFrom } = config;
+  const { grossAnnual, leisureBudget, projectSavings, taxRateManual, extraMonthlyIncome, paydayDay, paydayAmount, payAccountId, savingsSplit, savingsSplitFrom } = config;
   const setGrossAnnual = (grossAnnual: number) => onPatchConfig({ grossAnnual });
   const setLeisureBudget = (leisureBudget: number) => onPatchConfig({ leisureBudget });
   const setProjectSavings = (projectSavings: number) => onPatchConfig({ projectSavings });
@@ -74,6 +76,7 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
   const setExtraMonthlyIncome = (extraMonthlyIncome: number) => onPatchConfig({ extraMonthlyIncome });
   const setPaydayDay = (paydayDay: number | undefined) => onPatchConfig({ paydayDay });
   const setPaydayAmount = (paydayAmount: number | undefined) => onPatchConfig({ paydayAmount });
+  const setPayAccountId = (payAccountId: string | undefined) => onPatchConfig({ payAccountId });
   const onSavingsSplitChange = (split: { accountId: string; pct: number }[] | undefined, from: string | undefined) =>
     onPatchConfig({ savingsSplit: split, savingsSplitFrom: from });
   const [showDetails, setShowDetails] = useState(false);
@@ -90,8 +93,8 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
   const [isAddingExpense, setIsAddingExpense] = useState(false);
   const [newExpenseName, setNewExpenseName] = useState('');
   const [newExpenseAmount, setNewExpenseAmount] = useState('');
-  // Brouillon du montant du rappel de paie : on ne persiste qu'une saisie interprétable
-  // (vide = capacité calculée), sans réécrire le champ pendant la frappe.
+  // Brouillon du montant fixe d'épargne : on ne persiste qu'une saisie interprétable
+  // (vide = épargne calculée), sans réécrire le champ pendant la frappe.
   const [paydayAmountDraft, setPaydayAmountDraft] = useState(paydayAmount !== undefined ? String(paydayAmount) : '');
   // Le Pilotage peut s'afficher avant la fin du chargement Drive : le champ resterait alors
   // vide alors qu'un montant est enregistré. On le resynchronise quand la valeur arrive.
@@ -186,8 +189,9 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
       }
   };
 
-  // Abonnements actifs, en coût mensuel : ajoutés d'office aux charges fixes, gérés depuis
-  // l'écran Abonnements (jamais supprimables d'ici, pour ne pas désynchroniser les rappels).
+
+  // Abonnements actifs, en coût mensuel : comptés d'office dans les virements fixes, gérés depuis
+  // l'onglet Abonnements (jamais supprimables d'ici, pour ne pas désynchroniser les rappels).
   const subscriptionCharges = useMemo(() => subscriptionsAsExpenses(subscriptions), [subscriptions]);
   // Charge saisie à la main qui porte le nom d'un abonnement : sans doute comptée deux fois.
   const duplicateNames = useMemo(() => {
@@ -196,30 +200,26 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
   }, [expenses, subscriptionCharges]);
 
   const budgetData = useMemo(() => {
-    const manualFixed = expenses.reduce((sum, e) => sum + e.amount, 0);
     const subscriptionsFixed = subscriptionCharges.reduce((sum, e) => sum + e.amount, 0);
-    const totalFixed = manualFixed + subscriptionsFixed;
-    // Estimation avant la paie : la règle de la paie (lib/payDistribution) appliquée à la paie
-    // habituelle, sans reste du mois dernier ; montant fixe d'épargne compris. Même règle que
-    // la jauge de l'Accueil et la relance de paie (lib/payAdjustment) ; une fois la paie
+    // Plan habituel (avant la paie) : la règle de la paie (lib/payDistribution) appliquée à la
+    // paie habituelle, sans reste du mois dernier ; montant fixe d'épargne compris. Même règle
+    // que la jauge de l'Accueil et la relance de paie (lib/payAdjustment) ; une fois la paie
     // déclarée, la carte « Ma paie » suit le montant reçu.
     const fixedTransfers = computePayTransfers({ expenses, subscriptions, leisureBudget: 0, projectSavings: 0 });
+    const totalFixed = fixedTransfers.reduce((sum, t) => sum + t.amount, 0);
     const allocation = allocatePay({
       received: effectiveSuperNetForCalc, expectedPay: effectiveSuperNetForCalc,
-      fixed: fixedTransfers.reduce((sum, t) => sum + t.amount, 0),
-      projects: projectSavings, startBalance: leisureBudget, fixedSavings: paydayAmount,
+      fixed: totalFixed, projects: projectSavings, startBalance: leisureBudget, fixedSavings: paydayAmount,
     });
-    return { manualFixed, totalFixed, subscriptionsFixed, allocation, theoreticalCapacity: allocation.computedTarget, totalToInvest: allocation.savings };
+    return { totalFixed, subscriptionsFixed, allocation };
   }, [effectiveSuperNetForCalc, expenses, subscriptions, subscriptionCharges, leisureBudget, projectSavings, paydayAmount]);
+  const { allocation } = budgetData;
 
-  const payTransfers = useMemo(
-    () => computePayTransfers({ expenses, subscriptions, leisureBudget: Math.max(0, budgetData.allocation.leisure), projectSavings: budgetData.allocation.projects }),
-    [expenses, subscriptions, budgetData.allocation]
-  );
-
+  const split = activeSavingsSplit({ savingsSplit, savingsSplitFrom });
+  const customSplit = split !== undefined;
   const strategy = useMemo(
-    () => computePlacementStrategy(budgetData.totalToInvest, accounts, fiscalConfig, activeSavingsSplit({ savingsSplit, savingsSplitFrom })),
-    [budgetData.totalToInvest, accounts, fiscalConfig, savingsSplit, savingsSplitFrom]
+    () => computePlacementStrategy(allocation.savings, accounts, fiscalConfig, split),
+    [allocation.savings, accounts, fiscalConfig, split]
   );
 
   const bookletStats = useMemo(() => {
@@ -252,51 +252,56 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
     );
   }, [accounts, fiscalConfig]);
 
-  const survival = useMemo(() => {
-    const liquidMoney = accounts.filter(a => !a.contractEndDate && ![AccountType.IMMOBILIER, AccountType.PER, AccountType.PEE].includes(a.type)).reduce((sum, a) => sum + a.ownedAmount, 0);
-    const monthlyBurn = budgetData.totalFixed;
-
-    // Le retour anticipé "Infini" doit porter TOUS les champs lus par le JSX : sans
-    // years/months/days/monthlyBurn, l'écran afficherait littéralement "m j" et
-    // "Avec € de charges fixes".
-    if (monthlyBurn === 0) {
-      return { infinite: true, years: 0, months: 0, days: 0, monthlyBurn: 0, totalMonths: Infinity };
-    }
-
-    const totalMonths = liquidMoney / monthlyBurn;
-    const years = Math.floor(totalMonths / 12);
-    const months = Math.floor(totalMonths % 12);
-    const days = Math.floor((totalMonths * 30) % 30);
-
-    return { infinite: false, years, months, days, monthlyBurn, totalMonths };
-  }, [accounts, budgetData.totalFixed]);
-
-
-
-  // Montant à placer : expliqué en une phrase (hero) puis ligne par ligne (D'où vient ce chiffre).
+  // Libellé de la paie dans « Comment c'est calculé ».
   const payLabel = display.isReal
-    ? (effectiveSuperNet === undefined ? 'Paie nette après impôt (estimation)' : 'Net réel perçu (fiche de paie)')
-    : 'Paie nette après impôt';
-  const waterfall = useMemo(() => howItsComputed(budgetData.allocation, payLabel), [budgetData.allocation, payLabel]);
-  const heroSentence = [planSentence(budgetData.allocation), allocationSentence(budgetData.allocation)].filter(Boolean).join(' ');
-  const shortfall = budgetData.allocation.missingFixed;
-  const customSplit = activeSavingsSplit({ savingsSplit, savingsSplitFrom }) !== undefined;
-  // Ce qui ne part pas en épargne (virements fixes, projets, plaisir) : paie − dépenses = à placer.
-  const plannedSpending = budgetData.allocation.fixed + budgetData.allocation.projects + Math.max(0, budgetData.allocation.leisure);
-  // Même précision pour les trois montants de l'en-tête, pour que « paie − dépenses = à placer »
-  // tombe juste de tête : à l'euro si tout est rond, sinon au centime partout.
-  const heroDecimals = [effectiveSuperNetForCalc, plannedSpending, budgetData.totalToInvest]
-    .every((n) => Math.round(n * 100) % 100 === 0) ? 0 : 2;
-  const paydaySelectId = useId();
+    ? (effectiveSuperNet === undefined ? 'Paie habituelle (estimation)' : 'Paie habituelle (fiche de paie)')
+    : 'Paie habituelle';
 
   // Paie déclarée du mois d'épargne en cours : la carte « Ma paie » répartit le montant REÇU
-  // (prime et « À placer sur cette paie » compris), plus l'estimation.
+  // (prime et reste du compte courant compris), plus l'estimation.
   const declaredPay = payRitual ? openPay(payRitual.doc).pay : undefined;
   const received = useMemo(
     () => (declaredPay && payRitual ? recommendPayDistribution(payRitual.doc, {
       amount: declaredPay.amount, bonus: declaredPay.bonus, toSave: declaredPay.toSave, kind: declaredPay.kind, before: payBalanceBefore(declaredPay), receivedOn: declaredPay.receivedOn,
     }) : undefined),
     [declaredPay, payRitual]);
+
+  // « Modifier dans le Pilotage » (Paramètres › Notifications) : le groupe Paie habituelle
+  // s'ouvre, que le Pilotage vienne d'être monté ou soit déjà affiché.
+  const [incomeOpen, setIncomeOpen] = useState(() => takePaySettingsRequest());
+  useEffect(() => {
+    const open = () => { if (takePaySettingsRequest()) setIncomeOpen(true); };
+    window.addEventListener(OPEN_PAY_SETTINGS_EVENT, open);
+    return () => window.removeEventListener(OPEN_PAY_SETTINGS_EVENT, open);
+  }, []);
+
+  // Épargne visée par paie : calculée, ou montant fixe (ex-« Montant » du rappel de paie).
+  const [fixedMode, setFixedMode] = useState(paydayAmount !== undefined);
+  useEffect(() => { if (paydayAmount !== undefined) setFixedMode(true); }, [paydayAmount]);
+  const computedTarget = Math.max(0, allocation.computedTarget);
+  const chooseSavingsMode = (mode: 'computed' | 'fixed') => {
+    if (mode === 'computed') {
+      setFixedMode(false);
+      setPaydayAmount(undefined);
+      setPaydayAmountDraft('');
+      return;
+    }
+    setFixedMode(true);
+    if (paydayAmount === undefined) {
+      const start = Math.round(computedTarget);
+      setPaydayAmount(start);
+      setPaydayAmountDraft(String(start));
+    }
+  };
+  const fixedNote = fixedSavingsNote(allocation);
+
+  const currentAccounts = accounts.filter(a => a.type === AccountType.COMPTE_COURANT);
+  const payAccount = currentAccounts.find(a => a.id === payAccountId) ?? currentAccounts[0];
+  const firstPlaced = strategy.find(st => !st.alert && st.fillAmount > 0)?.accountName;
+  const floor = leisureFloorOf(leisureBudget);
+  const paydaySelectId = useId();
+  const payAccountSelectId = useId();
+  const backend = isBackendEnabled();
 
   const readOnlyValue = (label: string, value: React.ReactNode) => (
     <div>
@@ -310,46 +315,43 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
       <dd className="tabular-nums text-right whitespace-nowrap text-on-surface">{value}</dd>
     </div>
   );
+  const selectClass = `${fieldClass} dark:bg-surface-container-low`;
 
-  const budgetTab = (
+  const incomeSummary = [
+    effectiveSuperNet === undefined ? '—' : `${formatEUR(effectiveSuperNet, 0)} nets`,
+    validPayday(paydayDay) !== undefined ? `le ${paydayDay} du mois` : undefined,
+  ].filter(Boolean).join(' · ');
+  const savingsSummary = [
+    `${formatEUR(allocation.target, 0)} par paie`,
+    customSplit ? 'répartition personnalisée' : firstPlaced ? `${firstPlaced} d'abord` : undefined,
+  ].filter(Boolean).join(' · ');
+
+  const monthTab = (
     <div className="space-y-6">
-      {/* a. Ma paie : la paie attendue ou reçue, ce qu'il y a à placer, et où, virement par virement. */}
+      {/* Ma paie : ce que devient la paie, attendue ou reçue, et ce qu'il reste à faire. */}
       <PayChecklist
-        estimate={{ pay: effectiveSuperNetForCalc, spending: plannedSpending, toSave: budgetData.totalToInvest, sentence: heroSentence, decimals: heroDecimals }}
+        plan={allocation}
+        planSteps={strategy}
+        payLabel={payLabel}
         pay={declaredPay}
-        transfers={received?.transfers ?? payTransfers}
-        steps={received?.steps ?? strategy}
-        totalToInvest={received?.toSave ?? budgetData.totalToInvest}
-        shortfall={received?.shortfall ?? shortfall}
+        received={received}
+        accounts={accounts}
         checklist={payChecklist}
         onCheck={onPayLineCheck}
         onUncheck={onPayLineUncheck}
         onReset={onPayPlanReset}
         paydayDay={paydayDay}
         payCalendar={payCalendar}
-        customSplit={received?.customSplit ?? customSplit}
         ritual={payRitual}
       />
 
-      {/* b. Comment c'est calculé (l'estimation) et la règle des coupes. */}
-      <Disclosure title="Comment c'est calculé" icon={Sigma} summary={<MoneyText value={budgetData.totalToInvest} />}>
-        <BudgetWaterfall rows={waterfall} />
-        <p className="mt-3 text-sm text-on-surface-variant">{payRuleSentence(budgetData.allocation)}</p>
-        <p className="mt-3 text-xs text-on-surface-variant">Le détail de votre salaire (brut, charges, impôt) et tous les montants se règlent dans « Mes paramètres », plus bas.</p>
-      </Disclosure>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <BookletFill booklets={bookletStats} />
-        <SurvivalCard survival={survival} />
-      </div>
-
-      {/* d. Les réglages, repliés par groupe. */}
-      <section aria-labelledby="pilot-settings-title" className="pt-2">
-        <h3 id="pilot-settings-title" className="text-lg font-medium text-on-surface flex items-center gap-2"><SlidersHorizontal className="w-5 h-5 text-primary" aria-hidden="true" /> Mes paramètres</h3>
-        <p className="text-sm text-on-surface-variant mt-1 mb-4">Salaire, charges et budgets : le montant à placer se recalcule dès que vous les modifiez.</p>
+      {/* Réglages de la paie : un seul endroit, dans l'ordre de la barre. */}
+      <section id="pay-settings" aria-labelledby="pay-settings-title">
+        <h3 id="pay-settings-title" className="text-lg font-medium text-on-surface flex items-center gap-2"><SlidersHorizontal className="w-5 h-5 text-primary" aria-hidden="true" /> Réglages de la paie</h3>
+        <p className="text-sm text-on-surface-variant mt-1 mb-4">Dans l'ordre de la barre : la répartition se recalcule dès que vous les modifiez.</p>
         <div className="rounded-2xl border border-outline-variant bg-surface-container-lowest dark:bg-surface-container-low divide-y divide-outline-variant overflow-hidden">
 
-          <Disclosure appearance="plain" headingLevel={4} title="Revenus et salaire" icon={Calculator} summary={effectiveSuperNet === undefined ? '—' : `${formatEUR(effectiveSuperNet, 0)} nets après impôt par mois`}>
+          <Disclosure id={PAY_SETTINGS_INCOME_ID} open={incomeOpen} onOpenChange={setIncomeOpen} appearance="plain" headingLevel={4} title="Paie habituelle" icon={Calculator} summary={incomeSummary}>
             {activePayslip && (
               <div className="mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl bg-tertiary-container text-on-tertiary-container p-3">
                 <p className="flex items-start gap-2 text-sm">
@@ -438,9 +440,47 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
                 )}
               </div>
             )}
+
+            {/* Jour de paie : il ouvre chaque mois d'épargne (calendrier de la paie) et fixe le rappel. */}
+            <div className="mt-5 pt-4 border-t border-outline-variant grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-xl">
+              <div>
+                <label htmlFor={paydaySelectId} className="block text-sm font-medium text-on-surface-variant mb-1.5">Jour de paie</label>
+                <select
+                  id={paydaySelectId}
+                  value={paydayDay ?? ''}
+                  onChange={(e) => setPaydayDay(e.target.value ? Number(e.target.value) : undefined)}
+                  className={selectClass}
+                >
+                  <option value="">Pas de jour fixe</option>
+                  {Array.from({ length: 31 }, (_, i) => i + 1).map(d => <option key={d} value={d}>Le {d} du mois</option>)}
+                </select>
+              </div>
+              {/* Plusieurs comptes courants : celui où arrive la paie (son solde est prérempli dans le rituel). */}
+              {currentAccounts.length > 1 && (
+                <div>
+                  <label htmlFor={payAccountSelectId} className="block text-sm font-medium text-on-surface-variant mb-1.5">Compte où arrive la paie</label>
+                  <select
+                    id={payAccountSelectId}
+                    value={payAccount?.id ?? ''}
+                    onChange={(e) => setPayAccountId(e.target.value || undefined)}
+                    className={selectClass}
+                  >
+                    {currentAccounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                  </select>
+                </div>
+              )}
+            </div>
+            <p className="mt-2 text-sm text-on-surface-variant max-w-xl">
+              Le jour de paie ouvre chaque mois d'épargne.
+              {backend && ' Ce jour-là, une notification rappelle la répartition, recalculée sur vos soldes du moment (notifications activées sur l\'appareil).'}
+            </p>
+            {backend && onOpenNotifications && (
+              <Button variant="text" onClick={onOpenNotifications} className="mt-1 -ml-3 max-sm:h-12"><BellRing className="w-4 h-4" aria-hidden="true" /> Rappel par notification : Paramètres › Notifications</Button>
+            )}
           </Disclosure>
 
-          <Disclosure appearance="plain" headingLevel={4} title="Charges fixes et abonnements" icon={Receipt} summary={`${formatEUR(budgetData.totalFixed, 0)} par mois`}>
+          <Disclosure appearance="plain" headingLevel={4} title="Virements fixes" icon={Receipt} summary={`${formatEUR(budgetData.totalFixed, 0)} par mois`}>
+            <p className="text-sm text-on-surface-variant mb-3">Ajoutez une charge fixe par virement sortant (ex. « Revolut commun »), sans détailler ce qu'elle paie. Les virements fixes ne sont jamais réduits.</p>
             <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
               <h5 id={expensesTitleId} tabIndex={-1} className="text-sm font-medium text-on-surface outline-none">Charges saisies</h5>
               {!isAddingExpense && (
@@ -486,88 +526,83 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
               <p className="mt-2 text-sm text-on-tertiary-container bg-tertiary-container rounded-xl p-3 flex items-start gap-2"><Info className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" /> {expenses.filter(e => duplicateNames.has(e.id)).map(e => e.name).join(', ')} : aussi dans vos abonnements, donc compté deux fois. Supprimez la charge saisie.</p>
             )}
 
-            <div className="mt-5 flex flex-wrap items-center justify-between gap-3 mb-1">
-              <h5 className="text-sm font-medium text-on-surface">Abonnements (automatique)</h5>
-              <Button variant="text" size="sm" onClick={onOpenSubscriptions}>Gérer les abonnements</Button>
+            {/* Abonnements : le total seulement, la liste vit dans l'onglet Abonnements. */}
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm text-on-surface">
+                {subscriptionCharges.length > 0
+                  ? <><MoneyText value={budgetData.subscriptionsFixed} /> d'abonnements mensuels</>
+                  : 'Aucun abonnement actif.'}
+              </p>
+              <Button variant="text" size="sm" onClick={onOpenSubscriptions} aria-label="Gérer les abonnements">Gérer</Button>
             </div>
-            {subscriptionCharges.length > 0 ? (
-              <ul className="divide-y divide-outline-variant max-h-60 overflow-y-auto">
-                {subscriptionCharges.map(c => (
-                  <li key={c.id} className="flex items-center gap-3 py-2.5 text-sm">
-                    <span className="flex-1 min-w-0 truncate text-on-surface">
-                      {c.name}
-                      {c.paymentMethod && <span className="ml-2 text-xs text-on-surface-variant">{c.paymentMethod}</span>}
-                    </span>
-                    <MoneyText value={c.amount} className="text-on-surface pr-3" />
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-sm text-on-surface-variant py-2">Aucun abonnement actif.</p>
-            )}
             <p className="text-xs text-on-surface-variant mt-1">Seuls les abonnements mensuels (et hebdomadaires) comptent ici. Les annuels, semestriels et trimestriels ne font que déclencher un rappel avant le prélèvement.</p>
 
             <div className="mt-4 pt-3 border-t border-outline-variant flex justify-between gap-3 text-sm font-medium text-on-surface">
-              <span>Total des charges</span>
+              <span>Total des virements fixes</span>
               <MoneyText value={budgetData.totalFixed} className="pr-3" />
             </div>
           </Disclosure>
 
-          <Disclosure appearance="plain" headingLevel={4} title="Budgets" icon={Coins} summary={`${formatEUR(leisureBudget, 0)} plaisir · ${formatEUR(projectSavings, 0)} projets`}>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <TextField label="Argent plaisir" supporting="Ce qui reste sur le compte courant pour le mois." render={p => <NumberInput id={p.id} describedBy={p.describedBy} invalid={p.invalid} value={leisureBudget} onChange={setLeisureBudget} min={0} suffix="€" className={`${p.className} tabular-nums`} />} />
-              <TextField label="Épargne projets" supporting="Argent qui part vers un compte hors de Pécule : il ne compte pas comme épargne. Pour suivre un projet, placez-le plutôt sur un compte de Pécule avec une étiquette (voyage, apport…) : « Mes comptes » en affiche le total." render={p => <NumberInput id={p.id} describedBy={p.describedBy} invalid={p.invalid} value={projectSavings} onChange={setProjectSavings} min={0} suffix="€" className={`${p.className} tabular-nums`} />} />
-            </div>
-          </Disclosure>
+          <Disclosure appearance="plain" headingLevel={4} title="Épargne" icon={PiggyBank} summary={savingsSummary}>
+            <p className="text-sm font-medium text-on-surface-variant mb-2">Épargne visée par paie</p>
+            <SegmentedButton
+              label="Épargne visée par paie"
+              options={[
+                { value: 'computed', label: `Calculée (${formatEUR(computedTarget, 0)})` },
+                { value: 'fixed', label: 'Montant fixe' },
+              ]}
+              value={fixedMode ? 'fixed' : 'computed'}
+              onChange={chooseSavingsMode}
+            />
+            <p className="mt-2 text-sm text-on-surface-variant max-w-xl">
+              {fixedMode
+                ? 'Le même montant à chaque paie, à la place du calcul. Une prime et ce qui reste du mois dernier s\'y ajoutent toujours.'
+                : 'Paie habituelle, moins les virements fixes, l\'épargne projets et le solde de départ du mois. Une prime et ce qui reste du mois dernier s\'y ajoutent.'}
+            </p>
+            {fixedMode && (
+              <TextField
+                label="Montant fixe par paie"
+                inputMode="decimal"
+                suffix="€"
+                className="tabular-nums mt-3 max-w-56"
+                value={paydayAmountDraft}
+                placeholder={formatEUR(computedTarget, 0)}
+                onChange={(e) => {
+                  setPaydayAmountDraft(e.target.value);
+                  const v = e.target.value.trim() === '' ? undefined : parseFrenchNumber(e.target.value);
+                  if (v === undefined) setPaydayAmount(undefined);
+                  else if (v !== null && v >= 0) setPaydayAmount(v);
+                }}
+              />
+            )}
+            {fixedNote && (
+              <p className="mt-3 text-sm text-on-tertiary-container bg-tertiary-container rounded-xl p-3 flex items-start gap-2 max-w-xl"><Info className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" /> {fixedNote}</p>
+            )}
 
-          <Disclosure appearance="plain" headingLevel={4} title="Répartition de l'épargne" icon={PieChart} summary={customSplit ? 'Personnalisée' : 'Automatique'}>
+            <h5 className="mt-6 mb-2 text-sm font-medium text-on-surface flex items-center gap-2"><PieChart className="w-4 h-4 text-on-surface-variant" aria-hidden="true" /> Répartition entre les comptes</h5>
             <SavingsSplitEditor
               accounts={accounts}
               split={savingsSplit}
               from={savingsSplitFrom}
-              sampleAmount={budgetData.totalToInvest}
+              sampleAmount={allocation.savings}
               fiscalConfig={fiscalConfig}
               onChange={onSavingsSplitChange}
             />
+            <BookletFill booklets={bookletStats} className="mt-6 pt-4 border-t border-outline-variant" />
           </Disclosure>
 
-          {isBackendEnabled() && (
-            <Disclosure appearance="plain" headingLevel={4} title="Rappel le jour de paie" icon={BellRing} summary={paydayDay !== undefined ? `Le ${paydayDay} du mois` : 'Désactivé'}>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-xl">
-                <div>
-                  <label htmlFor={paydaySelectId} className="block text-sm font-medium text-on-surface-variant mb-1.5">Jour du rappel</label>
-                  <select
-                    id={paydaySelectId}
-                    value={paydayDay ?? ''}
-                    onChange={(e) => setPaydayDay(e.target.value ? Number(e.target.value) : undefined)}
-                    className={`${fieldClass} dark:bg-surface-container-low`}
-                  >
-                    <option value="">Désactivé</option>
-                    {Array.from({ length: 31 }, (_, i) => i + 1).map(d => <option key={d} value={d}>Le {d} du mois</option>)}
-                  </select>
-                </div>
-                {paydayDay !== undefined && (
-                  <TextField
-                    label="Montant"
-                    inputMode="decimal"
-                    suffix="€"
-                    className="tabular-nums"
-                    value={paydayAmountDraft}
-                    placeholder={`${formatEUR(Math.max(0, budgetData.theoreticalCapacity), 0)} (calculé)`}
-                    onChange={(e) => {
-                      setPaydayAmountDraft(e.target.value);
-                      const v = e.target.value.trim() === '' ? undefined : parseFrenchNumber(e.target.value);
-                      if (v === undefined) setPaydayAmount(undefined);
-                      else if (v !== null && v >= 0) setPaydayAmount(v);
-                    }}
-                  />
-                )}
-              </div>
-              <p className="mt-3 text-sm text-on-surface-variant">
-                Une notification ce jour-là avec la répartition ci-dessus, recalculée sur vos soldes du moment. Sans montant saisi, c'est la capacité d'épargne calculée qui est utilisée. Les notifications doivent être activées sur l'appareil (Paramètres).
-              </p>
-            </Disclosure>
-          )}
+          <Disclosure appearance="plain" headingLevel={4} title="Épargne projets" icon={Target} summary={`${formatEUR(projectSavings, 0)} par mois`}>
+            <TextField className="max-w-md" label="Épargne projets" supporting="Argent qui part vers un compte hors de Pécule : il ne compte pas comme épargne. Pour suivre un projet, placez-le plutôt sur un compte de Pécule avec une étiquette (voyage, apport…) : « Mes comptes » en affiche le total." render={p => <NumberInput id={p.id} describedBy={p.describedBy} invalid={p.invalid} value={projectSavings} onChange={setProjectSavings} min={0} suffix="€" className={`${p.className} tabular-nums`} />} />
+          </Disclosure>
+
+          <Disclosure appearance="plain" headingLevel={4} title="Plaisir" icon={Coins} summary={`${formatEUR(leisureBudget, 0)} au départ · minimum ${formatEUR(floor, 0)}`}>
+            <TextField
+              className="max-w-md"
+              label="Solde de départ du mois"
+              supporting={`Ce que vous voulez sur le compte courant juste après la paie. Ce qui reste du mois dernier est compté : la paie complète jusqu'à ce montant, le surplus va à l'épargne. Un mois court, il baisse d'abord, jamais sous les 2/3 (${formatEUR(floor, 0)}).`}
+              render={p => <NumberInput id={p.id} describedBy={p.describedBy} invalid={p.invalid} value={leisureBudget} onChange={setLeisureBudget} min={0} suffix="€" className={`${p.className} tabular-nums`} />}
+            />
+          </Disclosure>
         </div>
       </section>
     </div>
@@ -575,8 +610,8 @@ export const AssistantPilot: React.FC<AssistantPilotProps> = ({
 
   return (
     <div className="animate-fade-in pb-20">
-      <PageHeader title="Pilotage" subtitle="Combien placer ce mois-ci, sur quels comptes, et pourquoi." />
-      {budgetTab}
+      <PageHeader title="Pilotage" subtitle="Ce que devient votre paie, et où va votre épargne." />
+      {monthTab}
     </div>
   );
 };

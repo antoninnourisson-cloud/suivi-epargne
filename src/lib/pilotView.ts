@@ -80,6 +80,54 @@ export const livePayBar = (advised: PayBar, amounts: Partial<Record<PayBarKey, n
   return { parts, total: advised.total, missingFixed, label: barLabel(parts, advised.total, missingFixed) };
 };
 
+/**
+ * Précision de la légende : à l'euro si tous les montants sont ronds, sinon au centime partout
+ * (les parts tombent juste de tête sur le total).
+ */
+export const barDecimals = (bar: Pick<PayBar, 'parts' | 'total'>): 0 | 2 =>
+  [bar.total, ...bar.parts.flatMap(p => [p.amount, p.planned ?? 0])]
+    .every(n => Math.round(n * 100) % 100 === 0) ? 0 : 2;
+
+/**
+ * Ce que l'épargne contient de plus que l'épargne visée, calculé sur le résultat : reste du
+ * mois dernier (ou paie plus haute), et la prime, placée en entier (ou en partie quand la paie
+ * ne couvre même pas les virements fixes). Rien pour un versement en plus.
+ */
+export const savingsNoteOf = (a: PayAllocation): string | undefined => {
+  if (a.kind === 'extra') return undefined;
+  return [
+    ...(a.surplus >= 0.5
+      ? [Math.abs(a.surplus - a.before) < 0.5
+          ? `dont ${formatEUR(a.surplus)} de reste du mois dernier`
+          : `dont ${formatEUR(a.surplus)} en plus de l'épargne visée`]
+      : []),
+    ...(a.bonus > 0
+      ? [a.cuts.bonus > 0
+          ? `prime placée en partie (${formatEUR(a.bonusPlaced)} sur ${formatEUR(a.bonus)})`
+          : `dont prime ${formatEUR(a.bonus)}`]
+      : []),
+  ].join(', ') || undefined;
+};
+
+/**
+ * Montant fixe d'épargne (Réglages de la paie › Épargne) : ce qu'il change sur une paie
+ * habituelle, en euros. Rien quand il vaut le calcul.
+ */
+export const fixedSavingsNote = (a: PayAllocation): string | undefined => {
+  if (a.kind === 'extra' || a.fixedSavings === undefined) return undefined;
+  const computed = Math.max(0, a.computedTarget);
+  if (Math.abs(a.fixedSavings - computed) < 0.5) return undefined;
+  if (a.fixedSavings < computed) {
+    return `Plus bas que le calcul (${formatEUR(computed, 0)}) : il resterait ${formatEUR(a.plannedLeisure)} de plaisir au lieu de ${formatEUR(a.startBalance)}.`;
+  }
+  const L = Math.max(0, a.leisure);
+  const effects = [`il resterait ${formatEUR(L)} de plaisir au lieu de ${formatEUR(a.startBalance)}`];
+  if (a.cuts.projects > 0) effects.push(`l'épargne projets serait réduite de ${formatEUR(a.cuts.projects)} chaque mois`);
+  if (a.cuts.savings > 0) effects.push(`seuls ${formatEUR(a.savings)} seraient placés`);
+  const floor = a.cuts.projects > 0 || a.cuts.savings > 0 ? ` (le plaisir ne descend pas sous ${formatEUR(a.floor)})` : '';
+  return `Plus haut que le calcul (${formatEUR(computed, 0)}) : ${effects.join(', ')}${floor}.`;
+};
+
 // ---------------------------------------------------------------------------
 // « Comment c'est calculé »
 // ---------------------------------------------------------------------------

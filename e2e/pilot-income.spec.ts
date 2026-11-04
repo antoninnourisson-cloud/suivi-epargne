@@ -14,9 +14,9 @@ const openDemo = async (page: Page) => {
 const euros = (text: string | null) => Number((text || '').replace(/[^\d,-]/g, '').replace(',', '.'));
 
 const openSalaryDetail = async (page: Page) => {
-  await page.getByRole('button', { name: /^Revenus et salaire/ }).click();
+  await page.getByRole('button', { name: /^Paie habituelle/ }).click();
   await page.getByRole('button', { name: 'Voir le détail du salaire' }).click();
-  return page.getByRole('region', { name: /^Revenus et salaire/ });
+  return page.getByRole('region', { name: /^Paie habituelle/ });
 };
 
 test('un autre salaire se règle dans le Pilotage et compte dans la paie nette après impôt', async ({ page, isMobile }) => {

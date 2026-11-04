@@ -29,6 +29,11 @@ export interface EmergencyFund {
   missing: number;
   pct: number;
   reached: boolean;
+  /**
+   * Durée de survie, même épargne que la jauge (`current`) : en mois de charges fixes seules
+   * (virements fixes, abonnements compris), sans revenu. Absente sans charge fixe.
+   */
+  survival?: { fixedCharges: number; months: number };
 }
 
 /**
@@ -46,14 +51,33 @@ export const emergencySavingsOf = (accounts: Pick<SavingsAccount, 'type' | 'owne
 export const computeEmergencyFund = (
   accounts: SavingsAccount[],
   monthlySpending: number,
-  months: number = DEFAULT_EMERGENCY_MONTHS
+  months: number = DEFAULT_EMERGENCY_MONTHS,
+  /** Charges fixes seules (sans le plaisir) : base de la durée de survie. */
+  fixedCharges?: number
 ): EmergencyFund | null => {
   if (!(monthlySpending > 0) || !(months > 0)) return null;
   const target = Math.round(monthlySpending * months);
   const cashBuffer = currentAccountBuffer(monthlySpending);
   const current = emergencySavingsOf(accounts, cashBuffer);
   const missing = Math.max(0, target - current);
-  return { months, monthlySpending, target, current, cashBuffer, missing, pct: Math.min(100, (current / target) * 100), reached: missing <= 0 };
+  const survival = fixedCharges !== undefined && fixedCharges > 0 ? { fixedCharges, months: current / fixedCharges } : undefined;
+  return {
+    months, monthlySpending, target, current, cashBuffer, missing, pct: Math.min(100, (current / target) * 100), reached: missing <= 0,
+    ...(survival ? { survival } : {}),
+  };
+};
+
+/** Durée en toutes lettres, au mois entier inférieur : « moins d'un mois », « 7 mois », « 1 an et 2 mois ». */
+export const survivalLabel = (months: number): string => {
+  if (!Number.isFinite(months)) return "plus de 10 ans";
+  const whole = Math.floor(months);
+  if (whole < 1) return "moins d'un mois";
+  if (whole >= 120) return "plus de 10 ans";
+  const years = Math.floor(whole / 12);
+  const rest = whole % 12;
+  if (years === 0) return `${whole} mois`;
+  const y = `${years} an${years > 1 ? "s" : ""}`;
+  return rest === 0 ? y : `${y} et ${rest} mois`;
 };
 
 // ---------------------------------------------------------------------------

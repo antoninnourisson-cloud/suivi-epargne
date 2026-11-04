@@ -5,7 +5,7 @@ import { CalendarClock, CalendarDays, LifeBuoy, Sprout } from 'lucide-react';
 import { Button, Card, MoneyText, SegmentedButton } from '../ui';
 import { formatEUR, frenchDay } from '../../lib/format';
 import { parseISODate } from '../../lib/dates';
-import type { EmergencyFund } from '../../lib/planning';
+import { survivalLabel, type EmergencyFund } from '../../lib/planning';
 import type { AgendaEvent } from '../../lib/agenda';
 import type { UpcomingDebit } from '../../lib/home';
 import type { View } from '../../navigation';
@@ -54,6 +54,12 @@ export const EmergencyCard: React.FC<{ emergency: EmergencyFund; onSetMonths?: (
       {emergency.months} mois de dépenses ({fmtEUR(emergency.monthlySpending)} par mois), sur vos livrets et comptes courants, votre part seulement.
       {emergency.cashBuffer ? ` Les ${fmtEUR(emergency.cashBuffer)} gardés sur le compte courant pour les dépenses du mois n'en font pas partie.` : ''}
     </p>
+    {/* Durée de survie : la même épargne, sur une autre base (charges fixes seules), dite en toutes lettres. */}
+    {emergency.survival && (
+      <p className="text-sm text-on-surface mt-2">
+        Sans revenu, en ne payant que vos charges fixes ({fmtEUR(emergency.survival.fixedCharges)} par mois), cette épargne tiendrait <strong className="font-medium">{survivalLabel(emergency.survival.months)}</strong>.
+      </p>
+    )}
     {onSetMonths && (
       <SegmentedButton
         className="mt-4"

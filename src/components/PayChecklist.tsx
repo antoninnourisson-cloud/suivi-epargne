@@ -1,66 +1,74 @@
 // ================================================
 // FILE: src/components/PayChecklist.tsx
-// Carte « Ma paie », en tête du Pilotage budgétaire : la paie du mois d'épargne en cours.
-//  - Pas encore déclarée : la paie attendue et l'estimation de ce qu'il y aura à placer
-//    (l'ancien en-tête « À placer ce mois »), et « J'ai reçu ma paie », qui ouvre le rituel
-//    (pilot/PayReceivedSheet, chargé à la demande).
-//  - Déclarée : la paie reçue, son mois d'épargne, ce qu'il y a à placer, « 3/5 faits » et
-//    « Modifier la paie ».
-// Dans les deux cas, la répartition se coche ligne à ligne. Cocher une ligne d'épargne
-// ENREGISTRE le versement sur le compte (montant modifiable si le virement réel diffère du
-// plan) ; la décocher l'annule. Le plan est figé au premier virement coché : sinon, chaque
-// versement enregistré modifierait les soldes, donc le plan lui-même.
+// Carte « Ma paie », en tête de Pilotage › Ce mois : ce que devient la paie, en trois états.
+//  1. Avant la paie : « Paie attendue vers le 27 novembre · environ 2 000 € », la barre du
+//     plan habituel (virements fixes, épargne, épargne projets, plaisir) et « J'ai reçu ma
+//     paie », qui ouvre le rituel (pilot/PayReceivedSheet, chargé à la demande). Rien à cocher :
+//     le rituel est la seule porte.
+//  2. Paie déclarée : la paie reçue, la barre de cette paie, « 3/7 faits » et la liste « À
+//     faire » (seulement les lignes restantes, dans l'ordre des virements) ; « Modifier la
+//     paie » et « Autre argent reçu » (versement en plus, même rituel).
+//  3. Tout est fait : ce qui a été placé, ce qui reste sur le compte courant, « Voir le détail ».
+// Cocher une ligne d'épargne ENREGISTRE le versement sur le compte (montant modifiable si le
+// virement réel diffère du plan) ; la décocher l'annule. La ligne Plaisir n'est pas une case :
+// rien à virer, c'est ce qui reste sur le compte courant. « Comment c'est calculé » est le seul
+// texte d'explication (règle des 2/3 comprise).
 // ================================================
 import React, { Suspense, useCallback, useEffect, useId, useState } from 'react';
-import { PayChecklist as PayChecklistData, PayChecklistLine, PayRecord } from '../types';
-import { PayTransfer, PlacementStep, buildPayLines, payPeriodOf } from '../lib/finance';
+import { PayChecklist as PayChecklistData, PayChecklistLine, PayRecord, SavingsAccount } from '../types';
+import { PlacementStep, buildPayLines, payPeriodOf } from '../lib/finance';
 import { currentSavingsMonth, savingsMonthOfPay, validPayday, type PayCalendarData } from '../lib/payCalendar';
 import { formatISODay, parseISODate } from '../lib/dates';
 import { elideDe, formatEUR, formatMonth, frenchDay, toInputAmount } from '../lib/format';
 import { parseFrenchNumber } from '../lib/numbers';
-import { Info, CheckCircle2, RotateCcw, Wallet, ArrowRightLeft, PiggyBank, PenLine, Plus } from 'lucide-react';
-import { Button, Card, MoneyText, StatTile } from './ui';
-import { placementReason } from '../lib/pilotView';
+import { round2 } from '../lib/money';
+import { Info, CheckCircle2, RotateCcw, Wallet, PenLine, Plus, Sigma, ListChecks } from 'lucide-react';
+import { Button, Card, MoneyText } from './ui';
+import { allocationSentence, payBalanceBefore, type PayAllocation, type PayDistribution } from '../lib/payDistribution';
+import { barDecimals, howItsComputed, livePayBar, payBarParts, payRuleSentence, placementReason, planSentence, savingsNoteOf, type PayBarKey } from '../lib/pilotView';
+import { findMovement } from '../lib/payRecords';
 import { lazyWithRetry } from './ErrorBoundary';
 import { OPEN_PAY_SHEET_EVENT, takePaySheetRequest } from './pilot/paySheetRequest';
+import { PayBar } from './pilot/PayBar';
+import { Disclosure } from './pilot/Disclosure';
+import { BudgetWaterfall } from './pilot/BudgetWaterfall';
 import type { PayRitualProps } from './pilot/PayReceivedSheet';
 
 // Le rituel n'est chargé qu'à l'ouverture : le Pilotage reste léger.
 const PayReceivedSheet = lazyWithRetry(() => import('./pilot/PayReceivedSheet'));
 
-/** L'estimation, tant que la paie n'est pas déclarée (Mes paramètres). */
-export interface PayEstimate {
-  pay: number;
-  spending: number;
-  toSave: number;
-  /** La phrase qui explique le montant (pilotView.heroContext). */
-  sentence: string;
-  /** Même précision pour les trois montants : « paie − dépenses = à placer » tombe juste. */
-  decimals: 0 | 2;
-  payLabel?: string;
-}
+const LEISURE_LINE = 't:leisure';
+const PROJECTS_LINE = 't:projects';
+
+/** Groupe d'une ligne, dans l'ordre des virements : fixes, épargne, projets, plaisir. */
+const groupOf = (l: PayChecklistLine): PayBarKey =>
+  l.kind === 'saving' ? 'savings' : l.key === PROJECTS_LINE ? 'projects' : l.key === LEISURE_LINE ? 'leisure' : 'fixed';
+const GROUP_RANK: Record<PayBarKey, number> = { fixed: 0, savings: 1, projects: 2, leisure: 3 };
 
 interface PayChecklistProps {
-  estimate: PayEstimate;
+  /** Plan de la paie habituelle (lib/payDistribution, allocatePay, sans reste du mois dernier). */
+  plan: PayAllocation;
+  /** Comptes du plan habituel : leurs conseils (ouvrir un LDDS…) s'affichent avant la paie. */
+  planSteps?: PlacementStep[];
+  /** Libellé de la paie dans « Comment c'est calculé » (fiche de paie de référence ou estimation). */
+  payLabel?: string;
   /** Paie déclarée du mois d'épargne en cours (lib/payRecords, openPay). */
   pay?: PayRecord;
-  transfers: PayTransfer[];
-  steps: PlacementStep[];
-  /** À placer : estimation, ou répartition conseillée pour la paie reçue. */
-  totalToInvest: number;
-  shortfall: number; // > 0 : la paie ne couvre pas les virements fixes
+  /** Répartition conseillée pour la paie déclarée (recommendPayDistribution). */
+  received?: PayDistribution;
+  /** Comptes : nom et date des versements faits (« Voir le détail »). */
+  accounts?: Pick<SavingsAccount, 'id' | 'name' | 'movements'>[];
   checklist?: PayChecklistData;
-  // Coche une ligne (commande recordPay : la paie du mois d'épargne, créée au besoin, fige
-  // `lines` et enregistre le versement d'une ligne d'épargne) ; false si c'est refusé.
+  // Coche une ligne (commande checkPayLine : fige `lines` et enregistre le versement d'une
+  // ligne d'épargne) ; false si c'est refusé.
   onCheck: (lines: PayChecklistLine[], line: PayChecklistLine, amount: number, alreadyRecorded: boolean) => boolean;
   // Décoche une ligne et annule son versement (commande uncheckPayLine).
   onUncheck: (line: PayChecklistLine) => void;
   // « Recalculer le plan » : défige la liste (rien n'est coché).
   onReset: () => void;
-  customSplit?: boolean;       // répartition personnalisée : change le « pourquoi » de chaque compte
   paydayDay?: number;          // la liste suit la paie, pas le mois calendaire
   payCalendar?: Omit<PayCalendarData, 'paydayDay'>; // fiches et paies déclarées (même fenêtre que l'Accueil)
-  /** Le rituel « J'ai reçu ma paie » (absent : pas de bouton, la liste seule). */
+  /** Le rituel « J'ai reçu ma paie » (absent : pas de bouton). */
   ritual?: PayRitualProps;
 }
 
@@ -68,7 +76,7 @@ const sameYear = (iso: string, today: string) => iso.slice(0, 4) === today.slice
 const dayLabel = (iso: string, today: string) => `${frenchDay(parseISODate(iso))}${sameYear(iso, today) ? '' : ` ${iso.slice(0, 4)}`}`;
 
 export const PayChecklist: React.FC<PayChecklistProps> = ({
-  estimate, pay, transfers, steps, totalToInvest, shortfall, checklist, onCheck, onUncheck, onReset, paydayDay, payCalendar, customSplit = false, ritual,
+  plan, planSteps = [], payLabel, pay, received, accounts = [], checklist, onCheck, onUncheck, onReset, paydayDay, payCalendar, ritual,
 }) => {
   const now = new Date();
   const today = formatISODay(now);
@@ -77,7 +85,7 @@ export const PayChecklist: React.FC<PayChecklistProps> = ({
   const payWindow = currentSavingsMonth({ ...payCalendar, paydayDay }, today);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const idBase = useId();
-  // Rituel ouvert : nouvelle paie, ou paie déclarée à modifier.
+  // Rituel ouvert : nouvelle paie (ou versement en plus), ou paie déclarée à modifier.
   const [sheet, setSheet] = useState<{ editPayId?: string } | null>(null);
 
   // Lien direct (`?action=pay`, notification, routine) : la feuille s'ouvre d'elle-même,
@@ -92,15 +100,39 @@ export const PayChecklist: React.FC<PayChecklistProps> = ({
     return () => window.removeEventListener(OPEN_PAY_SHEET_EVENT, openFromRequest);
   }, [openFromRequest]);
 
-  const liveLines = buildPayLines(transfers, steps);
-  const suggestions = steps.filter(st => st.alert && st.hint);
-
-  const frozen = checklist && checklist.month === month ? checklist : undefined;
-  const lines = frozen ? frozen.lines : liveLines;
+  const declared = !!pay && !!received;
+  const frozen = declared && checklist && checklist.month === month ? checklist : undefined;
+  const lines = !declared ? [] : frozen ? frozen.lines : buildPayLines(received!.transfers, received!.steps);
   const done = frozen?.done ?? {};
-  const doneCount = lines.filter(l => done[l.key]).length;
-  const transferLines = lines.filter(l => l.kind === 'transfer');
-  const savingLines = lines.filter(l => l.kind === 'saving');
+  // La ligne Plaisir n'est pas une case : seules les autres comptent dans « 3/7 faits ».
+  const checkable = lines.filter(l => l.key !== LEISURE_LINE)
+    .map((l, i) => ({ l, i })).sort((a, b) => GROUP_RANK[groupOf(a.l)] - GROUP_RANK[groupOf(b.l)] || a.i - b.i).map(x => x.l);
+  const todo = checkable.filter(l => !done[l.key]);
+  const doneLines = checkable.filter(l => done[l.key]);
+  const allDone = declared && checkable.length > 0 && todo.length === 0;
+
+  const allocation = received?.allocation ?? plan;
+  // La barre : le plan habituel, ou la paie reçue avec ce qui est fait (montant réel) ou prévu ;
+  // le plaisir est ce qui reste de l'argent à répartir.
+  const bar = (() => {
+    const advised = payBarParts(allocation);
+    if (!declared) return advised;
+    const valueOf = (l: PayChecklistLine) => done[l.key]?.amount ?? l.amount;
+    const sumOf = (key: PayBarKey) => round2(lines.filter(l => groupOf(l) === key).reduce((s, l) => s + valueOf(l), 0));
+    const fixed = sumOf('fixed');
+    const savings = sumOf('savings');
+    const projects = sumOf('projects');
+    return livePayBar(advised, { fixed, savings, projects, leisure: round2(allocation.available - fixed - savings - projects) });
+  })();
+  const leisureLeft = bar.parts.find(p => p.key === 'leisure')?.amount ?? 0;
+  const savingsPart = bar.parts.find(p => p.key === 'savings')?.amount ?? 0;
+  const decimals = barDecimals(bar);
+  // « dont prime 500 € » tant que l'épargne faite ou prévue tient l'épargne conseillée.
+  const savingsNote = savingsPart >= allocation.savings - 0.005 ? savingsNoteOf(allocation) : undefined;
+  const steps = declared ? (frozen ? [] : received!.steps) : planSteps;
+  const suggestions = steps.filter(st => st.alert && st.hint);
+  // Tout est fait : la ligne d'en-tête dit déjà ce qui est placé et ce qui reste.
+  const cutSentence = allDone ? undefined : allocationSentence(allocation);
 
   const draftAmount = (l: PayChecklistLine) => {
     const raw = drafts[l.key];
@@ -126,9 +158,19 @@ export const PayChecklist: React.FC<PayChecklistProps> = ({
   };
 
   const reasonFor = (l: PayChecklistLine) => {
-    if (l.kind !== 'saving') return undefined;
-    const step = steps.find(st => !st.alert && st.accountId === l.accountId);
-    return step ? placementReason(step, customSplit) : undefined;
+    if (l.kind !== 'saving' || !received) return undefined;
+    const step = received.steps.find(st => !st.alert && st.accountId === l.accountId);
+    return step ? placementReason(step, received.customSplit) : undefined;
+  };
+
+  /** « sur Livret A · le 27 octobre » : compte réellement crédité et date du versement. */
+  const doneWhere = (l: PayChecklistLine) => {
+    const entry = done[l.key];
+    if (!entry || l.kind !== 'saving') return undefined;
+    const accountId = entry.accountId ?? l.accountId;
+    const name = accounts.find(a => a.id === accountId)?.name;
+    const date = entry.movementId ? findMovement(accounts, entry.movementId)?.movement.date : undefined;
+    return [name && name !== l.label ? `sur ${name}` : undefined, date ? `le ${dayLabel(date, today)}` : undefined].filter(Boolean).join(' · ') || undefined;
   };
 
   const renderLine = (l: PayChecklistLine & { detail?: string }) => {
@@ -136,7 +178,7 @@ export const PayChecklist: React.FC<PayChecklistProps> = ({
     const isDone = !!entry;
     const varied = isDone && Math.abs(entry.amount - l.amount) >= 0.005;
     const invalid = !isDone && draftAmount(l) === null;
-    const reason = reasonFor(l);
+    const reason = isDone ? doneWhere(l) : reasonFor(l);
     // « Livret A · Livret A · 1,7 % » : le type répète souvent le nom du compte.
     const detail = l.detail === l.label ? undefined : l.detail?.startsWith(`${l.label} · `) ? l.detail.slice(l.label.length + 3) : l.detail;
     const status = isDone
@@ -198,80 +240,37 @@ export const PayChecklist: React.FC<PayChecklistProps> = ({
     );
   };
 
-  const totalLines = lines.length;
-  const savingTotal = frozen ? savingLines.reduce((s, l) => s + l.amount, 0) : totalToInvest;
-  const transferTotal = transferLines.reduce((s, l) => s + l.amount, 0);
-  const progress = totalLines > 0 && (
-    <span className={`inline-flex items-center gap-1 h-7 px-2.5 rounded-sm text-xs font-medium tabular-nums ${doneCount === totalLines ? 'bg-primary-container text-on-primary-container' : 'bg-secondary-container text-on-secondary-container'}`}>
-      {doneCount === totalLines ? <><CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" /> Tout est fait</> : `${doneCount}/${totalLines} faits`}
+  const progress = declared && checkable.length > 0 && (
+    <span className={`inline-flex items-center gap-1 h-7 px-2.5 rounded-sm text-xs font-medium tabular-nums ${allDone ? 'bg-primary-container text-on-primary-container' : 'bg-secondary-container text-on-secondary-container'}`}>
+      {allDone ? <><CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" /> Tout est fait</> : `${doneLines.length}/${checkable.length} faits`}
     </span>
   );
-  const fmt = (n: number) => formatEUR(n, estimate.decimals);
   // Paie attendue (pas encore déclarée) : date du jour de paie, sinon rien à annoncer.
   const expectedOn = validPayday(paydayDay) !== undefined && payWindow.source !== 'received' ? payWindow.start : undefined;
   const savingsMonth = pay ? savingsMonthOfPay(pay) : payWindow.key;
   const monthName = formatMonth(savingsMonth, !sameYear(`${savingsMonth}-01`, today));
+  const before = payBalanceBefore(pay);
+
+  const headline = !declared ? (
+    <>{expectedOn ? `Paie attendue vers le ${dayLabel(expectedOn, today)}` : 'Paie pas encore déclarée'} · environ <MoneyText value={plan.expectedPay} decimals={0} /></>
+  ) : allDone ? (
+    <>Tout est fait · <MoneyText value={savingsPart} decimals={decimals} /> placés · le compte courant démarre à <MoneyText value={leisureLeft} decimals={decimals} /></>
+  ) : (
+    <>
+      Paie reçue le {dayLabel(pay!.receivedOn, today)} : <MoneyText value={pay!.amount} />
+      {before > 0 && <> + <MoneyText value={before} /> déjà sur le compte</>}
+      {before < 0 && <> · découvert de <MoneyText value={-before} /> avant la paie</>}
+      {' · '}Épargne {elideDe(monthName)}
+    </>
+  );
 
   return (
     <Card id="pay-checklist" title="Ma paie" icon={Wallet} action={progress}>
-      {pay ? (
-        // La paie déclarée : reçue quand, combien, pour quel mois d'épargne, et ce qu'il y a à placer.
-        <section aria-label="Paie reçue" className="-mt-1 mb-6 rounded-3xl bg-secondary-container p-5 sm:p-6">
-          <p className="text-sm text-on-secondary-container">
-            Paie reçue le {dayLabel(pay.receivedOn, today)} : <MoneyText value={pay.amount} /> · Épargne {elideDe(monthName)}
-          </p>
-          <StatTile size="hero" className="mt-3" label="À placer sur cette paie" value={<MoneyText value={savingTotal} />} />
-          {!!pay.bonus && <p className="mt-1 text-sm text-on-secondary-container">Dont prime placée en entier : <MoneyText value={pay.bonus} /></p>}
-          {ritual && (
-            <div className="mt-4 flex flex-wrap gap-2">
-              <Button variant="outlined" onClick={() => setSheet({ editPayId: pay.id })} className="max-sm:h-12"><PenLine className="w-4 h-4" aria-hidden="true" /> Modifier la paie</Button>
-              <Button variant="text" onClick={() => setSheet({})} className="max-sm:h-12"><Plus className="w-4 h-4" aria-hidden="true" /> Autre paie ou prime</Button>
-            </div>
-          )}
-        </section>
-      ) : (
-        // La réponse avant la paie : combien placer, d'après l'estimation.
-        <section aria-label="À placer ce mois" className="-mt-1 mb-6 rounded-3xl bg-secondary-container p-5 sm:p-6">
-          <p className="text-sm text-on-secondary-container mb-3">
-            {expectedOn ? `Paie attendue vers le ${dayLabel(expectedOn, today)}` : 'Paie pas encore déclarée'}
-            {' · '}environ {fmt(estimate.pay)} · environ {fmt(estimate.toSave)} à placer
-          </p>
-          <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-6">
-            <StatTile size="hero" label="À placer ce mois" value={<MoneyText value={estimate.toSave} decimals={estimate.decimals} />} />
-            {/* Une paire dt/dd par montant : le lecteur d'écran annonce chaque libellé avec sa valeur. */}
-            <dl className="grid grid-cols-2 gap-x-8 gap-y-1 text-sm">
-              <div>
-                <dt className="text-on-surface-variant">{estimate.payLabel ?? 'Paie nette après impôt'}</dt>
-                <dd className="text-lg text-on-surface"><MoneyText value={estimate.pay} decimals={estimate.decimals} /></dd>
-              </div>
-              <div>
-                <dt className="text-on-surface-variant">Dépenses prévues</dt>
-                <dd className="text-lg text-on-surface"><MoneyText value={estimate.spending} decimals={estimate.decimals} /></dd>
-              </div>
-            </dl>
-          </div>
-          <p className="mt-4 text-sm text-on-surface-variant max-w-2xl">{estimate.sentence}</p>
-          {ritual && (
-            <Button onClick={() => setSheet({})} className="mt-4 max-sm:h-12"><Wallet className="w-4 h-4" aria-hidden="true" /> J'ai reçu ma paie</Button>
-          )}
-        </section>
-      )}
-
-      <p className="text-sm text-on-surface-variant mb-4">
-        {pay
-          ? 'Cochez chaque virement une fois fait ; si le montant réel diffère, corrigez-le avant de cocher.'
-          : 'Répartition prévue sur la paie estimée. Déclarez votre paie pour l\'adapter au montant reçu, ou cochez chaque virement une fois fait.'}
-      </p>
-
-      <div className="flex items-baseline justify-between gap-3 border-b border-outline-variant pb-2">
-        <h4 className="text-sm font-medium text-on-surface flex items-center gap-2"><PiggyBank className="w-4 h-4 text-on-surface-variant" aria-hidden="true" /> Sur vos comptes d'épargne</h4>
-        <MoneyText value={savingTotal} className="text-sm font-medium text-on-surface" />
-      </div>
-      <ul className="divide-y divide-outline-variant">
-        {savingLines.map(renderLine)}
-      </ul>
-      {!frozen && suggestions.length > 0 && (
-        <div className="mt-2 space-y-2">
+      <p className="text-sm text-on-surface -mt-1">{headline}</p>
+      <PayBar bar={bar} decimals={decimals} notes={{ savings: savingsNote }} className="mt-4" />
+      {cutSentence && <p className="mt-3 text-sm text-on-surface-variant max-w-2xl">{cutSentence}</p>}
+      {suggestions.length > 0 && (
+        <div className="mt-3 space-y-2">
           {suggestions.map(st => (
             <p key={st.accountName} className="text-sm text-on-tertiary-container bg-tertiary-container rounded-xl p-3 flex items-start gap-2">
               <Info className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />{st.hint}
@@ -279,31 +278,57 @@ export const PayChecklist: React.FC<PayChecklistProps> = ({
           ))}
         </div>
       )}
-      {savingLines.length === 0 && suggestions.length === 0 && <p className="text-sm text-on-surface-variant py-3">Rien à placer ce mois-ci.</p>}
 
-      {transferLines.length > 0 && (
-        <>
-          <div className="mt-6 flex items-baseline justify-between gap-3 border-b border-outline-variant pb-2">
-            <h4 className="text-sm font-medium text-on-surface flex items-center gap-2"><ArrowRightLeft className="w-4 h-4 text-on-surface-variant" aria-hidden="true" /> Virements de la paie, déduits avant l'épargne</h4>
-            <MoneyText value={transferTotal} className="text-sm font-medium text-on-surface" />
-          </div>
+      {declared && todo.length > 0 && (
+        <section aria-labelledby={`${idBase}-todo`} className="mt-5">
+          <h4 id={`${idBase}-todo`} className="text-sm font-medium text-on-surface border-b border-outline-variant pb-2">À faire</h4>
           <ul className="divide-y divide-outline-variant">
-            {transferLines.map(renderLine)}
+            {todo.map(renderLine)}
           </ul>
-          <p className="text-xs text-on-surface-variant mt-1">Ajoutez une charge fixe par virement sortant (ex. « Revolut commun »), sans détailler ce qu'elle paie.</p>
-        </>
+          <p className="text-xs text-on-surface-variant mt-1">Cochez chaque virement une fois fait ; si le montant réel diffère, corrigez-le avant de cocher.</p>
+        </section>
       )}
 
-      {shortfall > 0 && (
-        <p role="status" className="mt-4 text-sm font-medium text-error flex items-center gap-2"><Info className="w-4 h-4 shrink-0" aria-hidden="true" /> Il manque {formatEUR(shortfall)} pour les virements fixes : à prendre sur votre épargne disponible.</p>
+      {declared && doneLines.length > 0 && (
+        <div className="mt-3">
+          <Disclosure appearance="inline" headingLevel={4} title="Voir le détail" icon={ListChecks}
+            summary={`${doneLines.length} ${doneLines.length > 1 ? 'lignes faites' : 'ligne faite'}`}>
+            <ul className="divide-y divide-outline-variant">
+              {doneLines.map(renderLine)}
+            </ul>
+          </Disclosure>
+        </div>
       )}
-      {frozen && doneCount === 0 && (
-        <Button variant="text" onClick={onReset} className="mt-4 -ml-3 max-sm:h-12">
+
+      {frozen && doneLines.length === 0 && (
+        <Button variant="text" onClick={onReset} className="mt-2 -ml-3 max-sm:h-12">
           <RotateCcw className="w-4 h-4" aria-hidden="true" /> Recalculer le plan sur les soldes actuels
         </Button>
       )}
-      {frozen && doneCount > 0 && (
-        <p className="mt-4 text-xs text-on-surface-variant">Plan figé pour l'épargne {elideDe(monthName)} depuis le premier virement coché. Il repartira des soldes du moment à la prochaine paie.</p>
+      {frozen && doneLines.length > 0 && !allDone && (
+        <p className="mt-2 text-xs text-on-surface-variant">Plan figé pour l'épargne {elideDe(monthName)} depuis le premier virement coché. Il repartira des soldes du moment à la prochaine paie.</p>
+      )}
+
+      <div className="mt-3">
+        <Disclosure appearance="inline" headingLevel={4} title="Comment c'est calculé" icon={Sigma}>
+          <p className="text-sm text-on-surface-variant mb-2">{planSentence(allocation)}</p>
+          <BudgetWaterfall rows={howItsComputed(allocation, payLabel)} />
+          <p className="mt-3 text-sm text-on-surface-variant">{payRuleSentence(allocation)}</p>
+          <p className="mt-2 text-xs text-on-surface-variant">Ces montants se règlent dans « Réglages de la paie », plus bas.</p>
+        </Disclosure>
+      </div>
+
+      {ritual && (
+        <div className="mt-4 flex flex-wrap gap-2">
+          {declared ? (
+            <>
+              <Button variant="outlined" onClick={() => setSheet({ editPayId: pay!.id })} className="max-sm:h-12"><PenLine className="w-4 h-4" aria-hidden="true" /> Modifier la paie</Button>
+              <Button variant="text" onClick={() => setSheet({})} className="max-sm:h-12"><Plus className="w-4 h-4" aria-hidden="true" /> Autre argent reçu</Button>
+            </>
+          ) : (
+            <Button onClick={() => setSheet({})} className="max-sm:h-12"><Wallet className="w-4 h-4" aria-hidden="true" /> J'ai reçu ma paie</Button>
+          )}
+        </div>
       )}
 
       {sheet && ritual && (

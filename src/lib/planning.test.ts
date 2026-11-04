@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeEmergencyFund, buildSoloPlan, reviewSubscriptions, benefitsFromPayslips } from './planning';
+import { computeEmergencyFund, buildSoloPlan, reviewSubscriptions, benefitsFromPayslips, survivalLabel } from './planning';
 import { buildTaxReturnChecklist } from './taxReturn';
 import { DEFAULT_FISCAL_CONFIG as CFG } from '../constants';
 import { AccountType } from '../types';
@@ -19,6 +19,27 @@ describe('épargne de précaution', () => {
   });
   it('rien sans dépenses connues', () => {
     expect(computeEmergencyFund([], 0)).toBeNull();
+  });
+  it('durée de survie : la même épargne que la jauge, en mois de charges fixes seules', () => {
+    const accounts = [acc({ id: 'la', name: 'LA', type: AccountType.LIVRET_A, ownedAmount: 14700 })] as any;
+    // Charges fixes 1 050 € + solde de départ 400 € : la jauge compte 1 450 € par mois.
+    const f = computeEmergencyFund(accounts, 1450, 3, 1050)!;
+    expect(f.current).toBe(14700);
+    expect(f.survival).toEqual({ fixedCharges: 1050, months: 14 });
+    expect(survivalLabel(f.survival!.months)).toBe('1 an et 2 mois');
+    // Sans charge fixe (ou non fournie) : pas de durée.
+    expect(computeEmergencyFund(accounts, 400, 3, 0)!.survival).toBeUndefined();
+    expect(computeEmergencyFund(accounts, 400, 3)!.survival).toBeUndefined();
+  });
+  it('durée en toutes lettres', () => {
+    expect(survivalLabel(0.4)).toBe("moins d'un mois");
+    expect(survivalLabel(1)).toBe('1 mois');
+    expect(survivalLabel(7.9)).toBe('7 mois');
+    expect(survivalLabel(12)).toBe('1 an');
+    expect(survivalLabel(26)).toBe('2 ans et 2 mois');
+    expect(survivalLabel(36)).toBe('3 ans');
+    expect(survivalLabel(130)).toBe('plus de 10 ans');
+    expect(survivalLabel(Infinity)).toBe('plus de 10 ans');
   });
 });
 

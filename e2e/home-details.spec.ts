@@ -60,3 +60,11 @@ test.describe('Accueil : plus de détails (démo)', () => {
     await expect(page.locator('#home-more').getByLabel('Début de la période', { exact: true })).toHaveValue('2026-01-01');
   });
 });
+
+test.describe('Accueil : épargne de précaution (démo)', () => {
+  test('la durée de survie (ex-Pilotage) est une ligne de la carte, qui nomme sa base', async ({ page }) => {
+    await openDemo(page);
+    const card = page.locator('section, div').filter({ has: page.getByRole('progressbar', { name: 'Épargne de précaution' }) }).last();
+    await expect(card.getByText(/^Sans revenu, en ne payant que vos charges fixes \([\d\s  ]+€ par mois\), cette épargne tiendrait .+\.$/)).toBeVisible();
+  });
+});

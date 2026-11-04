@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import fc from 'fast-check';
-import { howItsComputed, livePayBar, payBarParts, payRuleSentence, placementReason, planSentence } from './pilotView';
+import { barDecimals, fixedSavingsNote, howItsComputed, livePayBar, payBarParts, payRuleSentence, placementReason, planSentence, savingsNoteOf } from './pilotView';
 import { allocatePay, type AllocatePayInput } from './payDistribution';
 import { DISCREET_AMOUNT, setDiscreetAmounts } from './format';
 import { AccountType } from '../types';
@@ -137,6 +137,42 @@ describe('howItsComputed : « Comment c\'est calculé »', () => {
 
   it('la règle des coupes, avec le minimum en euros', () => {
     expect(nb(payRuleSentence(run()))).toBe('Si la paie ne suffit pas, le plaisir baisse d\'abord, jamais sous les 2/3 du solde de départ du mois (267 €), puis l\'épargne projets, puis l\'épargne. Les virements fixes ne bougent jamais, et une prime est placée en entier. Ce qui dépasse va à l\'épargne.');
+  });
+});
+
+describe('savingsNoteOf : ce que l’épargne contient en plus', () => {
+  it('reste du mois dernier, prime placée en entier, ou en partie', () => {
+    expect(nb(savingsNoteOf(run({ before: 30 }))!)).toBe('dont 30 € de reste du mois dernier');
+    expect(nb(savingsNoteOf(run({ received: 2500, bonus: 500, before: 30 }))!)).toBe('dont 30 € de reste du mois dernier, dont prime 500 €');
+    expect(nb(savingsNoteOf(run({ received: 2100 }))!)).toBe("dont 100 € en plus de l'épargne visée");
+    expect(savingsNoteOf(run())).toBeUndefined();
+    // Paie qui ne couvre même pas les virements fixes : la prime n'est placée qu'en partie.
+    expect(nb(savingsNoteOf(run({ received: 1000, bonus: 500 }))!)).toBe('prime placée en partie (0 € sur 500 €)');
+    expect(savingsNoteOf(allocatePay({ received: 300, expectedPay: 0, fixed: 0, projects: 0, startBalance: 0, kind: 'extra' }))).toBeUndefined();
+  });
+});
+
+describe('fixedSavingsNote : le montant fixe sur une paie habituelle', () => {
+  it('plus haut que le calcul : le plaisir baisse (correction 12 : 350 €, pas 300 €)', () => {
+    expect(nb(fixedSavingsNote(run({ fixedSavings: 500 }))!)).toBe('Plus haut que le calcul (450 €) : il resterait 350 € de plaisir au lieu de 400 €.');
+  });
+  it('plus haut au point de passer sous les 2/3 : les projets sont coupés chaque mois, dit en euros', () => {
+    // 2 000 − 1 050 − 100 − 650 = 200 € < 267 € : 67 € pris sur les projets.
+    expect(nb(fixedSavingsNote(run({ fixedSavings: 650 }))!)).toBe("Plus haut que le calcul (450 €) : il resterait 267 € de plaisir au lieu de 400 €, l'épargne projets serait réduite de 67 € chaque mois (le plaisir ne descend pas sous 267 €).");
+    // Plus que tout ce qui reste : projets à 0, puis l’épargne n’est pas tenue (683 € au lieu de 900 €).
+    expect(nb(fixedSavingsNote(run({ fixedSavings: 900 }))!)).toMatch(/seuls 683 € seraient placés/);
+  });
+  it('plus bas que le calcul : plus de plaisir ; égal ou absent : rien', () => {
+    expect(nb(fixedSavingsNote(run({ fixedSavings: 300 }))!)).toBe('Plus bas que le calcul (450 €) : il resterait 550 € de plaisir au lieu de 400 €.');
+    expect(fixedSavingsNote(run({ fixedSavings: 450 }))).toBeUndefined();
+    expect(fixedSavingsNote(run())).toBeUndefined();
+  });
+});
+
+describe('barDecimals', () => {
+  it('à l’euro si tout est rond, sinon au centime', () => {
+    expect(barDecimals(payBarParts(run()))).toBe(0);
+    expect(barDecimals(payBarParts(run({ received: 2000.5 })))).toBe(2);
   });
 });
 
