@@ -14,6 +14,7 @@ import type { AgendaEvent } from '../lib/agenda';
 import type { TaxReturnAlert } from '../lib/taxReturn';
 import { revealElementById } from './revealElement';
 import type { SavingsAccount, PortfolioSnapshot, FiscalConfig, RecurringMovement, Subscription, PayslipRecord, PayRecord, PlannedWithdrawal } from '../types';
+import type { RateProposalInfo } from '../lib/rateChanges';
 import { duePlannedWithdrawals } from '../lib/plannedWithdrawals';
 import {
   computeUnlockCost, findFiscalReview, applyTaxScale, findAvRateUpdatesDue, confirmRatesUnchanged, findDueRecurring,
@@ -112,6 +113,9 @@ interface DashboardProps {
   plannedWithdrawals?: PlannedWithdrawal[];
   onRecordPlannedWithdrawal?: (id: string) => void;
   onDeletePlannedWithdrawal?: (id: string) => void;
+  /** Taux réglementés relevés par la veille fiscale : la tâche « Les taux ont changé ». */
+  rateChanges?: RateProposalInfo[];
+  onOpenRateChanges?: () => void;
 }
 
 const TODO_ICONS: Record<HomeTodoIcon, TodoSpec['icon']> = {
@@ -128,7 +132,7 @@ const SLICE_STYLE: Record<'available' | 'tax' | 'locked', Pick<AvailabilitySegme
   locked: { color: 'bg-outline', hatch: 'dense' },
 };
 
-export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalConfig, onDeleteAccount, recurringMovements = [], onRecordRecurring, monthPlan, monthGoal, monthlyPay = 0, paydayDay, trackingStartDate, subscriptions = [], onUpdateFiscalConfig, onOpenSettings, onUpdateAccounts, payRaise, onAcceptPayRaise, onDismissPayRaise, onNavigate, onAddAccount, lastExportAt, onExport, emergency, onSetEmergencyMonths, agendaNext = [], lepTimeline, taxReturnAlert, payslips = [], gamification, goodMonthThreshold, milestonesSeen, payReviewsDone, rfrByYear, restitutionDoneOn, restitutionPlannedDate, onMarkMilestonesSeen, onValidatePayReview, yearClosing, pays, askSlot, plannedWithdrawals, onRecordPlannedWithdrawal, onDeletePlannedWithdrawal }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalConfig, onDeleteAccount, recurringMovements = [], onRecordRecurring, monthPlan, monthGoal, monthlyPay = 0, paydayDay, trackingStartDate, subscriptions = [], onUpdateFiscalConfig, onOpenSettings, onUpdateAccounts, payRaise, onAcceptPayRaise, onDismissPayRaise, onNavigate, onAddAccount, lastExportAt, onExport, emergency, onSetEmergencyMonths, agendaNext = [], lepTimeline, taxReturnAlert, payslips = [], gamification, goodMonthThreshold, milestonesSeen, payReviewsDone, rfrByYear, restitutionDoneOn, restitutionPlannedDate, onMarkMilestonesSeen, onValidatePayReview, yearClosing, pays, askSlot, plannedWithdrawals, onRecordPlannedWithdrawal, onDeletePlannedWithdrawal, rateChanges, onOpenRateChanges }) => {
   // Date du jour partagée (useToday) : l'Accueil resté ouvert passe au lendemain à minuit.
   const today = useToday();
   const choices = useHomeChoices(today);
@@ -232,6 +236,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalC
       navigate: !!onNavigate, recordRecurring: !!onRecordRecurring, deleteAccount: !!onDeleteAccount, updateFiscalConfig: !!onUpdateFiscalConfig,
       updateAccounts: !!onUpdateAccounts, openSettings: !!onOpenSettings, acceptPayRaise: !!onAcceptPayRaise, dismissPayRaise: !!onDismissPayRaise, exportData: !!onExport,
       plannedWithdrawals: !!onRecordPlannedWithdrawal && !!onDeletePlannedWithdrawal,
+      rateChanges: !!onOpenRateChanges,
     },
     daysSinceUpdate: daysSinceLastMovement(accounts, now),
     staleBalances: findStaleBalances(accounts, now),
@@ -254,6 +259,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalC
     yearClosing: yearClosing ?? null,
     backupCodeCheckDue,
     plannedWithdrawals: duePlannedWithdrawals(plannedWithdrawals, today),
+    rateChanges,
   });
 
   const run = (a: HomeAction) => {
@@ -281,6 +287,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalC
       case 'open-year-closing': onNavigate?.('history'); revealElementById('year-closing'); break;
       case 'record-planned-withdrawal': onRecordPlannedWithdrawal?.(a.id); break;
       case 'delete-planned-withdrawal': onDeletePlannedWithdrawal?.(a.id); break;
+      case 'open-rate-changes': onOpenRateChanges?.(); break;
     }
   };
   const todos: TodoSpec[] = homeTodos.map(t => ({

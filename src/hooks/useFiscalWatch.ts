@@ -177,16 +177,23 @@ export const useFiscalWatch = (geminiApiKey: string, fiscal: FiscalConfig | unde
     write(next);
     return next;
   }), []);
+  /** Propositions écartées remises en attente (« Annuler » après « Ignorer » ou « Appliquer »). */
+  const restore = useCallback((ps: readonly FiscalProposal[]) => setStored(prev => {
+    const gone = new Set(ps.map(signature));
+    const next = { ...prev, dismissed: (prev.dismissed || []).filter(x => !gone.has(x)) };
+    write(next);
+    return next;
+  }), []);
 
   // Objet stable tant que rien ne change : les écrans qui l'affichent ne sont pas re-rendus
   // à chaque rendu d'App.
   const canRun = !!geminiApiKey || serverAvailable();
   return useMemo(() => ({
-    proposals, running, runningVia, run, dismiss,
+    proposals, running, runningVia, run, dismiss, restore,
     checkedAt: picked.checkedAt, source: picked.source, serverReport,
     lastAttemptAt: stored.lastAttemptAt, lastError: stored.lastError,
     hasKey: !!geminiApiKey, canRun,
-  }), [proposals, running, runningVia, run, dismiss, picked.checkedAt, picked.source, serverReport, stored.lastAttemptAt, stored.lastError, geminiApiKey, canRun]);
+  }), [proposals, running, runningVia, run, dismiss, restore, picked.checkedAt, picked.source, serverReport, stored.lastAttemptAt, stored.lastError, geminiApiKey, canRun]);
 };
 
 export type FiscalWatch = ReturnType<typeof useFiscalWatch>;

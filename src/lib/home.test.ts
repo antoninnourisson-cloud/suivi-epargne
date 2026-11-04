@@ -451,6 +451,23 @@ describe('liste « À faire »', () => {
     expect(tr.secondary?.action).toEqual({ type: 'mark-tax-return-filed', incomeYear: 2025 });
   });
 
+  it('les taux ont changé (veille fiscale) : une tâche qui remplace le rappel de révision', () => {
+    const rateChanges = [
+      { group: 'livretA', groupLabel: 'Livret A et LDDS', current: 1.7, value: 1.5, effectiveDate: '2027-02-01' },
+      { group: 'lep', groupLabel: 'LEP', current: 2.7, value: 2.5, effectiveDate: '2026-11-01' },
+    ];
+    const staleRates = { revision: { key: '2026-08', label: '1er août 2026' }, accounts: [{ name: 'Livret A' }] };
+    const todos = buildHomeTodos(base({ rateChanges, staleRates, can: { ...can, rateChanges: true } }));
+    const t = todos.find(x => x.key === 'rate-changes')!;
+    expect(t.text).toBe('Les taux ont changé : Livret A et LDDS 1,7 % → 1,5 % au 1er février 2027 ; LEP 2,7 % → 2,5 % au 1er novembre.');
+    expect(t.pinned).toBe(true);
+    expect(t.primary).toEqual({ label: 'Voir et appliquer', action: { type: 'open-rate-changes' } });
+    expect(todos.some(x => x.key === 'rates')).toBe(false);
+    // Sans feuille, pas de bouton ; sans proposition, le rappel de révision revient.
+    expect(buildHomeTodos(base({ rateChanges })).find(x => x.key === 'rate-changes')!.primary).toBeUndefined();
+    expect(buildHomeTodos(base({ rateChanges: [], staleRates })).map(x => x.key)).toEqual(['rates']);
+  });
+
   it('retrait prévu (« J’ai besoin d’argent ») : une tâche le jour venu, « Enregistrer » ou « Supprimer »', () => {
     const la = acc('la', AccountType.LIVRET_A, 1000, { name: 'Livret A' });
     const av = acc('av', AccountType.ASSURANCE_VIE, 3000, { name: 'Assurance vie' });

@@ -29,7 +29,8 @@ import {
 import { MS_PER_DAY, daysBetween, formatISODay, parseISODate } from './dates';
 import { round2, signedAmount } from './money';
 import { csvAmount, type CsvCell } from './csv';
-import { elideDe, elideLe, formatEUR, formatMonth, formatPeriod, frenchDay } from './format';
+import type { RateProposalInfo } from './rateChanges';
+import { elideDe, elideLe, formatEUR, formatMonth, formatPeriod, formatRate, frenchDay } from './format';
 
 // ---------------------------------------------------------------------------
 // Votre épargne à ce jour
@@ -488,7 +489,9 @@ export type HomeAction =
   | { type: 'check-backup-code' }
   /** Retrait prévu par « J'ai besoin d'argent » : enregistré (virements, un seul « Annuler »), ou supprimé. */
   | { type: 'record-planned-withdrawal'; id: string }
-  | { type: 'delete-planned-withdrawal'; id: string };
+  | { type: 'delete-planned-withdrawal'; id: string }
+  /** « Les taux ont changé » : la feuille du rituel (taux de la veille, autres comptes). */
+  | { type: 'open-rate-changes' };
 
 export interface HomeTodo {
   /** Stable (sert au « Plus tard ») : ne pas changer sans raison. */
@@ -518,6 +521,8 @@ export interface HomeCapabilities {
   exportData: boolean;
   /** Retraits prévus : « Enregistrer » et « Supprimer » (absent : false). */
   plannedWithdrawals?: boolean;
+  /** Feuille « Les taux ont changé » (absent : false). */
+  rateChanges?: boolean;
 }
 
 export interface HomeTodoInput {
@@ -561,6 +566,8 @@ export interface HomeTodoInput {
   backupCodeCheckDue?: boolean;
   /** Retraits prévus (« J'ai besoin d'argent ») dont le jour est venu (lib/needMoney). */
   plannedWithdrawals?: PlannedWithdrawal[];
+  /** Taux réglementés relevés par la veille fiscale, en attente (lib/rateChanges). */
+  rateChanges?: RateProposalInfo[];
 }
 
 const ALERT_ICONS: Record<AlertKind, HomeTodoIcon> = {
@@ -568,6 +575,11 @@ const ALERT_ICONS: Record<AlertKind, HomeTodoIcon> = {
 };
 
 const eur0 = (n: number) => formatEUR(n, 0);
+/** « 1er février », avec l'année si elle n'est pas l'année en cours. */
+const effectiveDay = (iso: string, year: number) => {
+  const d = parseISODate(iso);
+  return d.getFullYear() === year ? frenchDay(d) : `${frenchDay(d)} ${d.getFullYear()}`;
+};
 const dayMonth = (iso: string) => parseISODate(iso).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' });
 
 /** Tâches et alertes de l'Accueil, dans l'ordre d'origine (TodoList les trie ensuite). */
@@ -639,7 +651,15 @@ export const buildHomeTodos = (i: HomeTodoInput): HomeTodo[] => {
       primary: lep.estimated ? go('Importer mon avis', 'settings') : go('Voir mes comptes', 'accounts'),
     });
   }
-  if (i.staleRates && i.staleRates.revision.key !== i.dismissedRateRevision) out.push({
+  // Taux relevés par la veille fiscale : une tâche, qui remplace le rappel de révision.
+  const rateChanges = i.rateChanges ?? [];
+  if (rateChanges.length > 0) out.push({
+    key: 'rate-changes', icon: 'percent', tone: 'action', pinned: true,
+    text: `Les taux ont changé : ${rateChanges.map(r => `${r.groupLabel} ${formatRate(r.current)} → ${formatRate(r.value)} au ${effectiveDay(r.effectiveDate, year)}`).join(' ; ')}.`,
+    detail: 'Vérifiez la source, corrigez si besoin, puis appliquez à tous les comptes concernés en un geste.',
+    primary: i.can.rateChanges ? { label: 'Voir et appliquer', action: { type: 'open-rate-changes' } } : undefined,
+  });
+  else if (i.staleRates && i.staleRates.revision.key !== i.dismissedRateRevision) out.push({
     key: 'rates', icon: 'percent', tone: 'action',
     text: `Taux réglementés révisés au ${i.staleRates.revision.label} : mettez à jour ${i.staleRates.accounts.map(a => a.name).join(', ')}.`,
     detail: 'Un taux périmé fausse le rendement, la projection et le plan de placement.',

@@ -17,13 +17,14 @@ import { PAY_SETTINGS_INCOME_ID, requestPaySettings } from '../components/pilot/
 import { revealElementById } from '../components/revealElement';
 import {
   AccountUpdate, AccountsView, Agenda, AskPeculeEntry, AssistantPilot, CloudBackupPanel, Dashboard, Donations, DriveBackupsPanel,
-  FiscalCalendar, FiscalWatchCard, History, Journal, Lazy, MotivationSettings, ParentalShare, Payslips, ServerSecurityPanel,
+  FiscalCalendar, FiscalWatchCard, History, Journal, Lazy, MotivationSettings, ParentalShare, Payslips, RateChangesSheet, ServerSecurityPanel,
   SetAsideVersionsPanel, Settings, ShareTargetHost, Simulator, SoloPlanCard, StatementImport, Subscriptions, TaxNoticePanel, TaxReturnHelper,
   TransferManager, ViewLoader, Yield, YearClosingCard,
 } from './screens';
 import type { DerivedData } from './useDerivedData';
 import { lepStillEligible } from '../lib/idleCash';
 import { localTodayISO } from '../lib/dates';
+import { splitFiscalProposals, type RateProposalInfo } from '../lib/rateChanges';
 import type { AccountActions } from './useAccountActions';
 import { usePayRaise } from './usePayRaise';
 import { useAddToast, useDialog } from './UiProviders';
@@ -150,11 +151,31 @@ export const ScreenRouter = memo(function ScreenRouter({ place, setView, onSelec
     onOpenKeys: () => openSettings('keys'),
   };
   const { screen, tab } = place;
-  const fiscalWatchCard = (compact: boolean) => <Lazy><FiscalWatchCard compact={compact} watch={fiscalWatch} onApply={actions.applyFiscalProposal} /></Lazy>;
+  // Taux des livrets (`rate.*`) : le rituel « Les taux ont changé » (tâche de l'Accueil) ; les
+  // autres propositions restent dans la carte de la veille.
+  const { rates: rateProposals, others: otherProposals } = useMemo(() => splitFiscalProposals(fiscalWatch.proposals), [fiscalWatch.proposals]);
+  const rateChanges = useMemo(() => rateProposals.map(p => p.rate).filter((r): r is RateProposalInfo => !!r), [rateProposals]);
+  const genericWatch = useMemo(() => ({ ...fiscalWatch, proposals: otherProposals }), [fiscalWatch, otherProposals]);
+  const fiscalWatchCard = (compact: boolean) => <Lazy><FiscalWatchCard compact={compact} watch={genericWatch} onApply={actions.applyFiscalProposal} /></Lazy>;
+  // Feuille « Les taux ont changé » : depuis la tâche de l'Accueil, ou « Un taux a changé ? » (Actualiser).
+  const [ratesOpen, setRatesOpen] = useState(false);
+  const openRates = useCallback(() => setRatesOpen(true), []);
+  const ignoreRates = () => {
+    const ignored = rateProposals;
+    ignored.forEach(fiscalWatch.dismiss);
+    addToast({ message: ignored.length > 1 ? 'Nouveaux taux ignorés' : 'Nouveau taux ignoré', action: { label: 'Annuler', onClick: () => fiscalWatch.restore(ignored) } });
+  };
+  const applyRates = (input: Parameters<typeof actions.applyRates>[0]) => {
+    const applied = rateProposals;
+    const refused = actions.applyRates(input, () => fiscalWatch.restore(applied));
+    // Un taux corrigé ne correspond plus au relevé : la proposition est écartée (rétablie par « Annuler »).
+    if (!refused) applied.forEach(fiscalWatch.dismiss);
+    return refused;
+  };
 
   return (
     <ScreenFrame place={place} hiddenTabs={hiddenTabs} onSelectTab={onSelectTab}>
-        {screen === 'dashboard' && fiscalWatch.proposals.length > 0 && <div className="mb-6">{fiscalWatchCard(true)}</div>}
+        {screen === 'dashboard' && otherProposals.length > 0 && <div className="mb-6">{fiscalWatchCard(true)}</div>}
         {screen === 'dashboard' && <Dashboard
           accounts={doc.accounts} history={doc.history} fiscalConfig={doc.fiscalConfig} onDeleteAccount={actions.deleteAccount}
           monthPlan={derived.monthPlan} monthGoal={derived.monthGoal} monthlyPay={derived.monthlyPay} paydayDay={c.paydayDay} trackingStartDate={c.trackingStartDate}
@@ -171,6 +192,7 @@ export const ScreenRouter = memo(function ScreenRouter({ place, setView, onSelec
           milestonesSeen={c.milestonesSeen} payReviewsDone={c.payReviewsDone} rfrByYear={c.rfrByYear}
           restitutionDoneOn={doc.parentalRestitution?.done?.date} restitutionPlannedDate={doc.parentalRestitution?.plannedDate}
           yearClosing={derived.yearClosing} pays={doc.pays}
+          rateChanges={rateChanges} onOpenRateChanges={openRates}
           plannedWithdrawals={c.plannedWithdrawals} onRecordPlannedWithdrawal={actions.recordPlannedWithdrawal} onDeletePlannedWithdrawal={actions.deletePlannedWithdrawal}
           askSlot={<Lazy><AskPeculeEntry data={derived.fullData} geminiApiKey={data.geminiApiKey} taxEstimate={derived.taxEstimate} monthPlan={derived.monthPlan} onOpenSettings={openSettings} /></Lazy>}
           onMarkMilestonesSeen={actions.markMilestonesSeen} onValidatePayReview={actions.validatePayReview} />}
@@ -186,7 +208,9 @@ export const ScreenRouter = memo(function ScreenRouter({ place, setView, onSelec
           />}
 
         {screen === 'update' && <AccountUpdate accounts={doc.accounts} onCommit={actions.commit} onAddAccount={openNewAccount}
-          onReadStatement={() => setStatementFor({})} />}
+          onReadStatement={() => setStatementFor({})} onRateChanged={openRates} />}
+        {ratesOpen && <Lazy><RateChangesSheet accounts={doc.accounts} proposals={rateChanges} onApply={applyRates}
+          onIgnore={rateChanges.length > 0 ? ignoreRates : undefined} onClose={() => setRatesOpen(false)} /></Lazy>}
         {statementFor && <Lazy><StatementImport accounts={doc.accounts} geminiApiKey={data.geminiApiKey} preferredAccountId={statementFor.accountId}
           onClose={() => setStatementFor(null)} onImport={actions.importStatement} onOpenKeys={() => openSettings('keys')} /></Lazy>}
 

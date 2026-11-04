@@ -19,6 +19,8 @@ describe('veille fiscale', () => {
     const [p] = diffFiscalWatch(r, DEFAULT_FISCAL_CONFIG, [la]);
     expect(p.key).toBe('rate.livretA');
     expect(p.source).toContain('service-public');
+    // Données du rituel « Les taux ont changé » (lib/rateChanges).
+    expect(p.rate).toEqual({ group: 'livretA', groupLabel: 'Livret A et LDDS', current: 1.7, value: 1.5, effectiveDate: '2027-02-01', source: 'https://www.service-public.fr/x' });
     const next = p.apply({ fiscal: DEFAULT_FISCAL_CONFIG, accounts: [la] });
     expect(next.accounts[0].interestRate).toBe(1.5);
     expect(next.accounts[0].rateHistory?.[0]).toEqual({ date: '2027-02-01', rate: 1.7 });

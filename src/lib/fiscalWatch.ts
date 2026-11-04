@@ -11,6 +11,7 @@ import { REGULATED_RATE_GROUPS, applyRateChange, transportExemptUntil, TRANSPORT
 import { localTodayISO } from './dates';
 import { formatRate, plainEUR } from './format';
 import { inflationOf } from './inflation';
+import type { RateProposalInfo } from './rateChanges';
 
 export interface WatchedValue<T = number> { value: T; source?: string; effectiveDate?: string }
 
@@ -44,6 +45,8 @@ export interface FiscalProposal {
   current: string;
   proposed: string;
   source?: string;
+  /** Taux d'un livret réglementé (clés `rate.*`) : présenté par le rituel « Les taux ont changé ». */
+  rate?: RateProposalInfo;
   /** Applique la proposition (paramètres fiscaux et/ou comptes). */
   apply: (s: { fiscal: FiscalConfig; accounts: SavingsAccount[] }) => { fiscal: FiscalConfig; accounts: SavingsAccount[] };
 }
@@ -127,10 +130,12 @@ export const diffFiscalWatch = (r: FiscalWatchResult, fiscal: FiscalConfig, acco
     const concerned = accounts.filter(a => group.types.includes(a.type));
     if (concerned.length === 0 || concerned.every(a => Math.abs((a.interestRate || 0) - w.value) < 0.005)) return;
     const effective = effectiveOr(w.effectiveDate);
+    const source = safeSource(w.source);
     out.push({
       key: `rate.${groupKey}`, label: `Taux ${group.label}`,
       current: pct(concerned[0].interestRate || 0), proposed: `${pct(w.value)} au ${effective.split('-').reverse().join('/')}`,
-      source: safeSource(w.source),
+      source,
+      rate: { group: groupKey, groupLabel: group.label, current: concerned[0].interestRate || 0, value: w.value, effectiveDate: effective, ...(source ? { source } : {}) },
       apply: s => ({ ...s, accounts: s.accounts.map(a => (group.types.includes(a.type) ? applyRateChange(a, w.value, effective) : a)) }),
     });
   };

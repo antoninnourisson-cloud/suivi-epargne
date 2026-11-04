@@ -23,7 +23,7 @@ import {
   recordRestitution, undoRestitution, revertRateChange, renameMovement, toggleMovementAdjustment,
   importStatement, type StatementImportItem,
   recordPay, uncheckPayLine, updatePay, deletePay, type RecordPayInput, type UpdatePayInput,
-  recordNeedWithdrawal,
+  recordNeedWithdrawal, applyRateChanges, type RateChangesInput,
 } from '../lib/commands';
 import type { AddToast, DialogApi } from './UiProviders';
 
@@ -372,6 +372,18 @@ export const useAccountActions = (doc: AppDoc, setters: Setters, addToast: AddTo
       clearActivePayslip: () => {
         s().setActivePayslipId(undefined);
         toast({ message: 'Retour à l\'estimation théorique', kind: 'success' });
+      },
+
+      /**
+       * « Les taux ont changé » : taux réglementés et autres comptes datés en une fois, avec un
+       * seul « Annuler » (qui rappelle aussi `onUndo`). Refus renvoyé, sinon `null`.
+       */
+      applyRates: (input: RateChangesInput, onUndo?: () => void): string | null => {
+        const r = applyRateChanges(commandStateRef.current, input);
+        if (!r.ok) return r.error;
+        commit(r.next);
+        toast({ message: r.message, kind: 'success', action: { label: 'Annuler', onClick: () => { commit(r.undo(commandStateRef.current)); onUndo?.(); } } });
+        return null;
       },
 
       /** Proposition de la veille fiscale acceptée. */

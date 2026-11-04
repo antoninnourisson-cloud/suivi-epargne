@@ -15,7 +15,7 @@ import {
   DEFAULT_ADJUST, breakdownDraft, clearStoredDrafts, draftToUpdate, loadStoredDrafts, parseDeposits, saveStoredDrafts,
   type Adjust, type Draft, type DraftField,
 } from './update/draft';
-import { Save, Wallet, CheckCircle, FileText } from 'lucide-react';
+import { Save, Wallet, CheckCircle, FileText, Percent } from 'lucide-react';
 import { useSaveFeedback } from '../hooks/useSaveFeedback';
 import { useToast } from './Toast';
 import { parseFrenchNumber } from '../lib/numbers';
@@ -31,6 +31,8 @@ interface AccountUpdateProps {
   onAddAccount?: () => void;
   /** « Lire un relevé » : soldes et opérations proposés d'après le relevé de la banque. */
   onReadStatement?: () => void;
+  /** « Un taux a changé ? » : la feuille des taux (livrets bancaires, assurance vie). */
+  onRateChanged?: () => void;
 }
 
 const FIELDS: readonly DraftField[] = ['owned', 'parental', 'date', 'deposits', 'cashFlow', 'bankTotal', 'interest', 'cash'];
@@ -43,7 +45,7 @@ const mergeDraft = (fresh: Draft, d: Draft | undefined): Draft => {
   return merged;
 };
 
-export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onCommit, onAddAccount, onReadStatement }) => {
+export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onCommit, onAddAccount, onReadStatement, onRateChanged }) => {
   const today = localTodayISO();
   // Le succès n'est annoncé qu'après une écriture Drive CONFIRMÉE (voir useSaveFeedback).
   const { status: saveStatus, markPending } = useSaveFeedback();
@@ -297,6 +299,12 @@ export const AccountUpdate: React.FC<AccountUpdateProps> = ({ accounts, onCommit
           ))}
         </ul>
       </Card>
+
+      {onRateChanged && (
+        <Button variant="text" size="sm" onClick={onRateChanged} className="mt-2 -ml-3">
+          <Percent className="w-4 h-4" aria-hidden="true" /> Un taux a changé ?
+        </Button>
+      )}
 
       {pendingCount > 0 && (
         <div className="fixed left-4 right-4 bottom-20 md:bottom-6 md:left-auto md:right-8 md:w-[28rem] z-30 flex items-center justify-between gap-2 p-3 pl-5 rounded-2xl bg-inverse-surface text-inverse-on-surface shadow-lg">
