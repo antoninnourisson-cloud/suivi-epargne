@@ -103,7 +103,7 @@ Constats du 4 novembre 2026 : le verrou est validé sur le téléphone du propri
 - ✅ **Audit du 29 octobre 2026** (lots L1 à L8, voir « Livré ») : toutes les propositions retenues sont faites, sauf ce qui suit. Non retenus : refus du partage selon le référent dans `share-sw.js` (non vérifiable sans l'appareil, et contournable), `id` du manifeste (changerait l'identité de l'app pour Chrome), `title`/`text` dans le partage (Pécule serait proposé pour du texte sans fichier). Les intérêts « Intérêts » de l'ajout rapide saisis avant le lot restent à marquer « Pas de l'épargne » au Journal.
 - Reste à faire (plus tard) :
   - aide à la déclaration : pas de ligne pour l'IFU d'un compte-titres (dividendes, plus-values), cases à vérifier sur une source officielle avant de coder ;
-  - plafond PER estimé : seule l'année 2026 est connue (`PER_CEILING_RULES`) ; ajouter 2027 et les suivantes une fois vérifiées sur une source officielle ;
+  - plafond PER estimé : 2026 et 2027 connus (`PER_CEILING_RULES`, 2027 ajouté le 4 novembre 2026 d'après le PASS 2026, 48 060 €) ; ajouter 2028 une fois l'arrêté du PASS 2027 publié (annoncé à 48 900 €, non confirmé) ;
   - import d'un relevé en CSV ou OFX (seule la lecture d'un PDF ou d'une capture par Gemini existe) ;
   - option au barème (case 2OP) : calcul exact par le barème complet (aujourd'hui un seul taux marginal, signalé comme approximation à l'écran) ;
   - comparaison au Livret A : avant le plus ancien changement de taux noté sur le compte Livret A, Pécule prend ce plus ancien taux ; une table officielle des taux passés rendrait la comparaison exacte sur de longues périodes ;

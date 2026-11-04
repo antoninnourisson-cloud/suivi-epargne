@@ -15,6 +15,14 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '2026.11.04-6',
+    date: '2026-11-04',
+    title: 'PER : plafond 2027',
+    items: [
+      "Sans avis d'impôt saisi, le plafond de déduction du PER est aussi estimé pour les versements de 2027 : 10 % de vos revenus d'activité de 2026, entre 4 806 € et 38 448 € (d'après le plafond de la Sécurité sociale 2026, 48 060 €).",
+    ],
+  },
+  {
     version: '2026.11.04-5',
     date: '2026-11-04',
     title: "La clôture de l'année en une feuille",

@@ -12,12 +12,18 @@ import { round2 } from './money';
  * Plafond de déduction d'un salarié quand l'avis d'impôt n'est pas saisi, par année de
  * versement : 10 % des revenus d'activité de l'année précédente (nets de frais
  * professionnels), au moins `floor`, au plus `cap`, hors reports des années passées.
- * Versements 2026 : 4 710 € à 37 680 €. Vérifié le 2026-10-21 :
+ * Bornes tirées du plafond annuel de la Sécurité sociale (PASS) de l'année précédente :
+ * 10 % du PASS au moins, 10 % de 8 PASS au plus.
+ * Versements 2026 (PASS 2025 : 47 100 €) : 4 710 € à 37 680 €. Vérifié le 2026-10-21 :
  * https://www.service-public.gouv.fr/particuliers/vosdroits/F14709
- * Une autre année n'est pas estimée : le plafond de l'avis est alors demandé.
+ * Versements 2027 (PASS 2026 : 48 060 €, arrêté du 22 décembre 2025) : 4 806 € à 38 448 €.
+ * Vérifié le 2026-11-04 : https://www.urssaf.fr/accueil/outils-documentation/taux-baremes/plafonds-securite-sociale.html
+ * Une autre année n'est pas estimée : le plafond de l'avis est alors demandé (2028 : à ajouter
+ * une fois l'arrêté du PASS 2027 publié).
  */
 export const PER_CEILING_RULES: Record<number, { floor: number; cap: number }> = {
   2026: { floor: 4710, cap: 37680 },
+  2027: { floor: 4806, cap: 38448 },
 };
 const PER_CEILING_RATE = 0.1;
 

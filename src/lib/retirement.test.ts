@@ -71,8 +71,15 @@ describe('économie d’impôt du PER', () => {
     expect(r.marginalRate).toBeUndefined();
   });
 
+  it('versements 2027 : bornes tirées du PASS 2026 (48 060 €), entre 4 806 € et 38 448 €', () => {
+    expect(PER_CEILING_RULES[2027]).toEqual({ floor: 4806, cap: 38448 });
+    const acc2027 = [per([mv('2027-03-01', 2000)])];
+    expect(computePerAdvantage({ accounts: acc2027, year: 2027, fiscalConfig: CFG, taxableIncome: 30_000 })).toMatchObject({ ceiling: 4806, ceilingSource: 'estimate' });
+    expect(computePerAdvantage({ accounts: acc2027, year: 2027, fiscalConfig: CFG, taxableIncome: 900_000 })).toMatchObject({ ceiling: 38448 });
+  });
+
   it("autre année sans avis : plafond inconnu (demandé), avis d'une autre année ignoré", () => {
-    const r = computePerAdvantage({ accounts: [per([mv('2027-03-01', 1000)])], year: 2027, fiscalConfig: CFG, taxableIncome: 40_000, notice: { year: 2026, amount: 5000 } })!;
+    const r = computePerAdvantage({ accounts: [per([mv('2028-03-01', 1000)])], year: 2028, fiscalConfig: CFG, taxableIncome: 40_000, notice: { year: 2027, amount: 5000 } })!;
     expect(r).toMatchObject({ ceilingSource: 'unknown', ceiling: undefined, deductible: 1000, room: undefined });
     expect(r.saving).toBeCloseTo(tax(40_000) - tax(39_000), 2);
   });
