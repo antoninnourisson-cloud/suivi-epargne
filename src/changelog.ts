@@ -15,6 +15,19 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '2026.11.04',
+    date: '2026-11-04',
+    title: 'Que faire de ma paie',
+    items: [
+      "« J'ai reçu ma paie » répond maintenant à « je fais quoi ? » pour toute la paie : les virements fixes, l'épargne compte par compte, l'épargne projets, et l'argent plaisir qui reste sur le compte courant. Le total des lignes est égal à ce que vous avez à répartir.",
+      "Nouvelle question dans le rituel : combien y a-t-il sur le compte courant maintenant, paie comprise ? Pécule le préremplit d'après le solde qu'il connaît, vous le corrigez. Ce qui restait du mois dernier et dépasse votre solde de départ du mois va à l'épargne. « Je ne sais pas » reste possible.",
+      "Mois court : les virements fixes ne bougent jamais. Si la paie ne suffit pas, l'argent plaisir baisse d'abord, sans passer sous les 2/3 de votre solde de départ du mois (400 € au départ : 267 € au plus bas), puis l'épargne projets, puis l'épargne. Une prime reste placée en entier.",
+      "Une barre en quatre parts (virements fixes, épargne, épargne projets, plaisir) montre où va la paie, avant, pendant et après le rituel. « Comment c'est calculé » remplace « D'où vient ce chiffre » et explique le calcul en euros, règle des 2/3 comprise.",
+      "Pilotage › Ce mois est plus simple : deux cartes, « Ma paie » (avec « À faire », « Modifier la paie » et « Autre argent reçu ») et « Réglages de la paie », tous les réglages au même endroit dans l'ordre de la barre. « Budget argent plaisir » devient « Solde de départ du mois ». La pastille de l'icône, la routine du mois et le rappel du jour de paie ne comptent plus l'argent plaisir comme un virement à faire.",
+      "La « Durée de survie » est passée à l'Accueil, dans l'Épargne de précaution, avec le même chiffre qu'avant : votre épargne disponible, placements compris, sur vos seules charges fixes.",
+    ],
+  },
+  {
     version: '2026.11.02',
     date: '2026-11-02',
     title: 'Des menus plus simples',
