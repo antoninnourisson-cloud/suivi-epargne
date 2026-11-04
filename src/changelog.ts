@@ -15,6 +15,18 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '2026.11.03',
+    date: '2026-11-03',
+    title: "Ma paie : je fais quoi de toute ma paie ?",
+    items: [
+      "« J'ai reçu ma paie » répartit maintenant toute la paie, dans l'ordre des virements : virements fixes, épargne, épargne projets, puis l'argent plaisir qui reste sur le compte courant. Une barre en quatre parts montre le découpage.",
+      "Le rituel demande le solde de votre compte courant, paie comprise (prérempli si Pécule le connaît, ou « Je ne sais pas ») : ce qui restait du mois dernier est compté, et ce qui dépasse votre solde de départ du mois part en épargne.",
+      "Si la paie ne suffit pas, le plaisir baisse d'abord, sans jamais descendre sous les deux tiers du solde de départ, puis l'épargne projets, puis l'épargne. Les virements fixes ne bougent jamais, et la prime reste placée.",
+      "Les montants se corrigent ligne par ligne ; le plaisir s'ajuste tout seul. Après « Tout est fait comme conseillé », Pécule note le solde de votre compte courant.",
+      "Dans le Pilotage, « D'où vient ce chiffre » devient « Comment c'est calculé ».",
+    ],
+  },
+  {
     version: '2026.11.02',
     date: '2026-11-02',
     title: 'Des menus plus simples',
