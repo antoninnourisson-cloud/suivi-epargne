@@ -196,7 +196,8 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig, monthPlan,
   const progressiveOption = useMemo(() => adviseProgressiveOption(
     taxableRows.filter(r => r.tax.regime !== 'NON_MODELISE').map(r => ({ type: r.type, incomeTax: r.tax.incomeTax, taxableGain: r.tax.taxableGain })),
     taxableIncome !== undefined && taxableIncome > 0 ? marginalTaxRate(taxableIncome, fiscalConfig.taxBrackets) : undefined,
-  ), [taxableRows, taxableIncome, fiscalConfig.taxBrackets]);
+    taxableIncome !== undefined && taxableIncome > 0 ? { taxableIncome, fiscalConfig } : undefined,
+  ), [taxableRows, taxableIncome, fiscalConfig]);
 
   // --- PLUS-VALUES LATENTES (placements dont on connaît les versements cumulés) ---
   // Impôt si l'on retirait TOUT le compte aujourd'hui : c'est la plus-value entière qui est
@@ -470,7 +471,7 @@ export const Yield: React.FC<YieldProps> = ({ accounts, fiscalConfig, monthPlan,
                   Votre tranche d'impôt est estimée à {pct1(progressiveOption.marginalRate)}, sous le taux forfaitaire de 12,8 %.
                   {progressiveOption.securities && <> Imposés au barème (case 2OP de la déclaration), ces gains coûteraient environ <b className="font-medium">{fmt(progressiveOption.securities.progressive)}</b> d'impôt sur le revenu au lieu de {fmt(progressiveOption.securities.flat)}. Ce choix vaut pour tous vos revenus de placement de l'année (intérêts, dividendes, plus-values) : comparez les deux calculs au moment de déclarer.</>}
                   {progressiveOption.crypto && <> Plus-values de crypto : leur option pour le barème est distincte (case 3CN), environ {fmt(progressiveOption.crypto.progressive)} au lieu de {fmt(progressiveOption.crypto.flat)}.</>}
-                  {' '}Ce n'est qu'une approximation : Pécule applique une seule tranche à tous ces gains. S'ils font passer une partie de vos revenus dans la tranche suivante, l'impôt réel sera plus élevé ; le simulateur officiel des impôts donne le montant exact.
+                  {' '}Calcul au barème complet, décote comprise : si ces gains font passer une partie de vos revenus dans la tranche suivante, c'est compté. Non compté : avec l'option, une partie de la CSG se déduit l'année suivante, ce qui la rend encore un peu plus avantageuse. Le simulateur officiel des impôts donne le montant exact.
                 </span>
               </p>
             )}

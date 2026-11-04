@@ -105,7 +105,7 @@ Constats du 4 novembre 2026 : le verrou est validé sur le téléphone du propri
   - aide à la déclaration : pas de ligne pour l'IFU d'un compte-titres (dividendes, plus-values), cases à vérifier sur une source officielle avant de coder ;
   - plafond PER estimé : 2026 et 2027 connus (`PER_CEILING_RULES`, 2027 ajouté le 4 novembre 2026 d'après le PASS 2026, 48 060 €) ; ajouter 2028 une fois l'arrêté du PASS 2027 publié (annoncé à 48 900 €, non confirmé) ;
   - import d'un relevé en CSV ou OFX (seule la lecture d'un PDF ou d'une capture par Gemini existe) ;
-  - option au barème (case 2OP) : calcul exact par le barème complet (aujourd'hui un seul taux marginal, signalé comme approximation à l'écran) ;
+  - ✅ option au barème (case 2OP) (fait le 4 novembre 2026) : calcul au barème complet, décote comprise (impôt sur revenu + gains, moins impôt sur le revenu seul) ; la CSG déductible l'année suivante n'est pas comptée ;
   - ✅ comparaison au Livret A (fait le 4 novembre 2026) : table officielle des taux depuis le 1er août 2014 (`LIVRET_A_OFFICIAL_RATES`, src/lib/performance.ts, Banque de France), utilisée avant le plus ancien changement noté sur le compte ; à compléter à chaque révision (1er février, 1er août) ;
   - exploitation (à faire plus tard, une chose à la fois, sur une branche) :
     - **Node 26** : à évaluer en 2027 (LTS depuis fin octobre 2026), une fois wrangler et Playwright validés ; Node 24 (fait le 30 octobre 2026) est maintenu jusqu'au 30 avril 2028 ;

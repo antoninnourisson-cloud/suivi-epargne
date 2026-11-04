@@ -133,13 +133,18 @@ describe('Rendement', () => {
   });
 
   // Le 1er janvier, aucun intérêt n'est encore acquis sur l'année : rien à comparer.
-  it.skipIf(new Date().getMonth() === 0 && new Date().getDate() === 1)("gains d'un livret imposable : option pour le barème signalée si la tranche est à 11 %", () => {
+  it.skipIf(new Date().getMonth() === 0 && new Date().getDate() === 1)("gains d'un livret imposable : option pour le barème signalée quand elle coûte moins (barème complet)", () => {
     const boost = acc({ id: 'lb', name: 'Livret Boost', type: AccountType.LIVRET_BANCAIRE, isTaxable: true, interestRate: 3, totalAmount: 10000, ownedAmount: 10000,
       movements: [{ id: 'i', date: `${year - 1}-01-01`, amount: 10000, label: 'Solde initial', type: 'IN', tag: 'initial' }] });
-    render(<Yield accounts={[boost]} fiscalConfig={DEFAULT_FISCAL_CONFIG} taxableIncome={20_000} />);
-    expect(screen.getByText(/Votre tranche d'impôt est estimée à 11\s%/)).toBeTruthy();
+    // Tranche à 0 % : les gains y restent, l'option ne coûte rien.
+    render(<Yield accounts={[boost]} fiscalConfig={DEFAULT_FISCAL_CONFIG} taxableIncome={9_000} />);
+    expect(screen.getByText(/Votre tranche d'impôt est estimée à 0\s%/)).toBeTruthy();
     expect(screen.getByText(/case 2OP de la déclaration/)).toBeTruthy();
-    expect(screen.getByText(/Ce n'est qu'une approximation : Pécule applique une seule tranche/)).toBeTruthy();
+    expect(screen.getByText(/Calcul au barème complet, décote comprise/)).toBeTruthy();
+    cleanup();
+    // Tranche à 11 % mais décote : chaque euro coûte en fait environ 16 %, plus que 12,8 %.
+    render(<Yield accounts={[boost]} fiscalConfig={DEFAULT_FISCAL_CONFIG} taxableIncome={20_000} />);
+    expect(screen.queryByText(/case 2OP/)).toBeNull();
     cleanup();
     render(<Yield accounts={[boost]} fiscalConfig={DEFAULT_FISCAL_CONFIG} taxableIncome={40_000} />);
     expect(screen.queryByText(/case 2OP/)).toBeNull();

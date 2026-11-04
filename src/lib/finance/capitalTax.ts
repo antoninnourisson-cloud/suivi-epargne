@@ -4,6 +4,7 @@ import { FiscalConfig, RateChange, AccountType, SavingsAccount, AccountMovement 
 import { MS_PER_DAY, formatISODay, parseISODate } from '../dates';
 import { SOCIAL_CHARGES_LIFE_INSURANCE } from '../../constants';
 import { isSavingsFlow } from './savings';
+import { applyDecote, computeIncomeTax } from './income';
 
 // --- FISCALITÉ DU CAPITAL (PFU / prélèvements sociaux) ---
 // Le régime le plus courant par type de compte — volontairement simplifié, pas une simulation
@@ -544,10 +545,12 @@ export const computeGainsWithdrawal = (
 // ---------------------------------------------------------------------------
 
 /**
- * Impôt sur le revenu au barème, si le foyer choisit l'option : chaque euro imposable l'est
- * à la tranche du foyer au lieu du taux forfaitaire (12,8 %, 7,5 % pour une assurance vie de
- * plus de 8 ans). Approximation : un gros gain peut faire passer une partie du revenu dans la
- * tranche suivante, et l'option rend 6,8 points de CSG déductibles l'année suivante.
+ * Impôt sur le revenu au barème, si le foyer choisit l'option, au lieu du taux forfaitaire
+ * (12,8 %, 7,5 % pour une assurance vie de plus de 8 ans). Avec `extraTax` (barème complet,
+ * décote comprise : impôt sur revenu + gains, moins impôt sur le revenu seul), un gain qui
+ * fait passer une partie du revenu dans la tranche suivante est compté juste ; sans, chaque
+ * euro l'est à la tranche du foyer. Non compté : l'option rend 6,8 points de CSG déductibles
+ * l'année suivante (l'avantage réel est donc un peu plus grand).
  * Vérifié le 2026-10-21 et le 2026-10-22 :
  * - l'option est expresse, irrévocable et GLOBALE : elle vaut pour tous les revenus et
  *   plus-values de placement de l'année (case 2OP), BOFiP BOI-RPPM-RCM-20-15-20191220,
@@ -564,10 +567,12 @@ export const computeGainsWithdrawal = (
 export const compareProgressiveOption = (
   items: { incomeTax: number; taxableGain: number }[],
   marginalRate: number,
+  extraTax?: (gains: number) => number,
 ): { flat: number; progressive: number; saving: number } | null => {
   if (!(marginalRate >= 0) || marginalRate >= PFU_INCOME_TAX_RATE) return null;
   const flat = items.reduce((s, i) => s + Math.max(0, i.incomeTax), 0);
-  const progressive = items.reduce((s, i) => s + Math.max(0, i.taxableGain) * marginalRate, 0);
+  const gains = items.reduce((s, i) => s + Math.max(0, i.taxableGain), 0);
+  const progressive = extraTax ? Math.max(0, extraTax(gains)) : gains * marginalRate;
   const saving = flat - progressive;
   return saving >= 0.5 ? { flat, progressive, saving } : null;
 };
@@ -583,17 +588,21 @@ export interface ProgressiveOptionAdvice {
 
 /**
  * L'option pour le barème coûterait-elle moins que le taux forfaitaire pour ces retraits ?
- * `marginalRate` : tranche estimée du foyer (lib/retirement, marginalTaxRate). Crypto à part :
+ * `marginalRate` : tranche estimée du foyer (lib/retirement, marginalTaxRate). Avec `income`
+ * (revenu imposable et barème), le calcul se fait au barème complet. Crypto à part :
  * son option (case 3CN) est indépendante de la case 2OP (aide officielle de la déclaration,
  * lien plus haut). `null` : tranche inconnue, trop haute, ou aucun gain à y gagner.
  */
 export const adviseProgressiveOption = (
   items: { type: AccountType; incomeTax: number; taxableGain: number }[],
   marginalRate: number | undefined,
+  income?: { taxableIncome: number; fiscalConfig: Pick<FiscalConfig, 'taxBrackets' | 'decote'> },
 ): ProgressiveOptionAdvice | null => {
   if (marginalRate === undefined) return null;
-  const securities = compareProgressiveOption(items.filter(i => i.type !== AccountType.CRYPTO), marginalRate);
-  const crypto = compareProgressiveOption(items.filter(i => i.type === AccountType.CRYPTO), marginalRate);
+  const tax = (base: number) => (income ? applyDecote(computeIncomeTax(base, income.fiscalConfig.taxBrackets), income.fiscalConfig) : 0);
+  const extraTax = income ? (gains: number) => tax(income.taxableIncome + gains) - tax(income.taxableIncome) : undefined;
+  const securities = compareProgressiveOption(items.filter(i => i.type !== AccountType.CRYPTO), marginalRate, extraTax);
+  const crypto = compareProgressiveOption(items.filter(i => i.type === AccountType.CRYPTO), marginalRate, extraTax);
   return securities || crypto ? { marginalRate, securities, crypto } : null;
 };
 

@@ -7,7 +7,7 @@ import {
   computeAccruedInterest, computeCapitalGainsTax, computeWithdrawalTax, computeGainsWithdrawal,
   socialChargesShareAtWithdrawal, cryptoDisposalsOfYear, compareProgressiveOption, adviseProgressiveOption,
   computeDonationSummary, splitTransportRefund, transportExemptShare, transportExemptUntil, computeIncome,
-  monthsUntilRestitution, salaryTaxEstimate,
+  monthsUntilRestitution, salaryTaxEstimate, applyDecote, computeIncomeTax,
 } from './finance';
 import { buildTaxReturnChecklist } from './taxReturn';
 import { diffFiscalWatch, isOfficialSource } from './fiscalWatch';
@@ -328,6 +328,27 @@ describe('option pour le barème', () => {
     expect(adviseProgressiveOption(items, undefined)).toBeNull();
     expect(adviseProgressiveOption(items, 0.3)).toBeNull();
     expect(adviseProgressiveOption([items[0]], 0.11)!.crypto).toBeNull();
+  });
+  it('barème complet : décote et passage dans la tranche suivante comptés', () => {
+    const tax = (base: number) => applyDecote(computeIncomeTax(base, CFG.taxBrackets), CFG);
+    const items = [{ type: AccountType.LIVRET_BANCAIRE, incomeTax: 128, taxableGain: 1000 }];
+    // Revenu bien au-dessus de la décote, dans la tranche à 11 % : exactement l'impôt en plus.
+    const high = 26_000;
+    const exact = adviseProgressiveOption(items, 0.11, { taxableIncome: high, fiscalConfig: CFG });
+    const expected = tax(high + 1000) - tax(high);
+    if (expected < 127.5) expect(exact!.securities!.progressive).toBeCloseTo(expected, 6);
+    else expect(exact).toBeNull();
+    // Revenu à 0 % juste sous la tranche à 11 % : la part qui déborde est imposée (et non 0 €).
+    const low = CFG.taxBrackets.find(b => b.rate === 0)!.limit as number - 200;
+    const spill = adviseProgressiveOption(items, 0, { taxableIncome: low, fiscalConfig: CFG })!;
+    expect(spill.securities!.progressive).toBeCloseTo(tax(low + 1000) - tax(low), 6);
+    expect(spill.securities!.progressive).toBeGreaterThanOrEqual(0);
+    // Dans la zone de la décote, un euro de plus coûte plus que 11 % : jamais moins que l'approximation.
+    const mid = 20_000;
+    const inDecote = adviseProgressiveOption(items, 0.11, { taxableIncome: mid, fiscalConfig: CFG });
+    const extra = tax(mid + 1000) - tax(mid);
+    expect(extra).toBeGreaterThan(110);
+    expect(inDecote?.securities ?? null).toEqual(extra <= 127.5 ? { flat: 128, progressive: extra, saving: 128 - extra } : null);
   });
 });
 

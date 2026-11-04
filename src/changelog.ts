@@ -15,6 +15,14 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '2026.11.04-8',
+    date: '2026-11-04',
+    title: 'Option pour le barème : calcul exact',
+    items: [
+      "Rendement › option pour le barème (case 2OP) : l'impôt se calcule maintenant au barème complet, décote comprise, et non plus avec une seule tranche. Avec la décote, un euro de plus dans la tranche à 11 % coûte en fait environ 16 %, plus que le taux forfaitaire de 12,8 % : l'option n'est alors plus conseillée.",
+    ],
+  },
+  {
     version: '2026.11.04-7',
     date: '2026-11-04',
     title: 'Comparaison au Livret A sur de longues périodes',
