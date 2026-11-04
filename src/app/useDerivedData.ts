@@ -108,15 +108,17 @@ export const useDerivedData = (doc: AppDoc, fullData: AppDoc, discreet = false) 
   // Clôture de l'année écoulée (lib/yearClosing) : la tâche de janvier-février de l'Accueil.
   // eslint-disable-next-line react-hooks/exhaustive-deps -- textes avec des montants : réécrits au passage en mode discret
   const yearClosing = useMemo(() => (seasonalMod ? seasonalMod.yearClosingStatus(fullData, today) : null), [seasonalMod, fullData, today, discreet]);
+  // Objectif de l'année (fixé à la clôture) : sa ligne dans la carte de l'objectif du mois.
+  const yearGoal = useMemo(() => (seasonalMod ? seasonalMod.yearGoalProgress(fullData, today) : null), [seasonalMod, fullData, today]);
   // Rendement supposé des placements sans taux saisi (performance observée, prudente) : le
   // même pour le Rendement, le simulateur « Et si… » et le plan solo (lib/performance).
   const projectionHypotheses = useMemo(() => withAssumedRates(doc.accounts), [doc.accounts]);
 
   return useMemo(() => ({
     fullData, allCharges, monthPlan, monthGoal, monthlyPay, agendaNext, lepTimeline, taxReturnAlert,
-    emergency, taxEstimate, taxEstimates, restitutionInMonths, activePayslip, hasParental, showParentalScreen, yearClosing, projectionHypotheses,
+    emergency, taxEstimate, taxEstimates, restitutionInMonths, activePayslip, hasParental, showParentalScreen, yearClosing, yearGoal, projectionHypotheses,
   }), [fullData, allCharges, monthPlan, monthGoal, monthlyPay, agendaNext, lepTimeline, taxReturnAlert,
-    emergency, taxEstimate, taxEstimates, restitutionInMonths, activePayslip, hasParental, showParentalScreen, yearClosing, projectionHypotheses]);
+    emergency, taxEstimate, taxEstimates, restitutionInMonths, activePayslip, hasParental, showParentalScreen, yearClosing, yearGoal, projectionHypotheses]);
 };
 
 export type DerivedData = ReturnType<typeof useDerivedData>;

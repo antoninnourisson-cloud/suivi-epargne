@@ -4,11 +4,12 @@
 // seuil « bon mois »). Paie attendue mais pas encore déclarée : « J'ai reçu ma paie » ouvre le
 // rituel. Les calculs sont dans lib/home (payPeriodSavings, savingsGauge).
 import React, { useState } from 'react';
-import { CalendarCheck, Percent, PiggyBank, Wallet } from 'lucide-react';
+import { CalendarCheck, Percent, PiggyBank, Target, Wallet } from 'lucide-react';
 import { Button, Card } from '../ui';
 import { formatEUR, formatSignedEUR, frenchDay } from '../../lib/format';
 import { parseISODate } from '../../lib/dates';
 import type { PayPeriodSavings, SavingsGauge } from '../../lib/home';
+import type { YearGoalProgress } from '../../lib/yearGoal';
 import { deMonth } from '../motivation/text';
 
 const fmtEUR = (v: number) => formatEUR(v, 0);
@@ -26,6 +27,8 @@ interface SavingsCardProps {
   monthlyPay: number;
   /** Ouvre le rituel « J'ai reçu ma paie » (bouton affiché tant que la paie attendue n'est pas déclarée). */
   onPayReceived?: () => void;
+  /** Objectif de l'année (fixé à la clôture) et mis de côté depuis le 1er janvier. */
+  yearGoal?: YearGoalProgress;
 }
 
 /** Phrase sous la jauge : ce qui reste pour l'objectif, puis pour le « bon mois ». */
@@ -44,7 +47,10 @@ const gaugeSentences = (g: SavingsGauge, saved: number): string[] => {
   return out;
 };
 
-export const SavingsCard: React.FC<SavingsCardProps> = ({ gauge, period, monthlyPay, onPayReceived }) => {
+/** « Objectif 2027 : 1 200 € sur 9 000 € ». */
+export const yearGoalLine = (g: YearGoalProgress): string => `Objectif ${g.year} : ${fmtEUR(Math.max(0, g.saved))} sur ${fmtEUR(g.goal)}`;
+
+export const SavingsCard: React.FC<SavingsCardProps> = ({ gauge, period, monthlyPay, onPayReceived, yearGoal }) => {
   const [rateMonth, setRateMonth] = useState<string | null>(null);
   const { title, max, pct, tick, done, good } = gauge;
   const { saved, history, avgRate, avgCount, byPay } = period;
@@ -96,6 +102,12 @@ export const SavingsCard: React.FC<SavingsCardProps> = ({ gauge, period, monthly
             </p>
           )}
         </>
+      )}
+      {yearGoal && (
+        <p className={`${max > 0 ? 'mt-3' : ''} text-sm text-on-surface flex items-center gap-1.5`} data-year-goal>
+          <Target className="w-4 h-4 shrink-0 text-primary" aria-hidden="true" />
+          <span className="tabular-nums">{yearGoalLine(yearGoal)}</span>
+        </p>
       )}
       {monthlyPay > 0 && (
         <div className={max > 0 ? 'mt-5 pt-4 border-t border-outline-variant' : ''}>

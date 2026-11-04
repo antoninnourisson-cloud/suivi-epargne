@@ -19,7 +19,7 @@ import {
   AccountUpdate, AccountsView, Agenda, AskPeculeEntry, AssistantPilot, CloudBackupPanel, Dashboard, Donations, DriveBackupsPanel,
   FiscalCalendar, FiscalWatchCard, History, Journal, Lazy, MotivationSettings, ParentalShare, Payslips, RateChangesSheet, ServerSecurityPanel,
   SetAsideVersionsPanel, Settings, ShareTargetHost, Simulator, SoloPlanCard, StatementImport, Subscriptions, TaxNoticePanel, TaxReturnHelper,
-  TransferManager, ViewLoader, Yield, YearClosingCard,
+  TransferManager, ViewLoader, Yield, YearClosingCard, YearClosingSheet,
 } from './screens';
 import type { DerivedData } from './useDerivedData';
 import { lepStillEligible } from '../lib/idleCash';
@@ -160,6 +160,9 @@ export const ScreenRouter = memo(function ScreenRouter({ place, setView, onSelec
   // Feuille « Les taux ont changé » : depuis la tâche de l'Accueil, ou « Un taux a changé ? » (Actualiser).
   const [ratesOpen, setRatesOpen] = useState(false);
   const openRates = useCallback(() => setRatesOpen(true), []);
+  // Feuille « Clôture de l'année » : depuis la tâche de l'Accueil, ou la carte de l'Historique.
+  const [closingOpen, setClosingOpen] = useState(false);
+  const openClosing = useCallback(() => setClosingOpen(true), []);
   const ignoreRates = () => {
     const ignored = rateProposals;
     ignored.forEach(fiscalWatch.dismiss);
@@ -193,6 +196,7 @@ export const ScreenRouter = memo(function ScreenRouter({ place, setView, onSelec
           restitutionDoneOn={doc.parentalRestitution?.done?.date} restitutionPlannedDate={doc.parentalRestitution?.plannedDate}
           yearClosing={derived.yearClosing} pays={doc.pays}
           rateChanges={rateChanges} onOpenRateChanges={openRates}
+          onOpenYearClosing={openClosing} yearGoal={derived.yearGoal}
           plannedWithdrawals={c.plannedWithdrawals} onRecordPlannedWithdrawal={actions.recordPlannedWithdrawal} onDeletePlannedWithdrawal={actions.deletePlannedWithdrawal}
           askSlot={<Lazy><AskPeculeEntry data={derived.fullData} geminiApiKey={data.geminiApiKey} taxEstimate={derived.taxEstimate} monthPlan={derived.monthPlan} onOpenSettings={openSettings} /></Lazy>}
           onMarkMilestonesSeen={actions.markMilestonesSeen} onValidatePayReview={actions.validatePayReview} />}
@@ -211,6 +215,10 @@ export const ScreenRouter = memo(function ScreenRouter({ place, setView, onSelec
           onReadStatement={() => setStatementFor({})} onRateChanged={openRates} />}
         {ratesOpen && <Lazy><RateChangesSheet accounts={doc.accounts} proposals={rateChanges} onApply={applyRates}
           onIgnore={rateChanges.length > 0 ? ignoreRates : undefined} onClose={() => setRatesOpen(false)} /></Lazy>}
+        {closingOpen && <Lazy><YearClosingSheet year={Number(localTodayISO().slice(0, 4)) - 1} data={derived.fullData} onRecord={actions.recordYearClosing}
+          onPatchConfig={data.patchConfig} onUpdateFiscalConfig={data.setFiscalConfig}
+          onNavigate={v => { if (v === 'settings') openSettingsSection('fiscal'); setView(v); }}
+          getArchiveData={data.currentData} confirm={dialog.confirm} onClose={() => setClosingOpen(false)} /></Lazy>}
         {statementFor && <Lazy><StatementImport accounts={doc.accounts} geminiApiKey={data.geminiApiKey} preferredAccountId={statementFor.accountId}
           onClose={() => setStatementFor(null)} onImport={actions.importStatement} onOpenKeys={() => openSettings('keys')} /></Lazy>}
 
@@ -221,10 +229,7 @@ export const ScreenRouter = memo(function ScreenRouter({ place, setView, onSelec
           onConfirmBalance={acc => actions.saveAccount({ ...acc, balanceCheckedAt: localTodayISO() })} />}
         {tab === 'simulator' && <Simulator accounts={doc.accounts} hypotheses={derived.projectionHypotheses} fiscalConfig={doc.fiscalConfig} monthPlan={derived.monthPlan} savingsSplit={c.savingsSplit} paydayDay={c.paydayDay} payslips={doc.payslips} trackingStartDate={c.trackingStartDate} parentalRestitution={doc.parentalRestitution} />}
         {tab === 'evolution' && <History history={doc.history} expensesHistory={doc.expensesHistory} reviewData={derived.fullData}
-          closingSlot={doc.accounts.length > 0 ? <Lazy><YearClosingCard data={derived.fullData} onPatchConfig={data.patchConfig}
-            onUpdateAccounts={data.setAccounts} onUpdateFiscalConfig={data.setFiscalConfig}
-            onNavigate={v => { if (v === 'settings') openSettingsSection('fiscal'); setView(v); }}
-            getArchiveData={data.currentData} confirm={dialog.confirm} /></Lazy> : undefined} />}
+          closingSlot={doc.accounts.length > 0 ? <Lazy><YearClosingCard data={derived.fullData} onOpen={openClosing} /></Lazy> : undefined} />}
         {tab === 'movements' && <Journal
           accounts={doc.accounts} restitution={doc.parentalRestitution} onDeleteMovement={actions.deleteMovement}
           trackingStartDate={c.trackingStartDate} onSetTrackingStart={actions.setTrackingStart}

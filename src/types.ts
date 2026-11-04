@@ -437,6 +437,9 @@ export interface GlobalAppData {
     // Clôture de l'année (lib/yearClosing), par année (« 2026 ») : étapes cochées à la main et
     // date de clôture. Une année clôturée n'a plus de rappel de clôture (Accueil, agenda, serveur).
     yearClosings?: Record<string, YearClosingRecord>;
+    // Objectif d'épargne de l'année (« 2027 » → 9000 €), fixé à la clôture de l'année d'avant :
+    // une ligne dans la carte de l'objectif du mois (Accueil). Nombres positifs seulement.
+    yearGoals?: Record<string, number>;
     // Retraits prévus par « J'ai besoin d'argent » (lib/needMoney) pour une date future : une
     // tâche de l'Accueil le jour venu, retirée une fois faite ou supprimée.
     plannedWithdrawals?: PlannedWithdrawal[];

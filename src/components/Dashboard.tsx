@@ -15,6 +15,7 @@ import type { TaxReturnAlert } from '../lib/taxReturn';
 import { revealElementById } from './revealElement';
 import type { SavingsAccount, PortfolioSnapshot, FiscalConfig, RecurringMovement, Subscription, PayslipRecord, PayRecord, PlannedWithdrawal } from '../types';
 import type { RateProposalInfo } from '../lib/rateChanges';
+import type { YearGoalProgress } from '../lib/yearGoal';
 import { duePlannedWithdrawals } from '../lib/plannedWithdrawals';
 import {
   computeUnlockCost, findFiscalReview, applyTaxScale, findAvRateUpdatesDue, confirmRatesUnchanged, findDueRecurring,
@@ -116,6 +117,10 @@ interface DashboardProps {
   /** Taux réglementés relevés par la veille fiscale : la tâche « Les taux ont changé ». */
   rateChanges?: RateProposalInfo[];
   onOpenRateChanges?: () => void;
+  /** Ouvre la feuille « Clôture de l'année » (sinon : la carte de l'Historique). */
+  onOpenYearClosing?: () => void;
+  /** Objectif de l'année en cours (fixé à la clôture) : une ligne dans la carte de l'objectif du mois. */
+  yearGoal?: YearGoalProgress | null;
 }
 
 const TODO_ICONS: Record<HomeTodoIcon, TodoSpec['icon']> = {
@@ -132,7 +137,7 @@ const SLICE_STYLE: Record<'available' | 'tax' | 'locked', Pick<AvailabilitySegme
   locked: { color: 'bg-outline', hatch: 'dense' },
 };
 
-export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalConfig, onDeleteAccount, recurringMovements = [], onRecordRecurring, monthPlan, monthGoal, monthlyPay = 0, paydayDay, trackingStartDate, subscriptions = [], onUpdateFiscalConfig, onOpenSettings, onUpdateAccounts, payRaise, onAcceptPayRaise, onDismissPayRaise, onNavigate, onAddAccount, lastExportAt, onExport, emergency, onSetEmergencyMonths, agendaNext = [], lepTimeline, taxReturnAlert, payslips = [], gamification, goodMonthThreshold, milestonesSeen, payReviewsDone, rfrByYear, restitutionDoneOn, restitutionPlannedDate, onMarkMilestonesSeen, onValidatePayReview, yearClosing, pays, askSlot, plannedWithdrawals, onRecordPlannedWithdrawal, onDeletePlannedWithdrawal, rateChanges, onOpenRateChanges }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalConfig, onDeleteAccount, recurringMovements = [], onRecordRecurring, monthPlan, monthGoal, monthlyPay = 0, paydayDay, trackingStartDate, subscriptions = [], onUpdateFiscalConfig, onOpenSettings, onUpdateAccounts, payRaise, onAcceptPayRaise, onDismissPayRaise, onNavigate, onAddAccount, lastExportAt, onExport, emergency, onSetEmergencyMonths, agendaNext = [], lepTimeline, taxReturnAlert, payslips = [], gamification, goodMonthThreshold, milestonesSeen, payReviewsDone, rfrByYear, restitutionDoneOn, restitutionPlannedDate, onMarkMilestonesSeen, onValidatePayReview, yearClosing, pays, askSlot, plannedWithdrawals, onRecordPlannedWithdrawal, onDeletePlannedWithdrawal, rateChanges, onOpenRateChanges, onOpenYearClosing, yearGoal }) => {
   // Date du jour partagée (useToday) : l'Accueil resté ouvert passe au lendemain à minuit.
   const today = useToday();
   const choices = useHomeChoices(today);
@@ -284,7 +289,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalC
       case 'confirm-av-rates': onUpdateAccounts?.(prev => confirmRatesUnchanged(prev, a.accountIds, today)); break;
       case 'export': onExport?.(); break;
       // La clôture est en tête de l'Historique : on l'amène à l'écran.
-      case 'open-year-closing': onNavigate?.('history'); revealElementById('year-closing'); break;
+      case 'open-year-closing':
+        if (onOpenYearClosing) onOpenYearClosing();
+        else { onNavigate?.('history'); revealElementById('year-closing'); }
+        break;
       case 'record-planned-withdrawal': onRecordPlannedWithdrawal?.(a.id); break;
       case 'delete-planned-withdrawal': onDeletePlannedWithdrawal?.(a.id); break;
       case 'open-rate-changes': onOpenRateChanges?.(); break;
@@ -300,7 +308,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalC
   const segments: AvailabilitySegment[] = availabilitySlices(availability).map(s => ({ ...s, ...SLICE_STYLE[s.key] }));
   const showUnlockDetails = availability.taxLocked > 0 && (unlockCost.extraTax >= 1 || unlockCost.closesPea || !!unlockCost.nextFree || unlockCost.unknown.length > 0);
   const goal = monthGoal ?? monthPlan;
-  const showSavingsCard = (goal !== undefined && goal > 0) || monthlyPay > 0 || motivation.enabled;
+  const showSavingsCard = (goal !== undefined && goal > 0) || monthlyPay > 0 || motivation.enabled || !!yearGoal;
   const moreSummary = `${projection ? 'Projection, évolution' : 'Évolution'} et répartition par établissement`;
 
   return (
@@ -364,6 +372,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalC
             period={period}
             monthlyPay={monthlyPay}
             onPayReceived={paydayDay ? openPaySheet : undefined}
+            yearGoal={yearGoal ?? undefined}
           />
         )}
         {goodMonths && goodMonths.months.length > 0 && (

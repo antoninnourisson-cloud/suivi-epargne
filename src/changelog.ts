@@ -15,6 +15,17 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '2026.11.04-5',
+    date: '2026-11-04',
+    title: "La clôture de l'année en une feuille",
+    items: [
+      "En janvier, « Ouvrir la clôture » (Accueil ou Historique) ouvre une seule feuille : soldes au 31 décembre, intérêts crédités, relevés de l'assurance vie et du PEA se saisissent sur place, et un seul « Enregistrer » fait tout, avec un seul « Annuler ».",
+      "Pour chaque livret, « Calculé par Pécule » à côté de ce que la banque a crédité, et l'écart en euros, par exemple « 2,30 € de moins que prévu ».",
+      "Une ligne « Objectif 2027 », préremplie avec ce que vous avez mis de côté dans l'année : elle s'affiche ensuite sur l'Accueil, dans la carte de l'objectif du mois.",
+      "Avant la restitution : le capital de vos parents compte par compte, le total, et les intérêts de l'année qui vous restent. La restitution se fait toujours à la main.",
+    ],
+  },
+  {
     version: '2026.11.04-4',
     date: '2026-11-04',
     title: 'Les taux ont changé',

@@ -248,3 +248,14 @@ describe('migrate : retraits prévus (« J’ai besoin d’argent »)', () => {
     expect('plannedWithdrawals' in migrate({ config: {} }).config).toBe(false);
   });
 });
+
+describe('migrate : objectifs annuels (clôture de l’année)', () => {
+  it('garde les années « AAAA » à montant positif, retire le reste, sans changer de version', () => {
+    const ok = migrate({ config: { yearGoals: { 2027: 9000, 2028: -5, abc: 100, 2029: 'beaucoup', 2030: 0 } } });
+    expect(ok.config.yearGoals).toEqual({ 2027: 9000 });
+    expect(ok.schemaVersion).toBe(migrate({}).schemaVersion);
+    expect('yearGoals' in migrate({ config: { yearGoals: { 2027: Number.NaN } } }).config).toBe(false);
+    expect('yearGoals' in migrate({ config: { yearGoals: 'non' } }).config).toBe(false);
+    expect('yearGoals' in migrate({ config: {} }).config).toBe(false);
+  });
+});

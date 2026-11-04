@@ -1,5 +1,5 @@
 // Clôture de l'année en mode démo (?demo=1), horloge figée en janvier 2027 : une seule tâche
-// sur l'Accueil mène à la liste de l'Historique ; on la parcourt (taux servi, déclaration,
+// sur l'Accueil ouvre la feuille de clôture ; on la parcourt (taux servi, déclaration,
 // paramètres fiscaux, archive JSON + CSV, « Votre année »), on clôture, et la tâche disparaît. Puis le passage en
 // solo : une fois la restitution enregistrée, les textes ne parlent plus des parents, sans
 // aucune modification du code (données seulement).
@@ -45,11 +45,10 @@ test.describe("Clôture de l'année (démo, janvier)", () => {
     await expect(page.locator('#todo-list')).not.toContainText('vérifiez vos paramètres fiscaux');
     await todo.getByRole('button', { name: 'Ouvrir la clôture' }).click();
 
-    // --- Analyses › Évolution (ex-Historique) : la clôture en tête, ouverte ---
-    await expect(page).toHaveTitle('Analyses · Évolution · Pécule');
-    const card = page.getByRole('region', { name: "Clôture de l'année 2026" });
-    await expect(card).toBeVisible();
-    const steps = card.getByRole('list', { name: 'Étapes de la clôture 2026' });
+    // --- La feuille de clôture (rituel), sur l'Accueil ---
+    let sheet = page.getByRole('dialog', { name: "Clôture de l'année 2026" });
+    await expect(sheet).toBeVisible();
+    const steps = sheet.getByRole('list', { name: 'Étapes de la clôture 2026' });
     await expect(steps.getByRole('heading', { level: 4 })).toHaveText([
       '1. Vérifier les soldes au 31 décembre', '2. Enregistrer les intérêts 2026', '3. Relevés annuels des placements',
       '4. Restitution du capital de vos parents', '5. Votre année 2026', '6. Préparer la déclaration des revenus 2026',
@@ -58,12 +57,11 @@ test.describe("Clôture de l'année (démo, janvier)", () => {
     // Fraîcheur compte par compte : le LEP n'a pas été vérifié depuis le 31 décembre.
     await expect(step(page, 'balances')).toContainText(/LEP\s*· dernier solde constaté le/);
     await expect(step(page, 'balances')).toContainText(/Livret A\s*· vérifié le 31 décembre 2026/);
-    await expect(step(page, 'interest')).toContainText(/Dont environ \d+\s€ produits par le capital de vos parents/);
     await expect(step(page, 'restitution')).toContainText(/Prévue le 1er janvier : 9\s500\s€ à rendre/);
+    await expect(step(page, 'restitution')).toContainText(/y compris les \d+\s€ produits par le capital de vos parents/);
 
-    // --- Relevés : valeur déjà reportée au 31/12, taux servi confirmé ---
+    // --- Relevés : valeur déjà reportée au 31/12, taux servi confirmé (à l'enregistrement) ---
     await step(page, 'statements').getByRole('button', { name: 'Taux inchangé' }).click();
-    await expect(step(page, 'statements')).toContainText(/^Fait : /);
 
     // --- Déclaration : coche à la main ---
     await step(page, 'tax-return').getByRole('checkbox', { name: "C'est noté" }).check();
@@ -88,21 +86,34 @@ test.describe("Clôture de l'année (démo, janvier)", () => {
     expect(text).toContain('Compte;Type;Établissement;Votre part (€);Part des parents (€);Total (€)');
     await expect(step(page, 'archive')).toContainText(/^Fait : /);
 
-    // --- « Votre année » s'ouvre depuis la clôture ---
-    await step(page, 'review').getByRole('button', { name: 'Voir votre année 2026' }).click();
-    const sheet = page.getByRole('dialog', { name: 'Votre année 2026' });
-    await expect(sheet).toBeVisible();
-    await page.keyboard.press('Escape');
+    // --- Un seul « Enregistrer » : intérêts proposés et taux servi ---
+    await sheet.getByRole('button', { name: 'Enregistrer' }).click();
     await expect(sheet).toBeHidden();
-    await expect(card).toContainText('5 étapes sur 8 faites');
+
+    // --- « Votre année » s'ouvre depuis la clôture (Analyses › Évolution) ---
+    await (await closingTodo(page)).getByRole('button', { name: 'Ouvrir la clôture' }).click();
+    await expect(step(page, 'statements')).toContainText(/^Fait : /);
+    await expect(step(page, 'interest')).toContainText(/^Fait : /);
+    await step(page, 'review').getByRole('button', { name: 'Voir votre année 2026' }).click();
+    await expect(page).toHaveTitle('Analyses · Évolution · Pécule');
+    const review = page.getByRole('dialog', { name: 'Votre année 2026' });
+    await expect(review).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(review).toBeHidden();
+    const card = page.getByRole('region', { name: "Clôture de l'année 2026" });
+    await expect(card).toContainText(/[67] étapes sur 8 faites/);
 
     // --- Clôturer : étapes en suspens, donc confirmation ---
+    await card.getByRole('button', { name: 'Ouvrir la clôture' }).click();
+    sheet = page.getByRole('dialog', { name: "Clôture de l'année 2026" });
     await step(page, 'close').getByRole('button', { name: 'Clôturer 2026' }).click();
     const confirm = page.getByRole('dialog', { name: "Clôturer l'année 2026 ?" });
-    await expect(confirm).toContainText(/Il reste 3 étapes : Vérifier les soldes au 31 décembre ; Enregistrer les intérêts 2026 ; Restitution du capital de vos parents/);
+    await expect(confirm).toContainText(/Il reste (2 étapes|une étape) : .*Restitution du capital de vos parents/);
     await confirm.getByRole('button', { name: 'Clôturer 2026' }).click();
-    await expect(card).toContainText('Année clôturée : plus de rappel de clôture.');
+    await expect(sheet).toContainText('Année clôturée : plus de rappel de clôture.');
     await expect(step(page, 'close')).toContainText(/Année clôturée le 10 janvier/);
+    await sheet.getByRole('button', { name: 'Fermer' }).click();
+    await expect(card).toContainText('Année clôturée : plus de rappel de clôture.');
 
     // --- Accueil : la tâche a disparu ---
     await goTo(page, 'Accueil', isMobile);
@@ -136,6 +147,7 @@ test.describe("Clôture de l'année (démo, janvier)", () => {
 
     // Clôture : l'étape de la restitution est faite, la suite s'écrit en solo.
     await goTo(page, 'Historique', isMobile);
+    await page.getByRole('region', { name: "Clôture de l'année 2026" }).getByRole('button', { name: 'Ouvrir la clôture' }).click();
     await expect(step(page, 'restitution')).toContainText(/^Fait : /);
     await expect(step(page, 'restitution')).toContainText(/9\s500\s€ rendus le 1er janvier\. Vous continuez en solo\./);
   });

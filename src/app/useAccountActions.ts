@@ -23,7 +23,7 @@ import {
   recordRestitution, undoRestitution, revertRateChange, renameMovement, toggleMovementAdjustment,
   importStatement, type StatementImportItem,
   recordPay, uncheckPayLine, updatePay, deletePay, type RecordPayInput, type UpdatePayInput,
-  recordNeedWithdrawal, applyRateChanges, type RateChangesInput,
+  recordNeedWithdrawal, applyRateChanges, type RateChangesInput, recordYearClosing, type YearClosingInput,
 } from '../lib/commands';
 import type { AddToast, DialogApi } from './UiProviders';
 
@@ -372,6 +372,35 @@ export const useAccountActions = (doc: AppDoc, setters: Setters, addToast: AddTo
       clearActivePayslip: () => {
         s().setActivePayslipId(undefined);
         toast({ message: 'Retour à l\'estimation théorique', kind: 'success' });
+      },
+
+      /**
+       * « Clôture de l'année » : soldes, intérêts, relevés et taux servi en une commande, et
+       * l'objectif de l'année qui commence (réglages), avec un seul « Annuler » pour le tout.
+       * Refus renvoyé, sinon `null`.
+       */
+      recordYearClosing: (input: YearClosingInput, goal: { year: number; amount: number | null } | null): string | null => {
+        const r = input.updates.length > 0 || input.rates.length > 0 ? recordYearClosing(commandStateRef.current, input) : null;
+        if (r && !r.ok && !(r.code === 'nothing-to-do' && goal)) return r.error;
+        if (!r?.ok && !goal) return 'Rien à enregistrer.';
+        const goalsBefore = docRef.current.config.yearGoals;
+        if (r?.ok) commit(r.next);
+        if (goal) {
+          const next = { ...(goalsBefore ?? {}) };
+          if (goal.amount === null) delete next[String(goal.year)]; else next[String(goal.year)] = goal.amount;
+          s().patchConfig({ yearGoals: Object.keys(next).length > 0 ? next : undefined });
+        }
+        const goalMessage = goal ? (goal.amount === null ? `Objectif ${goal.year} retiré` : `Objectif ${goal.year} : ${plainEUR(goal.amount)}`) : '';
+        toast({
+          message: r?.ok ? (goal ? `${r.message} · ${goalMessage}` : r.message) : goalMessage, kind: 'success',
+          action: {
+            label: 'Annuler', onClick: () => {
+              if (r?.ok) commit(r.undo(commandStateRef.current));
+              if (goal) s().patchConfig({ yearGoals: goalsBefore });
+            },
+          },
+        });
+        return null;
       },
 
       /**

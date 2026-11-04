@@ -174,6 +174,48 @@ const checkedLabel = (checkedOn: string | undefined, yearEnd: string, refYear: n
     : checkedOn ? `dernier solde constaté le ${dayLabel(checkedOn, refYear)}` : 'jamais vérifié';
 
 /**
+ * Comptes de la clôture : ceux à vérifier au 31 décembre (étape 1) et les placements à relevé
+ * annuel (étape 3). Partagé par la liste et la feuille de clôture.
+ */
+export const closingScope = (data: Pick<GlobalAppData, 'accounts'>, year: number): { balanceAccounts: SavingsAccount[]; placements: SavingsAccount[] } => {
+  const inScope = (data.accounts || []).filter(a => existedAtYearEnd(a, `${year}-12-31`));
+  return {
+    balanceAccounts: inScope.filter(a => !STATEMENT_TYPES.includes(a.type) && freshnessLimitDays(a.type) !== null),
+    placements: inScope.filter(a => STATEMENT_TYPES.includes(a.type) && a.totalAmount > 0.005),
+  };
+};
+
+/**
+ * Intérêts crédités au 31 décembre (étape 2) : la proposition d'« Actualiser », arrêtée au
+ * 31 mars (après, une hausse d'un livret est un versement). Seulement les comptes crédités ce
+ * jour-là (livrets, épargne logement) : un compte à terme paie selon son contrat.
+ * `pending` : ce qui reste à enregistrer (`null` : déjà enregistrés).
+ */
+export const closingInterestRows = (data: Pick<GlobalAppData, 'accounts'>, year: number, now: Date = new Date()): {
+  account: SavingsAccount; expected: number; pending: { year: number; amount: number } | null;
+}[] => {
+  const todayISO = formatISODay(now);
+  const refISO = todayISO < `${year + 1}-03-31` ? todayISO : `${year + 1}-03-31`;
+  return (data.accounts || [])
+    .filter(a => existedAtYearEnd(a, `${year}-12-31`) && INTEREST_CREDITED_DEC31_TYPES.includes(a.type))
+    .map(a => ({ a, expected: computeAccruedInterest(a, year, new Date(year + 1, 0, 1)) }))
+    .filter(r => r.expected > 0.005)
+    .map(({ a, expected }) => ({
+      account: a, expected,
+      pending: refISO >= `${year + 1}-01-01` ? suggestCreditedInterest(a, refISO) : { year, amount: round2(expected) },
+    }));
+};
+
+/**
+ * Intérêts de l'année produits par le capital des parents (offerts) : ceux notés à la
+ * restitution, sinon le même calcul que le rappel de décembre (home : parentalYearEndInterest),
+ * sur le solde total, part des parents comprise.
+ */
+export const parentalInterestOffered = (data: Pick<GlobalAppData, 'accounts' | 'parentalRestitution'>, year: number): number =>
+  data.parentalRestitution?.done?.interestsOffered.find(i => i.year === year)?.amount
+    ?? computeAccruedParentalInterest(data.accounts || [], year, new Date(year + 1, 0, 1)).totalAnnualParental;
+
+/**
  * Liste de clôture de `year`, à la date `now` (l'année suivante en principe). Les étapes sans
  * objet sont absentes : pas de compte concerné, plus de capital des parents ni de restitution
  * dans l'année.
@@ -187,10 +229,9 @@ export const buildYearClosing = (data: GlobalAppData, year: number, now: Date = 
   const nextYearStart = `${year + 1}-01-01`;
   const refYear = year + 1;
   const steps: YearClosingStep[] = [];
-  const inScope = accounts.filter(a => existedAtYearEnd(a, yearEnd));
+  const { balanceAccounts, placements } = closingScope(data, year);
 
   // 1. Soldes au 31 décembre : constatés depuis (Actualiser, fiche, « Confirmer le solde »).
-  const balanceAccounts = inScope.filter(a => !STATEMENT_TYPES.includes(a.type) && freshnessLimitDays(a.type) !== null);
   if (balanceAccounts.length > 0) {
     const items = balanceAccounts.map(a => {
       const on = lastBalanceCheck(a, todayISO);
@@ -206,25 +247,15 @@ export const buildYearClosing = (data: GlobalAppData, year: number, now: Date = 
     });
   }
 
-  // 2. Intérêts crédités au 31 décembre : la proposition d'« Actualiser », arrêtée au 31 mars
-  //    (après, une hausse d'un livret est un versement). Seulement les comptes crédités ce
-  //    jour-là (livrets, épargne logement) : un compte à terme paie selon son contrat.
-  const refISO = todayISO < `${year + 1}-03-31` ? todayISO : `${year + 1}-03-31`;
-  const interestRows = inScope
-    .filter(a => INTEREST_CREDITED_DEC31_TYPES.includes(a.type))
-    .map(a => ({ a, expected: computeAccruedInterest(a, year, new Date(year + 1, 0, 1)) }))
-    .filter(r => r.expected > 0.005);
+  // 2. Intérêts crédités au 31 décembre (closingInterestRows : la proposition d'« Actualiser »).
+  const interestRows = closingInterestRows(data, year, now);
   if (interestRows.length > 0) {
-    const items = interestRows.map(({ a, expected }) => {
-      const pending = refISO >= nextYearStart ? suggestCreditedInterest(a, refISO) : { year, amount: round2(expected) };
-      return {
-        key: a.id, label: a.name, done: !pending,
-        detail: pending ? `${eur2(pending.amount)} attendus : à enregistrer` : `${eur2(expected)} : enregistrés`,
-      };
-    });
+    const items = interestRows.map(({ account: a, expected, pending }) => ({
+      key: a.id, label: a.name, done: !pending,
+      detail: pending ? `${eur2(pending.amount)} attendus : à enregistrer` : `${eur2(expected)} : enregistrés`,
+    }));
     const byHand = checked.has(CLOSING_CHECKS.interest);
-    const offered = data.parentalRestitution?.done?.interestsOffered.find(i => i.year === year)?.amount
-      ?? computeAccruedParentalInterest(accounts, year, new Date(year + 1, 0, 1)).totalAnnualParental;
+    const offered = parentalInterestOffered(data, year);
     const parents = offered >= 1 ? ` Dont environ ${eur0(offered)} produits par le capital de vos parents : ils vous sont offerts.` : '';
     const done = byHand || items.every(i => i.done);
     steps.push({
@@ -239,7 +270,6 @@ export const buildYearClosing = (data: GlobalAppData, year: number, now: Date = 
 
   // 3. Relevés annuels des placements : valeur au 31/12 et versements ; taux servi du fonds
   //    euros de l'assurance vie (publié par l'assureur en janvier).
-  const placements = inScope.filter(a => STATEMENT_TYPES.includes(a.type) && a.totalAmount > 0.005);
   if (placements.length > 0) {
     const items: YearClosingItem[] = placements.map(a => {
       const on = lastBalanceCheck(a, todayISO);
@@ -408,7 +438,7 @@ const natureOf = (m: AccountMovement): string =>
     : m.type === 'IN' ? 'Versement' : 'Retrait';
 
 /** Part des parents à une date : leur capital d'aujourd'hui, moins leurs mouvements d'après. */
-const parentalAt = (a: SavingsAccount, iso: string) =>
+export const parentalAt = (a: Pick<SavingsAccount, 'movements' | 'parentalCapital'>, iso: string) =>
   a.movements.reduce((s, m) => (m.date > iso && m.kind === 'parental' ? s - signedAmount(m) : s), a.parentalCapital);
 
 /**

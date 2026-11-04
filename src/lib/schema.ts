@@ -202,6 +202,13 @@ const sanitizeFiscalConfig = (raw: unknown): FiscalConfig => {
   };
 };
 
+/** Objectifs annuels : « AAAA » → montant positif et fini ; `undefined` s'il n'en reste rien. */
+const sanitizeYearGoals = (raw: unknown): Record<string, number> | undefined => {
+  if (!isObj(raw)) return undefined;
+  const out = Object.fromEntries(Object.entries(raw).filter(([y, v]) => /^\d{4}$/.test(y) && typeof v === 'number' && Number.isFinite(v) && v > 0)) as Record<string, number>;
+  return Object.keys(out).length > 0 ? out : undefined;
+};
+
 /**
  * Clôtures d'année (lib/yearClosing) remises d'aplomb : seules les années « AAAA » à objet
  * restent ; une date de clôture illisible est retirée (année rouverte), les coches gardent
@@ -366,6 +373,12 @@ export const migrate = (raw: unknown): AppDoc => {
   if (config.yearClosings !== undefined) {
     const closings = sanitizeYearClosings(config.yearClosings);
     if (closings) config.yearClosings = closings; else delete config.yearClosings;
+  }
+  // Objectifs annuels (clôture de l'année) : années « AAAA » et montants positifs seulement,
+  // sans changer de version.
+  if (config.yearGoals !== undefined) {
+    const goals = sanitizeYearGoals(config.yearGoals);
+    if (goals) config.yearGoals = goals; else delete config.yearGoals;
   }
   // Retraits prévus (« J'ai besoin d'argent ») : entrées illisibles écartées, sans changer de version.
   if (config.plannedWithdrawals !== undefined) {

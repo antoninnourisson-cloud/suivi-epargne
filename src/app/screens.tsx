@@ -34,6 +34,8 @@ export const MotivationSettings = lazyWithRetry(() => import('../components/moti
 export const TaxReturnHelper = lazyWithRetry(() => import('../components/TaxReturnHelper').then(m => ({ default: m.TaxReturnHelper })));
 export const SoloPlanCard = lazyWithRetry(() => import('../components/SoloPlanCard').then(m => ({ default: m.SoloPlanCard })));
 export const YearClosingCard = lazyWithRetry(() => import('../components/year/YearClosingCard').then(m => ({ default: m.YearClosingCard })));
+// Rituel « Clôture de l'année » : depuis la tâche de l'Accueil (janvier-février) et la carte de l'Historique.
+export const YearClosingSheet = lazyWithRetry(() => import('../components/year/YearClosingSheet').then(m => ({ default: m.YearClosingSheet })));
 export const ConflictDialog = lazyWithRetry(() => import('../components/sync/ConflictDialog').then(m => ({ default: m.ConflictDialog })));
 export const LogoutDialog = lazyWithRetry(() => import('../components/sync/LogoutDialog').then(m => ({ default: m.LogoutDialog })));
 export const QuickAddModal = lazyWithRetry(() => import('../components/agendaQuickAdd').then(m => ({ default: m.QuickAddModal })));

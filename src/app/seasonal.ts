@@ -6,3 +6,5 @@
 export { buildAgenda } from '../lib/agenda';
 export { buildTaxReturnAlert } from '../lib/taxReturn';
 export { yearClosingStatus } from '../lib/yearClosing';
+// Objectif de l'année (fixé à la clôture) : sa ligne dans la carte de l'objectif du mois.
+export { yearGoalProgress } from '../lib/yearGoal';
