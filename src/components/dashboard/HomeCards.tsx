@@ -54,10 +54,11 @@ export const EmergencyCard: React.FC<{ emergency: EmergencyFund; onSetMonths?: (
       {emergency.months} mois de dépenses ({fmtEUR(emergency.monthlySpending)} par mois), sur vos livrets et comptes courants, votre part seulement.
       {emergency.cashBuffer ? ` Les ${fmtEUR(emergency.cashBuffer)} gardés sur le compte courant pour les dépenses du mois n'en font pas partie.` : ''}
     </p>
-    {/* Durée de survie : la même épargne, sur une autre base (charges fixes seules), dite en toutes lettres. */}
+    {/* Durée de survie (ex-Pilotage, même chiffre) : son épargne (placements compris) et sa base
+        (charges fixes seules), dites en toutes lettres : ce n'est pas la base de la jauge. */}
     {emergency.survival && (
       <p className="text-sm text-on-surface mt-2">
-        Sans revenu, en ne payant que vos charges fixes ({fmtEUR(emergency.survival.fixedCharges)} par mois), cette épargne tiendrait <strong className="font-medium">{survivalLabel(emergency.survival.months)}</strong>.
+        Sans revenu, en ne payant que vos charges fixes ({fmtEUR(emergency.survival.fixedCharges)} par mois), votre épargne disponible, placements compris ({fmtEUR(emergency.survival.savings)}), tiendrait <strong className="font-medium">{survivalLabel(emergency.survival.months)}</strong>.
       </p>
     )}
     {onSetMonths && (

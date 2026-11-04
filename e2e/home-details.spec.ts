@@ -62,9 +62,9 @@ test.describe('Accueil : plus de détails (démo)', () => {
 });
 
 test.describe('Accueil : épargne de précaution (démo)', () => {
-  test('la durée de survie (ex-Pilotage) est une ligne de la carte, qui nomme sa base', async ({ page }) => {
+  test('la durée de survie (ex-Pilotage) est une ligne de la carte, qui nomme son épargne et sa base', async ({ page }) => {
     await openDemo(page);
     const card = page.locator('section, div').filter({ has: page.getByRole('progressbar', { name: 'Épargne de précaution' }) }).last();
-    await expect(card.getByText(/^Sans revenu, en ne payant que vos charges fixes \([\d\s  ]+€ par mois\), cette épargne tiendrait .+\.$/)).toBeVisible();
+    await expect(card.getByText(/^Sans revenu, en ne payant que vos charges fixes \([\d\s  ]+€ par mois\), votre épargne disponible, placements compris \([\d\s  ]+€\), tiendrait .+\.$/)).toBeVisible();
   });
 });

@@ -20,13 +20,29 @@ describe('épargne de précaution', () => {
   it('rien sans dépenses connues', () => {
     expect(computeEmergencyFund([], 0)).toBeNull();
   });
-  it('durée de survie : la même épargne que la jauge, en mois de charges fixes seules', () => {
+  it('durée de survie : le chiffre de l’ancienne carte du Pilotage (épargne disponible, placements compris), en mois de charges fixes seules', () => {
     const accounts = [acc({ id: 'la', name: 'LA', type: AccountType.LIVRET_A, ownedAmount: 14700 })] as any;
     // Charges fixes 1 050 € + solde de départ 400 € : la jauge compte 1 450 € par mois.
     const f = computeEmergencyFund(accounts, 1450, 3, 1050)!;
     expect(f.current).toBe(14700);
-    expect(f.survival).toEqual({ fixedCharges: 1050, months: 14 });
+    expect(f.survival).toEqual({ fixedCharges: 1050, savings: 14700, months: 14 });
     expect(survivalLabel(f.survival!.months)).toBe('1 an et 2 mois');
+    // Comme l'ancienne carte : PEA, assurance vie et tout le compte courant comptent ; pas
+    // l'immobilier, le PER, le PEE ni un contrat à échéance. La jauge, elle, garde sa base.
+    const mixed = [
+      ...accounts,
+      acc({ id: 'pea', name: 'PEA', type: AccountType.PEA, ownedAmount: 6000 }),
+      acc({ id: 'av', name: 'AV', type: AccountType.ASSURANCE_VIE, ownedAmount: 2100 }),
+      acc({ id: 'cc', name: 'CC', type: AccountType.COMPTE_COURANT, ownedAmount: 1000 }),
+      acc({ id: 'per', name: 'PER', type: AccountType.PER, ownedAmount: 5000 }),
+      acc({ id: 'pee', name: 'PEE', type: AccountType.PEE, ownedAmount: 5000 }),
+      acc({ id: 'immo', name: 'Immo', type: AccountType.IMMOBILIER, ownedAmount: 90000 }),
+      acc({ id: 'cat', name: 'CAT', type: AccountType.LIVRET_BANCAIRE, ownedAmount: 3000, contractEndDate: '2027-06-30' }),
+    ] as any;
+    const g = computeEmergencyFund(mixed, 1450, 3, 1050)!;
+    expect(g.survival).toEqual({ fixedCharges: 1050, savings: 23800, months: 23800 / 1050 });
+    expect(survivalLabel(g.survival!.months)).toBe('1 an et 10 mois');
+    expect(g.current).toBeLessThan(23800);
     // Sans charge fixe (ou non fournie) : pas de durée.
     expect(computeEmergencyFund(accounts, 400, 3, 0)!.survival).toBeUndefined();
     expect(computeEmergencyFund(accounts, 400, 3)!.survival).toBeUndefined();

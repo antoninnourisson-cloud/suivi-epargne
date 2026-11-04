@@ -30,11 +30,22 @@ export interface EmergencyFund {
   pct: number;
   reached: boolean;
   /**
-   * Durée de survie, même épargne que la jauge (`current`) : en mois de charges fixes seules
+   * Durée de survie (ex-carte du Pilotage, même chiffre) : l'épargne disponible, placements
+   * compris (availableSavingsOf, PAS la base de la jauge), en mois de charges fixes seules
    * (virements fixes, abonnements compris), sans revenu. Absente sans charge fixe.
    */
-  survival?: { fixedCharges: number; months: number };
+  survival?: { fixedCharges: number; savings: number; months: number };
 }
+
+/**
+ * Épargne disponible de la durée de survie, comme l'ancienne carte du Pilotage : votre part sur
+ * tous les comptes (placements, assurance vie et comptes courants compris), sauf l'immobilier,
+ * l'épargne retraite et salariale bloquée (PER, PEE) et les contrats à échéance.
+ */
+export const availableSavingsOf = (accounts: Pick<SavingsAccount, 'type' | 'ownedAmount' | 'contractEndDate'>[]): number =>
+  accounts
+    .filter(a => !a.contractEndDate && ![AccountType.IMMOBILIER, AccountType.PER, AccountType.PEE].includes(a.type))
+    .reduce((s, a) => s + a.ownedAmount, 0);
 
 /**
  * Épargne de précaution disponible (votre part) : livrets et comptes sans délai, plus ce qui
@@ -60,7 +71,8 @@ export const computeEmergencyFund = (
   const cashBuffer = currentAccountBuffer(monthlySpending);
   const current = emergencySavingsOf(accounts, cashBuffer);
   const missing = Math.max(0, target - current);
-  const survival = fixedCharges !== undefined && fixedCharges > 0 ? { fixedCharges, months: current / fixedCharges } : undefined;
+  const savings = fixedCharges !== undefined && fixedCharges > 0 ? availableSavingsOf(accounts) : 0;
+  const survival = fixedCharges !== undefined && fixedCharges > 0 ? { fixedCharges, savings, months: savings / fixedCharges } : undefined;
   return {
     months, monthlySpending, target, current, cashBuffer, missing, pct: Math.min(100, (current / target) * 100), reached: missing <= 0,
     ...(survival ? { survival } : {}),
