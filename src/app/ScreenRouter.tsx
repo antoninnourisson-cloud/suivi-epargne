@@ -13,6 +13,8 @@ import type { SavingsAccount } from '../types';
 import { isView, SCREEN_LABELS, tabsOf, type Place, type ScreenTab, type View } from '../navigation';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import { openSettingsSection } from '../components/settings/sections';
+import { PAY_SETTINGS_INCOME_ID, requestPaySettings } from '../components/pilot/paySettingsRequest';
+import { revealElementById } from '../components/revealElement';
 import {
   AccountUpdate, AccountsView, Agenda, AskPeculeEntry, AssistantPilot, CloudBackupPanel, Dashboard, Donations, DriveBackupsPanel,
   FiscalCalendar, FiscalWatchCard, History, Journal, Lazy, MotivationSettings, ParentalShare, Payslips, ServerSecurityPanel,
@@ -175,7 +177,7 @@ export const ScreenRouter = memo(function ScreenRouter({ place, setView, onSelec
           config={c} onPatchConfig={data.patchConfig}
           fiscalConfig={doc.fiscalConfig} workBenefits={doc.workBenefits}
           activePayslip={derived.activePayslip} onClearActivePayslip={actions.clearActivePayslip}
-          subscriptions={doc.subscriptions} onOpenSubscriptions={() => setView('subscriptions')}
+          subscriptions={doc.subscriptions} onOpenSubscriptions={() => setView('subscriptions')} onOpenNotifications={() => openSettings('notifications')}
           payChecklist={payChecklist} onPayLineCheck={actions.checkPayLine} onPayLineUncheck={actions.uncheckPayLine} onPayPlanReset={actions.resetPayPlan}
           payCalendar={payCalendar} payRitual={payRitual}
           />}
@@ -244,7 +246,8 @@ export const ScreenRouter = memo(function ScreenRouter({ place, setView, onSelec
             onSignedOutEverywhere={onSignedOutEverywhere} /></Lazy>}
           motivationSlot={<Lazy><MotivationSettings gamification={c.gamification} goodMonthThreshold={c.goodMonthThreshold} onChange={patch => data.patchConfig(patch)} /></Lazy>}
           paydayDay={c.paydayDay}
-          onOpenPayday={() => setView('pilot')}
+          // « Modifier : Pilotage › Paie habituelle » : Ce mois › Réglages de la paie › Paie habituelle, ouvert.
+          onOpenPayday={() => { requestPaySettings(); setView('pilot'); revealElementById(PAY_SETTINGS_INCOME_ID); }}
           // Champ par champ, à partir de l'état le plus récent : une saisie ne défait jamais ce
           // qui a changé entre-temps (veille fiscale, avis, import).
           onUpdateFiscal={update => data.setFiscalConfig(update)}

@@ -25,12 +25,14 @@ export const PartSwatch: React.FC<{ part: PayBarKey }> = ({ part }) => (
 
 interface PayBarProps {
   bar: PayBarData;
+  /** Précision : à l'euro ou au centime (pilotView.barDecimals) ; par défaut, selon le montant. */
+  decimals?: 0 | 2;
   /** Précision sous le montant d'une part (« dont prime 500 € »…). */
   notes?: Partial<Record<PayBarKey, React.ReactNode>>;
   className?: string;
 }
 
-export const PayBar: React.FC<PayBarProps> = ({ bar, notes = {}, className = '' }) => {
+export const PayBar: React.FC<PayBarProps> = ({ bar, notes = {}, decimals, className = '' }) => {
   const segments = bar.parts.flatMap(p => {
     const cut = p.planned !== undefined ? Math.max(0, p.planned - p.amount) : 0;
     return [
@@ -58,8 +60,8 @@ export const PayBar: React.FC<PayBarProps> = ({ bar, notes = {}, className = '' 
               {p.label}
             </dt>
             <dd className="ml-5 text-on-surface">
-              <MoneyText value={p.amount} className="font-medium" />
-              {p.planned !== undefined && <span className="text-on-surface-variant"> (prévu {formatEUR(p.planned)})</span>}
+              <MoneyText value={p.amount} decimals={decimals} className="font-medium" />
+              {p.planned !== undefined && <span className="text-on-surface-variant"> (prévu {formatEUR(p.planned, decimals)})</span>}
               {notes[p.key] && <span className="block text-xs text-on-surface-variant">{notes[p.key]}</span>}
             </dd>
           </div>

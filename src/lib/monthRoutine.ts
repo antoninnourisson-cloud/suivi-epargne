@@ -17,6 +17,7 @@ import { findStaleBalances, freshnessLimitDays, lastBalanceCheck } from './fresh
 import { formatISODay, parseISODate } from './dates';
 import { elideDe, formatMonth, formatPeriod, frenchDay } from './format';
 import { isPayReviewDone, liveDone, openPay, payslipPeriodOf } from './payRecords';
+import { isPayTodoLine } from './finance/payPlan';
 
 export type RoutineStepKey = 'pay' | 'payslip' | 'balances';
 
@@ -65,12 +66,14 @@ export const computeMonthRoutine = (input: {
   const { window, pay } = openPay({ pays, payslips, accounts, config: { paydayDay: input.paydayDay } }, now);
   const steps: RoutineStep[] = [];
 
-  // 1. Paie reçue et répartie : déclarée, virements faits, bilan du mois précédent validé.
+  // 1. Paie reçue et répartie : déclarée, virements faits, bilan du mois précédent validé. La
+  //    ligne Plaisir n'est pas une case (elle reste sur le compte courant) : jamais comptée.
   const reviewPending = !!input.payReviewKey && !isPayReviewDone(input.payReviewKey, input.payReviewsDone, pays);
   if ((input.monthlyPay ?? 0) > 0 || pay || input.payReviewKey) {
     const done = pay ? liveDone(pay.done, accounts) : {};
-    const total = pay?.lines.length ?? 0;
-    const checked = pay ? pay.lines.filter(l => done[l.key]).length : 0;
+    const todo = pay ? pay.lines.filter(isPayTodoLine) : [];
+    const total = todo.length;
+    const checked = todo.filter(l => done[l.key]).length;
     const review = reviewPending ? `Bilan ${elideDe(formatMonth(input.payReviewKey!))} à valider` : '';
     let detail: string, action: string;
     if (!pay) {

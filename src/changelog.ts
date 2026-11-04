@@ -15,6 +15,17 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '2026.11.04',
+    date: '2026-11-04',
+    title: 'Pilotage : « Ma paie » et ses réglages',
+    items: [
+      "Pilotage › Ce mois tient en deux cartes : « Ma paie », avec la barre en quatre parts, « À faire », « Modifier la paie » et « Autre argent reçu », puis « Réglages de la paie », où tous les réglages sont regroupés dans l'ordre de la barre.",
+      "« Budget argent plaisir » devient « Solde de départ du mois » : c'est ce que le compte courant doit avoir au début du mois, paie répartie.",
+      "La pastille de l'icône, la routine du mois et le rappel du jour de paie ne comptent plus l'argent plaisir comme un virement à faire : il reste simplement sur le compte courant.",
+      "La « Durée de survie » est passée à l'Accueil, dans l'Épargne de précaution, avec le même chiffre qu'avant : votre épargne disponible, placements compris, sur vos seules charges fixes.",
+    ],
+  },
+  {
     version: '2026.11.03',
     date: '2026-11-03',
     title: "Ma paie : je fais quoi de toute ma paie ?",

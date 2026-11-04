@@ -5,7 +5,7 @@
 // ================================================
 import { AccountType, FiscalConfig, GlobalAppData, SavingsAccount, PayslipRecord } from '../types';
 import {
-  SavingsSplit, payslipSuperNet, computePayTransfers, findDueRecurring,
+  SavingsSplit, payslipSuperNet, computePayTransfers, findDueRecurring, isPayTodoLine,
   findStaleRegulatedRates, findFiscalReview, findAvRateUpdatesDue, socialChargesRateFor,
   accountAgeYears, computeMaturityCountdown, PFU_INCOME_TAX_RATE, isHousingSavingsIncomeTaxExempt,
 } from './finance';
@@ -174,8 +174,8 @@ export const detectPayRaise = (payslips: PayslipRecord[]): { latest: PayslipReco
 /**
  * Nombre de choses à faire, affiché sur l'icône de l'app installée : paie du mois d'épargne
  * attendue mais pas encore déclarée (1 : le rituel « J'ai reçu ma paie »), sinon ses
- * virements pas encore faits ; échéances récurrentes à enregistrer, taux et paramètres
- * fiscaux à revoir.
+ * virements pas encore faits (jamais le plaisir : il reste sur le compte courant, rien à
+ * virer) ; échéances récurrentes à enregistrer, taux et paramètres fiscaux à revoir.
  */
 export const computeBadgeCount = (data: GlobalAppData, asOfDate: Date = new Date()): number => {
   const accounts = data.accounts || [];
@@ -185,11 +185,11 @@ export const computeBadgeCount = (data: GlobalAppData, asOfDate: Date = new Date
   if (pay) {
     // Une ligne dont le versement a été supprimé à la main redevient à faire.
     const done = liveDone(pay.done, accounts);
-    count += pay.lines.filter(l => !done[l.key]).length;
+    count += pay.lines.filter(l => isPayTodoLine(l) && !done[l.key]).length;
   } else if (data.config?.paydayDay) {
     // Même objectif que le Pilotage et l'Accueil (lib/payAdjustment) : rien à répartir, rien à faire.
     const transfers = computePayTransfers({ expenses: data.expenses || [], subscriptions: data.subscriptions, leisureBudget: data.config.leisureBudget ?? 0, projectSavings: data.config.projectSavings ?? 0 });
-    if (transfers.length > 0 || computeMonthTarget(data, asOfDate).total > 0) count += 1;
+    if (transfers.some(isPayTodoLine) || computeMonthTarget(data, asOfDate).total > 0) count += 1;
   }
   count += findDueRecurring(data.recurringMovements || [], accounts, asOfDate).length;
   if (findStaleRegulatedRates(accounts, asOfDate)) count += 1;

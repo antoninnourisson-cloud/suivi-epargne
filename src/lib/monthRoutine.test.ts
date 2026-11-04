@@ -26,6 +26,16 @@ const base = {
 };
 
 describe('routine du mois', () => {
+  it("la ligne Plaisir n'est pas une case : ni comptée, ni attendue", () => {
+    const leisure = { key: 't:leisure', label: 'Argent plaisir (reste sur le compte courant)', amount: 400, kind: 'transfer' as const };
+    const withLeisure = (done: string[]) => {
+      const p = pay(done);
+      return computeMonthRoutine({ ...base, payReviewsDone: ['2026-10'], pays: [{ ...p, lines: [...p.lines, leisure] }] })!.steps[0];
+    };
+    expect(withLeisure(['t:Loyer'])).toMatchObject({ done: false, detail: '1 sur 2 faits' });
+    expect(withLeisure(['t:Loyer', 's:a'])).toMatchObject({ done: true, detail: 'Reçue le 27 octobre' });
+  });
+
   it("suit le mois d'épargne et le nomme, en trois étapes, avec les élisions", () => {
     const r = computeMonthRoutine(base)!;
     expect(r.periodKey).toBe('2026-11');

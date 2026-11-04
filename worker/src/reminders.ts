@@ -21,6 +21,7 @@ import {
   findAccountsAwaitingAnnualStatement,
   computeDonationSummary,
   computeRestitutionPlan,
+  isPayTodoLine,
 } from '../../src/lib/finance';
 import { LATEST_TAX_SCALE } from '../../src/constants';
 import { computeYearReview } from '../../src/lib/agenda';
@@ -204,8 +205,11 @@ export const computeReminders = (data: GlobalAppData, today: CivilDate | Date, a
       payPeriod.key !== savingsMonth ? { legacyKeys: [`${prefix}:${payPeriod.key}`] } : {};
     const pay = (data.pays ?? []).find(p => p.kind !== 'extra' && savingsMonthOfPay(p) === savingsMonth);
     const daysSincePay = todayN - dayNumberOfLocal(payPeriod.payDate);
-    // Virements du plan de la paie habituelle (règle de la paie : plaisir = ce qui reste).
-    const transfers = () => usualPayDistribution(data, now).transfers;
+    // Plan de la paie habituelle (règle de la paie, lib/payDistribution). Le serveur ne connaît
+    // pas ce qui reste sur le compte courant : estimation comme s'il était vide.
+    const usual = () => usualPayDistribution(data, now);
+    // Virements à faire (le plaisir reste sur le compte courant : rien à virer).
+    const transfers = () => usual().transfers.filter(isPayTodoLine);
     // Estimation du Pilotage tant que la paie n'est pas déclarée (même objectif que l'Accueil).
     const estimate = () => {
       const amount = computeMonthTarget(data, now).total;
@@ -217,15 +221,22 @@ export const computeReminders = (data: GlobalAppData, today: CivilDate | Date, a
     if (!pay && daysSincePay >= 0 && daysSincePay < PAYDAY_WINDOW_DAYS) {
       const { amount, steps } = estimate();
       if (steps.length > 0) {
+        // Dans l'ordre des virements, comme la carte « Ma paie » : fixes (un total), épargne par
+        // compte, projets, puis le compte courant (plaisir), qui démarre le mois à ce qui reste.
+        const plan = usual().allocation;
+        const saving = steps.filter(s => !s.infoOnly);
+        const where = (s: typeof saving[number]) => `${eur(s.fillAmount)} ${s.alert ? `→ ${s.accountName.toLowerCase()}` : `sur ${s.accountName}`}`;
         out.push({
           key: `payday:${savingsMonth}`,
           ...legacy('payday'),
           message: {
             title: `Paie reçue ? Environ ${eur(amount)} à placer`,
             body: [
-              ...transfers().map(t => `${eur(t.amount)} ${t.label}`),
-              `Épargne : ${steps.filter(s => !s.infoOnly).map(s => `${eur(s.fillAmount)} ${s.alert ? `→ ${s.accountName.toLowerCase()}` : `sur ${s.accountName}`}`).join(', ')}`,
-            ].join(' · ') + '.',
+              plan.fixed > 0 && `Virements fixes ${eur(plan.fixed)}`,
+              saving.length === 1 && !saving[0].alert ? `Épargne ${where(saving[0])}` : `Épargne ${eur(amount)} : ${saving.map(where).join(', ')}`,
+              plan.projects > 0 && `Projets ${eur(plan.projects)}`,
+              plan.leisure > 0 && `Plaisir : le compte courant démarre à ${eur(plan.leisure)}`,
+            ].filter(Boolean).join(' · ') + '. Gardez le solde de votre compte courant sous la main.',
             url: payLink,
             tag: 'payday',
           },
@@ -258,7 +269,7 @@ export const computeReminders = (data: GlobalAppData, today: CivilDate | Date, a
           : recommendPayDistribution(data, { amount: pay.amount, bonus: pay.bonus, toSave: pay.toSave, before: payBalanceBefore(pay), receivedOn: pay.receivedOn }).lines;
         const done = liveDone(pay.done, accounts);
         // Le plaisir reste sur le compte courant : rien à virer, jamais compté.
-        const pending = lines.filter(l => !done[l.key] && l.key !== 't:leisure');
+        const pending = lines.filter(l => isPayTodoLine(l) && !done[l.key]);
         if (pending.length > 0) {
           out.push({
             key: `payday-followup:${savingsMonth}`,
