@@ -16,9 +16,21 @@
 //   Cloudflare (fetch en « no-store »).
 // Sans ce Worker, Cloudflare imposait 4 heures à tout (réglage « Browser Cache TTL »).
 //
-// La politique de contenu complète (CSP) reste dans la balise <meta> d'index.html, seule
-// source de vérité : ici, uniquement frame-ancestors, qu'une balise <meta> ne peut pas
-// exprimer.
+// Politique de contenu (CSP) : la balise <meta> d'index.html reste la seule source de vérité
+// (Vite y écrit l'adresse du serveur à la construction, que ce Worker ne connaît pas). Pour
+// une page HTML en 200 qui porte cette balise, le Worker en recopie la politique telle quelle
+// dans un en-tête HTTP (le corps est lu en entier, quelques ko, puis renvoyé à l'identique),
+// avec « report-uri /csp-report » et « report-to csp » (+ Reporting-Endpoints) pour recevoir
+// les violations. Une page sans balise (presentation.html, confidentialite.html) ou toute
+// autre réponse garde son corps tel quel. frame-ancestors, qu'une balise <meta> ne peut pas
+// exprimer, reste un en-tête séparé, ajouté dans tous les cas.
+//
+// POST /csp-report : reçoit les rapports du navigateur (application/csp-report ou
+// application/reports+json), traités ici, jamais relayés. Une ligne console.warn par
+// violation, avec seulement : la règle, le site bloqué (origine seule, ou inline / eval / data),
+// le chemin de la page (sans paramètres) et la disposition. Ni adresse complète, ni agent
+// utilisateur, ni IP. Réponse 204 ; plus de 16 Ko : 413 ; autre type de contenu : 415.
+// Tout autre POST, PUT... est relayé sans modification.
 // ================================================
 
 const CANONICAL_HOST = 'pecule-app.com';
@@ -56,10 +68,30 @@ export const cacheControlFor = (pathname: string, contentType: string | null): s
   return null;
 };
 
-const withSecurityHeaders = (res: Response, pathname: string): Response => {
-  // Les en-têtes d'une réponse fetch() sont immuables : copie (le corps est relayé en flux,
-  // sans être lu ni modifié).
-  const out = new Response(res.body, res);
+const CSP_REPORT_PATH = '/csp-report';
+const CSP_REPORT_MAX_BYTES = 16 * 1024;
+const CSP_REPORT_MAX_ENTRIES = 20;
+
+/** Politique de la balise <meta http-equiv="Content-Security-Policy">, espaces normalisés, ou `null`. */
+export const cspFromHtml = (html: string): string | null => {
+  // Les commentaires peuvent citer la balise sans qu'elle s'applique.
+  for (const tag of html.replace(/<!--[\s\S]*?-->/g, '').match(/<meta\b[^>]*>/gi) ?? []) {
+    if (!/\bhttp-equiv\s*=\s*["']?content-security-policy["'\s/>]/i.test(tag)) continue;
+    const content = /\bcontent\s*=\s*(?:"([^"]*)"|'([^']*)')/i.exec(tag);
+    const policy = (content?.[1] ?? content?.[2] ?? '').replace(/\s+/g, ' ').trim().replace(/;$/, '').trim();
+    return policy || null;
+  }
+  return null;
+};
+
+const withSecurityHeaders = (res: Response, pathname: string, body: BodyInit | null = res.body, csp: string | null = null): Response => {
+  // Les en-têtes d'une réponse fetch() sont immuables : copie (hors CSP, le corps est relayé
+  // en flux, sans être lu ni modifié).
+  const out = new Response(body, res);
+  if (csp) {
+    out.headers.append('Content-Security-Policy', `${csp}; report-uri ${CSP_REPORT_PATH}; report-to csp`);
+    out.headers.set('Reporting-Endpoints', `csp="${CSP_REPORT_PATH}"`);
+  }
   for (const [name, value] of Object.entries(SECURITY_HEADERS)) out.headers.set(name, value);
   out.headers.append('Content-Security-Policy', FRAME_ANCESTORS_CSP);
   if (res.status === 200 || res.status === 304) {
@@ -72,6 +104,58 @@ const withSecurityHeaders = (res: Response, pathname: string): Response => {
     }
   }
   return out;
+};
+
+/** Adresse bloquée réduite à son site, ou à un mot (inline, eval, data...). */
+const blockedSite = (raw: unknown): string => {
+  if (typeof raw !== 'string' || !raw) return 'inconnu';
+  if (/^data:/i.test(raw)) return 'data';
+  if (/^[a-z-]{1,20}$/i.test(raw)) return raw.toLowerCase();
+  try {
+    const u = new URL(raw);
+    return ['http:', 'https:', 'ws:', 'wss:'].includes(u.protocol) ? u.origin : u.protocol.slice(0, -1).slice(0, 20);
+  } catch {
+    return 'inconnu';
+  }
+};
+
+const pathOf = (raw: unknown): string => {
+  if (typeof raw !== 'string') return 'inconnu';
+  try { return new URL(raw).pathname.slice(0, 100); } catch { return 'inconnu'; }
+};
+
+const directiveOf = (raw: unknown): string => {
+  const first = typeof raw === 'string' ? raw.trim().split(/\s+/)[0] : '';
+  return /^[a-z-]{1,40}$/.test(first) ? first : 'inconnu';
+};
+
+const logViolation = (v: Record<string, unknown>): void => {
+  const directive = directiveOf(v['effective-directive'] ?? v.effectiveDirective ?? v['violated-directive'] ?? v.violatedDirective);
+  const disposition = v.disposition === 'report' ? 'report' : 'enforce';
+  console.warn(`csp-violation directive=${directive} blocked=${blockedSite(v['blocked-uri'] ?? v.blockedURL)} page=${pathOf(v['document-uri'] ?? v.documentURL)} disposition=${disposition}`);
+};
+
+const isRecord = (x: unknown): x is Record<string, unknown> => typeof x === 'object' && x !== null && !Array.isArray(x);
+
+const handleCspReport = async (request: Request): Promise<Response> => {
+  const type = (request.headers.get('Content-Type') || '').split(';')[0].trim().toLowerCase();
+  if (type !== 'application/csp-report' && type !== 'application/reports+json') return new Response(null, { status: 415 });
+  if (Number(request.headers.get('Content-Length')) > CSP_REPORT_MAX_BYTES) return new Response(null, { status: 413 });
+  const raw = await request.arrayBuffer();
+  if (raw.byteLength > CSP_REPORT_MAX_BYTES) return new Response(null, { status: 413 });
+  try {
+    const data: unknown = JSON.parse(new TextDecoder().decode(raw));
+    if (type === 'application/csp-report') {
+      if (isRecord(data) && isRecord(data['csp-report'])) logViolation(data['csp-report']);
+    } else if (Array.isArray(data)) {
+      for (const entry of data.slice(0, CSP_REPORT_MAX_ENTRIES)) {
+        if (isRecord(entry) && entry.type === 'csp-violation' && isRecord(entry.body)) logViolation(entry.body);
+      }
+    }
+  } catch {
+    // JSON illisible : rien à noter.
+  }
+  return new Response(null, { status: 204 });
 };
 
 export default {
@@ -89,6 +173,8 @@ export default {
       return new Response(null, { status: safe ? 301 : 308, headers: { Location: url.toString() } });
     }
 
+    if (request.method === 'POST' && url.pathname === CSP_REPORT_PATH) return handleCspReport(request);
+
     // Seules les pages et fichiers servis (GET/HEAD) reçoivent les en-têtes ; le reste est
     // relayé sans aucune modification.
     if (request.method !== 'GET' && request.method !== 'HEAD') return fetch(request);
@@ -97,6 +183,11 @@ export default {
     // gardait sw.js 10 minutes, la durée donnée par GitHub Pages, et retardait d'autant la
     // mise à jour des apps installées, 30 octobre 2026).
     const upstream = ALWAYS_FRESH.has(url.pathname) ? await fetch(request, { cache: 'no-store' }) : await fetch(request);
+    // Page HTML en 200 : lue en entier pour recopier la CSP de sa balise <meta> (quelques ko).
+    if (request.method === 'GET' && upstream.status === 200 && (upstream.headers.get('Content-Type') || '').toLowerCase().startsWith('text/html')) {
+      const text = await upstream.text();
+      return withSecurityHeaders(upstream, url.pathname, text, cspFromHtml(text));
+    }
     return withSecurityHeaders(upstream, url.pathname);
   },
 } satisfies ExportedHandler;

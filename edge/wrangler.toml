@@ -18,3 +18,13 @@ routes = [
   { pattern = "pecule-app.com/*", zone_name = "pecule-app.com" },
   { pattern = "www.pecule-app.com/*", zone_name = "pecule-app.com" },
 ]
+
+# Journaux consultables dans le tableau de bord (Workers → pecule-edge → Logs) : seulement les
+# lignes écrites par le Worker lui-même (violations de la politique de sécurité reçues sur
+# /csp-report : règle, site bloqué, chemin de la page). Les journaux d'appels (une entrée par
+# requête, donc l'adresse IP) sont DÉSACTIVÉS, comme sur le serveur de l'application.
+[observability]
+enabled = true
+
+[observability.logs]
+invocation_logs = false
