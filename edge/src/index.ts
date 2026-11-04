@@ -88,6 +88,9 @@ const withSecurityHeaders = (res: Response, pathname: string, body: BodyInit | n
   // Les en-têtes d'une réponse fetch() sont immuables : copie (hors CSP, le corps est relayé
   // en flux, sans être lu ni modifié).
   const out = new Response(body, res);
+  // Corps relu puis réécrit (page HTML) : la longueur d'origine, peut-être celle d'un corps
+  // compressé, ne vaut plus ; le moteur la recalcule.
+  if (body !== res.body) out.headers.delete('Content-Length');
   if (csp) {
     out.headers.append('Content-Security-Policy', `${csp}; report-uri ${CSP_REPORT_PATH}; report-to csp`);
     out.headers.set('Reporting-Endpoints', `csp="${CSP_REPORT_PATH}"`);
