@@ -30,6 +30,7 @@ import { MS_PER_DAY, daysBetween, formatISODay, parseISODate } from './dates';
 import { round2, signedAmount } from './money';
 import { csvAmount, type CsvCell } from './csv';
 import type { RateProposalInfo } from './rateChanges';
+import type { BackupUploadProblem } from './recoveryCodeCheck';
 import { elideDe, elideLe, formatEUR, formatMonth, formatPeriod, formatRate, frenchDay } from './format';
 
 // ---------------------------------------------------------------------------
@@ -564,6 +565,8 @@ export interface HomeTodoInput {
    * depuis un an (lib/recoveryCodeCheck, backupCodeCheckDue).
    */
   backupCodeCheckDue?: boolean;
+  /** Sauvegarde de secours activée, mais dernier envoi vieux de plus de 30 jours ou erreur récente (lib/recoveryCodeCheck). */
+  backupProblem?: (BackupUploadProblem & { reason?: string }) | null;
   /** Retraits prévus (« J'ai besoin d'argent ») dont le jour est venu (lib/needMoney). */
   plannedWithdrawals?: PlannedWithdrawal[];
   /** Taux réglementés relevés par la veille fiscale, en attente (lib/rateChanges). */
@@ -629,6 +632,8 @@ export const buildHomeTodos = (i: HomeTodoInput): HomeTodo[] => {
       const name = i.accounts.find(a => a.id === l.accountId)?.name;
       return `${formatEUR(l.amount)} sur ${name ? elideLe(name) : 'un compte supprimé'}`;
     });
+    // Un compte supprimé depuis : l'enregistrement est impossible, seule la suppression a un sens.
+    const orphan = p.lines.some(l => !i.accounts.some(a => a.id === l.accountId));
     const list = takes.length > 1 ? `${takes.slice(0, -1).join(', ')} et ${takes[takes.length - 1]}` : takes[0];
     out.push({
       key: `withdrawal-${p.id}`, icon: 'wallet', tone: 'action', pinned: true,
@@ -636,8 +641,10 @@ export const buildHomeTodos = (i: HomeTodoInput): HomeTodo[] => {
       detail: p.date < p.needDate
         ? `Fait le ${dayMonth(p.date)} ou après, ce retrait garde les intérêts de la quinzaine qui vient de finir.`
         : undefined,
-      primary: i.can.plannedWithdrawals ? { label: 'Enregistrer', action: { type: 'record-planned-withdrawal', id: p.id } } : undefined,
-      secondary: i.can.plannedWithdrawals ? { label: 'Supprimer', action: { type: 'delete-planned-withdrawal', id: p.id } } : undefined,
+      primary: !i.can.plannedWithdrawals ? undefined
+        : orphan ? { label: 'Supprimer', action: { type: 'delete-planned-withdrawal', id: p.id } }
+        : { label: 'Enregistrer', action: { type: 'record-planned-withdrawal', id: p.id } },
+      secondary: i.can.plannedWithdrawals && !orphan ? { label: 'Supprimer', action: { type: 'delete-planned-withdrawal', id: p.id } } : undefined,
     });
   }
   const lep = i.lepTimeline;
@@ -728,6 +735,20 @@ export const buildHomeTodos = (i: HomeTodoInput): HomeTodo[] => {
     detail: 'Pécule garde déjà une copie mensuelle sur votre Drive ; celle-ci reste chez vous.',
     primary: { label: 'Télécharger', action: { type: 'export' } },
   });
+  // La copie chiffrée n'est plus envoyée : à dire sans attendre le jour où on en aurait besoin.
+  // Pas de carte permanente : un envoi réussi efface l'erreur et rajeunit la date.
+  if (i.backupProblem && i.can.openSettings) {
+    const p = i.backupProblem;
+    out.push({
+      key: 'backup-upload-problem', icon: 'alert', tone: 'action', snoozable: true,
+      text: p.kind === 'error'
+        ? 'Sauvegarde de secours : le dernier envoi a échoué.'
+        : p.never ? `Sauvegarde de secours : aucun envoi depuis son activation, il y a ${p.days} jours.`
+          : `Sauvegarde de secours : dernier envoi il y a ${p.days} jours.`,
+      detail: p.kind === 'error' && p.reason ? `${p.reason} Pécule réessaiera à votre prochaine ouverture.` : 'Ouvrez Pécule connecté à Internet : la copie repart seule. Sinon, regardez l’état dans les Paramètres.',
+      primary: { label: 'Voir la sauvegarde', action: { type: 'check-backup-code' } },
+    });
+  }
   // Une fois par an : le code de secours est-il toujours à portée de main ? Retapé juste
   // (Paramètres, Données), le rappel disparaît pour un an ; « Plus tard » le reporte.
   if (i.backupCodeCheckDue && i.can.openSettings) out.push({

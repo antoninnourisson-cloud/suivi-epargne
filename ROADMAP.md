@@ -95,6 +95,8 @@ La **restitution aux parents** (janvier 2027) se fera **à la main**, avec les o
 
 Constats du 4 novembre 2026 : le verrou est validé sur le téléphone du propriétaire ; le partage vers Pécule reste livré tel quel, sans suivi prévu ; la vieille copie `suivi-epargne.vercel.app` est ignorée (son origine est retirée du client OAuth, elle ne peut plus se connecter).
 
+Audit rapide du 4 novembre 2026 (trois lectures : justesse, écrans, exploitation), correctifs validés par le propriétaire et faits le jour même : montants OFX au point décimal et OFX reconnu à son contenu, montant CSV ambigu refusé ; retrait prévu dont le compte a disparu (« Supprimer » seulement) ; phrases sur les parents masquées en solo dans « J'ai besoin d'argent » ; petits boutons à 48 px sur téléphone ; tâche de l'Accueil si la sauvegarde de secours échoue ou date de plus de 30 jours ; notification 7 jours avant la fin d'une connexion (60 jours au plus) ; délais maximaux sur les appels du serveur vers Google et les notifications, et plus de « Reconnectez-vous » pour un incident passager. Laissés tels quels : dates CSV au format américain, chiffres écrits dans le texte de Rendement, mise en ligne du site indépendante du serveur, session sans clé d'appareil (repli des anciennes versions, choix du propriétaire).
+
 ### Audit complet d'octobre 2026 (lots 1, 2 et 3 faits, puis l'audit du 29 octobre)
 - ✅ **Lot 1** : données protégées, « Actualiser » fiable, calculs justes, surveillance fiable, déploiements derrière la CI.
 - ✅ **Lot 2** : plusieurs appareils (écran de choix, version écartée mise de côté), hors ligne, déclaration complète, verrou renforcé (« Code oublié » avec délai de 24 h).

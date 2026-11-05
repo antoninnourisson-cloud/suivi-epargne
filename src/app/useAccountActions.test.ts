@@ -429,6 +429,14 @@ describe('rituels : retraits prévus, taux, clôture de l’année', () => {
     expect(setters.patchConfig).not.toHaveBeenCalled();
   });
 
+  it('tâche du retrait prévu dont le compte a été supprimé : message clair, la tâche reste', () => {
+    const gone = { ...plan, lines: [{ accountId: 'parti', amount: 10 }] };
+    const { result, setters, lastToast } = setup(withPlans(gone));
+    act(() => result.current.recordPlannedWithdrawal('p1'));
+    expect(lastToast()).toMatchObject({ kind: 'error', message: "Ce compte n'existe plus : supprimez ce retrait prévu." });
+    expect(setters.patchConfig).not.toHaveBeenCalled();
+  });
+
   it('retrait prévu supprimé, puis remis par « Annuler »', () => {
     const { result, setters, lastToast, rerender } = setup(withPlans(plan));
     act(() => result.current.deletePlannedWithdrawal('p1'));

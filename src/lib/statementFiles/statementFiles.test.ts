@@ -62,7 +62,7 @@ describe('parseAmount', () => {
     expect(parseAmount('1.234,56')).toBe(1234.56);
     expect(parseAmount('1,234.56')).toBe(1234.56);
     expect(parseAmount('12.50')).toBe(12.5);
-    expect(parseAmount('1.234')).toBe(1234);
+    expect(parseAmount('1.234')).toBeNull();
     expect(parseAmount('1.234.567')).toBe(1234567);
     expect(parseAmount('0,125')).toBe(0.13);
     expect(parseAmount('15,00-')).toBe(-15);
@@ -246,5 +246,31 @@ describe('readLocalStatement', () => {
       expect(r.kind).toBe('statement');
     }
     await expect(readLocalStatement(fileOf('a.ofx', 'pas du ofx'))).rejects.toBeInstanceOf(StatementFileError);
+  });
+});
+
+describe('montants ambigus et détection OFX (audit)', () => {
+  const ofx = (amount: string) => `OFXHEADER:100\nDATA:OFXSGML\n\n<OFX><BANKMSGSRSV1><STMTTRNRS><STMTRS><CURDEF>EUR<BANKACCTFROM><ACCTID>00012345678<ACCTTYPE>CHECKING</BANKACCTFROM><BANKTRANLIST><STMTTRN><DTPOSTED>20260903<TRNAMT>${amount}<NAME>TEST</STMTTRN></BANKTRANLIST><LEDGERBAL><BALAMT>1.250<DTASOF>20260930</LEDGERBAL></STMTRS></STMTTRNRS></BANKMSGSRSV1></OFX>`;
+
+  it("OFX : le point est toujours décimal, une virgule seule aussi", () => {
+    const a = parseOfx(utf8(ofx('-45.000'))).accounts[0];
+    expect(a.movements[0].amount).toBe(45);
+    expect(a.closingBalance).toBe(1.25);
+    expect(parseOfx(utf8(ofx('-12,5'))).accounts[0].movements[0].amount).toBe(12.5);
+  });
+
+  it('CSV : « 12.500 » est refusé et rend la détection ambiguë', () => {
+    expect(parseAmount('12.500')).toBeNull();
+    expect(parseAmount('-1,250')).toBeNull();
+    expect(parseAmount('12.50')).toBe(12.5);
+    const g = guessCsv('Date;Libellé;Montant\n01/10/2026;A;12.500\n02/10/2026;B;3,00\n');
+    expect(g.ambiguous).toBe(true);
+    const ok = guessCsv('Date;Libellé;Montant\n01/10/2026;A;12,50\n02/10/2026;B;3,00\n');
+    expect(ok.ambiguous).toBe(false);
+  });
+
+  it("un OFX nommé « document » est reconnu à son contenu", async () => {
+    const r = await readLocalStatement(fileOf('document', utf8(ofx('-4.50'))));
+    expect(r.kind).toBe('statement');
   });
 });

@@ -92,10 +92,10 @@ describe('Button', () => {
     expect(tokens(buttonClass('filled'))).toEqual(expect.arrayContaining(['h-10', 'px-6']));
     expect(tokens(buttonClass('text'))).toEqual(expect.arrayContaining(['h-10', 'px-3']));
     expect(tokens(buttonClass('text'))).not.toContain('px-6');
-    expect(tokens(buttonClass('outlined', '', 'sm'))).toEqual(expect.arrayContaining(['h-8', 'px-3']));
+    expect(tokens(buttonClass('outlined', '', 'sm'))).toEqual(expect.arrayContaining(['h-12', 'sm:h-8', 'px-3']));
     expect(tokens(buttonClass('outlined', '', 'sm'))).not.toContain('h-10');
     render(<Button size="sm" variant="tonal">Exporter</Button>);
-    expect(screen.getByRole('button', { name: 'Exporter' }).className.split(/\s+/)).toContain('h-8');
+    expect(screen.getByRole('button', { name: 'Exporter' }).className.split(/\s+/)).toEqual(expect.arrayContaining(['h-12', 'sm:h-8']));
   });
 
   it('en cours : désactivé, avec le texte « Enregistrement… »', () => {

@@ -278,4 +278,110 @@ describe('tournée quotidienne des rappels', () => {
     expect(push.sent).toHaveLength(0);
     expect(await kv.get('health:cron', 'json')).toMatchObject({ ok: true });
   });
+  describe('connexion qui se termine', () => {
+    const subscribeSession = async (hash: string, endpoint = 'https://fcm.googleapis.com/fcm/send/device-1') => {
+      await kv.put('push:u1', JSON.stringify([{ endpoint, keys: await makeKeys(), sessionHash: hash }]));
+    };
+    const withFile = () => { google.files = [{ id: 'f1', modifiedTime: '2026-09-27T10:00:00Z', content: dataFile() }]; };
+    const expiryNotices = () => push.sent.filter(x => x.message.tag === 'session-expiry');
+
+    it('session qui expire dans 7 jours ou moins : prévenu une seule fois, avec la date et le geste à faire', async () => {
+      const now = Date.parse('2026-09-28T07:00:00Z');
+      const { hash } = await createSession(kv.asKV(), 'u1', 'me@example.com', now - 55 * DAY);
+      await subscribeSession(hash);
+      withFile();
+      await runCron();
+      const notices = expiryNotices();
+      expect(notices).toHaveLength(1);
+      expect(notices[0].message.body).toBe(
+        "Votre connexion à Pécule se termine le 3 octobre. Avant cette date, déconnectez-vous puis reconnectez-vous avec Google dans l'app, sinon vos rappels s'arrêteront.");
+      expect(kv.keysWithPrefix('sent:u1:session-expiry:')).toHaveLength(1);
+      await runCron();
+      vi.setSystemTime(new Date(now + DAY));
+      await runCron();
+      expect(expiryNotices()).toHaveLength(1);
+    });
+
+    it('session encore loin de son terme : aucun avertissement', async () => {
+      const now = Date.parse('2026-09-28T07:00:00Z');
+      const { hash } = await createSession(kv.asKV(), 'u1', 'me@example.com', now - 40 * DAY);
+      await subscribeSession(hash);
+      withFile();
+      await runCron();
+      expect(expiryNotices()).toHaveLength(0);
+    });
+
+    it('aucun appareil n’a reçu l’avertissement : nouvel essai le lendemain', async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      const now = Date.parse('2026-09-28T07:00:00Z');
+      const { hash } = await createSession(kv.asKV(), 'u1', 'me@example.com', now - 55 * DAY);
+      await subscribeSession(hash);
+      push.status = 500;
+      await runCron();
+      expect(kv.keysWithPrefix('sent:u1:session-expiry:')).toEqual([]);
+      push.status = 201;
+      vi.setSystemTime(new Date(now + DAY));
+      await runCron();
+      expect(expiryNotices()).toHaveLength(2); // tentative ratée, puis réussie
+      expect(kv.keysWithPrefix('sent:u1:session-expiry:')).toHaveLength(1);
+    });
+  });
+
+  describe('délais maximaux des appels sortants', () => {
+    it('chaque appel Google porte un délai maximal', async () => {
+      await subscribeDevice();
+      google.files = [{ id: 'f1', modifiedTime: '2026-09-27T10:00:00Z', content: dataFile() }];
+      await runCron();
+      const calls = fakeGoogle.mock.calls;
+      expect(calls.length).toBeGreaterThanOrEqual(3);
+      for (const [, init] of calls) expect(init?.signal).toBeInstanceOf(AbortSignal);
+    });
+
+    it('lecture Drive hors délai : classée « drive », la tournée continue avec les autres comptes et les étapes suivantes', async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      await kv.put('user:u2', await kv.get('user:u1') as string);
+      await kv.put('push:u1', JSON.stringify([{ endpoint: 'https://fcm.googleapis.com/fcm/send/device-1', keys: await makeKeys() }]));
+      await kv.put('push:u2', JSON.stringify([{ endpoint: 'https://fcm.googleapis.com/fcm/send/device-2', keys: await makeKeys() }]));
+      google.files = [{ id: 'f1', modifiedTime: '2026-09-27T10:00:00Z', content: dataFile() }];
+      let first = true;
+      fakeGoogle.mockImplementationOnce(async () => new Response(JSON.stringify({ access_token: 'ya29.fresh', expires_in: 3599 }), { status: 200 }));
+      fakeGoogle.mockImplementationOnce(async () => {
+        if (first) { first = false; throw new DOMException('The operation was aborted due to timeout', 'TimeoutError'); }
+        throw new Error('inattendu');
+      });
+      await runCron();
+      expect(await kv.get('health:cron', 'json')).toMatchObject({ ok: false, usersProcessed: 2 });
+      const log = await kv.get('health:cron-log', 'json');
+      expect(log[0]).toMatchObject({ cron: 'daily', ok: false, errors: ['drive'] });
+      expect(push.sent.map(x => x.endpoint)).toContain('https://fcm.googleapis.com/fcm/send/device-2');
+    });
+
+    it('/token hors délai : erreur « jeton », pas un invalid_grant (rien n’est purgé)', async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      await subscribeDevice();
+      fakeGoogle.mockImplementationOnce(async () => { throw new DOMException('timeout', 'TimeoutError'); });
+      await runCron();
+      expect(await kv.get('user:u1')).not.toBeNull();
+      // Incident passager : pas de « Reconnectez-vous », la tournée de demain réessaiera.
+      expect(push.sent.some(x => x.message.tag === 'reconnect')).toBe(false);
+    });
+
+    it('/token en panne chez Google (erreur 503) : passager, pas de « Reconnectez-vous »', async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      await subscribeDevice();
+      fakeGoogle.mockImplementationOnce(async () => new Response('{}', { status: 503 }));
+      await runCron();
+      expect(await kv.get('user:u1')).not.toBeNull();
+      expect(push.sent.some(x => x.message.tag === 'reconnect')).toBe(false);
+    });
+
+    it('/token refusé autrement (erreur 400 de Google) : « Reconnectez-vous »', async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      await subscribeDevice();
+      fakeGoogle.mockImplementationOnce(async () => new Response(JSON.stringify({ error: 'invalid_client' }), { status: 400 }));
+      await runCron();
+      expect(await kv.get('user:u1')).not.toBeNull();
+      expect(push.sent[0].message.tag).toBe('reconnect');
+    });
+  });
 });

@@ -31,12 +31,26 @@ export class GoogleAuthError extends Error {
   constructor(public code: string, message: string) { super(message); this.name = 'GoogleAuthError'; }
 }
 
+/** Délais maximaux (ms) des appels sortants : sans eux, un service qui ne répond pas bloque la tournée. */
+export const TOKEN_TIMEOUT_MS = 10_000;
+export const DRIVE_TIMEOUT_MS = 15_000;
+
+const isTimeout = (e: unknown): boolean => e instanceof Error && (e.name === 'TimeoutError' || e.name === 'AbortError');
+
 const postToken = async (params: Record<string, string>): Promise<TokenResponse> => {
-  const res = await fetch('https://oauth2.googleapis.com/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams(params),
-  });
+  let res: Response;
+  try {
+    res = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams(params),
+      signal: AbortSignal.timeout(TOKEN_TIMEOUT_MS),
+    });
+  } catch (e) {
+    // Classé « jeton » (CronErrors), et distinct d'invalid_grant : une lenteur ne purge rien.
+    if (isTimeout(e)) throw new GoogleAuthError('TIMEOUT', 'Google token endpoint timeout');
+    throw e;
+  }
   const json = await res.json<{ error?: string; error_description?: string }>().catch(() => ({} as { error?: string; error_description?: string }));
   if (!res.ok) throw new GoogleAuthError(json.error || `HTTP_${res.status}`, json.error_description || 'Google token endpoint error');
   return json as TokenResponse;
@@ -84,7 +98,13 @@ export const revokeToken = (token: string) =>
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({ token }),
+    signal: AbortSignal.timeout(DRIVE_TIMEOUT_MS),
   }).catch(() => undefined);
+
+/** Délai dépassé ou réseau coupé pendant un appel Drive : classé « drive » (categorizeCronError). */
+const driveFailure = (e: unknown): never => {
+  throw new Error(isTimeout(e) ? 'DRIVE_TIMEOUT' : `DRIVE_NETWORK_${e instanceof Error ? e.name : 'ERROR'}`);
+};
 
 const DATA_FILE_NAME = 'suivi_epargne.json';
 
@@ -98,7 +118,8 @@ export const readDataFile = async (accessToken: string): Promise<GlobalAppData |
   const order = encodeURIComponent('modifiedTime desc');
   const list = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,modifiedTime)&orderBy=${order}`, {
     headers: { Authorization: `Bearer ${accessToken}` },
-  });
+    signal: AbortSignal.timeout(DRIVE_TIMEOUT_MS),
+  }).catch(driveFailure);
   if (!list.ok) throw new Error(`DRIVE_LIST_${list.status}`);
   const files = (((await list.json()) as { files?: { id: string; modifiedTime?: string }[] }).files || [])
     // Tri refait ici, comme dans l'app : l'ordre de l'API n'est pas une garantie.
@@ -106,7 +127,9 @@ export const readDataFile = async (accessToken: string): Promise<GlobalAppData |
   if (files.length === 0) return null;
   const res = await fetch(`https://www.googleapis.com/drive/v3/files/${files[0].id}?alt=media`, {
     headers: { Authorization: `Bearer ${accessToken}` },
-  });
+    signal: AbortSignal.timeout(DRIVE_TIMEOUT_MS),
+  }).catch(driveFailure);
   if (!res.ok) throw new Error(`DRIVE_READ_${res.status}`);
-  return migrate(await res.json());
+  // Le délai court aussi pendant la lecture du corps.
+  return migrate(await res.json().catch(driveFailure));
 };

@@ -63,3 +63,38 @@ export const backupCodeCheckDue = (enrollment: BackupEnrollment | null | undefin
   if (!Number.isFinite(since)) return false;
   return now.getTime() - since >= BACKUP_CODE_CHECK_DAYS * 86_400_000;
 };
+
+// ---------------------------------------------------------------------------
+// Envoi de la copie chiffrée en échec ou en retard (tâche de l'Accueil)
+// ---------------------------------------------------------------------------
+
+/** Ce que dit l'état local de la sauvegarde (services/cloudBackup, `readStatus`). */
+export interface BackupUploadStatus { lastUploadAt?: string; lastError?: string; lastErrorAt?: string }
+
+export type BackupUploadProblem =
+  | { kind: 'stale'; days: number; /** Aucun envoi réussi depuis l'activation. */ never: boolean }
+  | { kind: 'error'; code: string };
+
+/** Au-delà de 30 jours sans envoi réussi, ou avec une erreur de moins de 7 jours : la tâche apparaît. */
+const BACKUP_STALE_DAYS = 30;
+const BACKUP_ERROR_RECENT_DAYS = 7;
+
+/**
+ * La sauvegarde activée sur cet appareil a-t-elle un problème à signaler ? Une erreur récente
+ * d'abord (elle dit pourquoi), sinon un dernier envoi vieux de plus de 30 jours. Un envoi réussi
+ * efface l'erreur et rajeunit la date : la tâche disparaît d'elle-même. Dates illisibles : rien.
+ */
+export const backupUploadProblem = (
+  enrollment: BackupEnrollment | null | undefined, status: BackupUploadStatus, now: Date,
+): BackupUploadProblem | null => {
+  if (!enrollment) return null;
+  const DAY = 86_400_000;
+  if (status.lastError) {
+    const at = Date.parse(status.lastErrorAt ?? '');
+    if (Number.isFinite(at) && now.getTime() - at <= BACKUP_ERROR_RECENT_DAYS * DAY) return { kind: 'error', code: status.lastError };
+  }
+  const since = Date.parse(status.lastUploadAt ?? enrollment.enabledAt);
+  if (!Number.isFinite(since)) return null;
+  const days = Math.floor((now.getTime() - since) / DAY);
+  return days > BACKUP_STALE_DAYS ? { kind: 'stale', days, never: !status.lastUploadAt } : null;
+};

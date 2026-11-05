@@ -67,7 +67,7 @@ import {
 } from './security';
 import {
   DAY, SessionRecord, createSession, loadSession, touchSession, deleteSession, deleteAllSessions, sessionExists,
-  bindSession, listSessions, sessionPublicId, isLegacySession,
+  bindSession, listSessions, sessionPublicId, isLegacySession, SESSION_MAX_AGE,
 } from './sessions';
 import {
   PROOF_HEADER, NONCE_HEADER, parseDeviceKey, importDeviceKey, sameDeviceKey, verifyProof, proofNonces, sanitizeDeviceLabel,
@@ -107,6 +107,10 @@ const SENT_TTL = 400 * DAY;
 const SENT_MARK = '2';
 const LEGACY_SENT_MARK = '1';
 const RECONNECT_NOTICE_TTL = 3 * DAY;
+// Une session ne se prolonge pas au-delà de SESSION_MAX_AGE (60 jours après la connexion),
+// même utilisée chaque jour : on prévient cette durée avant, une seule fois par session.
+const SESSION_EXPIRY_WARNING = 7 * DAY;
+const SESSION_EXPIRY_NOTICE_TTL = 10 * DAY;
 const LOGIN_CODE_TTL = 60;       // minimum KV ; le code est effacé dès l'échange
 
 interface CronHealth { lastRunAt: string; ok: boolean; error?: string; usersProcessed: number }
@@ -229,6 +233,9 @@ const accessTokenFor = async (env: Env, sub: string): Promise<{ access_token: st
 };
 
 const isInvalidGrant = (e: unknown) => e instanceof GoogleAuthError && e.code === 'invalid_grant';
+/** Délai dépassé, erreur 5xx de Google ou panne réseau : passager, à réessayer plus tard. */
+const isTransientGoogleError = (e: unknown) =>
+  (e instanceof GoogleAuthError && (e.code === 'TIMEOUT' || /^HTTP_5\d\d$/.test(e.code))) || e instanceof TypeError;
 
 // ---------- Stockage des abonnements ----------
 
@@ -978,20 +985,42 @@ const RECONNECT_MESSAGE = (env: Env): PushMessage => ({
   title: 'Pécule', body: 'Reconnectez-vous à Pécule pour garder vos rappels.', url: env.APP_URL, tag: 'reconnect',
 });
 
+/** Seule une nouvelle connexion Google crée une session neuve : l'ouvrir ne suffit pas. */
+const SESSION_EXPIRY_MESSAGE = (env: Env, expiresAtMs: number): PushMessage => ({
+  title: 'Pécule',
+  body: `Votre connexion à Pécule se termine le ${parisDay(expiresAtMs)}. Avant cette date, déconnectez-vous puis reconnectez-vous avec Google dans l'app, sinon vos rappels s'arrêteront.`,
+  url: env.APP_URL, tag: 'session-expiry',
+});
+
 const remindUser = async (env: Env, sub: string, now: Date): Promise<void> => {
   const stored = await readPushList(env, sub);
   let subs = await pruneOrphanSubscriptions(env, stored);
   const persist = async () => { if (subs.length !== stored.length) await writePushList(env, sub, subs); };
   if (subs.length === 0) { await persist(); return; }
 
-  const send = async (message: PushMessage, sentKey: string, ttl: number, legacyKeys: string[] = []) => {
+  const send = async (
+    message: PushMessage, sentKey: string, ttl: number, legacyKeys: string[] = [], targets: StoredSubscription[] = subs,
+  ) => {
     if (await env.STORE.get(sentKey)) return;
     for (const k of legacyKeys) if ((await env.STORE.get(k)) === LEGACY_SENT_MARK) return;
-    const { delivered, gone } = await deliver(env, subs, message);
+    const { delivered, gone } = await deliver(env, targets, message);
     if (gone.length) subs = subs.filter(x => !gone.includes(x.endpoint));
     // Marqué « envoyé » seulement si au moins un appareil l'a reçu : sinon on réessaie demain.
     if (delivered > 0) await env.STORE.put(sentKey, SENT_MARK, { expirationTtl: ttl });
   };
+
+  // Session qui expire dans 7 jours ou moins : prévenu une fois, sur les seuls appareils qu'elle porte.
+  const nowMs = now.getTime();
+  const bySession = new Map<string, StoredSubscription[]>();
+  for (const s of subs) if (s.sessionHash) bySession.set(s.sessionHash, [...(bySession.get(s.sessionHash) ?? []), s]);
+  for (const [hash, targets] of bySession) {
+    const session = await loadSession(env.STORE, hash, nowMs);
+    if (!session?.createdAt) continue;
+    const expiresAt = session.createdAt + SESSION_MAX_AGE * 1000;
+    if (expiresAt - nowMs > SESSION_EXPIRY_WARNING * 1000) continue;
+    await send(SESSION_EXPIRY_MESSAGE(env, expiresAt), `sent:${sub}:session-expiry:${await sessionPublicId(hash)}`, SESSION_EXPIRY_NOTICE_TTL, [], targets);
+  }
+  if (subs.length === 0) { await persist(); return; }
 
   let accessToken: string;
   try {
@@ -1004,7 +1033,9 @@ const remindUser = async (env: Env, sub: string, now: Date): Promise<void> => {
       return;
     }
     console.error('cannot refresh token for reminders', e);
-    await send(RECONNECT_MESSAGE(env), `sent:${sub}:reconnect`, RECONNECT_NOTICE_TTL);
+    // Incident passager chez Google (délai dépassé, erreur 5xx, réseau) : rien à demander à
+    // l'utilisateur, la tournée de demain réessaiera. « Reconnectez-vous » seulement pour un refus.
+    if (!isTransientGoogleError(e)) await send(RECONNECT_MESSAGE(env), `sent:${sub}:reconnect`, RECONNECT_NOTICE_TTL);
     await persist();
     return;
   }

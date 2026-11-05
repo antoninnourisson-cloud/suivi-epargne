@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { generateRecoveryCode } from './cloudBackupCrypto';
-import { pickCheckGroups, checkGroups, groupOf, normalizeGroup, recoveryCodeFileText, RECOVERY_GROUPS, backupCodeCheckDue } from './recoveryCodeCheck';
+import { pickCheckGroups, checkGroups, groupOf, normalizeGroup, recoveryCodeFileText, RECOVERY_GROUPS, backupCodeCheckDue, backupUploadProblem } from './recoveryCodeCheck';
 
 describe('vérification du code de secours noté', () => {
   it('tire deux groupes distincts, non voisins, dans l’ordre, entre 1 et 7', () => {
@@ -56,5 +56,26 @@ describe('vérification annuelle du code de secours', () => {
   });
   it('date illisible : pas de rappel', () => {
     expect(backupCodeCheckDue({ enabledAt: 'n’importe quoi' }, at('2030-01-01T00:00:00Z'))).toBe(false);
+  });
+});
+
+describe('backupUploadProblem', () => {
+  const at = (iso: string) => new Date(iso);
+  const e = { enabledAt: '2027-01-01T00:00:00Z' };
+  it('rien sans sauvegarde activée, ou envoi récent', () => {
+    expect(backupUploadProblem(null, {}, at('2027-06-01T00:00:00Z'))).toBeNull();
+    expect(backupUploadProblem(e, { lastUploadAt: '2027-05-10T00:00:00Z' }, at('2027-06-01T00:00:00Z'))).toBeNull();
+  });
+  it('plus de 30 jours sans envoi : en retard, avec le nombre de jours', () => {
+    expect(backupUploadProblem(e, { lastUploadAt: '2027-04-28T00:00:00Z' }, at('2027-06-01T12:00:00Z'))).toEqual({ kind: 'stale', days: 34, never: false });
+    expect(backupUploadProblem(e, { lastUploadAt: '2027-05-02T00:00:00Z' }, at('2027-06-01T12:00:00Z'))).toBeNull();
+  });
+  it("aucun envoi depuis l'activation : compte depuis l'activation", () => {
+    expect(backupUploadProblem(e, {}, at('2027-03-01T00:00:00Z'))).toEqual({ kind: 'stale', days: 59, never: true });
+  });
+  it('erreur récente : signalée même si le dernier envoi est récent ; ancienne : ignorée', () => {
+    const s = { lastUploadAt: '2027-05-30T00:00:00Z', lastError: 'SERVER', lastErrorAt: '2027-05-31T00:00:00Z' };
+    expect(backupUploadProblem(e, s, at('2027-06-01T00:00:00Z'))).toEqual({ kind: 'error', code: 'SERVER' });
+    expect(backupUploadProblem(e, s, at('2027-06-20T00:00:00Z'))).toBeNull();
   });
 });

@@ -121,4 +121,15 @@ describe('NeedMoneySheet', () => {
     expect(again.dialog.textContent).toMatch(/rien à proposer/);
     expect(again.dialog.textContent).toMatch(/il manque 100\s€/);
   });
+
+  it('en solo (plus de capital des parents) : aucune phrase sur les parents', () => {
+    const solo = accounts.map(a => ({ ...a, parentalCapital: 0, totalAmount: a.ownedAmount }));
+    const { dialog } = setup({ accounts: solo });
+    expect(dialog.textContent).not.toMatch(/parents/);
+    ask(dialog, '90000');
+    expect(dialog.textContent).toMatch(/il manque/);
+    expect(dialog.textContent).not.toMatch(/parents/);
+    cleanup();
+    expect(setup().dialog.textContent).toMatch(/La part de vos parents n'est jamais touchée/);
+  });
 });

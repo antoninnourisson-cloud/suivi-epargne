@@ -141,7 +141,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalC
   // Date du jour partagée (useToday) : l'Accueil resté ouvert passe au lendemain à minuit.
   const today = useToday();
   const choices = useHomeChoices(today);
-  const backupCodeCheckDue = useBackupCodeCheckDue();
+  const { codeCheckDue: backupCodeCheckDue, uploadProblem: backupProblem } = useBackupCodeCheckDue();
   const [ratesEditorOpen, setRatesEditorOpen] = useState(false);
 
   // --- Où j'en suis ---
@@ -263,6 +263,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalC
     emergency: emergency ?? null,
     yearClosing: yearClosing ?? null,
     backupCodeCheckDue,
+    backupProblem,
     plannedWithdrawals: duePlannedWithdrawals(plannedWithdrawals, today),
     rateChanges,
   });

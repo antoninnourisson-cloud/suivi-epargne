@@ -185,6 +185,8 @@ describe('buildYearClosing', () => {
     expect(step(buildYearClosing(data({ accounts: [shared], parentalRestitution: { plannedDate: '2027-03-01' } }), 2026, JAN), 'restitution')).toBeUndefined();
     // Restitution d'une année plus ancienne : sans objet pour cette clôture.
     expect(step(buildYearClosing(data({ parentalRestitution: restitution }), 2027, new Date(2028, 0, 10)), 'restitution')).toBeUndefined();
+    // L'année suivante, en solo : plus un mot sur les parents dans les intérêts.
+    expect(step(buildYearClosing(data({ parentalRestitution: restitution }), 2027, new Date(2028, 0, 10)), 'interest')?.detail ?? '').not.toMatch(/parents/);
   });
 
   it('déclaration : points à vérifier et reçus des dons manquants', () => {

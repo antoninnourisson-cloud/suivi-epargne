@@ -31,7 +31,8 @@ export const fileBytes = (file: Blob): Promise<ArrayBuffer> =>
 /**
  * Montant écrit à la française ou à l'anglaise : « 1 234,56 », « -12,5 € », « (45,00) »,
  * « 1.234,56 », « 12.50 ». Un séparateur unique suivi d'exactement trois chiffres est un
- * séparateur de milliers (un montant en euros n'a pas trois décimales). `null` si illisible.
+ * séparateur : ambigu (« 12.500 » : douze mille cinq cents ou douze euros cinquante ?), donc refusé
+ * (`null`), comme `parseFrenchNumber`. `null` aussi si illisible.
  */
 export const parseAmount = (raw: string): number | null => {
   let s = raw.replace(/[\s  ]/g, '').replace(/€|eur(os?)?/gi, '').replace(/[−–]/g, '-');
@@ -55,7 +56,9 @@ export const parseAmount = (raw: string): number | null => {
     const after = parts[parts.length - 1];
     const many = parts.length > 2;
     if (many && !parts.slice(1).every(p => p.length === 3)) return null;
-    const thousands = many || (after.length === 3 && parts[0] !== '' && parts[0] !== '0');
+    // Un seul séparateur suivi de trois chiffres (« 12.500 ») : milliers ou décimales ? Refusé, pas deviné.
+    if (!many && after.length === 3 && parts[0] !== '' && parts[0] !== '0') return null;
+    const thousands = many;
     normalized = thousands ? parts.join('') : `${parts[0] || '0'}.${after}`;
   } else normalized = s;
   if (!/^\d+(\.\d+)?$/.test(normalized)) return null;
@@ -76,4 +79,19 @@ export const parseDate = (raw: string): string | null => {
   else return null;
   const iso = `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
   return isISODay(iso) ? iso : null;
+};
+
+/** « 12.500 », « -1,250 € » : deux lectures possibles, que `parseAmount` refuse. */
+export const isAmbiguousAmount = (raw: string): boolean =>
+  /^[+-]?[1-9]\d{0,2}[.,]\d{3}$/.test(raw.replace(/[\s  ]/g, '').replace(/€|eur(os?)?/gi, '').replace(/[−–]/g, '-')) && parseAmount(raw) === null;
+
+/**
+ * Montant d'un fichier OFX : le point y est toujours décimal (« -45.000 » vaut -45 €, « 1.250 »
+ * vaut 1,25 €). Une virgule seule est tolérée comme décimale. `null` si illisible.
+ */
+export const parseOfxAmount = (raw: string): number | null => {
+  const s = raw.replace(/[\s  ]/g, '').replace(/[−–]/g, '-');
+  if (!/^[+-]?(\d+([.,]\d*)?|[.,]\d+)$/.test(s)) return null;
+  const n = Number(s.replace(',', '.'));
+  return Number.isFinite(n) ? Math.round(n * 100) / 100 : null;
 };

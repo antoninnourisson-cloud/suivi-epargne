@@ -3,7 +3,7 @@
 // - tonal : action secondaire mise en avant ;
 // - outlined, text : actions discrètes ;
 // - danger : action destructrice (rôle « error »).
-// Taille « sm » : 32 px de haut (bouton secondaire dans une ligne de liste ou sous un champ) ;
+// Taille « sm » : 48 px de haut sur téléphone, 32 px dès « sm » (bouton secondaire dans une ligne de liste ou sous un champ) ;
 // sur écran tactile, la zone sensible reste de 48 px (index.css). Marges intérieures
 // Material : 24 px, 12 px pour un bouton texte (un `-ml-3` aligne alors son texte au bord).
 // Une classe passée en `className` ne remplace pas toujours celle du kit (h-8 contre h-10 :
@@ -36,7 +36,7 @@ const BUTTON_VARIANTS: Record<ButtonVariant, string> = {
 };
 
 const sizeClass = (variant: ButtonVariant, size: ButtonSize) =>
-  size === 'sm' ? 'h-8 px-3 gap-1.5' : `h-10 gap-2 ${variant === 'text' ? 'px-3' : 'px-6'}`;
+  size === 'sm' ? 'h-12 sm:h-8 px-3 gap-1.5' : `h-10 gap-2 ${variant === 'text' ? 'px-3' : 'px-6'}`;
 
 /** Classes d'un bouton du kit, pour un lien (<a>) qui doit avoir l'air d'un bouton. */
 export const buttonClass = (variant: ButtonVariant = 'filled', className = '', size: ButtonSize = 'md') =>

@@ -127,6 +127,9 @@ export interface PushMessage {
  * Envoie un message. Renvoie le statut HTTP du service de push : 404/410 signifient que
  * l'abonnement n'existe plus (appareil désinscrit) et doit être supprimé par l'appelant.
  */
+/** Délai maximal (ms) d'un envoi au service push. */
+export const PUSH_TIMEOUT_MS = 15_000;
+
 export const sendPush = async (
   subscription: PushSubscriptionJSON,
   message: PushMessage,
@@ -138,6 +141,7 @@ export const sendPush = async (
     utf8(JSON.stringify(message))
   );
   const res = await fetch(subscription.endpoint, {
+    signal: AbortSignal.timeout(PUSH_TIMEOUT_MS),
     method: 'POST',
     headers: {
       Authorization: await vapidAuthorization(subscription.endpoint, vapid.subject, vapid.publicKey, vapid.privateKey),
@@ -147,6 +151,9 @@ export const sendPush = async (
       Urgency: 'normal',
     },
     body,
+  }).catch(e => {
+    // Classé « notification » (categorizeCronError : PUSH).
+    throw e instanceof Error && e.name === 'TimeoutError' ? new Error('PUSH_TIMEOUT') : e;
   });
   return res.status;
 };

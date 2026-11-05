@@ -12,6 +12,7 @@ import { ArrowLeft, CalendarClock, Info, Lightbulb, Plus, Trash2, Wallet, X } fr
 import type { FiscalConfig, GlobalAppData, PlannedWithdrawal, PlannedWithdrawalLine, SavingsAccount } from '../../types';
 import type { EmergencyFund } from '../../lib/planning';
 import { bestWithdrawalDay, needSources, planNeed, plannedDay, precautionAfter, withdrawalCost, type WithdrawalCost } from '../../lib/needMoney';
+import { hasParentalCapital } from '../../lib/parentalMode';
 import { payAccountOf } from '../../lib/payDistribution';
 import { localTodayISO, parseISODate } from '../../lib/dates';
 import { parseFrenchNumber } from '../../lib/numbers';
@@ -68,6 +69,7 @@ export const NeedMoneySheet: React.FC<NeedMoneySheetProps> = ({ accounts, config
   const asOf = parseISODate(today);
   const sources = useMemo(() => needSources(accounts, fiscalConfig, asOf), [accounts, fiscalConfig, today]); // eslint-disable-line react-hooks/exhaustive-deps
   const dest = payAccountOf({ accounts, config });
+  const withParents = hasParentalCapital(accounts);
 
   const propose = () => {
     if (!step1Ok) return;
@@ -124,7 +126,7 @@ export const NeedMoneySheet: React.FC<NeedMoneySheetProps> = ({ accounts, config
       {step === 1 && (
         <>
           {heading("J'ai besoin d'argent")}
-          <p className="text-sm text-on-surface-variant mb-5">Pécule cherche où le prendre en coûtant le moins : vos livrets d'abord, puis seulement si besoin l'assurance vie et le PEA. La part de vos parents n'est jamais touchée.</p>
+          <p className="text-sm text-on-surface-variant mb-5">Pécule cherche où le prendre en coûtant le moins : vos livrets d'abord, puis seulement si besoin l'assurance vie et le PEA.{withParents && " La part de vos parents n'est jamais touchée."}</p>
           <div className="space-y-5">
             <TextField label="Montant dont j'ai besoin" inputMode="decimal" value={amountText} onChange={e => setAmountText(e.target.value)} suffix="€" placeholder="800"
               error={amountText.trim() !== '' && amount === null ? 'Montant non reconnu (exemple : 1 234,56)' : undefined} />
@@ -186,7 +188,7 @@ export const NeedMoneySheet: React.FC<NeedMoneySheetProps> = ({ accounts, config
           <div className="mt-4 space-y-3 text-sm">
             {missing > EPS && (
               <p role="status" className="rounded-xl p-3 bg-error-container text-on-error-container">
-                Votre épargne disponible ne suffit pas : il manque {formatEUR(missing)}. La part de vos parents et l'épargne bloquée (retraite, PEL, épargne salariale…) ne sont pas proposées.
+                Votre épargne disponible ne suffit pas : il manque {formatEUR(missing)}. {withParents ? "La part de vos parents et l'épargne bloquée" : "L'épargne bloquée"} (retraite, PEL, épargne salariale…) {withParents ? 'ne sont pas proposées' : "n'est pas proposée"}.
               </p>
             )}
             {lines.length > 0 && amount !== null && Math.abs(total - amount) >= 0.005 && missing <= EPS && (

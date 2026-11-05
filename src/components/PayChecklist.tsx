@@ -319,7 +319,7 @@ export const PayChecklist: React.FC<PayChecklistProps> = ({
                           </span>
                         </span>
                         {ritual && (
-                          <Button variant="text" size="sm" onClick={() => setSheet({ editPayId: p.id })} className="shrink-0 max-sm:h-12">
+                          <Button variant="text" size="sm" onClick={() => setSheet({ editPayId: p.id })} className="shrink-0">
                             Modifier<span className="sr-only"> : {EXTRA_NATURE_TITLE[extraNatureOf(p)].toLowerCase()} du {dayLabel(p.receivedOn, today)}</span>
                           </Button>
                         )}

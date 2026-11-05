@@ -476,11 +476,27 @@ describe('liste « À faire »', () => {
     const t = todos.find(x => x.key === 'withdrawal-p1')!;
     expect(t.text).toMatch(/^Retrait prévu : prendre 800\s€ sur le Livret A, 200\s€ sur l'Assurance vie et 50\s€ sur un compte supprimé, pour le 20 octobre\.$/);
     expect(t.detail).toMatch(/^Fait le 16 octobre ou après/);
-    expect(t.primary).toEqual({ label: 'Enregistrer', action: { type: 'record-planned-withdrawal', id: 'p1' } });
-    expect(t.secondary).toEqual({ label: 'Supprimer', action: { type: 'delete-planned-withdrawal', id: 'p1' } });
+    // Un compte supprimé depuis : on ne peut plus enregistrer, seule « Supprimer » reste.
+    expect(t.primary).toEqual({ label: 'Supprimer', action: { type: 'delete-planned-withdrawal', id: 'p1' } });
+    expect(t.secondary).toBeUndefined();
+    const ok = buildHomeTodos(base({ accounts: [la, av], plannedWithdrawals: [{ ...plan, lines: plan.lines.slice(0, 2) }], can: { ...can, plannedWithdrawals: true } })).find(x => x.key === 'withdrawal-p1')!;
+    expect(ok.primary).toEqual({ label: 'Enregistrer', action: { type: 'record-planned-withdrawal', id: 'p1' } });
+    expect(ok.secondary).toEqual({ label: 'Supprimer', action: { type: 'delete-planned-withdrawal', id: 'p1' } });
     // Jour même du besoin : pas de conseil ; sans gestionnaire, pas de bouton.
     const same = buildHomeTodos(base({ accounts: [la], plannedWithdrawals: [{ ...plan, date: '2026-10-20', lines: [plan.lines[0]] }] })).find(x => x.key === 'withdrawal-p1')!;
     expect(same.detail).toBeUndefined();
     expect(same.primary).toBeUndefined();
+  });
+
+  it('sauvegarde de secours en retard ou en échec : une tâche qui renvoie aux Paramètres, sinon rien', () => {
+    expect(buildHomeTodos(base({ backupProblem: null }))).toEqual([]);
+    const stale = buildHomeTodos(base({ backupProblem: { kind: 'stale', days: 34, never: false } }))[0];
+    expect(stale.key).toBe('backup-upload-problem');
+    expect(stale.text).toBe('Sauvegarde de secours : dernier envoi il y a 34 jours.');
+    expect(stale.primary).toEqual({ label: 'Voir la sauvegarde', action: { type: 'check-backup-code' } });
+    const err = buildHomeTodos(base({ backupProblem: { kind: 'error', code: 'OFFLINE', reason: 'Serveur injoignable (hors ligne ?).' } }))[0];
+    expect(err.text).toBe('Sauvegarde de secours : le dernier envoi a échoué.');
+    expect(err.detail).toMatch(/^Serveur injoignable/);
+    expect(buildHomeTodos(base({ backupProblem: { kind: 'stale', days: 34, never: false }, can: { ...can, openSettings: false } }))).toEqual([]);
   });
 });

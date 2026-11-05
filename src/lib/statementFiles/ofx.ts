@@ -1,7 +1,7 @@
 // Lecteur OFX (OFX 1.x en SGML, balises non fermées ; OFX 2.x en XML) → relevé de Pécule.
 // Un seul lecteur pour toutes les banques qui proposent ce format. Fonction pure.
 import { maskAccountNumbers, sanitizeStatement, type StatementData } from '../statementImport';
-import { decodeText, parseAmount, parseDate, StatementFileError } from './common';
+import { decodeText, parseDate, parseOfxAmount, StatementFileError } from './common';
 
 interface Txn { date?: string; amount?: string; name?: string; memo?: string }
 interface Stmt {
@@ -72,14 +72,14 @@ export const parseOfx = (buf: ArrayBuffer): StatementData => {
   const accounts = stmts.map((s, i) => {
     const masked = s.accountId ? maskAccountNumbers(s.accountId) : '';
     const kind = s.card ? 'Carte bancaire' : (s.accountType && TYPE_LABEL[s.accountType]) || '';
-    const balance = s.balance !== undefined ? parseAmount(s.balance) : null;
+    const balance = s.balance !== undefined ? parseOfxAmount(s.balance) : null;
     return {
       name: [kind, masked].filter(Boolean).join(' ') || `Compte ${i + 1}`,
       numberEnd: (s.accountId ?? '').replace(/\D/g, '').slice(-4),
       closingBalance: balance ?? undefined,
       closingDate: balance !== null && s.balanceDate ? parseDate(s.balanceDate) ?? undefined : undefined,
       movements: s.txns.map(x => {
-        const amount = x.amount ? parseAmount(x.amount) : null;
+        const amount = x.amount ? parseOfxAmount(x.amount) : null;
         const label = [x.name, x.memo && x.memo !== x.name && !x.name?.includes(x.memo) ? x.memo : ''].filter(Boolean).join(' ');
         return { date: x.date ? parseDate(x.date) : null, label, amount: amount === null ? null : Math.abs(amount), direction: amount === null ? null : amount < 0 ? 'DEBIT' : 'CREDIT' };
       }),

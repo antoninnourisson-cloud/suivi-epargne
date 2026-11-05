@@ -121,7 +121,11 @@ export const useAccountActions = (doc: AppDoc, setters: Setters, addToast: AddTo
         const plan = (docRef.current.config.plannedWithdrawals ?? []).find(p => p.id === id);
         if (!plan) return;
         const r = recordNeedWithdrawal(commandStateRef.current, { lines: plan.lines, date: localTodayISO(), destId: payAccountOf(docRef.current)?.id });
-        if (!r.ok) { showCommandError(r); return; }
+        if (!r.ok) {
+          if (r.code === 'not-found') toast({ message: "Ce compte n'existe plus : supprimez ce retrait prévu.", kind: 'error' });
+          else showCommandError(r);
+          return;
+        }
         commit(r.next);
         removePlanned(id);
         toast({ message: r.message, kind: 'success', action: { label: 'Annuler', onClick: () => { commit(r.undo(commandStateRef.current)); restorePlanned(plan); } } });

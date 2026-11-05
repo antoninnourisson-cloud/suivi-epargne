@@ -13,7 +13,10 @@ export type LocalRead =
   | { kind: 'statement'; data: StatementData }
   | { kind: 'columns'; table: CsvTable; mapping: CsvMapping; fileName: string };
 
-const isOfx = (file: Pick<File, 'name'>) => /\.(ofx|qfx)$/i.test(file.name);
+const OFX_CONTENT = /<OFX[\s>]|OFXHEADER:/i;
+/** Reconnu à son contenu : un fichier partagé peut s'appeler « document ». L'extension n'est qu'un indice. */
+const isOfx = (file: Pick<File, 'name'>, bytes: ArrayBuffer) =>
+  OFX_CONTENT.test(decodeText(bytes).slice(0, 20000)) || /\.(ofx|qfx)$/i.test(file.name);
 
 /**
  * Lit un fichier .ofx, .qfx ou .csv. Lève une StatementFileError (message en clair) si le fichier
@@ -22,7 +25,7 @@ const isOfx = (file: Pick<File, 'name'>) => /\.(ofx|qfx)$/i.test(file.name);
  */
 export const readLocalStatement = async (file: File): Promise<LocalRead> => {
   const bytes = await fileBytes(file);
-  if (isOfx(file)) return { kind: 'statement', data: parseOfx(bytes) };
+  if (isOfx(file, bytes)) return { kind: 'statement', data: parseOfx(bytes) };
   const guess = guessCsv(decodeText(bytes));
   if (!guess.ambiguous && mappingIsComplete(guess.mapping)) {
     try {

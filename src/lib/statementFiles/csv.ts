@@ -2,7 +2,7 @@
 // devinés ; quand la détection n'est pas sûre, l'écran demande de choisir les colonnes
 // (`CsvMapping`). Fonctions pures, le fichier ne quitte pas l'appareil.
 import { normalizeLabel, sanitizeStatement, type StatementData } from '../statementImport';
-import { parseAmount, parseDate, StatementFileError } from './common';
+import { isAmbiguousAmount, parseAmount, parseDate, StatementFileError } from './common';
 
 /** Numéros de colonnes (à partir de 0) ; -1 : pas de colonne. Montant seul, ou débit et/ou crédit. */
 export interface CsvMapping { date: number; label: number; amount: number; debit: number; credit: number; balance: number }
@@ -141,7 +141,10 @@ export const guessCsv = (text: string): CsvGuess => {
   const data = rows.slice(at + 1).filter(r => r.length > 1 || r[0]?.trim()).map(fit);
   if (data.length === 0) throw new StatementFileError("Aucune opération trouvée dans ce fichier : seul l'en-tête est présent.");
   const guess = guessMapping(header);
-  return { table: { header, rows: data }, mapping: guess.mapping, ambiguous: !found || guess.ambiguous };
+  // Un montant comme « 12.500 » ne se devine pas : l'étape des colonnes s'affiche, tableau sous les yeux.
+  const money = [guess.mapping.amount, guess.mapping.debit, guess.mapping.credit, guess.mapping.balance].filter(i => i >= 0);
+  const unsure = data.some(r => money.some(i => isAmbiguousAmount((r[i] ?? '').trim())));
+  return { table: { header, rows: data }, mapping: guess.mapping, ambiguous: !found || guess.ambiguous || unsure };
 };
 
 /** Colonnes cohérentes ? (date, libellé, et un montant ou un débit/crédit ; solde facultatif) */

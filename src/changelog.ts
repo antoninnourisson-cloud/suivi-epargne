@@ -15,6 +15,18 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '2026.11.04-12',
+    date: '2026-11-04',
+    title: 'Relevés mieux lus, sauvegarde surveillée',
+    items: [
+      "Relevé OFX : les montants avec un point (« -45.000 ») sont lus comme des euros et des centimes, et un fichier OFX est reconnu même sans extension. Dans un CSV, un montant ambigu comme « 12.500 » n'est plus deviné : l'étape « Colonnes du fichier » s'affiche.",
+      "Sauvegarde de secours : si le dernier envoi date de plus de 30 jours, ou a échoué récemment, une tâche apparaît sur l'Accueil.",
+      "Retrait prévu dont le compte a été supprimé : l'Accueil ne propose plus que « Supprimer ».",
+      "Sans capital de vos parents, plus aucune phrase sur eux dans « J'ai besoin d'argent ». Les petits boutons font 48 px de haut sur téléphone.",
+      "Rappels : une notification prévient quelques jours avant la fin de votre connexion (60 jours au plus), pour vous reconnecter à temps. Un simple incident passager chez Google n'envoie plus « Reconnectez-vous ».",
+    ],
+  },
+  {
     version: '2026.11.04-11',
     date: '2026-11-04',
     title: 'Partager un relevé OFX ou CSV',
