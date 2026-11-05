@@ -37,5 +37,3 @@ export type CommandResult<Extra = unknown> = CommandOk<Extra> | CommandError;
 
 export const fail = (code: CommandErrorCode, error: string): CommandError => ({ ok: false, code, error });
 
-/** Applique un patch à un état (tests, enchaînement de commandes). */
-export const applyPatch = (state: CommandState, patch: CommandPatch): CommandState => ({ ...state, ...patch });

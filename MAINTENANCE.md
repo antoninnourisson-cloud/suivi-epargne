@@ -4,6 +4,20 @@ Ce document rassemble ce qu'il faut savoir pour faire vivre l'app sans la casser
 
 Voir aussi : [README.md](README.md) (fonctionnement général), [worker/README.md](worker/README.md) (serveur), [ROADMAP.md](ROADMAP.md) (pistes et notes techniques).
 
+## Si ça ne marche plus
+
+Cherchez le symptôme, ouvrez la section indiquée. Les mentions **navigateur** se font sans terminal ; **commande** demande un terminal (voir [CONTRIBUTING.md](CONTRIBUTING.md) pour l'installer).
+
+| Symptôme | Où lire | En un mot |
+|---|---|---|
+| **Site blanc**, ou l'app reste sur une **ancienne version** | [App cassée après un déploiement](#app-cassée-après-un-déploiement), puis [§ 9 Surveillance](#9-surveillance) | navigateur : retour arrière en trois clics (Actions → Déploiement → Run workflow, version choisie dans *Use workflow from*). Une ancienne version qui reste affichée : fermer complètement l'app et la rouvrir (elle se met à jour seule à l'ouverture) ; sinon vérifier que le dernier déploiement est vert |
+| **Notifications muettes** (plus de rappels, « Envoyer un test » sans effet) | [Changer un secret du serveur](#changer-un-secret-du-serveur) (clés VAPID changées, jeton Google illisible), [§ 9](#9-surveillance) (compteur d'échecs d'envoi dans `/status`), [§ 6](#6-limites-de-loffre-gratuite-cloudflare) (quotas) | le plus souvent : Paramètres → Notifications → Désactiver puis Activer, sur chaque appareil. Une notification « Reconnectez-vous » demande de se reconnecter avec Google |
+| **Connexion refusée** | [Changer un secret du serveur](#changer-un-secret-du-serveur) (`ALLOWED_EMAILS`, `GOOGLE_CLIENT_SECRET`), [Code secret OAuth Google renouvelé](#code-secret-oauth-google-renouvelé), [§ 7 Statut OAuth](#7-statut-de-lapplication-oauth-google), [§ 8 Domaine](#8-nom-de-domaine) | navigateur : vérifier que l'adresse est bien dans `ALLOWED_EMAILS`, que le code secret Google est le bon, que l'application OAuth n'est pas repassée en test |
+| **Fichier Drive introuvable ou abîmé** | [Fichier Drive corrompu ou mauvaise manipulation](#fichier-drive-corrompu-ou-mauvaise-manipulation) | introuvable (corbeille, supprimé) : l'app ne crée rien et propose de restaurer la copie du téléphone, une copie mensuelle, de chercher à nouveau ou de repartir de zéro. Abîmé : copies mensuelles, historique Drive, sauvegarde de secours chiffrée |
+| **Serveur injoignable** (`api.pecule-app.com`, issue `panne`) | [§ 9 Surveillance](#9-surveillance), [App cassée après un déploiement](#app-cassée-après-un-déploiement) (Rollback du Worker), [§ 6 Limites](#6-limites-de-loffre-gratuite-cloudflare), [§ 8 Domaine](#8-nom-de-domaine) | l'app continue de lire et d'écrire sur Drive sans serveur ; seuls les rappels, la sauvegarde de secours et la veille fiscale s'arrêtent. navigateur : Cloudflare → *Workers & Pages* → `suivi-epargne-api` → *Deployments* → Rollback |
+| **Domaine** (certificat, `pecule-app.com` ne répond plus, e-mail `contact@`) | [§ 8 Nom de domaine](#8-nom-de-domaine), [Compte Cloudflare perdu ou inaccessible](#compte-cloudflare-perdu-ou-inaccessible) | navigateur : Cloudflare → Domain Registration (renouvellement, paiement), DNS, Email Routing |
+| **Un test échoue en CI** | [§ 2 Publier une mise à jour](#2-publier-une-mise-à-jour), [CONTRIBUTING.md](CONTRIBUTING.md) (§ Stratégie de test) | navigateur : onglet Actions → le run rouge → rapport Playwright (artefact `playwright-report-…`, avec captures et trace). Un test réussi seulement au second essai est signalé par un avertissement « instable » : à corriger, ce n'est pas un succès. Rien n'est publié tant que la CI est rouge |
+
 ## 1. Invariants à ne pas casser
 
 ### Soldes et mouvements
@@ -55,10 +69,10 @@ Voir aussi : [README.md](README.md) (fonctionnement général), [worker/README.m
    - un titre, et de 1 à 6 phrases simples (`items`).
    Le test `src/changelog.test.ts` vérifie le format, l'ordre et l'unicité.
 2. **Vérifications** : `npm run lint`, `npm run typecheck` et `npm run test:coverage` (app + serveur + edge), puis `npm run e2e` si un écran ou la synchronisation a changé (tests Playwright : mode démo, et faux Drive pour la synchronisation ; `E2E_TARGET=build` pour les lancer sur le build de production, comme la CI).
-   La couverture est mesurée sur **toute l'app** (seuils plancher 81 % des instructions, 74 % des branches, 73 % des fonctions, 85 % des lignes : la mesure arrondie à l'unité inférieure, donc un nouvel écran arrive avec ses tests unitaires), avec des seuils propres pour le **cœur métier** `src/lib`, `worker/src`, `edge/src` (92 / 81 / 93 / 95) et pour les **filets anti-perte** `usePortfolioData` et `src/hooks/portfolio` (synchronisation, copies locales) et les services Drive, coffre local, sauvegarde de secours, serveur, verrou (89 / 81 / 87 / 94). Mesuré le 23 octobre 2026 : toute l'app 81,7 / 75,0 / 73,1 / 85,0 %, cœur métier 96,8 / 89,6 / 97,7 / 98,5 %, filets anti-perte 91,1 / 83,8 / 89,4 / 95,5 %. Un seuil se relève quand de nouveaux tests le permettent (`vitest.config.ts`), il ne se baisse pas.
+   La couverture est mesurée sur **toute l'app**, avec des seuils propres pour le cœur métier et pour les filets anti-perte : les seuils plancher et les mesures datées sont dans [`vitest.config.ts`](vitest.config.ts), seule source (un nouvel écran arrive avec ses tests unitaires). Un seuil se relève quand de nouveaux tests le permettent, il ne se baisse pas. Comment écrire et lancer les tests : [CONTRIBUTING.md](CONTRIBUTING.md) (§ Stratégie de test).
 3. **Push sur `main`** :
    - `deploy.yml` revérifie tout (`ci.yml`, une seule fois), puis déploie **ensemble** : GitHub Pages (le dossier `dist` que `ci.yml` vient de construire et de tester, artefact `site-dist`, rien n'est reconstruit), le serveur (`worker/`) et le Worker des en-têtes `pecule-edge` (`edge/`), à **chaque** push : l'app et le serveur ne peuvent pas rester désaccordés (redéployer un Worker inchangé est sans effet). Les deux Workers demandent les secrets GitHub `CLOUDFLARE_API_TOKEN` et `CLOUDFLARE_ACCOUNT_ID` ; sans eux, ils sont sautés (`npm run deploy` dans `worker/` ou `edge/`). Enfin, tag `v<version>` et GitHub Release (puces du changelog). Pour tout redéployer sans nouveau commit : Actions → Déploiement → Run workflow (*Use workflow from* : `main`) ; pour revenir à une version précédente, voir § 5 ;
-   Le fichier principal de l'app est plafonné à **500 kB** : `ci.yml` lance `scripts/check-bundle-size.mjs` après le build et échoue au-delà (mesuré à 451,74 kB le 29 octobre 2026). Un nouveau gros morceau (calculs saisonniers, moteur de la veille fiscale, lecteurs de documents) se charge à part par `import()`.
+   Le fichier principal de l'app est plafonné à **350 kB** et tout ce qui est chargé au démarrage à **800 kB** : `ci.yml` lance `scripts/check-bundle-size.mjs` après le build et échoue au-delà (mesurés à 232,81 kB et 585,91 kB le 5 novembre 2026). React (`react-*.js`) et les graphiques (`charts-*.js`, chargés à la demande seulement : le script échoue s'ils se retrouvent au démarrage) ont leur propre fichier dans `vite.config.ts`, pour garder la même empreinte d'une mise à jour à l'autre. Un nouveau gros morceau (calculs saisonniers, moteur de la veille fiscale, lecteurs de documents) se charge à part par `import()`.
    Le site n'est publié que si le serveur qu'il vise répond : le job « Serveur joignable » de `deploy.yml` (`scripts/check-backend.mjs`) demande `/status` à l'adresse de `.env.production` (code 200, `ok: true`, en-tête CORS pour `https://pecule-app.com`). En cas d'échec, les Workers partent mais pas le site : vérifier le domaine du serveur (§ 8), puis relancer le déploiement.
 4. Vérifier dans l'onglet **Actions** du dépôt que les runs sont verts, puis ouvrir l'app : la fenêtre « Quoi de neuf » doit s'afficher une fois.
 
@@ -66,7 +80,7 @@ Voir aussi : [README.md](README.md) (fonctionnement général), [worker/README.m
 
 | Secret | Où | Remarques |
 |---|---|---|
-| `GOOGLE_CLIENT_SECRET`, `ENCRYPTION_KEY`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `ALLOWED_EMAILS` | **Tableau de bord Cloudflare** : Workers & Pages → `suivi-epargne-api` → Paramètres → Variables et secrets | jamais dans le dépôt ; `npm run setup-secrets` (voir worker/README.md) |
+| `GOOGLE_CLIENT_SECRET`, `ENCRYPTION_KEY` (et `ENCRYPTION_KEY_PREVIOUS`, seulement le temps d'un changement de clé), `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `ALLOWED_EMAILS` | **Tableau de bord Cloudflare** : Workers & Pages → `suivi-epargne-api` → Paramètres → Variables et secrets | jamais dans le dépôt ; `npm run setup-secrets` (voir worker/README.md) ; pour en changer un : [Changer un secret du serveur](#changer-un-secret-du-serveur) |
 | Client OAuth (identifiant public + code secret) | **Console Google Cloud** : API et services → Identifiants, client commençant par `763862877733-` | l'identifiant est public (dans le code) ; seul le code secret est sensible |
 | `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` | **GitHub** : dépôt → Settings → Secrets and variables → Actions | servent uniquement au déploiement automatique des deux Workers (`suivi-epargne-api` et `pecule-edge` ; pour ce dernier, le jeton a en plus Zone → Workers Routes → Edit sur pecule-app.com) |
 | Clé Gemini | **Sur chaque appareil**, saisie par l'utilisateur dans Paramètres (stockage local) | clé personnelle de l'utilisateur ; jamais sur Drive, jamais sur le serveur |
@@ -125,6 +139,52 @@ L'app continue de fonctionner sans serveur (session Google d'une heure, pas de n
 1. Console Google Cloud → Identifiants → client `763862877733-…` : copier le nouveau code secret.
 2. Tableau de bord Cloudflare → `suivi-epargne-api` → Variables et secrets → modifier `GOOGLE_CLIENT_SECRET`.
 3. Supprimer l'ancien code secret dans la console Google une fois le nouveau en place. Les refresh tokens déjà émis restent valables avec le nouveau code secret ; tester quand même une connexion et « Envoyer un test » de notification.
+
+### Changer un secret du serveur
+
+Les secrets du serveur vivent chez Cloudflare (tableau de bord : Workers & Pages → `suivi-epargne-api` → Paramètres → Variables et secrets). Ne jamais les écrire dans le dépôt, un message ou une capture d'écran : les garder dans le gestionnaire de mots de passe. Une valeur de secret ne se relit plus après l'avoir enregistrée.
+
+Deux façons de poser un secret, de même effet : **navigateur** (tableau de bord Cloudflare ci-dessus : *Modifier* ou *Ajouter*, type **Secret**, puis *Déployer*) ou **commande** (dans `worker/` : `npx wrangler secret put NOM`, la valeur se saisit à l'invite). Seule la génération d'une nouvelle valeur demande une commande (`node`). Ne jamais lancer `npm run setup-secrets -- --force` : cela régénère **tous** les secrets générés d'un coup (clé de chiffrement et clés des notifications), donc déconnecte tout le monde et coupe toutes les notifications.
+
+#### `ENCRYPTION_KEY` (clé de chiffrement des jetons Google), sans déconnecter personne
+
+À faire par exemple après une fuite supposée, ou par précaution. Cette clé chiffre le jeton Google gardé par le serveur ; elle sert aussi, par dérivation, à signer la connexion en cours et les preuves de l'appareil. Le serveur sait lire un jeton avec l'ancienne clé le temps du changement (`ENCRYPTION_KEY_PREVIOUS`, `worker/src/crypto.ts`) : **l'ordre ci-dessous compte**.
+
+1. **Garder l'ancienne valeur** dans le gestionnaire de mots de passe (jamais dans le dépôt).
+2. **Générer** une nouvelle clé de 32 octets en base64url (commande : la valeur s'affiche, la copier directement dans le gestionnaire de mots de passe, puis fermer le terminal) : `node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"`
+3. Dans `worker/` : `npx wrangler secret put ENCRYPTION_KEY_PREVIOUS`, avec l'**ancienne** valeur (ou, dans le tableau de bord, ajouter le secret `ENCRYPTION_KEY_PREVIOUS`).
+4. `npx wrangler secret put ENCRYPTION_KEY`, avec la **nouvelle** valeur (ou la modifier dans le tableau de bord). Effet immédiat, toujours **après** l'étape 3.
+5. **Attendre** le passage quotidien (7 h UTC) ou ouvrir l'app : chaque jeton Google est alors réécrit avec la nouvelle clé (le serveur le fait dès qu'il doit lire un jeton avec l'ancienne). Pendant quelques minutes, une connexion Google commencée juste avant le changement peut échouer : la refaire.
+6. **Après au moins un passage réussi** (le lendemain matin, par exemple ; `/status` et l'issue `panne` doivent rester calmes) : `npx wrangler secret delete ENCRYPTION_KEY_PREVIOUS` (ou la supprimer dans le tableau de bord). La retirer trop tôt, c'est retomber dans le cas de l'étape 8.
+7. **Mettre à jour la copie** dans le gestionnaire de mots de passe (nouvelle valeur ; l'ancienne peut être détruite).
+8. **Pour l'utilisateur, rien à refaire en général.** Si l'étape 3 a été oubliée (ou si la valeur précédente est fausse), le serveur ne peut plus lire les jetons : il les efface, et l'app demande de se reconnecter avec Google ; les rappels sont arrêtés jusqu'à cette reconnexion. Rien n'est perdu côté données (elles sont sur Drive). Les sauvegardes de secours chiffrées ne sont pas touchées : leur clé vient du code de secours, pas de `ENCRYPTION_KEY`.
+
+#### `VAPID_PUBLIC_KEY` et `VAPID_PRIVATE_KEY` (notifications)
+
+Les deux forment **une paire** : toujours les changer ensemble. `VAPID_SUBJECT` n'est pas un secret (il est dans `worker/wrangler.toml`).
+- **Ce qui casse** : chaque abonnement existant a été créé pour l'ancienne clé publique. Les services de notification (Google, Apple, Mozilla) refusent alors les envois, **sans bruit** : le serveur ne retire que les abonnements « disparus » (404 ou 410), pas les refusés. Les notifications s'arrêtent sur **tous** les appareils, et le champ `notifications` de `/status` (envois tentés, reçus, en échec) montre les échecs ; la surveillance ouvre une issue `panne` si tous les envois d'un passage échouent (§ 9).
+- **Ce qu'il faut refaire** : sur **chaque** appareil, Paramètres → Notifications → **Désactiver**, puis **Activer** (l'app voit que la clé a changé, supprime l'ancien abonnement et en crée un nouveau), puis « Envoyer un test ». Rien d'autre côté serveur ni sur Drive.
+- **Marche à suivre** : génération et envoi directs chez Cloudflare, sans que rien ne s'affiche (commande, dans `worker/`, après `npx wrangler login`) :
+  `node -e "const c=require('crypto');const {publicKey:p,privateKey:k}=c.generateKeyPairSync('ec',{namedCurve:'P-256'});const v={VAPID_PUBLIC_KEY:p.export({format:'der',type:'spki'}).subarray(-65).toString('base64url'),VAPID_PRIVATE_KEY:k.export({format:'jwk'}).d};for(const n in v)require('child_process').spawnSync('npx wrangler secret put '+n,{shell:true,input:v[n],stdio:['pipe','inherit','inherit']})"`
+  L'ancienne paire n'est plus utile (rien à conserver). Ces clés ne se changent que si elles ont fuité : sinon, ne pas y toucher.
+
+#### `GOOGLE_CLIENT_SECRET` (code secret du client OAuth Google)
+
+Voir [Code secret OAuth Google renouvelé](#code-secret-oauth-google-renouvelé) (**navigateur** : console Google Cloud, puis tableau de bord Cloudflare). Les jetons déjà gardés restent valables avec le nouveau code secret. Si une **mauvaise** valeur est posée, d'après le code (`worker/src/google.ts`, `worker/src/handlers/cron.ts`) : les connexions et le renouvellement des accès échouent chez Google (`invalid_client`), rien n'est effacé, et les appareils reçoivent « Reconnectez-vous à Pécule » ; remettre la bonne valeur suffit.
+
+#### `ALLOWED_EMAILS` (comptes autorisés)
+
+**Navigateur** seulement (tableau de bord Cloudflare). Une ou plusieurs adresses Gmail séparées par des virgules ; majuscules et espaces ignorés.
+- **Ajouter** une adresse : elle peut se connecter tout de suite.
+- **Retirer** une adresse : ses sessions déjà ouvertes sont fermées à leur prochaine requête (le serveur revérifie la liste à chaque fois), et la connexion lui est refusée.
+- **Liste vide ou secret supprimé** : personne ne peut se connecter (refus par défaut, `worker/src/handlers/session.ts`). Une faute de frappe a le même effet pour l'adresse concernée.
+- Rien à refaire sur Drive ni sur les appareils pour les comptes conservés.
+
+#### `CLOUDFLARE_API_TOKEN` (jeton du déploiement automatique, secret **GitHub**)
+
+**Navigateur** seulement. Il ne sert qu'à publier le serveur et le Worker des en-têtes depuis GitHub Actions (`deploy.yml`) ; l'app et le serveur déjà en ligne continuent de fonctionner s'il est périmé ou révoqué.
+- **Ce qui casse** : les jobs « worker » et « edge » échouent (cercle rouge dans Actions) ; le site est quand même publié, mais le serveur et les en-têtes ne sont plus mis à jour, et la Release n'est pas créée. Si le secret est **absent** (vide), ces jobs sont simplement sautés, avec un avis.
+- **Ce qu'il faut refaire** : Cloudflare → My Profile → API Tokens → créer un nouveau jeton (modèle « Edit Cloudflare Workers », avec en plus *Zone → Workers Routes → Edit* sur `pecule-app.com` pour le Worker des en-têtes), puis GitHub → dépôt → Settings → Secrets and variables → Actions → `CLOUDFLARE_API_TOKEN` → *Update secret*. Vérifier en lançant Actions → Déploiement → Run workflow (sur `main`), puis **supprimer l'ancien jeton** dans Cloudflare. `CLOUDFLARE_ACCOUNT_ID` ne change pas (identifiant du compte, pas un mot de passe). Les jobs qui l'utilisent ne tournent que depuis `main` et les tags `v*`, dans l'environnement GitHub `cloudflare`.
 
 ### Fichier Drive corrompu ou mauvaise manipulation
 1. **Paramètres → Copies mensuelles sur Drive** : choisir une copie `suivi_epargne_backup_AAAA-MM.json` (12 mois gardés) et la restaurer (confirmation demandée).

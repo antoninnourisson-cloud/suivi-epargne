@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { AccountType, type PayChecklistLine, type PayRecord, type SavingsAccount } from '../../types';
 import { computeMonthSavedAmount } from '../finance';
-import { applyPatch, CommandState, deletePay, deleteMovement, quickAdd, recordPay, uncheckPayLine, updatePay, PAY_DEPOSIT_LABEL } from './index';
+import { CommandState, deletePay, deleteMovement, quickAdd, recordPay, uncheckPayLine, updatePay, PAY_DEPOSIT_LABEL } from './index';
+import { applyPatch } from './testHelpers';
 import { payChecklistOf } from '../payRecords';
 
 const ok = <T extends { ok: boolean }>(r: T) => { if (!r.ok) throw new Error(JSON.stringify(r)); return r as Extract<T, { ok: true }>; };

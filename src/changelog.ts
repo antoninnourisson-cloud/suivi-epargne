@@ -15,6 +15,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '2026.11.05-3',
+    date: '2026-11-05',
+    title: 'Mises à jour plus légères',
+    items: [
+      "Mises à jour plus légères : React et les graphiques ont désormais leur propre fichier, gardé d'une version à l'autre. Une mise à jour fait retélécharger environ 0,8 Mo au lieu de 1,4 Mo.",
+      "Coulisses : accessibilité vérifiée sur 14 écrans et les feuilles principales, notifications du téléphone testées, seuils de tests relevés ; serveur et service Drive rangés en plus petits fichiers, sans changement ; aide au dépannage et au changement des clés du serveur dans la documentation.",
+    ],
+  },
+  {
     version: '2026.11.05-2',
     date: '2026-11-05',
     title: 'Retour qui ferme, rappels fiscaux au bon moment',

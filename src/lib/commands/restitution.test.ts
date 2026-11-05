@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { AccountType, SavingsAccount } from '../../types';
 import { isRestitutionMovement } from '../accountOps';
-import { applyPatch, CommandState, recordRestitution, undoRestitution, quickAdd, deleteMovement } from './index';
+import { CommandState, recordRestitution, undoRestitution, quickAdd, deleteMovement } from './index';
+import { applyPatch } from './testHelpers';
 
 const accounts = (): SavingsAccount[] => [
   { id: 'la', name: 'Livret A', institution: 'B', type: AccountType.LIVRET_A, totalAmount: 15200, ownedAmount: 8200, parentalCapital: 7000, interestRate: 2.4,

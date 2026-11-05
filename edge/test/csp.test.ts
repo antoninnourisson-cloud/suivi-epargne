@@ -1,5 +1,5 @@
 // Politique de contenu (CSP) d'index.html : scripts Google limités aux fichiers exacts que
-// l'app charge (src/services/googleDriveService.ts), jamais un domaine entier.
+// l'app charge (src/services/drive/session.ts), jamais un domaine entier.
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -21,7 +21,7 @@ describe('CSP d’index.html', () => {
   });
 
   it('les adresses de scripts du code correspondent à la CSP', () => {
-    const service = readFileSync(fileURLToPath(new URL('../../src/services/googleDriveService.ts', import.meta.url)), 'utf8');
+    const service = readFileSync(fileURLToPath(new URL('../../src/services/drive/session.ts', import.meta.url)), 'utf8');
     for (const src of service.match(/'https:\/\/(?:accounts|apis)\.google\.com\/[^']+'/g)!.map(s => s.slice(1, -1))) {
       expect(directive('script-src').some(allowed => allowed.endsWith('/') ? src.startsWith(allowed) : src === allowed), src).toBe(true);
     }

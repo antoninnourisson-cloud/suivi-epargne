@@ -2,7 +2,8 @@
 // retrait), part des parents intouchable, un seul « Annuler ».
 import { describe, it, expect } from 'vitest';
 import { AccountType, type SavingsAccount } from '../../types';
-import { applyPatch, recordNeedWithdrawal, type CommandState } from './index';
+import { recordNeedWithdrawal, type CommandState } from './index';
+import { applyPatch } from './testHelpers';
 
 const state = (): CommandState => ({
   accounts: [

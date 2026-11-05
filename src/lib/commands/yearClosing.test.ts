@@ -3,7 +3,7 @@
 import { describe, it, expect } from 'vitest';
 import { AccountType, type SavingsAccount } from '../../types';
 import { recordYearClosing } from './yearClosing';
-import { applyPatch } from './types';
+import { applyPatch } from './testHelpers';
 
 const livret: SavingsAccount = {
   id: 'la', name: 'Livret A', type: AccountType.LIVRET_A, institution: 'B', totalAmount: 10000, ownedAmount: 10000, parentalCapital: 0, interestRate: 3,

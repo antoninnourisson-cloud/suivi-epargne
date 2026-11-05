@@ -74,20 +74,6 @@ export const deleteMovement = (state: CommandState, input: { accountId: string; 
 };
 
 /**
- * Annule un versement enregistré depuis la liste des virements de paie : retire le
- * mouvement et rétablit solde ET versements cumulés.
- */
-export const cancelDeposit = (state: CommandState, input: { accountId: string; movementId: string }): CommandResult => {
-  const movement = state.accounts.find(a => a.id === input.accountId)?.movements.find(m => m.id === input.movementId);
-  if (!movement) return fail('not-found', 'Versement introuvable.');
-  if (isRestitutionMovement(movement)) return fail('forbidden', RESTITUTION_DELETE_ERROR);
-  const { accounts, undo } = removeLegs(state, [{ accountId: input.accountId, movement }]);
-  const negative = negativeAfter(accounts, state.accounts);
-  if (negative) return fail('forbidden', negativeError(movement.label, negative));
-  return { ok: true, next: { accounts }, message: 'Versement annulé', undo };
-};
-
-/**
  * Nettoyage des mouvements qui s'annulent (voir findCancellingGroups) : leur somme est
  * nulle, ils sont retirés de l'historique sans toucher aux soldes.
  */

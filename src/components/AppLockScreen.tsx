@@ -273,7 +273,7 @@ export const AppLockScreen: React.FC<AppLockScreenProps> = ({
             <form onSubmit={e => { e.preventDefault(); void submitStrongerPin(); }}>
               <label htmlFor="lock-new-pin" className="block text-sm font-medium text-on-surface-variant mb-1.5">Nouveau code (6 à 8 chiffres)</label>
               <input id="lock-new-pin" type="password" inputMode="numeric" pattern="[0-9]*" maxLength={8} autoComplete="new-password"
-                value={newPin} onChange={e => setNewPin(e.target.value.replace(/D/g, ''))}
+                value={newPin} onChange={e => setNewPin(e.target.value.replace(/\D/g, ''))}
                 className="w-full h-12 px-4 rounded-xs bg-transparent border border-outline text-base text-on-surface tracking-widest" />
               <div className="mt-4 flex flex-wrap justify-end gap-2">
                 <Button type="button" variant="text" onClick={() => onUnlock()}>Plus tard</Button>

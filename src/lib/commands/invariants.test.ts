@@ -7,10 +7,9 @@ import { AccountType, SavingsAccount } from '../../types';
 import { round2 } from '../accountOps';
 import { mulberry32 } from '../simulator';
 import {
-  applyPatch, CommandOk, CommandResult, CommandState,
-  quickAdd, deleteMovement, cancelDeposit, saveAccount, deleteAccount, recordRestitution, undoRestitution, updateBalances,
-  linkedTransfer, recordPay, uncheckPayLine, deletePay,
+  CommandOk, CommandResult, CommandState, quickAdd, deleteMovement, saveAccount, deleteAccount, recordRestitution, undoRestitution, updateBalances, linkedTransfer, recordPay, uncheckPayLine, deletePay,
 } from './index';
+import { applyPatch } from './testHelpers';
 
 const initial = (): CommandState => ({
   accounts: [
@@ -98,9 +97,8 @@ const runSequence = (seed: number, steps: number) => {
       if (withMoves.length === 0) continue;
       const acc = pick(withMoves);
       const m = pick(acc.movements!);
-      const useCancel = rnd() < 0.3;
-      name = `${useCancel ? 'cancelDeposit' : 'deleteMovement'} ${m.id}`;
-      r = useCancel ? cancelDeposit(s, { accountId: acc.id, movementId: m.id }) : deleteMovement(s, { accountId: acc.id, movementId: m.id });
+      name = `deleteMovement ${m.id}`;
+      r = deleteMovement(s, { accountId: acc.id, movementId: m.id });
       if (m.tag === 'restitution') expect(r.ok, where).toBe(false);
     } else if (roll < 0.66) {
       const acc = pick(accounts);

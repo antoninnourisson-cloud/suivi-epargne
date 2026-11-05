@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { AccountType, type SavingsAccount } from '../../types';
 import { renameMovement, revertRateChange, toggleMovementAdjustment } from './edits';
-import { applyPatch } from './types';
+import { applyPatch } from './testHelpers';
 
 const account = (id: string, type: AccountType, extra: Partial<SavingsAccount> = {}): SavingsAccount => ({
   id, name: id, institution: 'Banque', type, totalAmount: 100, ownedAmount: 100, parentalCapital: 0, movements: [], ...extra,

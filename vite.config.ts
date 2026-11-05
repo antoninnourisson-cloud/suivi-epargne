@@ -194,10 +194,25 @@ export default defineConfig({
         // 41 → 76 fichiers JS ; fichier principal 452 → 408 kB ; précache 54 → 89 entrées
         // (1 664 → 1 636 Kio) ; Accueil du mode démo, écrans préchargés compris : 22 → 42
         // fichiers JS, 853 → 804 kB. À revoir quand Rolldown saura fusionner les petits fichiers.
+        // Mesuré le 5 novembre 2026 en changeant un seul texte dans un écran chargé à la demande :
+        // avant les groupes `react` et `charts`, 52 des 92 fichiers JS changeaient de nom (1,42 Mo
+        // à retélécharger) ; après, 48 (0,81 Mo). Le reste vient du fichier principal, dont le nom
+        // change dès qu'un écran change (il liste les fichiers à précharger) et que ~40 fichiers
+        // importent pour le code partagé de l'app.
         // Un `codeSplitting` par écran ne convient pas : il aspire aussi les dépendances
         // partagées (recharts…).
         codeSplitting: {
           groups: [
+            // React et son planificateur : un fichier à part, qui ne change qu'à une montée de version
+            // de React. Sans cela, React vivait dans le fichier principal (dont l'empreinte change à
+            // chaque mise à jour) et la quarantaine de fichiers qui l'importent par son nom changeaient
+            // d'empreinte avec lui : le téléphone retéléchargeait presque tout à chaque mise à jour.
+            { name: 'react', test: /[\\/]node_modules[\\/](?:react|react-dom|scheduler)[\\/]/ },
+            // Les graphiques (recharts) et leurs seules dépendances, un fichier à part pour la même
+            // raison. Il reste CHARGÉ À LA DEMANDE : l'app n'utilise aucune de ces dépendances en
+            // dehors de recharts, et le démarrage ne l'importe pas (scripts/check-bundle-size.mjs le
+            // vérifie).
+            { name: 'charts', test: /[\\/]node_modules[\\/](?:recharts|victory-vendor|d3-[^\\/]+|internmap|@reduxjs|redux|redux-thunk|reselect|immer|react-redux|use-sync-external-store|decimal\.js-light|eventemitter3|es-toolkit|tiny-invariant|clsx)[\\/]/ },
             { name: 'icons', test: /[\\/]node_modules[\\/]lucide-react[\\/]/ },
             { name: 'ui', test: /[\\/]src[\\/]components[\\/]ui[\\/]/ },
           ],

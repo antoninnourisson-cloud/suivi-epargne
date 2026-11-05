@@ -6,7 +6,8 @@ import { render, screen, fireEvent, cleanup, within } from '@testing-library/rea
 import { AccountUpdate } from './AccountUpdate';
 import { AccountType, type SavingsAccount } from '../types';
 import { localTodayISO } from '../lib/dates';
-import { applyPatch, type CommandPatch } from '../lib/commands';
+import { type CommandPatch } from '../lib/commands';
+import { applyPatch } from '../lib/commands/testHelpers';
 
 afterEach(() => { cleanup(); try { sessionStorage.clear(); } catch { /* ignoré */ } });
 

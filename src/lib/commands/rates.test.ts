@@ -2,7 +2,8 @@
 // Livret A), autres comptes seulement s'ils changent, un seul « Annuler ».
 import { describe, it, expect } from 'vitest';
 import { AccountType, type SavingsAccount } from '../../types';
-import { applyPatch, applyRateChanges, type CommandState } from './index';
+import { applyRateChanges, type CommandState } from './index';
+import { applyPatch } from './testHelpers';
 
 const acc = (id: string, name: string, type: AccountType, interestRate?: number): SavingsAccount => ({
   id, name, institution: 'B', type, totalAmount: 1000, ownedAmount: 1000, parentalCapital: 0, movements: [], ...(interestRate !== undefined ? { interestRate } : {}),

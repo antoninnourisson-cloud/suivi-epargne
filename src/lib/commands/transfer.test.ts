@@ -2,7 +2,8 @@
 // annulation exacte des deux côtés.
 import { describe, it, expect } from 'vitest';
 import { AccountType, type SavingsAccount } from '../../types';
-import { applyPatch, deleteMovement, linkedTransfer, quickAdd, type CommandState } from './index';
+import { deleteMovement, linkedTransfer, quickAdd, type CommandState } from './index';
+import { applyPatch } from './testHelpers';
 
 const ids = { linkId: 'l1', out: 'out1', in: 'in1' };
 const state = (): CommandState => ({

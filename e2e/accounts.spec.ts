@@ -44,12 +44,13 @@ test.describe('Comptes (démo)', () => {
   });
 
   test("le taux servi d'une assurance vie se change à une date d'effet (historisé)", async ({ page }) => {
+    await page.clock.setFixedTime(new Date('2026-11-05T10:00:00')); // année du jour figée
     await open(page, 'accounts');
     await page.getByRole('button', { name: 'Modifier Assurance vie' }).first().click();
     const rate = page.getByLabel('Taux servi (fonds euros)');
     await expect(rate).toHaveValue('2,6');
     await rate.fill('2,9');
-    await page.getByLabel('Nouveau taux à partir du').fill(`${new Date().getFullYear()}-01-01`);
+    await page.getByLabel('Nouveau taux à partir du').fill('2026-01-01');
     await page.getByRole('button', { name: 'Enregistrer', exact: true }).click();
     await page.getByRole('button', { name: 'Modifier Assurance vie' }).first().click();
     await expect(page.getByLabel('Taux servi (fonds euros)')).toHaveValue('2,9');

@@ -39,7 +39,14 @@ test.describe('Simulateur « Et si… » (démo)', () => {
     await expect(rows.last().locator('td').nth(2)).toHaveText(/^−3\s0\d\d\s€$/);
   });
 
-  test('la fourchette se calcule hors de l\'écran (Web Worker) et suit l\'horizon choisi', async ({ page, isMobile }) => {
+  // La date du jour est figée (page.clock) pour vérifier les deux branches : en janvier, l'horizon
+  // finit en fin d'année pleine ; hors janvier, il finit en cours d'année et les intérêts déjà
+  // gagnés mais pas encore versés sont signalés à part.
+  for (const { label, date, interetsAttendus } of [
+    { label: 'en janvier', date: '2027-01-15T10:00:00', interetsAttendus: false },
+    { label: 'hors janvier', date: '2026-11-05T10:00:00', interetsAttendus: true },
+  ]) test(`la fourchette se calcule hors de l'écran (Web Worker) et suit l'horizon choisi, ${label}`, async ({ page, isMobile }) => {
+    await page.clock.setFixedTime(new Date(date));
     // Un Worker bloqué par la CSP ou introuvable se verrait ici (l'écran retomberait sur le calcul sur place).
     const errors: string[] = [];
     page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
@@ -55,7 +62,9 @@ test.describe('Simulateur « Et si… » (démo)', () => {
     await expect(page.getByText(/s'ajoutent au solde chaque 31 décembre/)).toBeVisible();
     // Hors janvier, l'horizon finit en cours d'année : les intérêts des livrets déjà gagnés,
     // pas encore versés, sont signalés à part.
-    if (new Date().getMonth() !== 0) await expect(page.getByText(/d'intérêts déjà gagnés sur ces livrets attendront/)).toBeVisible();
+    const attente = page.getByText(/d'intérêts déjà gagnés sur ces livrets attendront/);
+    if (interetsAttendus) await expect(attente).toBeVisible();
+    else await expect(attente).toHaveCount(0);
     expect(workers.some(u => /simulator\.worker/.test(u))).toBe(true);
     // Sous le chiffre du plan, le résultat probable (rythme passé) est dit, avec sa fourchette.
     await expect(page.getByText(/À votre rythme des \d+ derniers mois : plutôt/)).toBeVisible();

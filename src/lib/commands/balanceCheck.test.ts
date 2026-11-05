@@ -2,7 +2,8 @@
 // fiche du compte, jamais par un versement prévu ; annulée avec l'opération.
 import { describe, it, expect } from 'vitest';
 import { AccountType, SavingsAccount } from '../../types';
-import { applyPatch, CommandState, quickAdd, saveAccount, updateBalances, laterDay } from './index';
+import { CommandState, quickAdd, saveAccount, updateBalances, laterDay } from './index';
+import { applyPatch } from './testHelpers';
 
 const ok = <T extends { ok: boolean }>(r: T) => { if (!r.ok) throw new Error(JSON.stringify(r)); return r as Extract<T, { ok: true }>; };
 const acc = (s: CommandState, id: string) => s.accounts.find(a => a.id === id)!;

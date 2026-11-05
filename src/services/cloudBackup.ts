@@ -22,7 +22,7 @@ import { backendFetch, hasBackendSession, isBackendEnabled } from './backendServ
 
 export { generateRecoveryCode } from '../lib/cloudBackupCrypto';
 
-/** Même plafond que le serveur (worker/src/index.ts, PUT /backup). */
+/** Même plafond que le serveur (worker/src/handlers/backup.ts, PUT /backup). */
 const MAX_BACKUP_BYTES = 2 * 1024 * 1024;
 
 const DB_NAME = 'pecule-cloud-backup';

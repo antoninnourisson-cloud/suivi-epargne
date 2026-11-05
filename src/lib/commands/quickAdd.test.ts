@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { AccountType, SavingsAccount } from '../../types';
 import { computeMonthSavedAmount, isSavingsFlow } from '../finance';
-import { applyPatch, CommandState, quickAdd } from './index';
+import { CommandState, quickAdd } from './index';
+import { applyPatch } from './testHelpers';
 import { isQuickAddInterest } from './quickAdd';
 
 const ok = <T extends { ok: boolean }>(r: T) => { if (!r.ok) throw new Error(JSON.stringify(r)); return r as Extract<T, { ok: true }>; };

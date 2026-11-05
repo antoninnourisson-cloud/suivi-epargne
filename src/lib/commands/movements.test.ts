@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { AccountType, SavingsAccount } from '../../types';
 import { findCancellingGroups } from '../accountOps';
-import { applyPatch, CommandState, quickAdd, deleteMovement, cancelDeposit, removeCancellingMovements, saveAccount, deleteAccount, planMovementDeletion } from './index';
+import { CommandState, quickAdd, deleteMovement, removeCancellingMovements, saveAccount, deleteAccount, planMovementDeletion } from './index';
+import { applyPatch } from './testHelpers';
 
 const state = (): CommandState => ({
   accounts: [
@@ -112,19 +113,6 @@ describe('annulations hors ordre', () => {
     const s2 = applyPatch(s1, ok(quickAdd(s1, { accountId: 'cc', amount: 1500, type: 'OUT', label: 'B', date: '2026-10-02', id: 'B' })).next);
     expect(acc(s2, 'cc').ownedAmount).toBe(0);
     expect(applyPatch(s2, a.undo(s2))).toEqual(s2);
-  });
-});
-
-describe('cancelDeposit (virements de paie)', () => {
-  it('retire le versement et rétablit solde et versements cumulés', () => {
-    const s0 = state();
-    const add = ok(quickAdd(s0, { accountId: 'av', amount: 250, type: 'IN', label: 'Virement de paie', date: '2026-10-01', id: 'pay' }));
-    const s1 = applyPatch(s0, add.next);
-    const c = ok(cancelDeposit(s1, { accountId: 'av', movementId: 'pay' }));
-    const s2 = applyPatch(s1, c.next);
-    expect(s2).toEqual(s0);
-    expect(applyPatch(s2, c.undo(s2))).toEqual(s1);
-    expect(cancelDeposit(s2, { accountId: 'av', movementId: 'pay' })).toMatchObject({ ok: false, code: 'not-found' });
   });
 });
 

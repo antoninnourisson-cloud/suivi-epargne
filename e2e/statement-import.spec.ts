@@ -13,13 +13,14 @@ const pdf = { name: 'releve.pdf', mimeType: 'application/pdf', buffer: Buffer.fr
 
 test.describe('Lire un relevé (démo)', () => {
   test('fichier OFX lu sur le téléphone : relecture, import, puis annulation', async ({ page }) => {
+    // Date figée : l'écriture du relevé porte la date du jour de l'app, sans risque de minuit.
+    await page.clock.setFixedTime(new Date('2026-11-05T10:00:00'));
     await open(page, 'update');
     await expect(page.getByRole('heading', { name: 'Actualiser les soldes', level: 2 })).toBeVisible({ timeout: 20_000 });
     await page.getByRole('button', { name: 'Lire un relevé' }).click();
     const dialog = page.getByRole('dialog', { name: 'Lire un relevé' });
     await expect(dialog.getByText("Fichier lu sur votre téléphone : rien n'est envoyé.")).toBeVisible();
-    const d = new Date();
-    const day = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
+    const day = '20261105';
     const ofx = `OFXHEADER:100
 DATA:OFXSGML
 VERSION:102

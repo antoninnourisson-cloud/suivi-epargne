@@ -8,7 +8,7 @@ const CORE = '{src/lib,worker/src,edge/src}/**/*.ts';
 // dans src/hooks/portfolio), copies locales, sauvegarde de secours, session serveur, verrou
 // de l'appareil, et autour d'eux dans src/app : les actions qui écrivent les comptes et les
 // mouvements (useAccountActions) et la session Google de l'appareil (useAuthSession).
-const DATA_SAFETY = '{src/hooks/usePortfolioData,src/hooks/portfolio/*,src/services/{googleDriveService,localVault,cloudBackup,backendService,setAsideVersions,appLockService},src/app/{useAccountActions,useAuthSession}}.ts';
+const DATA_SAFETY = '{src/hooks/usePortfolioData,src/hooks/portfolio/*,src/services/{googleDriveService,drive/*,localVault,cloudBackup,backendService,setAsideVersions,appLockService},src/app/{useAccountActions,useAuthSession}}.ts';
 
 // Les tests de bout en bout (Playwright) ont leur propre lanceur.
 const EXCLUDE = ['node_modules/**', 'dist/**', 'dist-e2e/**', 'e2e/**', 'worker/node_modules/**', 'edge/node_modules/**'];
@@ -57,16 +57,19 @@ export default mergeConfig(viteConfig, defineConfig({
         '**/*.test.{ts,tsx}', '**/*.d.ts', 'src/theme/**', 'src/dev/**', 'src/index.tsx', 'src/lib/chartTheme.ts',
       ],
       // Seuils plancher : la couverture ne doit pas reculer. À relever au fil des tests.
-      // - Les seuils globaux portent sur TOUTE l'app (écrans compris). Mesuré le 23 octobre
-      //   2026 : 81,7 / 75,0 / 73,1 / 85,0 (le 19 octobre : 63,7 / 53,7 / 49,4 / 66,6). Plancher
-      //   = mesure arrondie à l'unité inférieure : un nouvel écran arrive avec ses tests
-      //   unitaires (React Testing Library), sinon la CI (donc le déploiement) s'arrête.
-      // - Le cœur métier et les filets anti-perte ont leurs seuils propres, stricts (valeurs
-      //   mesurées arrondies à l'unité inférieure).
+      // - Les seuils globaux portent sur TOUTE l'app (écrans compris). Mesuré le 5 novembre
+      //   2026 : 86,9 / 81,8 / 79,7 / 90,1 (le 23 octobre : 81,7 / 75,0 / 73,1 / 85,0). Plancher
+      //   = mesure arrondie à l'unité inférieure, un point de moins quand il resterait moins de
+      //   0,3 point de marge (les tests fast-check tirent des cas au hasard, la mesure bouge un
+      //   peu) : un nouvel écran arrive avec ses tests unitaires (React Testing Library), sinon
+      //   la CI (donc le déploiement) s'arrête.
+      // - Le cœur métier et les filets anti-perte ont leurs seuils propres, stricts, même règle.
+      //   Mesurés le 5 novembre 2026 : cœur 97,1 / 91,6 / 97,8 / 98,6 ; filets 91,9 / 83,7 /
+      //   90,6 / 96,2 (calcul : coverage-summary.json agrégé selon CORE et DATA_SAFETY).
       thresholds: {
-        statements: 81, branches: 74, functions: 73, lines: 85,
-        [CORE]: { statements: 92, branches: 81, functions: 93, lines: 95 },
-        [DATA_SAFETY]: { statements: 89, branches: 81, functions: 87, lines: 94 },
+        statements: 86, branches: 81, functions: 79, lines: 89,
+        [CORE]: { statements: 96, branches: 91, functions: 97, lines: 98 },
+        [DATA_SAFETY]: { statements: 91, branches: 83, functions: 90, lines: 96 },
       },
     },
   },

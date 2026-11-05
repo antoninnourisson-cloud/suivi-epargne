@@ -142,7 +142,12 @@ d'accueil (Partager → *Sur l'écran d'accueil*).
   abonnement appartient à la session qui l'a créé et disparaît avec elle. Si le fichier de
   données contient `config.discreetNotifications: true`, les textes ne contiennent aucun montant.
 - **Limitation de débit** par IP (binding natif Cloudflare, sans écriture KV) : 20 requêtes/min
-  sur `/auth/*` et `/account/delete`, 60/min sur `/token` et le reste. Au-delà : 429.
+  sur `/auth/*` et `/account/delete`, 60/min sur `/token` et le reste. Au-delà : 429. En plus, les
+  routes qui écrivent dans KV ont un plafond **par compte et par route** (60/min : liaison de
+  l'appareil, abonnement, retrait, « Code oublié », sauvegarde de secours ; `accountLimited` dans
+  `src/handlers/http.ts`), pour qu'une session volée ne puisse pas épuiser le quota d'écritures
+  depuis plusieurs adresses. Les réponses JSON portent `Cache-Control: no-store` et
+  `X-Content-Type-Options: nosniff` ; les pages d'erreur HTML ont en plus une CSP `default-src 'none'`.
 - **Session liée à l'appareil** (`src/deviceProof.ts`) : à la connexion, l'app crée une paire
   de clés ECDSA P-256 dont la partie privée est **non exportable** et envoie la clé publique,
   gardée avec la session. Chaque requête porte ensuite `X-Pecule-Proof: <nonce>.<signature>`
@@ -204,7 +209,7 @@ réponses) ; sinon `401` avec `REAUTH_REQUIRED` (session inconnue, ou d'avant la
 | `GET /push/devices` 🔒 | — | `{"devices":[{"id","host","createdAt","current"}]}` |
 | `POST /push/remove` 🔒 | `{"id"}` ou `{"endpoint"}` | `{"ok":true,"removed":bool,"devices":n}` |
 | `POST /push/test` 🔒 | — | `{"ok":bool,"delivered":n}` |
-| `GET /status` | — | `{"ok","cron":{"lastRunAt","ok"},"site":{"checkedAt","ok","failing"},"fiscalWatch":{"lastSuccessAt","lastFailureAt","ok"},"history":[…10 passages des crons, catégories d'erreur seulement]}` (clés KV `health:fiscal-watch` et `health:cron-log` ; surveillance, sans donnée personnelle ; `site` : pages publiques, et script principal cité par `index.html` qui doit répondre 200 en JavaScript, pour repérer un écran blanc) |
+| `GET /status` | — | `{"ok","cron":{"lastRunAt","ok"},"site":{"checkedAt","ok","failing"},"fiscalWatch":{"lastSuccessAt","lastFailureAt","ok"},"notifications":{"attempted","delivered","failed"},"history":[…10 passages des crons, catégories d'erreur seulement]}` (clés KV `health:fiscal-watch` et `health:cron-log` ; surveillance, sans donnée personnelle ; `site` : pages publiques, et script principal cité par `index.html` qui doit répondre 200 en JavaScript, pour repérer un écran blanc) |
 | `PUT /backup` 🔒 | copie chiffrée (≤ 2 Mo) | `{"date","dates"}` ; conservation échelonnée (24 copies au plus) ; `429` au-delà de 20 envois par jour |
 | `GET /backup` 🔒 | — | `{"dates","deletion"?}` ; `GET /backup/:date` : la copie chiffrée |
 | `DELETE /backup` 🔒 | — | programme l'effacement, dans 7 jours, des copies présentes ; une nouvelle demande ajoute les copies envoyées depuis (chacune garde sa propre échéance ; `purgeAt` = la plus tardive) : `{"ok","scheduled","purgeAt","copies"}` |
@@ -258,5 +263,9 @@ efface un marqueur par rappel envoyé (quelques centaines au plus), ce qui reste
 - Redéployer après une modification : `npm run deploy`
 - Tests : `npm test` à la racine du dépôt (le chiffrement push est vérifié contre le vecteur
   officiel de la RFC 8291 ; sessions, state OAuth, abonnements et mode discret ont leurs tests)
-- `npm run setup-secrets -- --force` régénère TOUS les secrets. À éviter : ça déconnecte tous
-  les appareils et oblige à réactiver les notifications partout.
+- `npm run setup-secrets -- --force` régénère la clé de chiffrement ET les clés des notifications. À
+  éviter : ça déconnecte tous les appareils et oblige à réactiver les notifications partout.
+- Changer un secret sans casser les connexions (clé de chiffrement avec `ENCRYPTION_KEY_PREVIOUS`,
+  clés des notifications, code secret Google, adresses autorisées, jeton de déploiement) : voir
+  [MAINTENANCE.md](../MAINTENANCE.md), section *Changer un secret du serveur*, qui dit aussi ce qui
+  se fait dans un navigateur et ce qui demande une commande.

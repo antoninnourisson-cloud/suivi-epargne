@@ -1,7 +1,7 @@
 // Effacement des copies de secours programmé sur le serveur (7 jours, annulable) : affiché en
 // haut de l'app à chaque ouverture. Il reste ainsi visible même si quelqu'un qui aurait pris
 // la main sur une session a d'abord coupé les notifications du propriétaire, puis demandé
-// l'effacement (voir scheduleBackupDeletion dans worker/src/index.ts).
+// l'effacement (voir scheduleBackupDeletion dans worker/src/handlers/backup.ts).
 import React, { useEffect, useRef, useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { Button } from './ui';

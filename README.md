@@ -241,7 +241,7 @@ npm run lint           # ESLint, avec les règles d'accessibilité jsx-a11y (blo
 npm run typecheck      # types : app + serveur + edge
 npm test               # tests Vitest : app + serveur (worker/test) + edge (edge/test), en trois groupes (calculs, serveur, écrans : voir vitest.config.ts)
 npm run test:coverage  # idem, avec les seuils de couverture de vitest.config.ts (comme la CI)
-                       # (chiffres ci-dessous)
+                       # (seuils et mesures : voir vitest.config.ts)
 npm run test:watch     # tests en continu
 npm run e2e            # tests de bout en bout Playwright (téléphone ; ordinateur pour les parcours @ordinateur), serveur de dev
                        # E2E_TARGET=build : les mêmes sur le build de production (comme la CI)
@@ -250,17 +250,9 @@ npm run preview        # sert le build localement
 npm run theme          # régénère src/theme/m3.css depuis scripts/m3-theme.mjs (palette Material)
 ```
 
-Pour `npm run e2e`, installe une fois le navigateur : `npx playwright install chromium` (en local, la config utilise Chrome s'il est installé). Le serveur de développement est lancé automatiquement. En CI (ou avec `E2E_TARGET=build`), Playwright construit le **build de production** dans `dist-e2e/` et le sert avec `vite preview` : CSP de production, service worker et minification sont donc testés ([`e2e/target.ts`](e2e/target.ts)). La CI repasse ensuite `e2e/production.spec.ts` sur `dist`, le dossier exact que `deploy.yml` publie (`E2E_DIST=dist`, servi tel quel). La plupart des parcours tournent en mode démo ; ceux de la synchronisation (conflit, sauvegarde locale, hors ligne, session expirée, échec de lecture) tournent sans démo, contre un faux Drive en mémoire ([`e2e/fakeDrive.ts`](e2e/fakeDrive.ts)), sans aucun appel à Google ni au serveur. Aucun test ne joint le vrai serveur : les tests importent `test` depuis [`e2e/fixtures.ts`](e2e/fixtures.ts), qui coupe ces appels (règle ESLint).
+Pour `npm run e2e`, en local, la config utilise **Google Chrome installé** sur la machine (rien à télécharger) ; seule la CI utilise le Chromium de Playwright (`npx playwright install chromium`). Pour un seul fichier : `npx playwright test e2e/simulator.spec.ts --project=mobile`. Le serveur de développement est lancé automatiquement. En CI (ou avec `E2E_TARGET=build`), Playwright construit le **build de production** dans `dist-e2e/` et le sert avec `vite preview` : CSP de production, service worker et minification sont donc testés ([`e2e/target.ts`](e2e/target.ts)). La CI repasse ensuite `e2e/production.spec.ts` sur `dist`, le dossier exact que `deploy.yml` publie (`E2E_DIST=dist`, servi tel quel). La plupart des parcours tournent en mode démo ; ceux de la synchronisation (conflit, sauvegarde locale, hors ligne, session expirée, échec de lecture) tournent sans démo, contre un faux Drive en mémoire ([`e2e/fakeDrive.ts`](e2e/fakeDrive.ts)), sans aucun appel à Google ni au serveur. Aucun test ne joint le vrai serveur : les tests importent `test` depuis [`e2e/fixtures.ts`](e2e/fixtures.ts), qui coupe ces appels (règle ESLint).
 
-**Couverture des tests unitaires** (mesurée le 28 octobre 2026, seuils plancher dans [`vitest.config.ts`](vitest.config.ts), vérifiés par la CI). Deux chiffres, à ne pas confondre :
-
-| Périmètre | Instructions | Branches | Fonctions | Lignes |
-|---|---:|---:|---:|---:|
-| **Toute l'app** (écrans, hooks, services, App.tsx, serveur, edge) | 81,7 % | 75,3 % | 73,2 % | 85,1 % |
-| Cœur métier (`src/lib`, `worker/src`, `edge/src`) | 97,0 % | 90,5 % | 98,1 % | 98,6 % |
-| Filets anti-perte (synchronisation Drive, copies locales, sauvegarde de secours, session, verrou) | 91,1 % | 83,9 % | 89,4 % | 95,7 % |
-
-La plupart des écrans ont des tests unitaires (React Testing Library) ; ils sont aussi couverts par les tests de bout en bout, qui ne comptent pas dans ces chiffres.
+**Couverture des tests unitaires** : les seuils plancher (toute l'app, cœur métier, filets anti-perte) et les mesures datées sont dans [`vitest.config.ts`](vitest.config.ts), vérifiés par la CI ; `npm run test:coverage` donne la mesure du jour. Les chiffres ne sont plus recopiés ici : ils dérivaient. La plupart des écrans ont des tests unitaires (React Testing Library) ; ils sont aussi couverts par les tests de bout en bout, qui ne comptent pas dans ces chiffres.
 
 **Mode démo**, sans compte Google : <http://localhost:5173/?demo=1>. L'app se charge avec des données fictives ([`src/dev/demoData.ts`](src/dev/demoData.ts)), et rien n'est lu ni écrit sur Drive. Ce mode n'existe qu'en développement et dans le build des tests de bout en bout (`dist-e2e/`, jamais publié) : dans le build publié, il est retiré du code.
 

@@ -3,7 +3,8 @@ import { AccountType, SavingsAccount } from '../../types';
 import { computeGoodMonths, computePayReview } from '../motivation';
 import { computeAccountBalanceAtDate, computeMonthSavedAmount, suggestCreditedInterest } from '../finance';
 import { breakdownDraft, draftToUpdate, type Draft } from '../../components/update/draft';
-import { applyPatch, CommandState, quickAdd, updateBalances } from './index';
+import { CommandState, quickAdd, updateBalances } from './index';
+import { applyPatch } from './testHelpers';
 
 const ok = <T extends { ok: boolean }>(r: T) => { if (!r.ok) throw new Error(JSON.stringify(r)); return r as Extract<T, { ok: true }>; };
 const acc = (s: CommandState, id: string) => s.accounts.find(a => a.id === id)!;

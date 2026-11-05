@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { AccountType, type SavingsAccount } from '../../types';
-import { applyPatch, importStatement, quickAdd, type CommandState } from './index';
+import { importStatement, quickAdd, type CommandState } from './index';
+import { applyPatch } from './testHelpers';
 
 const ok = <T extends { ok: boolean }>(r: T) => { if (!r.ok) throw new Error(JSON.stringify(r)); return r as Extract<T, { ok: true }>; };
 const get = (s: CommandState, id: string) => s.accounts.find(a => a.id === id)!;
