@@ -1,7 +1,7 @@
 // ================================================
 // FILE: src/components/RegulatedRatesEditor.tsx
 // Mise à jour des taux des livrets réglementés avec leur date d'effet (ex. Livret A à
-// 1,7 % au 1er août 2026), appliquée à tous les livrets concernés d'un coup. Les intérêts
+// 1,7 % au 1er août 2025), appliquée à tous les livrets concernés d'un coup. Les intérêts
 // sont recalculés avec l'ancien taux avant cette date et le nouveau après.
 // Champs Material 3 (ui/TextField) : libellé visible et relié, erreur annoncée.
 // ================================================

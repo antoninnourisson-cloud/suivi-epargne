@@ -449,7 +449,7 @@ export const REGULATED_RATE_GROUPS: { key: string; label: string; types: Account
 ];
 
 /**
- * Nouveau taux à partir de `effectiveISO` (ex. 1,7 % au 1er août 2026), même saisi plus
+ * Nouveau taux à partir de `effectiveISO` (ex. 1,7 % au 1er août 2025), même saisi plus
  * tard. Convention de `rateHistory` : une entrée { date, rate } = « `rate` courait
  * jusqu'à `date` ». Les entrées postérieures à la date d'effet sont remplacées (le nouveau
  * taux s'applique depuis cette date).

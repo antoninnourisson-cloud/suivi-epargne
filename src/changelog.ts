@@ -79,7 +79,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     date: '2026-11-04',
     title: 'Les taux ont changé',
     items: [
-      "Quand la veille fiscale relève un nouveau taux officiel, une tâche de l'Accueil le montre, par exemple « Livret A et LDDS : 1,7 % → 1,5 % au 1er février 2027 ». Vous pouvez corriger le taux ou la date avant d'appliquer : rien ne change sans un clic.",
+      "Quand la veille fiscale relève un nouveau taux officiel, une tâche de l'Accueil le montre, avec l'ancien et le nouveau taux et leur date d'effet (1er février ou 1er août). Vous pouvez corriger le taux ou la date avant d'appliquer : rien ne change sans un clic.",
       "« Appliquer » change le taux de tous les comptes concernés (le LDDS avec le Livret A), à la date d'effet, avec un seul « Annuler ». « Ignorer ces taux » écarte la proposition.",
       "Dans la même feuille, « Vos autres comptes » : le taux de vos livrets bancaires et de votre assurance vie se corrige si la banque ou l'assureur l'a changé. Aussi dans Actualiser, avec le lien « Un taux a changé ? ».",
     ],

@@ -2,7 +2,8 @@
 // de la veille fiscale (simulée dans le stockage de l'appareil) crée la tâche de l'Accueil ; la
 // feuille montre le Livret A et le LDDS, puis « Vos autres comptes » ; « Appliquer » change le
 // taux des deux livrets, visible sur le compte ; un seul « Annuler » remet l'ancien.
-// Démo : Livret A et LDDS à 1,7 %, LEP à 2,5 %, Assurance vie à 2,6 %.
+// Démo : Livret A et LDDS à 1,5 % (taux officiel depuis le 1er février 2026), LEP à 2,5 %,
+// Assurance vie à 2,6 %.
 import { test, expect, type Page } from './fixtures';
 import { LATEST_VERSION } from '../src/changelog';
 import { goTo } from './nav';
@@ -16,10 +17,10 @@ const openDemo = async (page: Page, watch = true) => {
     try {
       // « Quoi de neuf » déjà vu : la modale ne masque pas l'écran.
       localStorage.setItem('last_seen_version', v);
-      // Résultat de la veille (Gemini) : le Livret A passe à 1,5 % au 1er février 2027.
+      // Résultat de la veille (Gemini), SIMULÉ : taux fictif de 1,25 % au 1er février 2027, pour le test.
       if (withWatch) localStorage.setItem('fiscal_watch', JSON.stringify({
         checkedAt: at, lastSuccessAt: at,
-        result: { livretARate: { value: 1.5, effectiveDate: '2027-02-01', source: 'https://www.service-public.gouv.fr/particuliers/vosdroits/F2365' } },
+        result: { livretARate: { value: 1.25, effectiveDate: '2027-02-01', source: 'https://www.service-public.gouv.fr/particuliers/vosdroits/F2365' } },
       }));
     } catch { /* ignoré */ }
   }, [LATEST_VERSION, NOW.toISOString(), watch] as const);
@@ -47,7 +48,7 @@ test.describe('Les taux ont changé (démo, téléphone)', () => {
     const errors: string[] = [];
     page.on('pageerror', e => errors.push(e.message));
     await openDemo(page);
-    const task = page.locator('li').filter({ hasText: /^Les taux ont changé : Livret A et LDDS 1,7 % → 1,5 % au 1er février 2027\./ });
+    const task = page.locator('li').filter({ hasText: /^Les taux ont changé : Livret A et LDDS 1,5 % → 1,25 % au 1er février 2027\./ });
     await expect(task).toBeVisible();
     // Le taux ne passe plus par la carte générique de la veille.
     await expect(page.getByRole('heading', { name: 'Veille fiscale' })).toHaveCount(0);
@@ -57,8 +58,8 @@ test.describe('Les taux ont changé (démo, téléphone)', () => {
     await task.getByRole('button', { name: 'Voir et appliquer' }).click();
     const sheet = page.getByRole('dialog', { name: 'Les taux ont changé' });
     await expect(sheet).toBeVisible();
-    await expect(sheet.getByText(/Actuel : 1,7 % · Livret A, LDDS/)).toBeVisible();
-    await expect(sheet.getByLabel('Nouveau taux, Livret A et LDDS')).toHaveValue('1,5');
+    await expect(sheet.getByText(/Actuel : 1,5 % · Livret A, LDDS/)).toBeVisible();
+    await expect(sheet.getByLabel('Nouveau taux, Livret A et LDDS')).toHaveValue('1,25');
     await expect(sheet.getByLabel('À partir du, Livret A et LDDS')).toHaveValue('2027-02-01');
     const others = sheet.getByRole('list', { name: 'Vos autres comptes' });
     await expect(others).toContainText(/Assurance vie\s*Actuel : 2,6 %/);
@@ -70,11 +71,11 @@ test.describe('Les taux ont changé (démo, téléphone)', () => {
     const status = page.getByRole('status').filter({ hasText: 'Taux mis à jour sur 2 comptes' });
     await expect(status).toBeVisible();
     await expect(task).toHaveCount(0);
-    await expectAccountRate(page, 'LDDS', '1,5');
+    await expectAccountRate(page, 'LDDS', '1,25');
 
-    // Un seul « Annuler » : les deux livrets reviennent à 1,7 %, et la tâche revient.
+    // Un seul « Annuler » : les deux livrets reviennent à 1,5 %, et la tâche revient.
     await status.getByRole('button', { name: 'Annuler' }).click();
-    await expectAccountRate(page, 'Livret A', '1,7');
+    await expectAccountRate(page, 'Livret A', '1,5');
     await goTo(page, 'Accueil', true);
     await expect(task).toBeVisible();
     expect(errors).toEqual([]);
