@@ -32,11 +32,11 @@ describe('Actualiser : « Inchangé »', () => {
     setup([lep, ldds]);
     expect(within(row(/^LEP/)).getByText('Solde vérifié il y a 4 mois').className).toMatch(/text-tertiary/);
     expect(within(row(/^LDDS/)).getByText('Solde vérifié il y a 10 jours')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Solde de LEP inchangé' })).toBeTruthy();
+    expect(screen.getByLabelText('Solde de LEP inchangé')).toBeTruthy();
     // Solde récent : proposé seulement sur la ligne dépliée.
-    expect(screen.queryByRole('button', { name: 'Solde de LDDS inchangé' })).toBeNull();
+    expect(screen.queryByLabelText('Solde de LDDS inchangé')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: /^LDDS/ }));
-    expect(screen.getByRole('button', { name: 'Solde de LDDS inchangé' })).toBeTruthy();
+    expect(screen.getByLabelText('Solde de LDDS inchangé')).toBeTruthy();
   });
 
   it('« Tout enregistrer » marche avec seulement des soldes confirmés : constat daté du jour, aucun mouvement', () => {

@@ -103,13 +103,17 @@ describe('Mes comptes : mouvements d’un compte', () => {
   it('lignes sur deux niveaux (date courte), 20 d’abord puis « Voir plus », sans zone défilante', () => {
     const list = openList();
     expect(list.className).not.toMatch(/overflow-y-auto|max-h-/);
-    expect(within(list).getAllByRole('listitem')).toHaveLength(20);
+    // Éléments de liste lus directement : getAllByRole est très coûteux sous charge (plus de 20 s).
+    const items = () => list.querySelectorAll(':scope > li');
+    expect(items()).toHaveLength(20);
     // Plus récent d'abord, date écrite en clair.
-    const first = within(list).getAllByRole('listitem')[0];
+    const first = items()[0];
     expect(first.textContent).toMatch(/Épargne 25\+34\s€25 sept\. 2026/);
-    fireEvent.click(screen.getByRole('button', { name: 'Voir plus (5 autres)' }));
-    expect(within(list).getAllByRole('listitem')).toHaveLength(25);
-    expect(screen.queryByRole('button', { name: /Voir plus/ })).toBeNull();
+    const more = screen.getByText(/^Voir plus/, { selector: 'button' });
+    expect(more.textContent).toMatch(/Voir plus\s*\(5 autres\)/);
+    fireEvent.click(more);
+    expect(items()).toHaveLength(25);
+    expect(screen.queryByText(/^Voir plus/, { selector: 'button' })).toBeNull();
   });
 
   it('menu « ⋮ » : renommer ou supprimer, Échap le referme et rend le focus', () => {
