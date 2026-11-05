@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   buildTaxReturnChecklist, buildTaxReturnAlert, buildTaxReturnReminder, taxReturnSeason, taxReturnTopics,
-  isLikelyForeignAccount, TAX_RETURN_CALENDAR_TEXT,
+  isLikelyForeignAccount, TAX_RETURN_CALENDAR_TEXT, TAX_RETURN_CALENDAR, taxReturnDatedStage, describeTaxDeadlines, buildTaxReturnDatedReminder,
 } from './taxReturn';
 import { buildAgenda } from './agenda';
 import { migrate } from './schema';
@@ -213,5 +213,35 @@ describe('format du fichier : compte détenu à l’étranger', () => {
     expect(migrate(raw(false)).accounts[0].heldAbroad).toBe(false);
     expect('heldAbroad' in migrate(raw('oui')).accounts[0]).toBe(false);
     expect('heldAbroad' in migrate({ accounts: [{ id: 'b', name: 'B', type: AccountType.LIVRET_A, institution: 'X', totalAmount: 0, ownedAmount: 0, parentalCapital: 0 }] }).accounts[0]).toBe(false);
+  });
+});
+
+describe('rappels datés de la déclaration', () => {
+  const day = (year: number, month: number, d: number) => ({ year, month, day: d });
+  const data = { payslips: [], donations: [], accounts: [] };
+
+  it('dates connues (2026) : début mai, puis la semaine de la première date limite (21 mai)', () => {
+    expect(taxReturnDatedStage(day(2026, 5, 1))?.stage).toBe('may');
+    expect(taxReturnDatedStage(day(2026, 5, 7))?.stage).toBe('may');
+    expect(taxReturnDatedStage(day(2026, 5, 8))).toBeNull();
+    expect(taxReturnDatedStage(day(2026, 5, 14))).toBeNull();
+    expect(taxReturnDatedStage(day(2026, 5, 15))?.stage).toBe('deadline');
+    expect(taxReturnDatedStage(day(2026, 5, 21))?.stage).toBe('deadline');
+    expect(taxReturnDatedStage(day(2026, 5, 22))).toBeNull();
+    expect(taxReturnDatedStage(day(2026, 5, 4))).toMatchObject({ incomeYear: 2025, deadlines: ['2026-05-21', '2026-05-28', '2026-06-04'] });
+  });
+  it('année absente du calendrier : aucun rappel daté', () => {
+    expect(TAX_RETURN_CALENDAR[2027]).toBeUndefined();
+    expect(taxReturnDatedStage(day(2027, 5, 3))).toBeNull();
+    expect(taxReturnDatedStage(day(2027, 5, 20))).toBeNull();
+  });
+  it('texte : dates limites en clair et « déjà déclaré ? »', () => {
+    expect(describeTaxDeadlines(['2026-05-21', '2026-05-28', '2026-06-04'])).toBe('le 21 mai, le 28 mai ou le 4 juin');
+    const may = buildTaxReturnDatedReminder(data, { stage: 'may', incomeYear: 2025, deadlines: ['2026-05-21'] });
+    expect(may.title).toBe("Déclaration des revenus 2025 : l'avez-vous faite ?");
+    expect(may.detail).toContain('le 21 mai');
+    expect(may.detail).toContain('Ignorez ce rappel');
+    const last = buildTaxReturnDatedReminder(data, { stage: 'deadline', incomeYear: 2025, deadlines: ['2026-05-21'] });
+    expect(last.title).toBe('Déclaration des revenus 2025 : la date limite approche');
   });
 });

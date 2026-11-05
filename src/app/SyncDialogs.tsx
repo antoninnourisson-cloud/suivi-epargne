@@ -1,10 +1,14 @@
 // Fenêtres de la synchronisation : choix entre deux versions (conflit entre appareils, fichier
 // en double) et déconnexion avec des modifications pas encore sur Drive.
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import type { PortfolioData } from '../hooks/usePortfolioData';
 import { sendBlocker, type SendBlocker } from '../lib/sync/syncStatus';
+import { lazyWithRetry } from '../components/ErrorBoundary';
 import { ConflictDialog, Lazy, LogoutDialog } from './screens';
-import type { AddToast } from './UiProviders';
+import { useDialog, type AddToast } from './UiProviders';
+
+// Fichier Drive introuvable : fenêtre chargée à la demande, comme les autres fenêtres de la synchro.
+const MissingFileDialog = lazyWithRetry(() => import('../components/sync/MissingFileDialog').then(m => ({ default: m.MissingFileDialog })));
 
 /** Pourquoi « Envoyer puis se déconnecter » est grisé. */
 const CANNOT_SEND: Record<SendBlocker, string> = {
@@ -37,18 +41,44 @@ export type SyncDialogsState = ReturnType<typeof useSyncDialogs>;
 type DialogData = Pick<PortfolioData,
   'conflict' | 'syncStatus' | 'syncConflict' | 'localBackup' | 'closeDuplicateComparison' | 'resolveConflict'
   | 'retryConflictLoad' | 'flushPendingChanges'>;
+/** Fichier Drive introuvable : facultatif ici (les tests de ces fenêtres ne le fournissent pas). */
+type MissingFileData = Pick<PortfolioData, 'missingFile' | 'restoreMissingFromDevice' | 'startOverMissing'
+  | 'restoreMissingFromBackup' | 'retryFindMissing' | 'listDriveBackups'>;
 
 interface SyncDialogsHostProps {
-  data: DialogData;
+  data: DialogData & Partial<MissingFileData>;
   dialogs: SyncDialogsState;
   addToast: AddToast;
   onLogout: (opts: { discardUnsynced: boolean }) => Promise<void>;
 }
 
+/** Fichier Drive introuvable : le choix s'affiche tant qu'il n'est pas fait (voir useMissingFile). */
+const MissingFileHost: React.FC<{ data: MissingFileData; addToast: AddToast }> = ({ data, addToast }) => {
+  const info = useSyncExternalStore(data.missingFile.subscribe, data.missingFile.getSnapshot);
+  const dialog = useDialog();
+  if (!info) return null;
+  return (
+    <Lazy><MissingFileDialog
+      info={info}
+      onRestoreDevice={data.restoreMissingFromDevice}
+      onStartOver={data.startOverMissing}
+      onRetryFind={data.retryFindMissing}
+      listBackups={data.listDriveBackups}
+      restoreBackup={data.restoreMissingFromBackup}
+      confirm={(t, m, ok, label) => dialog.confirm(t, m, ok, true, label)}
+      onDone={outcome => addToast({
+        kind: 'success',
+        message: outcome === 'found' ? 'Fichier retrouvé sur Drive.' : 'Votre fichier Pécule a été recréé sur Drive.',
+      })}
+    /></Lazy>
+  );
+};
+
 export const SyncDialogsHost: React.FC<SyncDialogsHostProps> = ({ data, dialogs, addToast, onLogout }) => {
   const blocker = sendBlocker(data.syncStatus, { conflictOpen: data.syncConflict, hasLocalBackup: !!data.localBackup });
   return (
     <>
+      {data.missingFile && <MissingFileHost data={data as MissingFileData} addToast={addToast} />}
       {data.conflict && (
         <Lazy><ConflictDialog
           open={dialogs.conflictOpen}

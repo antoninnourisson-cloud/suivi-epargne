@@ -35,6 +35,8 @@ VAPID_SUBJECT = "https://pecule-app.com/"
 
 # Secrets (jamais dans ce fichier) — posés par `npm run setup-secrets` et `wrangler secret put` :
 #   GOOGLE_CLIENT_SECRET, ENCRYPTION_KEY, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, ALLOWED_EMAILS
+# Facultatif, le temps d'un changement de clé : ENCRYPTION_KEY_PREVIOUS (l'ancienne ENCRYPTION_KEY).
+# Marche à suivre : MAINTENANCE.md.
 
 [[kv_namespaces]]
 binding = "STORE"

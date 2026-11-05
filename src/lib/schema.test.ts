@@ -259,3 +259,17 @@ describe('migrate : objectifs annuels (clôture de l’année)', () => {
     expect('yearGoals' in migrate({ config: {} }).config).toBe(false);
   });
 });
+
+describe('migrate : soldes des avis d\'imposition', () => {
+  it('garde les soldes valides, retire le reste, sans changer de version', () => {
+    const ok = migrate({ config: { taxNoticeBalances: {
+      2025: { kind: 'due', amount: 320.456, date: '2026-12-15' },
+      2024: { kind: 'refund', amount: 150, date: '2025-02-30' },
+      2023: { kind: 'autre', amount: 10 }, 2022: { kind: 'due', amount: -1 }, abc: { kind: 'due', amount: 5 },
+    } } });
+    expect(ok.config.taxNoticeBalances).toEqual({ 2025: { kind: 'due', amount: 320.46, date: '2026-12-15' }, 2024: { kind: 'refund', amount: 150 } });
+    expect(ok.schemaVersion).toBe(migrate({}).schemaVersion);
+    expect('taxNoticeBalances' in migrate({ config: { taxNoticeBalances: 'non' } }).config).toBe(false);
+    expect('taxNoticeBalances' in migrate({ config: {} }).config).toBe(false);
+  });
+});

@@ -7,6 +7,7 @@ import {
   resetAllLocks, enableLock, verifyBiometric, disableBiometric, isLockActive, isLockResetPending,
   markLockResetPending, cancelLockReset, completeLockReset, getLastLockReset,
   requestLockReset, getLockResetRequest, cancelLockResetRequest, LOCK_RESET_DELAY_MS, markLockResetAlertSent,
+  isPinLegacyFormat, shouldSuggestStrongerPin, markStrongerPinSuggested,
 } from './appLockService';
 
 const HASH = 'app_lock_pin_hash';
@@ -88,6 +89,45 @@ describe('ancien format (SHA-256 en une passe)', () => {
     expect(await verifyPin('1234')).toBe(true);
     expect(localStorage.getItem(ITER)).toBeNull();
     expect(await verifyPin('1234')).toBe(true);
+  });
+});
+
+describe('ancien code court : renforcement proposé une fois par jour', () => {
+  const legacy4 = async () => {
+    localStorage.setItem(SALT, 'c2Vs');
+    localStorage.setItem(HASH, await legacyHash('1234', 'c2Vs'));
+  };
+
+  it('proposé pour un ancien code, pas pour un code PBKDF2 ni sans code', async () => {
+    expect(shouldSuggestStrongerPin()).toBe(false);
+    await legacy4();
+    expect(isPinLegacyFormat()).toBe(true);
+    expect(shouldSuggestStrongerPin()).toBe(true);
+    await enablePin('246813');
+    expect(isPinLegacyFormat()).toBe(false);
+    expect(shouldSuggestStrongerPin()).toBe(false);
+  });
+
+  it('une fois par jour au plus (jour local), de nouveau le lendemain', async () => {
+    await legacy4();
+    const matin = new Date(2026, 10, 5, 9, 0);
+    expect(shouldSuggestStrongerPin(matin)).toBe(true);
+    markStrongerPinSuggested(matin);
+    expect(shouldSuggestStrongerPin(new Date(2026, 10, 5, 23, 59))).toBe(false);
+    expect(shouldSuggestStrongerPin(new Date(2026, 10, 6, 0, 1))).toBe(true);
+  });
+
+  it('choisir un nouveau code efface l’ancien format (empreinte, sel, rappel du jour)', async () => {
+    await legacy4();
+    markStrongerPinSuggested();
+    const oldHash = localStorage.getItem(HASH);
+    await enablePin('246813');
+    expect(localStorage.getItem(HASH)).not.toBe(oldHash);
+    expect(localStorage.getItem(SALT)).not.toBe('c2Vs');
+    expect(localStorage.getItem(ITER)).toBe('310000');
+    expect(localStorage.getItem('app_lock_pin_upgrade_asked')).toBeNull();
+    expect(await verifyPin('246813')).toBe(true);
+    expect(await verifyPin('1234')).toBe(false);
   });
 });
 

@@ -65,7 +65,7 @@ export const BackupDeletionNotice: React.FC<{
       </p>
       {error && <p className="text-sm font-medium">{error}</p>}
       <div className="flex flex-wrap gap-2">
-        <Button variant="filled" className="min-h-12 sm:min-h-10" isLoading={busy} onClick={() => void cancel()}>Annuler l'effacement</Button>
+        <Button variant="filled" className="min-h-12 sm:min-h-10" isLoading={busy} loadingLabel="Annulation…" onClick={() => void cancel()}>Annuler l'effacement</Button>
         <Button variant="text" className="min-h-12 sm:min-h-10" onClick={() => { openSettingsSection('data'); onOpenSettings(); }}>Voir dans Paramètres</Button>
       </div>
     </div>

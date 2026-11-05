@@ -41,17 +41,30 @@ export const ToastContainer: React.FC<{ toasts: ToastItem[]; onDismiss: (id: str
   );
 };
 
-/** Un toast : 3 s, ou 10 s s'il porte une action (« Annuler »), sauf durée fournie (30 s pour
- *  une suppression faite au clavier), en pause tant que la souris est dessus ou que le focus
- *  est dedans. */
+/** Durée d'un toast : une erreur reste 10 s au moins, et jusqu'à fermeture si son texte est long
+ *  (plus de 80 caractères : le temps de le lire n'est pas garanti) ; un message avec action
+ *  (« Annuler ») garde 10 s ; une confirmation courte 3 s ; une durée fournie l'emporte, sauf
+ *  pour une erreur (au moins 10 s). Retourne null pour « jusqu'à fermeture ». */
+export const LONG_ERROR_CHARS = 80;
+export const toastDurationMs = (t: Pick<ToastItem, 'message' | 'kind' | 'action' | 'durationMs'>): number | null => {
+  if (t.kind === 'error') {
+    if (t.message.length > LONG_ERROR_CHARS) return null;
+    return Math.max(10_000, t.durationMs ?? 0);
+  }
+  return t.durationMs ?? (t.action ? 10_000 : 3000);
+};
+
+/** Un toast : durée selon `toastDurationMs`, en pause tant que la souris est dessus ou que le
+ *  focus est dedans. */
 const ToastView: React.FC<{ t: ToastItem; onDismiss: (id: string) => void }> = ({ t, onDismiss }) => {
   const [paused, setPaused] = useState(false);
-  const remaining = useRef(t.durationMs ?? (t.action ? 10_000 : 3000));
+  const remaining = useRef(toastDurationMs(t));
   useEffect(() => {
-    if (paused) return;
+    if (paused || remaining.current === null) return;
+    const left = remaining.current;
     const started = Date.now();
-    const timer = window.setTimeout(() => onDismiss(t.id), remaining.current);
-    return () => { window.clearTimeout(timer); remaining.current = Math.max(1500, remaining.current - (Date.now() - started)); };
+    const timer = window.setTimeout(() => onDismiss(t.id), left);
+    return () => { window.clearTimeout(timer); remaining.current = Math.max(1500, left - (Date.now() - started)); };
   }, [paused, t.id, onDismiss]);
   return (
     <div

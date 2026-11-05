@@ -3,7 +3,8 @@
 // Sessions des appareils et index par utilisateur.
 //
 //   session:<hash>   { sub, email, createdAt, refreshedAt, gen, key?, device? } — clé = SHA-256 du jeton
-//   sessions:<sub>   tableau JSON des empreintes de sessions de l'utilisateur
+//   sessions:<sub>   tableau JSON des empreintes de sessions de l'utilisateur (auto-réparé :
+//                    loadSession y remet une session valide qui en aurait disparu)
 //
 // `key` : clé publique de l'appareil (deviceProof.ts) ; une session qui en a une exige une
 // preuve signée à chaque requête. `device` : type d'appareil déclaré, pour la liste des
@@ -127,6 +128,11 @@ export const loadSession = async (store: KVNamespace, hash: string, nowMs = Date
     if (ttl >= MIN_KV_TTL) await store.put(sessionKey(hash), JSON.stringify(migrated), { expirationTtl: ttl });
     return migrated;
   }
+  // Auto-réparation : l'index est un tableau relu puis réécrit sans verrou, deux connexions
+  // simultanées peuvent y faire disparaître une session valide (« Déconnecter tous les
+  // appareils » la raterait). Une lecture de l'index (pas d'écriture) à chaque requête
+  // authentifiée ; la session y est remise seulement si elle manque.
+  if (!(await readRawIndex(store, s.sub)).includes(hash)) await addToSessionIndex(store, s.sub, hash, nowMs);
   return s;
 };
 

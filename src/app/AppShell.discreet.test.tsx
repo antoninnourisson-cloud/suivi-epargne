@@ -35,7 +35,7 @@ describe('Mode discret (en-tête)', () => {
 
     fireEvent.click(buttons[1]);
     screen.getAllByRole('button', { name: 'Masquer les montants' }).forEach(b => expect(b.getAttribute('aria-pressed')).toBe('true'));
-    expect(screen.getByTestId('ecran').textContent).toBe(`Épargne nette ${DISCREET_AMOUNT} · reste −${DISCREET_AMOUNT}`);
+    expect(screen.getByTestId('ecran').textContent).toBe(`Épargne nette ${DISCREET_AMOUNT}montant masqué · reste −${DISCREET_AMOUNT}montant masqué`);
     expect(localStorage.getItem('discreet_amounts')).toBe('1');
 
     fireEvent.click(screen.getAllByRole('button', { name: 'Masquer les montants' })[0]);

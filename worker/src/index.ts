@@ -50,14 +50,14 @@
 // visible dans l'app et annoncé aux appareils, y compris à ceux retirés depuis moins de
 // 30 jours (push-removed:<sub>).
 // ================================================
-import { sha256b64url, encryptString, decryptString, randomToken } from './crypto';
+import { sha256b64url, encryptString, decryptWithFallback, DecryptError, randomToken } from './crypto';
 import {
   OAUTH_SCOPES, exchangeCode, refreshAccessToken, decodeIdToken, verifyIdTokenClaims, revokeToken, readDataFile, GoogleAuthError,
 } from './google';
 import { sendPush, PushMessage } from './webpush';
 import { fetchFiscalSources, FiscalSource } from './fiscalSources';
 import { cachedSiteCheck } from './siteCheck';
-import { CronErrors, appendCronLog, readCronLog, readFiscalWatchHealth, recordFiscalWatchCron } from './cronLog';
+import { CronErrors, appendCronLog, readCronLog, readFiscalWatchHealth, recordFiscalWatchCron, type NotificationTally } from './cronLog';
 import { AiRunner, FISCAL_WATCH_CRON, LATEST_KEY, FAILURE_KEY, FiscalWatchRun, runAndStoreFiscalWatch, canRunOnDemand, isFiscalRetryDue, noteFiscalRetry } from './fiscalWatchJob';
 import { isReminderEnabled } from '../../src/lib/notificationPrefs';
 import { computeReminders, applyDiscreetMode, isDiscreet, parisCivilDate } from './reminders';
@@ -85,6 +85,7 @@ export interface Env {
   GOOGLE_CLIENT_ID: string;
   GOOGLE_CLIENT_SECRET: string;  // secret
   ENCRYPTION_KEY: string;        // secret — 32 octets base64url (sert aussi, via HKDF, à signer le state OAuth)
+  ENCRYPTION_KEY_PREVIOUS?: string; // secret, facultatif — ancienne clé, le temps d'un changement de ENCRYPTION_KEY (MAINTENANCE.md)
   VAPID_PUBLIC_KEY: string;      // secret — point P-256 non compressé, base64url
   VAPID_PRIVATE_KEY: string;     // secret — scalaire d, base64url
   VAPID_SUBJECT: string;
@@ -113,7 +114,7 @@ const SESSION_EXPIRY_WARNING = 7 * DAY;
 const SESSION_EXPIRY_NOTICE_TTL = 10 * DAY;
 const LOGIN_CODE_TTL = 60;       // minimum KV ; le code est effacé dès l'échange
 
-interface CronHealth { lastRunAt: string; ok: boolean; error?: string; usersProcessed: number }
+interface CronHealth { lastRunAt: string; ok: boolean; error?: string; usersProcessed: number; notifications?: NotificationTally }
 
 // ---------- HTTP utilitaires ----------
 
@@ -134,7 +135,7 @@ const corsHeaders = (req: Request, env: Env): Record<string, string> => {
 const json = (req: Request, env: Env, data: unknown, status = 200, extra: Record<string, string> = {}): Response =>
   new Response(JSON.stringify(data), {
     status,
-    headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', ...corsHeaders(req, env), ...extra },
+    headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', ...corsHeaders(req, env), ...extra },
   });
 
 const escapeHtml = (s: string) => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
@@ -149,13 +150,33 @@ const htmlPage = (env: Env, title: string, message: string, status = 400): Respo
 <p style="line-height:1.5;color:#94a3b8">${escapeHtml(message)}</p>
 <a href="${escapeHtml(env.APP_URL)}" style="display:inline-block;margin-top:12px;background:#14532d;color:white;padding:10px 16px;border-radius:10px;text-decoration:none;font-weight:600">Retour à l'app</a>
 </main></body></html>`,
-    { status, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } }
+    {
+      status,
+      headers: {
+        'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff',
+        // Page sans script ni image : seuls les styles en ligne (attributs style) sont permis, et
+        // aucune page tierce ne peut l'afficher dans un cadre.
+        'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'",
+        'Referrer-Policy': 'no-referrer',
+      },
+    }
   );
 
 const redirect = (location: string, headers: Record<string, string> = {}): Response =>
   new Response(null, { status: 302, headers: { Location: location, 'Cache-Control': 'no-store', ...headers } });
 
 type AuthedSession = { hash: string; session: SessionRecord };
+
+/**
+ * Limiteur par compte pour les routes qui ÉCRIVENT dans KV (en plus du limiteur par IP du
+ * point d'entrée) : protège le quota d'écritures gratuit même depuis plusieurs adresses.
+ * Une clé par route, pour qu'une route très sollicitée n'en bloque pas une autre. `null` si
+ * la requête peut continuer, sinon la réponse 429 à renvoyer.
+ */
+const accountLimited = async (req: Request, env: Env, route: string, sub: string): Promise<Response | null> =>
+  (await rateLimited(env.API_LIMITER, `${route}:${sub}`))
+    ? json(req, env, { error: 'RATE_LIMITED' }, 429, { 'Retry-After': '60' })
+    : null;
 
 type AuthFailureCode = 'REAUTH_REQUIRED' | 'PROOF_REQUIRED' | 'PROOF_INVALID' | 'PROOF_NONCE';
 /**
@@ -218,13 +239,27 @@ const isEmailAllowed = (email: string | undefined, env: Env): boolean => {
 const accessTokenFor = async (env: Env, sub: string): Promise<{ access_token: string; expires_in: number }> => {
   const user = await readUser(env.STORE, sub);
   if (!user) throw new GoogleAuthError('invalid_grant', 'NO_USER');
-  const refreshToken = await decryptString(user.refreshTokenEnc, env.ENCRYPTION_KEY);
+  let refreshToken: string;
+  let reseal: boolean;
+  try {
+    const d = await decryptWithFallback(user.refreshTokenEnc, env.ENCRYPTION_KEY, env.ENCRYPTION_KEY_PREVIOUS);
+    refreshToken = d.plaintext;
+    reseal = d.usedPrevious;
+  } catch (e) {
+    // Jeton illisible avec la clé courante comme avec l'ancienne (clé changée sans conserver
+    // l'ancienne) : irrécupérable. Traité comme un accès révoqué : l'appelant efface le compte
+    // et l'app demande de se reconnecter (et non une panne réseau, 502).
+    if (e instanceof DecryptError) throw new GoogleAuthError('invalid_grant', 'UNDECRYPTABLE_TOKEN');
+    throw e;
+  }
   const tokens = await refreshAccessToken(refreshToken, env.GOOGLE_CLIENT_ID, env.GOOGLE_CLIENT_SECRET);
   // Google peut faire tourner le refresh token : on garde toujours le plus récent. Sinon,
   // l'usage prolonge seulement la durée de vie du compte (au plus une écriture par jour).
-  if (tokens.refresh_token && tokens.refresh_token !== refreshToken) {
+  if ((tokens.refresh_token && tokens.refresh_token !== refreshToken) || reseal) {
+    // Aussi quand le jeton n'était lisible qu'avec l'ancienne clé : réécrit avec la courante,
+    // pour que ENCRYPTION_KEY_PREVIOUS puisse ensuite être retirée.
     await writeUser(env.STORE, sub, {
-      ...user, refreshTokenEnc: await encryptString(tokens.refresh_token, env.ENCRYPTION_KEY), updatedAt: Date.now(),
+      ...user, refreshTokenEnc: await encryptString(tokens.refresh_token ?? refreshToken, env.ENCRYPTION_KEY), updatedAt: Date.now(),
     });
   } else {
     await touchUser(env.STORE, sub, user);
@@ -409,7 +444,7 @@ const handleExchange = async (req: Request, env: Env): Promise<Response> => {
   await env.STORE.delete(key);
   let record: { session: string; access_token: string; expires_in: number };
   try {
-    record = JSON.parse(await decryptString(sealed, env.ENCRYPTION_KEY));
+    record = JSON.parse((await decryptWithFallback(sealed, env.ENCRYPTION_KEY, env.ENCRYPTION_KEY_PREVIOUS)).plaintext);
   } catch {
     return json(req, env, { error: 'INVALID_CODE' }, 400);
   }
@@ -440,6 +475,8 @@ const handleExchange = async (req: Request, env: Env): Promise<Response> => {
 const handleBind = async (req: Request, env: Env): Promise<Response> => {
   const s = await readSession(req, env);
   if (!s || isLegacySession(s.session)) throw new AuthFailure('REAUTH_REQUIRED');
+  const limited = await accountLimited(req, env, 'bind', s.session.sub);
+  if (limited) return limited;
   const body = await readJsonBody(req) as { key?: unknown; proof?: unknown; device?: unknown };
   const deviceKey = await readDeviceKey(body.key);
   if (!deviceKey) return json(req, env, { error: 'INVALID_KEY' }, 400);
@@ -558,7 +595,7 @@ const handleAccountDelete = async (req: Request, env: Env): Promise<Response> =>
   const user = await env.STORE.get<UserRecord>(`user:${s.session.sub}`, 'json');
   if (user) {
     try {
-      const res = await revokeToken(await decryptString(user.refreshTokenEnc, env.ENCRYPTION_KEY));
+      const res = await revokeToken((await decryptWithFallback(user.refreshTokenEnc, env.ENCRYPTION_KEY, env.ENCRYPTION_KEY_PREVIOUS)).plaintext);
       googleRevoked = !!res && res.ok;
     } catch (e) { console.error('revoke failed', e); }
   }
@@ -574,6 +611,8 @@ const handleAccountDelete = async (req: Request, env: Env): Promise<Response> =>
 
 const handleSubscribe = async (req: Request, env: Env): Promise<Response> => {
   const s = await requireSession(req, env);
+  const limited = await accountLimited(req, env, 'subscribe', s.session.sub);
+  if (limited) return limited;
   const body = await readJsonBody(req) as { subscription?: unknown };
   const subscription = parseSubscription(body.subscription);
   if (!subscription) return json(req, env, { error: 'INVALID_SUBSCRIPTION' }, 400);
@@ -584,8 +623,18 @@ const handleSubscribe = async (req: Request, env: Env): Promise<Response> => {
     if (alive.length !== current.length) await writePushList(env, s.session.sub, alive);
     return json(req, env, { error: result.error }, 409);
   }
-  await writePushList(env, s.session.sub, result.list);
+  // Abonnement identique à celui déjà gardé (l'app le renvoie à chaque ouverture) : rien à
+  // réécrire, ni liste purgée de ses orphelins en attente.
+  if (alive.length !== current.length || !sameStoredList(result.list, current)) await writePushList(env, s.session.sub, result.list);
   return json(req, env, { ok: true, devices: result.list.length });
+};
+
+/** Mêmes abonnements, mêmes sessions, quel que soit l'ordre. */
+const sameStoredList = (a: StoredSubscription[], b: StoredSubscription[]): boolean => {
+  if (a.length !== b.length) return false;
+  const canon = (x: StoredSubscription) => JSON.stringify([x.endpoint, x.keys.p256dh, x.keys.auth, x.sessionHash ?? null, x.createdAt ?? null]);
+  const seen = new Set(b.map(canon));
+  return a.every(x => seen.has(canon(x)));
 };
 
 const removeEndpoint = async (env: Env, sub: string, match: (x: StoredSubscription) => Promise<boolean> | boolean) => {
@@ -613,6 +662,8 @@ const handleDevices = async (req: Request, env: Env): Promise<Response> => {
 
 const handleRemoveDevice = async (req: Request, env: Env): Promise<Response> => {
   const s = await requireSession(req, env);
+  const limited = await accountLimited(req, env, 'remove', s.session.sub);
+  if (limited) return limited;
   const body = await readJsonBody(req) as { endpoint?: unknown; id?: unknown };
   if (typeof body.endpoint !== 'string' && typeof body.id !== 'string') return json(req, env, { error: 'INVALID_REQUEST' }, 400);
   const { gone, result } = await removeEndpoint(env, s.session.sub, async x =>
@@ -625,21 +676,25 @@ const handleRemoveDevice = async (req: Request, env: Env): Promise<Response> => 
 };
 
 /**
- * Envoie un message à tous les appareils en parallèle. Renvoie le nombre de réceptions et
- * les endpoints disparus (404/410), à retirer par l'appelant.
+ * Envoie un message à tous les appareils en parallèle. Renvoie le nombre de réceptions, les
+ * endpoints disparus (404/410), à retirer par l'appelant, et le bilan des envois (tally) :
+ * « failed » = refusés ou en erreur, hors appareils disparus.
  */
-const deliver = async (env: Env, subs: StoredSubscription[], message: PushMessage): Promise<{ delivered: number; gone: string[] }> => {
+const deliver = async (
+  env: Env, subs: StoredSubscription[], message: PushMessage,
+): Promise<{ delivered: number; gone: string[]; tally: NotificationTally }> => {
   const vapid = { publicKey: env.VAPID_PUBLIC_KEY, privateKey: env.VAPID_PRIVATE_KEY, subject: env.VAPID_SUBJECT };
   const results = await Promise.allSettled(subs.map(s => sendPush(s, message, vapid)));
   let delivered = 0;
+  let failed = 0;
   const gone: string[] = [];
   results.forEach((r, i) => {
-    if (r.status === 'rejected') { console.error('push failed', r.reason); return; }
+    if (r.status === 'rejected') { failed++; console.error('push failed', r.reason); return; }
     if (r.value >= 200 && r.value < 300) delivered++;
     else if (r.value === 404 || r.value === 410) gone.push(subs[i].endpoint);
-    else console.error('push rejected', r.value, new URL(subs[i].endpoint).hostname);
+    else { failed++; console.error('push rejected', r.value, new URL(subs[i].endpoint).hostname); }
   });
-  return { delivered, gone };
+  return { delivered, gone, tally: { attempted: subs.length, delivered, failed } };
 };
 
 const handleTestPush = async (req: Request, env: Env): Promise<Response> => {
@@ -692,6 +747,8 @@ const LOCK_RESET_MAX_AGE_MS = 7 * DAY * 1000;
  */
 const handleLockResetAlert = async (req: Request, env: Env): Promise<Response> => {
   const s = await requireSession(req, env);
+  const limited = await accountLimited(req, env, 'lock-reset', s.session.sub);
+  if (limited) return limited;
   const body = await readJsonBody(req) as { requestedAt?: unknown; device?: unknown };
   const alertKey = `alert:lock-reset:${s.hash}`;
   if (await env.STORE.get(alertKey)) return json(req, env, { ok: true, delivered: 0, throttled: true });
@@ -774,6 +831,9 @@ const handleStatus = async (req: Request, env: Env): Promise<Response> => {
   const site = await cachedSiteCheck(env.STORE, env.APP_URL).catch(() => null);
   return json(req, env, {
     ok: true, cron: { lastRunAt: health?.lastRunAt ?? null, ok: health?.ok ?? null }, site,
+    // Envois de notifications du dernier passage quotidien (nombres seulement) : la
+    // surveillance n'alerte que si tous ont échoué, ou si 3 passages de suite en ont eu.
+    notifications: health?.notifications ? { ...health.notifications } : null,
     // Veille fiscale du lundi et derniers passages des deux crons (heure, tâche, résultat,
     // catégorie d'erreur) : worker/src/cronLog.ts.
     fiscalWatch, history,
@@ -992,7 +1052,7 @@ const SESSION_EXPIRY_MESSAGE = (env: Env, expiresAtMs: number): PushMessage => (
   url: env.APP_URL, tag: 'session-expiry',
 });
 
-const remindUser = async (env: Env, sub: string, now: Date): Promise<void> => {
+const remindUser = async (env: Env, sub: string, now: Date, errors?: CronErrors): Promise<void> => {
   const stored = await readPushList(env, sub);
   let subs = await pruneOrphanSubscriptions(env, stored);
   const persist = async () => { if (subs.length !== stored.length) await writePushList(env, sub, subs); };
@@ -1003,7 +1063,8 @@ const remindUser = async (env: Env, sub: string, now: Date): Promise<void> => {
   ) => {
     if (await env.STORE.get(sentKey)) return;
     for (const k of legacyKeys) if ((await env.STORE.get(k)) === LEGACY_SENT_MARK) return;
-    const { delivered, gone } = await deliver(env, targets, message);
+    const { delivered, gone, tally } = await deliver(env, targets, message);
+    errors?.addNotifications(tally);
     if (gone.length) subs = subs.filter(x => !gone.includes(x.endpoint));
     // Marqué « envoyé » seulement si au moins un appareil l'a reçu : sinon on réessaie demain.
     if (delivered > 0) await env.STORE.put(sentKey, SENT_MARK, { expirationTtl: ttl });
@@ -1097,7 +1158,7 @@ const runDailyReminders = async (env: Env): Promise<void> => {
       const page = await env.STORE.list({ prefix: 'push:', cursor });
       for (const k of page.keys) {
         usersProcessed++;
-        try { await remindUser(env, k.name.slice('push:'.length), now); }
+        try { await remindUser(env, k.name.slice('push:'.length), now, errors); }
         catch (e) { console.error('reminders failed', e); errors.add(e); }
       }
       cursor = page.list_complete ? undefined : page.cursor;
@@ -1110,10 +1171,11 @@ const runDailyReminders = async (env: Env): Promise<void> => {
     const health: CronHealth = {
       lastRunAt: now.toISOString(), ok: errors.count === 0, usersProcessed,
       ...(errors.count ? { error: `${errors.count} échec(s) : ${errors.messages[0]}`.slice(0, 300) } : {}),
+      notifications: { ...errors.notifications },
     };
     await env.STORE.put('health:cron', JSON.stringify(health));
     // Historique public de /status : catégories d'erreur seulement, jamais le message.
-    await appendCronLog(env.STORE, { at: health.lastRunAt, cron: 'daily', ok: health.ok, errors: errors.categories })
+    await appendCronLog(env.STORE, { at: health.lastRunAt, cron: 'daily', ok: health.ok, errors: errors.categories, notifications: errors.notifications })
       .catch(e => console.error('cron log failed', e));
   }
 };

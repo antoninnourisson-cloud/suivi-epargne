@@ -140,7 +140,7 @@ describe('tournée quotidienne des rappels', () => {
   const dataFile = (config: Record<string, unknown> = {}) => ({
     accounts: [livret], expenses: [], history: [],
     recurringMovements: [{ id: 'r1', accountId: 'la', amount: 200, type: 'IN', label: 'Épargne auto', dayOfMonth: 5, active: true }],
-    config: { grossAnnual: 0, leisureBudget: 0, projectSavings: 0, taxRateManual: 0, extraMonthlyIncome: 0, ...config },
+    config: { grossAnnual: 0, leisureBudget: 0, projectSavings: 0, taxRateManual: 0, extraMonthlyIncome: 0, rfrByYear: { '2025': 10000 }, ...config },
   });
   const runCron = async () => {
     let p: Promise<unknown> = Promise.resolve();

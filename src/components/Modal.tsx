@@ -1,7 +1,10 @@
 // Fenêtre modale accessible, partagée par toutes les fenêtres de l'app : rôle « dialog »,
 // intitulé annoncé, focus gardé à l'intérieur, Échap pour fermer, retour du focus à
-// l'élément d'origine, défilement de la page bloqué.
+// l'élément d'origine, défilement de la page bloqué. Sur mobile, le geste Retour ferme la
+// fenêtre du dessus (une entrée d'historique par fenêtre, voir app/backHistory.ts) et les
+// feuilles du bas remontent au-dessus du clavier.
 import React, { useEffect, useRef } from 'react';
+import { pushModalEntry, registerModal, releaseModalEntry } from '../app/backHistory';
 
 interface ModalProps {
   open: boolean;
@@ -19,7 +22,8 @@ interface ModalProps {
   initialFocusRef?: React.RefObject<HTMLElement | null>;
   /**
    * `false` : un clic sur le voile ne ferme pas (formulaire déjà commencé, qu'un toucher
-   * maladroit effacerait). Échap et le bouton Fermer restent disponibles.
+   * maladroit effacerait). Échap et le bouton Fermer restent disponibles ; le geste Retour
+   * se comporte de même (la fenêtre reste ouverte).
    */
   closeOnScrim?: boolean;
 }
@@ -71,6 +75,54 @@ export const Modal: React.FC<ModalProps> = ({ open, onClose, label, children, va
   const overlayRef = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
+  const closeOnScrimRef = useRef(closeOnScrim);
+  closeOnScrimRef.current = closeOnScrim;
+  const sheetVariant = variant === 'sheet';
+
+  // Geste Retour : la fenêtre pose une entrée d'historique à l'ouverture. Retour sur cette
+  // entrée = toucher le voile (fermeture, ou rien si le voile ne ferme pas : l'entrée est
+  // remise). Fermée autrement (bouton, Échap), la fenêtre retire elle-même son entrée.
+  useEffect(() => {
+    if (!open) return;
+    pushModalEntry();
+    let popped = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const unregister = registerModal(() => {
+      popped = true;
+      // Sous le verrou (fenêtre inerte) ou voile « sans fermeture » : on reste, l'entrée revient.
+      if (!closeOnScrimRef.current || panelRef.current?.closest('[inert]')) { popped = false; pushModalEntry(); return; }
+      onCloseRef.current();
+      // La fenêtre est toujours là (confirmation d'abandon, par exemple) : l'entrée revient.
+      timer = setTimeout(() => { if (popped) { popped = false; pushModalEntry(); } }, 60);
+    });
+    return () => {
+      clearTimeout(timer);
+      unregister();
+      releaseModalEntry(popped);
+    };
+  }, [open]);
+
+  // Clavier à l'écran (Chrome Android le superpose sans réduire la page) : hauteur cachée du
+  // bas de la page, en variable CSS sur le voile ; la feuille du bas remonte d'autant.
+  useEffect(() => {
+    const overlay = overlayRef.current;
+    const vv = typeof window !== 'undefined' ? window.visualViewport : null;
+    if (!open || !sheetVariant || !overlay || !vv) return;
+    const update = () => {
+      const hidden = Math.round(window.innerHeight - vv.height - vv.offsetTop);
+      // Sous 80 px : barre d'adresse ou rebond, pas un clavier ; pincement : pas un clavier.
+      const kb = vv.scale > 1.01 || hidden < 80 ? 0 : hidden;
+      overlay.style.setProperty('--kb-inset', `${kb}px`);
+    };
+    update();
+    vv.addEventListener('resize', update);
+    vv.addEventListener('scroll', update);
+    return () => {
+      vv.removeEventListener('resize', update);
+      vv.removeEventListener('scroll', update);
+      overlay.style.removeProperty('--kb-inset');
+    };
+  }, [open, sheetVariant]);
 
   useEffect(() => {
     if (!open) return;
@@ -116,7 +168,7 @@ export const Modal: React.FC<ModalProps> = ({ open, onClose, label, children, va
   return (
     <div
       ref={overlayRef}
-      className={`fixed inset-0 z-70 flex ${sheet || page ? 'items-end sm:items-center' : 'items-center p-4'} justify-center bg-scrim/40 animate-fade-in`}
+      className={`fixed inset-0 z-70 flex ${sheet || page ? 'items-end sm:items-center' : 'items-center p-4'} justify-center bg-scrim/40 animate-fade-in ${sheet ? 'pb-[var(--kb-inset,0px)]' : ''}`}
       onClick={closeOnScrim ? onClose : undefined}
     >
       <div
@@ -128,7 +180,7 @@ export const Modal: React.FC<ModalProps> = ({ open, onClose, label, children, va
         onClick={e => e.stopPropagation()}
         // Material 3 : boîte de dialogue (coins de 28 px, surface « container high ») ou
         // feuille du bas, avec sa poignée.
-        className={`bg-surface-container-high text-on-surface shadow-xl w-full outline-hidden rounded-3xl max-h-[90vh] overflow-y-auto ${sheet ? 'max-sm:rounded-b-none max-sm:max-h-[85vh] pb-[env(safe-area-inset-bottom)]' : ''} ${page ? 'max-sm:rounded-none max-sm:h-dvh max-sm:max-h-dvh pb-[env(safe-area-inset-bottom)]' : ''} ${className}`}
+        className={`bg-surface-container-high text-on-surface shadow-xl w-full outline-hidden rounded-3xl max-h-[90vh] overflow-y-auto ${sheet ? 'max-sm:rounded-b-none max-sm:max-h-[min(85vh,calc(100dvh-var(--kb-inset,0px)-1rem))] pb-[env(safe-area-inset-bottom)]' : ''} ${page ? 'max-sm:rounded-none max-sm:h-dvh max-sm:max-h-dvh pb-[env(safe-area-inset-bottom)]' : ''} ${className}`}
       >
         {/* Poignée remontée dans le rembourrage du haut, puis 8 px fixes avant le contenu,
             quel que soit le rembourrage passé (p-4 ou p-6) : elle ne touche jamais le titre. */}

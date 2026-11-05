@@ -117,6 +117,13 @@ export interface Expense {
 // Champs extraits d'une fiche de paie par l'IA. Tous optionnels : une extraction
 // partielle (fiche illisible, champ absent) ne doit jamais bloquer l'enregistrement,
 // l'utilisateur complète/corrige à la main avant de valider.
+/** Solde d'un avis d'imposition, tel qu'il est écrit sur l'avis (Pécule ne calcule rien). */
+export interface TaxNoticeBalance {
+  kind: 'due' | 'refund';  // due : reste à payer ; refund : remboursement
+  amount: number;          // en euros, positif
+  date?: string;           // AAAA-MM-JJ : date de prélèvement ou de versement écrite sur l'avis
+}
+
 export interface PayslipExtractedData {
   employer?: string;
   period?: string;        // "2026-08" par ex.
@@ -416,6 +423,12 @@ export interface GlobalAppData {
     // Revenu fiscal de référence relevé sur les avis d'imposition, par année de revenus
     // (éligibilité au LEP). Absent = estimé à partir des fiches de paie ou du salaire.
     rfrByYear?: Record<string, number>;
+    // Solde écrit sur l'avis d'imposition (reste à payer ou remboursement), par année de revenus.
+    // Lu par Gemini puis validé par l'utilisateur ; absent = pas d'avis lu.
+    taxNoticeBalances?: Record<string, TaxNoticeBalance>;
+    // Dernière déclaration de revenus marquée faite (« C'est déclaré »), par année de revenus :
+    // gardée dans le fichier pour que le serveur n'envoie plus les rappels de mai.
+    taxReturnFiledYear?: number;
     // Dernier export JSON téléchargé (rappel trimestriel).
     lastExportAt?: string;
     // Motivation (voir src/lib/motivation.ts) : bons mois, séries, jalons, point de paie.

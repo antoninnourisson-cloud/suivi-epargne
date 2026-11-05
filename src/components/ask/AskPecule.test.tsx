@@ -18,7 +18,7 @@ vi.mock('../../lib/askSnapshot', async importOriginal => {
   return { ...real, buildAskSnapshot: (...a: Parameters<typeof real.buildAskSnapshot>) => { build(); return real.buildAskSnapshot(...a); } };
 });
 
-import { AskPecule, ASK_SUGGESTIONS } from './AskPecule';
+import { AskPecule, ASK_SUGGESTIONS, askSuggestions } from './AskPecule';
 
 const setup = (key = 'cle') => {
   const props = { data: emptyData(), geminiApiKey: key, onClose: vi.fn(), onOpenSettings: vi.fn() };
@@ -27,6 +27,29 @@ const setup = (key = 'cle') => {
 
 beforeEach(() => { ask.mockReset(); build.mockClear(); localStorage.clear(); });
 afterEach(cleanup);
+
+describe('Suggestions selon le mois', () => {
+  const at = (iso: string) => askSuggestions(new Date(`${iso}T12:00:00`));
+  it('toujours six, sans doublon, et quatre fixes', () => {
+    for (let m = 1; m <= 12; m++) {
+      const list = at(`2026-${String(m).padStart(2, '0')}-15`);
+      expect(list).toHaveLength(6);
+      expect(new Set(list).size).toBe(6);
+      expect(list.slice(0, 4)).toEqual(ASK_SUGGESTIONS.slice(0, 4));
+    }
+  });
+  it("printemps : impôt ; fin d'année : intérêts attendus ; janvier : 12 derniers mois", () => {
+    expect(at('2026-05-10').join('|')).toMatch(/impôt est estimé/);
+    expect(at('2026-11-05').join('|')).toMatch(/fin de l'année/);
+    expect(at('2026-12-20').join('|')).toMatch(/depuis le 1er janvier/);
+    expect(at('2027-01-08').join('|')).toMatch(/12 derniers mois/);
+  });
+  it("le reste de l'année : les suggestions habituelles", () => {
+    expect(at('2026-08-10')).toEqual(ASK_SUGGESTIONS);
+    expect(at('2026-02-10')).toEqual(ASK_SUGGESTIONS);
+    expect(at('2026-09-30')).toEqual(ASK_SUGGESTIONS);
+  });
+});
 
 describe('Demander à Pécule', () => {
   it('sans clé : explique et ouvre « Clés et services », sans rien préparer', () => {
@@ -44,7 +67,7 @@ describe('Demander à Pécule', () => {
     ask.mockResolvedValueOnce('Ce trimestre : 600 €.').mockResolvedValueOnce('En septembre : 200 €.');
     setup();
     expect(screen.getByText(/ne sont pas un conseil financier/).textContent).toMatch(/d'après vos données du \d+ \S+ \d{4}/);
-    expect(screen.getAllByRole('button').filter(b => ASK_SUGGESTIONS.includes(b.textContent ?? ''))).toHaveLength(ASK_SUGGESTIONS.length);
+    expect(screen.getAllByRole('button').filter(b => askSuggestions().includes(b.textContent ?? ''))).toHaveLength(6);
     fireEvent.click(screen.getByRole('button', { name: ASK_SUGGESTIONS[0] }));
     expect(await screen.findByText('Ce trimestre : 600 €.')).toBeTruthy();
     expect(ask.mock.calls[0][2]).toEqual([]);

@@ -15,6 +15,19 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '2026.11.05-2',
+    date: '2026-11-05',
+    title: 'Retour qui ferme, rappels fiscaux au bon moment',
+    items: [
+      "Le geste Retour du téléphone ferme la fenêtre ou la feuille ouverte, puis revient à l'écran précédent, au lieu de quitter Pécule. Le bas des feuilles remonte au-dessus du clavier.",
+      "Fichier Pécule introuvable sur Drive (mis à la corbeille, par exemple) : Pécule ne repart plus d'un fichier vide. Il propose de restaurer la copie du téléphone, une copie mensuelle, ou de chercher à nouveau.",
+      "Rappels fiscaux : la déclaration est rappelée début mai et la semaine de la date limite (sauf si « C'est déclaré » a été touché), l'avis d'impôt en août et septembre, et le jour où une assurance vie atteint 8 ans ou un PEA 5 ans.",
+      "Avec une clé Gemini : la lecture de l'avis d'impôt garde le reste à payer ou le remboursement, et la clôture de l'année sait lire le relevé annuel d'un placement.",
+      "Mouvement rapide : vos trois derniers libellés du compte sont proposés en premier, avec leur montant. « Demander à Pécule » propose des questions de saison.",
+      "Les messages d'erreur restent affichés plus longtemps, les boutons en attente disent ce qu'ils font (« Lecture… », « Vérification… »), et TalkBack lit « montant masqué » en mode discret. Un ancien code de 4 ou 5 chiffres propose de passer à 6.",
+    ],
+  },
+  {
     version: '2026.11.05',
     date: '2026-11-05',
     title: 'Fenêtres plus sûres, veille relancée',

@@ -202,7 +202,7 @@ export const StatementImport: React.FC<StatementImportProps> = ({ accounts, gemi
         </p>
       )}
       <input ref={fileRef} type="file" accept={STATEMENT_FILES_ACCEPT} onChange={onFile} className="hidden" tabIndex={-1} aria-hidden="true" data-testid="statement-file" />
-      <Button ref={pickRef} onClick={() => fileRef.current?.click()} disabled={step === 'reading'} isLoading={step === 'reading'}>
+      <Button ref={pickRef} onClick={() => fileRef.current?.click()} disabled={step === 'reading'} isLoading={step === 'reading'} loadingLabel="Lecture…">
         {step !== 'reading' && <Upload className="w-4 h-4" aria-hidden="true" />} Choisir le relevé
       </Button>
       {!canRead && (

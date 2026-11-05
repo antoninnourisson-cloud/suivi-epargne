@@ -11,6 +11,7 @@ import { Modal } from '../Modal';
 import { Button, IconButton } from '../ui';
 import { StatementImport } from '../StatementImport';
 import { TaxNoticePanel } from '../TaxNoticePanel';
+import { withTaxNoticeBalance } from '../../lib/taxNoticeBalance';
 import { isDemoSession, isLocalStatementFile } from '../../services/statementReader';
 import { discardSharedFile, parseShareMarker, takeSharedFile, type ShareMarker } from '../../services/sharedFile';
 import { stripParam } from '../../app/useAppNavigation';
@@ -122,6 +123,7 @@ export const ShareTargetHost: React.FC<ShareTargetHostProps> = props => {
         </div>
         <TaxNoticePanel geminiApiKey={geminiApiKey} rfrByYear={rfrByYear} householdParts={doc.fiscalConfig.lepHouseholdParts}
           onSave={(y, v) => data.patchConfig({ rfrByYear: { ...rfrByYear, [String(y)]: v } })}
+          balances={doc.config.taxNoticeBalances} onSaveBalance={(y, b) => data.patchConfig({ taxNoticeBalances: withTaxNoticeBalance(doc.config.taxNoticeBalances, y, b) })}
           onSetParts={parts => data.setFiscalConfig(prev => ({ ...prev, lepHouseholdParts: parts }))} initialFile={phase.file} />
         <div className="mt-4 flex justify-end"><Button variant="text" onClick={onDone}>Fermer</Button></div>
       </Modal>

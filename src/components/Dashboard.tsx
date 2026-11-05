@@ -98,6 +98,9 @@ interface DashboardProps {
   milestonesSeen?: string[];
   payReviewsDone?: string[];
   rfrByYear?: Record<string, number>;
+  // « C'est déclaré » : noté dans le fichier (le serveur s'en sert) en plus de l'appareil.
+  taxReturnFiledYear?: number;
+  onMarkTaxReturnFiled?: (incomeYear: number) => void;
   restitutionDoneOn?: string;
   // Date prévue de la restitution (à passer depuis App) ; à défaut, tant que les parents ont
   // du capital et que rien n'est fait, le 1er janvier suivant (date conseillée).
@@ -137,7 +140,7 @@ const SLICE_STYLE: Record<'available' | 'tax' | 'locked', Pick<AvailabilitySegme
   locked: { color: 'bg-outline', hatch: 'dense' },
 };
 
-export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalConfig, onDeleteAccount, recurringMovements = [], onRecordRecurring, monthPlan, monthGoal, monthlyPay = 0, paydayDay, trackingStartDate, subscriptions = [], onUpdateFiscalConfig, onOpenSettings, onUpdateAccounts, payRaise, onAcceptPayRaise, onDismissPayRaise, onNavigate, onAddAccount, lastExportAt, onExport, emergency, onSetEmergencyMonths, agendaNext = [], lepTimeline, taxReturnAlert, payslips = [], gamification, goodMonthThreshold, milestonesSeen, payReviewsDone, rfrByYear, restitutionDoneOn, restitutionPlannedDate, onMarkMilestonesSeen, onValidatePayReview, yearClosing, pays, askSlot, plannedWithdrawals, onRecordPlannedWithdrawal, onDeletePlannedWithdrawal, rateChanges, onOpenRateChanges, onOpenYearClosing, yearGoal }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalConfig, onDeleteAccount, recurringMovements = [], onRecordRecurring, monthPlan, monthGoal, monthlyPay = 0, paydayDay, trackingStartDate, subscriptions = [], onUpdateFiscalConfig, onOpenSettings, onUpdateAccounts, payRaise, onAcceptPayRaise, onDismissPayRaise, onNavigate, onAddAccount, lastExportAt, onExport, emergency, onSetEmergencyMonths, agendaNext = [], lepTimeline, taxReturnAlert, payslips = [], gamification, goodMonthThreshold, milestonesSeen, payReviewsDone, rfrByYear, taxReturnFiledYear, onMarkTaxReturnFiled, restitutionDoneOn, restitutionPlannedDate, onMarkMilestonesSeen, onValidatePayReview, yearClosing, pays, askSlot, plannedWithdrawals, onRecordPlannedWithdrawal, onDeletePlannedWithdrawal, rateChanges, onOpenRateChanges, onOpenYearClosing, yearGoal }) => {
   // Date du jour partagée (useToday) : l'Accueil resté ouvert passe au lendemain à minuit.
   const today = useToday();
   const choices = useHomeChoices(today);
@@ -254,7 +257,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalC
     inactiveEmpty: findInactiveEmptyAccounts(accounts, now),
     fiscalReview: findFiscalReview(fiscalConfig, now),
     taxReturnAlert: taxReturnAlert ?? null,
-    taxReturnFiled: choices.taxReturnFiled,
+    taxReturnFiled: taxReturnFiledYear ? String(taxReturnFiledYear) : choices.taxReturnFiled,
+    rfrByYear,
     payRaise: payRaise ?? null,
     avRatesDue: findAvRateUpdatesDue(accounts, now),
     ceilingAlerts: findCeilingAlerts(accounts, fiscalConfig),
@@ -283,7 +287,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalC
       case 'check-backup-code': onOpenSettings?.('data'); break;
       // L'aide est en bas de l'écran « Dons et impôts » : on l'amène à l'écran.
       case 'show-tax-return': onNavigate?.('donations'); revealElementById('tax-return'); break;
-      case 'mark-tax-return-filed': choices.markTaxReturnFiled(a.incomeYear); break;
+      case 'mark-tax-return-filed': choices.markTaxReturnFiled(a.incomeYear); onMarkTaxReturnFiled?.(a.incomeYear); break;
       case 'accept-pay-raise': onAcceptPayRaise?.(); break;
       case 'dismiss-pay-raise': onDismissPayRaise?.(); break;
       // Noté sur les comptes (fichier, tous les appareils) : la clôture de l'année le voit aussi.

@@ -176,4 +176,48 @@ test.describe('Synchronisation avec Drive (faux Drive)', () => {
     // La saisie reste sur l'appareil (copie locale), prête à partir après reconnexion.
     expect(await page.evaluate(() => localStorage.getItem('suivi_epargne_backup'))).not.toBeNull();
   });
+
+  test('fichier Drive disparu : rien n’est créé, un choix est proposé, la copie de l’appareil recrée le fichier', async ({ page }) => {
+    const drive = await installFakeDrive(page);
+    await page.goto('/');
+    await expect(home(page)).toBeAttached({ timeout: 20_000 });
+    // La copie hors ligne de l'appareil est écrite après le chargement.
+    await expect.poll(() => page.evaluate(() => localStorage.getItem('pecule_offline_copy')), { timeout: 15_000 }).not.toBeNull();
+    await page.waitForTimeout(SAVE_WAIT_MS);
+    const offlineBefore = await page.evaluate(() => localStorage.getItem('pecule_offline_copy'));
+
+    const writesBefore = drive.writes.length; // écritures de la première ouverture (avant la disparition)
+    drive.fileMissing = true; // mis à la corbeille depuis Drive
+    await page.reload();
+    const dialog = page.getByRole('dialog', { name: 'Votre fichier Pécule est introuvable sur Drive' });
+    await expect(dialog).toBeVisible({ timeout: 20_000 });
+    await page.waitForTimeout(1_000);
+    expect(drive.created).toEqual([]); // jamais de fichier vide créé
+    expect(drive.writes.slice(writesBefore)).toEqual([]); // rien d'écrit depuis la disparition
+    expect(await page.evaluate(() => localStorage.getItem('pecule_offline_copy'))).toBe(offlineBefore); // copie intacte
+
+    await dialog.getByRole('button', { name: /Restaurer la copie de cet appareil/ }).click();
+    await expect(dialog).toBeHidden({ timeout: 15_000 });
+    await expect(home(page)).toBeAttached();
+    expect(drive.created).toHaveLength(1);
+    expect((drive.created[0] as { accounts: unknown[] }).accounts).toHaveLength(DEMO_DATA.accounts.length);
+    expect(lddsOf(drive.content)).toBe(3000);
+  });
+
+  test('fichier Drive disparu : « Repartir de zéro » demande une confirmation', async ({ page }) => {
+    const drive = await installFakeDrive(page);
+    await page.goto('/');
+    await expect(home(page)).toBeAttached({ timeout: 20_000 });
+    await expect.poll(() => page.evaluate(() => localStorage.getItem('pecule_offline_copy')), { timeout: 15_000 }).not.toBeNull();
+    drive.fileMissing = true;
+    await page.reload();
+    const dialog = page.getByRole('dialog', { name: 'Votre fichier Pécule est introuvable sur Drive' });
+    await expect(dialog).toBeVisible({ timeout: 20_000 });
+    await dialog.getByRole('button', { name: 'Repartir de zéro' }).click();
+    expect(drive.created).toEqual([]); // pas avant la confirmation
+    await dialog.getByRole('button', { name: 'Oui, repartir de zéro' }).click();
+    await expect(dialog).toBeHidden({ timeout: 15_000 });
+    expect(drive.created).toHaveLength(1);
+    expect((drive.created[0] as { accounts: unknown[] }).accounts).toHaveLength(0);
+  });
 });

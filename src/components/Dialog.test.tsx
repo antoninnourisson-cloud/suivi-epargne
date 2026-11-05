@@ -103,5 +103,15 @@ describe('Button', () => {
     const b = screen.getByRole('button') as HTMLButtonElement;
     expect(b.disabled).toBe(true);
     expect(b.textContent).toContain('Enregistrement…');
+    expect(b.getAttribute('aria-busy')).toBe('true');
+  });
+
+  it('en cours : le mot est celui de l’appel (« Lecture… »), et sans attente pas d’aria-busy', () => {
+    const { rerender } = render(<Button isLoading loadingLabel="Lecture…">Choisir le relevé</Button>);
+    expect(screen.getByRole('button').textContent).toContain('Lecture…');
+    expect(screen.getByRole('button').textContent).not.toContain('Enregistrement');
+    rerender(<Button loadingLabel="Lecture…">Choisir le relevé</Button>);
+    expect(screen.getByRole('button').getAttribute('aria-busy')).toBeNull();
+    expect(screen.getByRole('button').textContent).toBe('Choisir le relevé');
   });
 });

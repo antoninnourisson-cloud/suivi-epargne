@@ -12,7 +12,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Fingerprint, Loader2, AlertTriangle, Delete, LockKeyhole, Clock } from 'lucide-react';
 import {
-  isBiometricEnabled, isPinEnabled, verifyBiometric, verifyPin, getPinCooldownSeconds, type LockResetRequest,
+  isBiometricEnabled, isPinEnabled, verifyBiometric, verifyPin, getPinCooldownSeconds, enablePin,
+  shouldSuggestStrongerPin, markStrongerPinSuggested, PIN_MIN_DIGITS, type LockResetRequest,
 } from '../services/appLockService';
 import { Button } from './ui';
 
@@ -60,7 +61,10 @@ export const AppLockScreen: React.FC<AppLockScreenProps> = ({
   const pinOn = isPinEnabled();
   // unlock : code ou biométrie ; request : explication, puis demande de retrait ;
   // confirm : retrait (délai écoulé), avec le choix pour les modifications pas sur Drive.
-  const [stage, setStage] = useState<'unlock' | 'request' | 'confirm'>('unlock');
+  const [stage, setStage] = useState<'unlock' | 'request' | 'confirm' | 'strengthen'>('unlock');
+  // Nouveau code saisi à l'étape « Renforcez votre code ».
+  const [newPin, setNewPin] = useState('');
+  const [savingPin, setSavingPin] = useState(false);
   const hasRequest = !!resetRequest;
   // Message d'erreur annoncé (role="alert") ; vidé avant chaque essai pour qu'un même
   // message soit annoncé de nouveau.
@@ -129,7 +133,18 @@ export const AppLockScreen: React.FC<AppLockScreenProps> = ({
     setInfo('');
     const ok = await verifyPin(value).catch(() => false);
     setCheckingPin(false);
-    if (ok) { onUnlock(); return; }
+    if (ok) {
+      // Ancien code court : on propose, une fois par jour au plus, d'en choisir un plus long
+      // avant d'ouvrir l'app (le verrou reste affiché pendant ce temps).
+      if (shouldSuggestStrongerPin()) {
+        markStrongerPinSuggested();
+        setPin(''); setNewPin(''); setAlert(''); setInfo('');
+        setStage('strengthen');
+        return;
+      }
+      onUnlock();
+      return;
+    }
     const next = getPinCooldownSeconds();
     setCooldown(next);
     setPin('');
@@ -181,6 +196,23 @@ export const AppLockScreen: React.FC<AppLockScreenProps> = ({
   const openConfirm = () => { setAlert(''); setInfo(''); setStage('confirm'); };
   const closeForgot = () => { setAlert(''); setStage('unlock'); };
 
+  const submitStrongerPin = async () => {
+    if (savingPin) return;
+    if (newPin.length < PIN_MIN_DIGITS || newPin.length > PIN_MAX_LENGTH) {
+      setAlert(`Le code doit faire entre ${PIN_MIN_DIGITS} et 8 chiffres.`);
+      return;
+    }
+    setSavingPin(true);
+    setAlert('');
+    try {
+      await enablePin(newPin);
+      onUnlock();
+    } catch {
+      setAlert("Le code n'a pas pu être enregistré sur cet appareil. Réessayez, ou gardez votre code actuel.");
+      setSavingPin(false);
+    }
+  };
+
   const submitRequest = () => {
     setAlert('');
     try {
@@ -230,7 +262,26 @@ export const AppLockScreen: React.FC<AppLockScreenProps> = ({
         </p>
         <p role="status" className="sr-only">{info}</p>
 
-        {stage === 'unlock' ? (
+        {stage === 'strengthen' ? (
+          <section aria-labelledby="lock-strengthen-title" className="text-left">
+            <h2 id="lock-strengthen-title" ref={forgotTitleRef} tabIndex={-1} className="text-lg font-medium text-on-surface mb-2 outline-none">
+              Renforcez votre code : 6 chiffres au moins
+            </h2>
+            <p className="text-sm text-on-surface-variant mb-3">
+              Votre code actuel est court : il se devine vite si quelqu'un copie les données de ce téléphone. Choisissez-en un de 6 à 8 chiffres ; l'ancien est alors effacé. Vous pouvez aussi le faire plus tard dans les Paramètres.
+            </p>
+            <form onSubmit={e => { e.preventDefault(); void submitStrongerPin(); }}>
+              <label htmlFor="lock-new-pin" className="block text-sm font-medium text-on-surface-variant mb-1.5">Nouveau code (6 à 8 chiffres)</label>
+              <input id="lock-new-pin" type="password" inputMode="numeric" pattern="[0-9]*" maxLength={8} autoComplete="new-password"
+                value={newPin} onChange={e => setNewPin(e.target.value.replace(/D/g, ''))}
+                className="w-full h-12 px-4 rounded-xs bg-transparent border border-outline text-base text-on-surface tracking-widest" />
+              <div className="mt-4 flex flex-wrap justify-end gap-2">
+                <Button type="button" variant="text" onClick={() => onUnlock()}>Plus tard</Button>
+                <Button type="submit" isLoading={savingPin} disabled={newPin.length < PIN_MIN_DIGITS}>Changer le code</Button>
+              </div>
+            </form>
+          </section>
+        ) : stage === 'unlock' ? (
           <>
             {resetRequest && (
               <section aria-labelledby="lock-request-title" className="text-left rounded-2xl bg-secondary-container text-on-secondary-container p-4 mb-6 text-sm">

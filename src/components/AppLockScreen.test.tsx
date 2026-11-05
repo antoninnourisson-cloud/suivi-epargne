@@ -15,6 +15,9 @@ const svc = vi.hoisted(() => ({
   cooldown: 0,
   verifyPin: vi.fn(async (_pin: string) => false),
   verifyBiometric: vi.fn(async () => false),
+  suggest: false,
+  marked: 0,
+  enablePin: vi.fn(async (_pin: string) => {}),
 }));
 vi.mock('../services/appLockService', () => ({
   isBiometricEnabled: () => svc.biometric,
@@ -22,6 +25,10 @@ vi.mock('../services/appLockService', () => ({
   verifyPin: (pin: string) => svc.verifyPin(pin),
   verifyBiometric: () => svc.verifyBiometric(),
   getPinCooldownSeconds: () => svc.cooldown,
+  enablePin: (pin: string) => svc.enablePin(pin),
+  shouldSuggestStrongerPin: () => svc.suggest,
+  markStrongerPinSuggested: () => { svc.suggest = false; svc.marked += 1; },
+  PIN_MIN_DIGITS: 6,
 }));
 
 import { AppLockScreen } from './AppLockScreen';
@@ -36,10 +43,57 @@ beforeEach(() => {
   svc.biometric = false;
   svc.pin = true;
   svc.cooldown = 0;
+  svc.suggest = false;
+  svc.marked = 0;
+  svc.enablePin.mockReset().mockResolvedValue(undefined);
   svc.verifyPin.mockReset().mockResolvedValue(false);
   svc.verifyBiometric.mockReset().mockResolvedValue(false);
 });
 afterEach(() => { cleanup(); vi.useRealTimers(); });
+
+describe('AppLockScreen : ancien code court', () => {
+  it('après un déverrouillage réussi, propose de renforcer le code avant d’ouvrir l’app', async () => {
+    const onUnlock = vi.fn();
+    svc.suggest = true;
+    svc.verifyPin.mockResolvedValue(true);
+    render(<AppLockScreen onUnlock={onUnlock} onForgot={vi.fn()} />);
+    typeDigits('1234');
+    fireEvent.click(screen.getByRole('button', { name: 'OK' }));
+    await screen.findByRole('heading', { name: 'Renforcez votre code : 6 chiffres au moins' });
+    expect(onUnlock).not.toHaveBeenCalled();
+    expect(svc.marked).toBe(1);
+
+    const field = screen.getByLabelText('Nouveau code (6 à 8 chiffres)');
+    fireEvent.change(field, { target: { value: '12345' } });
+    expect((screen.getByRole('button', { name: 'Changer le code' }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.change(field, { target: { value: '246813' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Changer le code' }));
+    await waitFor(() => expect(onUnlock).toHaveBeenCalledTimes(1));
+    expect(svc.enablePin).toHaveBeenCalledWith('246813');
+  });
+
+  it('« Plus tard » ouvre l’app sans changer le code', async () => {
+    const onUnlock = vi.fn();
+    svc.suggest = true;
+    svc.verifyPin.mockResolvedValue(true);
+    render(<AppLockScreen onUnlock={onUnlock} onForgot={vi.fn()} />);
+    typeDigits('1234');
+    fireEvent.click(screen.getByRole('button', { name: 'OK' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Plus tard' }));
+    expect(onUnlock).toHaveBeenCalledTimes(1);
+    expect(svc.enablePin).not.toHaveBeenCalled();
+  });
+
+  it('rien à proposer : déverrouillage direct', async () => {
+    const onUnlock = vi.fn();
+    svc.verifyPin.mockResolvedValue(true);
+    render(<AppLockScreen onUnlock={onUnlock} onForgot={vi.fn()} />);
+    typeDigits('246813');
+    fireEvent.click(screen.getByRole('button', { name: 'OK' }));
+    await waitFor(() => expect(onUnlock).toHaveBeenCalled());
+    expect(screen.queryByRole('heading', { name: /Renforcez/ })).toBeNull();
+  });
+});
 
 describe('AppLockScreen : accessibilité', () => {
   it('repère principal, titre focalisé, touche « effacer » nommée, région d’alerte présente dès l’affichage', () => {

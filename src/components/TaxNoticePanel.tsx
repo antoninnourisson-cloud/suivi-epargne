@@ -4,6 +4,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { FileSearch, Loader2, Check, X, Upload } from 'lucide-react';
 import { extractTaxNotice, fileToBase64, TaxNoticeData } from '../services/geminiService';
 import { formatEUR } from '../lib/format';
+import { taxBalanceSentence } from '../lib/taxNoticeBalance';
+import type { TaxNoticeBalance } from '../types';
 import { Button, Card } from './ui';
 import { Hint, useCardSummary, useInSettingsCard } from './settings/SettingsCard';
 import { NumberField } from './settings/fields';
@@ -15,11 +17,15 @@ interface Props {
   householdParts?: number;
   onSave: (year: number, rfr: number) => void;
   onSetParts: (parts: number) => void;
+  /** Soldes déjà enregistrés par année de revenus (facultatif : sans, le solde lu n'est pas gardé). */
+  balances?: Record<string, TaxNoticeBalance>;
+  /** Garde le solde lu sur l'avis (`undefined` : l'avis n'en donne pas, l'ancien est retiré). */
+  onSaveBalance?: (year: number, balance: TaxNoticeBalance | undefined) => void;
   /** Avis déjà reçu (« Partager vers Pécule ») : lu dès l'ouverture. */
   initialFile?: File;
 }
 
-export const TaxNoticePanel: React.FC<Props> = ({ geminiApiKey, rfrByYear, householdParts, onSave, onSetParts, initialFile }) => {
+export const TaxNoticePanel: React.FC<Props> = ({ geminiApiKey, rfrByYear, householdParts, onSave, onSetParts, balances, onSaveBalance, initialFile }) => {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState<TaxNoticeData | null>(null);
@@ -29,6 +35,7 @@ export const TaxNoticePanel: React.FC<Props> = ({ geminiApiKey, rfrByYear, house
   const years = [thisYear - 1, thisYear - 2, thisYear - 3];
 
   const known = Object.entries(rfrByYear).filter(([, v]) => v > 0).sort(([a], [b]) => Number(b) - Number(a))[0];
+  const lastBalance = Object.entries(balances ?? {}).sort(([a], [b]) => Number(b) - Number(a))[0];
   useCardSummary('rfr', known ? `RFR ${known[0]} : ${formatEUR(known[1], 0)}` : 'RFR estimé (aucun avis saisi)');
 
   const onFile = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -81,9 +88,10 @@ export const TaxNoticePanel: React.FC<Props> = ({ geminiApiKey, rfrByYear, house
       {draft && draft.incomeYear && draft.rfr !== undefined && (
         <div className="mt-4 p-4 rounded-xl bg-secondary-container text-on-secondary-container">
           <p className="text-sm font-medium">Revenus {draft.incomeYear} : RFR {formatEUR(draft.rfr, 0)}{draft.parts ? ` · ${draft.parts.toLocaleString('fr-FR')} part${draft.parts > 1 ? 's' : ''}` : ''}</p>
+          {draft.balance && <p className="text-sm mt-1">{taxBalanceSentence(draft.balance)}</p>}
           <p className="text-xs mt-1">Vérifiez ces valeurs sur votre avis avant d'enregistrer.</p>
           <div className="flex flex-wrap gap-2 mt-3">
-            <Button type="button" onClick={() => { onSave(draft.incomeYear!, draft.rfr!); if (draft.parts && draft.parts !== householdParts) onSetParts(draft.parts); setDraft(null); }}>
+            <Button type="button" onClick={() => { onSave(draft.incomeYear!, draft.rfr!); if (draft.parts && draft.parts !== householdParts) onSetParts(draft.parts); onSaveBalance?.(draft.incomeYear!, draft.balance); setDraft(null); }}>
               <Check className="w-4 h-4" aria-hidden="true" /> Enregistrer</Button>
             <Button type="button" variant="text" onClick={() => setDraft(null)}><X className="w-4 h-4" aria-hidden="true" /> Annuler</Button>
           </div>
@@ -95,6 +103,7 @@ export const TaxNoticePanel: React.FC<Props> = ({ geminiApiKey, rfrByYear, house
           <NumberField key={y} label={`Revenu fiscal de référence ${y}`} value={rfrByYear[String(y)] ?? 0} onChange={v => onSave(y, v)} min={0} suffix="€" />
         ))}
       </div>
+      {lastBalance && <p className="text-sm text-on-surface mt-3" data-tax-balance>Revenus {lastBalance[0]} · {taxBalanceSentence(lastBalance[1])}</p>}
       <Hint className="mt-2">Vide (0) = estimé d'après vos fiches de paie ou votre salaire.</Hint>
     </>
   );

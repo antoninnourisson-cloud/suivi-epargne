@@ -1,12 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import { computeReminders, parisCivilDate, applyDiscreetMode, isDiscreet, Reminder } from '../src/reminders';
+import { isReminderEnabled } from '../../src/lib/notificationPrefs';
 import { AccountType, GlobalAppData } from '../../src/types';
 import { migrate } from '../../src/lib/schema';
 import { DEFAULT_FISCAL_CONFIG } from '../../src/constants';
 
 const base = (over: Partial<GlobalAppData> = {}): GlobalAppData => ({
   accounts: [], expenses: [], history: [],
-  config: { grossAnnual: 0, leisureBudget: 0, projectSavings: 0, taxRateManual: 0, extraMonthlyIncome: 0 },
+  config: { grossAnnual: 0, leisureBudget: 0, projectSavings: 0, taxRateManual: 0, extraMonthlyIncome: 0, rfrByYear: { '2025': 10000 } },
   ...over,
 });
 const APP = 'https://example.github.io/app/';
@@ -576,5 +577,112 @@ describe('mode discret', () => {
     expect(raw.some(x => /€/.test(x.message.body))).toBe(true);
     const out = applyDiscreetMode(raw);
     expect(out.some(x => /€/.test(x.message.title + x.message.body))).toBe(false);
+  });
+});
+
+describe('rappels fiscaux datés', () => {
+  const keysOf = (data: GlobalAppData, d: Date) => computeReminders(data, d, APP).map(r => r.key);
+  const noRfr = (over: Partial<GlobalAppData> = {}) => base({ ...over, config: { ...base().config, rfrByYear: undefined } });
+
+  describe('déclaration : début mai et semaine de la date limite', () => {
+    it('début mai 2026 (dates connues) : un rappel avec les trois dates limites', () => {
+      const r = computeReminders(base(), new Date(2026, 4, 4, 9), APP).find(x => x.key === 'tax-return:2025:may')!;
+      expect(r.message.title).toContain('2025');
+      expect(r.message.body).toContain('le 21 mai, le 28 mai ou le 4 juin');
+      expect(r.message.body).toContain('Déjà déclaré');
+      expect(r.message.tag).toBe('tax-return');
+    });
+    it('seulement du 1er au 7 mai', () => {
+      expect(keysOf(base(), new Date(2026, 4, 1, 9))).toContain('tax-return:2025:may');
+      expect(keysOf(base(), new Date(2026, 4, 7, 9))).toContain('tax-return:2025:may');
+      expect(keysOf(base(), new Date(2026, 4, 8, 9)).some(k => k.startsWith('tax-return'))).toBe(false);
+    });
+    it('semaine de la première date limite : du 15 au 21 mai 2026, pas avant ni après', () => {
+      expect(keysOf(base(), new Date(2026, 4, 15, 9))).toContain('tax-return:2025:deadline');
+      expect(keysOf(base(), new Date(2026, 4, 21, 9))).toContain('tax-return:2025:deadline');
+      expect(keysOf(base(), new Date(2026, 4, 14, 9)).some(k => k.startsWith('tax-return'))).toBe(false);
+      expect(keysOf(base(), new Date(2026, 4, 22, 9)).some(k => k.startsWith('tax-return'))).toBe(false);
+    });
+    it('année sans dates connues (2027) : pas de rappel daté, jamais de date inventée', () => {
+      expect(keysOf(base(), new Date(2027, 4, 4, 9)).some(k => k.startsWith('tax-return'))).toBe(false);
+      expect(keysOf(base(), new Date(2027, 4, 20, 9)).some(k => k.startsWith('tax-return'))).toBe(false);
+    });
+    it("le rappel d'avril reste inchangé", () => {
+      expect(keysOf(base(), new Date(2027, 3, 12, 9))).toContain('tax-return:2026');
+    });
+    it('type « Impôts » désactivé dans les préférences : filtré comme le reste', () => {
+      const key = 'tax-return:2025:may';
+      expect(isReminderEnabled(key, { tax: false })).toBe(false);
+      expect(isReminderEnabled(key, undefined)).toBe(true);
+    });
+    it('mode discret : corps générique', () => {
+      const r = applyDiscreetMode(computeReminders(base(), new Date(2026, 4, 4, 9), APP)).find(x => x.key === 'tax-return:2025:may')!;
+      expect(r.message.body).toBe('Votre aide à la déclaration de revenus est prête dans l’app.');
+    });
+  });
+
+  describe("avis d'impôt : août et septembre", () => {
+    it("rappel tant que le revenu fiscal de référence de l'année de revenus n'est pas saisi", () => {
+      const r = computeReminders(noRfr(), new Date(2026, 7, 1, 9), APP).find(x => x.key === 'tax-notice:2026')!;
+      expect(r.message.title).toBe("Votre avis d'impôt est arrivé ?");
+      expect(r.message.url).toContain('view=settings');
+      expect(keysOf(noRfr(), new Date(2026, 8, 30, 9))).toContain('tax-notice:2026');
+    });
+    it('même clé tout au long de la période : un seul envoi par an', () => {
+      const a = keysOf(noRfr(), new Date(2026, 7, 5, 9)).filter(k => k.startsWith('tax-notice'));
+      const b = keysOf(noRfr(), new Date(2026, 8, 20, 9)).filter(k => k.startsWith('tax-notice'));
+      expect(a).toEqual(['tax-notice:2026']);
+      expect(b).toEqual(a);
+    });
+    it('hors août-septembre : rien', () => {
+      expect(keysOf(noRfr(), new Date(2026, 6, 31, 9)).some(k => k.startsWith('tax-notice'))).toBe(false);
+      expect(keysOf(noRfr(), new Date(2026, 9, 1, 9)).some(k => k.startsWith('tax-notice'))).toBe(false);
+    });
+    it('revenu fiscal de référence déjà saisi pour 2025 : rien', () => {
+      expect(keysOf(base(), new Date(2026, 7, 10, 9)).some(k => k.startsWith('tax-notice'))).toBe(false);
+    });
+    it('un revenu saisi pour une autre année ne compte pas', () => {
+      const data = base({ config: { ...base().config, rfrByYear: { '2024': 15000 } } });
+      expect(keysOf(data, new Date(2026, 7, 10, 9))).toContain('tax-notice:2026');
+    });
+    it('mode discret et préférences', () => {
+      const r = applyDiscreetMode(computeReminders(noRfr(), new Date(2026, 7, 10, 9), APP)).find(x => x.key === 'tax-notice:2026')!;
+      expect(r.message.body).toBe('Votre avis d’impôt est peut-être arrivé : importez-le dans l’app.');
+      expect(isReminderEnabled('tax-notice:2026', { tax: false })).toBe(false);
+    });
+  });
+
+  describe('anniversaire fiscal : PEA 5 ans, assurance vie 8 ans', () => {
+    const pea = { id: 'pea1', name: 'PEA Bourse', type: AccountType.PEA, institution: 'B', totalAmount: 5000, ownedAmount: 5000, parentalCapital: 0, interestRate: 4, openingDate: '2021-03-12', movements: [], balanceCheckedAt: '2026-03-01' };
+    const av = { ...pea, id: 'av1', name: 'Assurance vie', type: AccountType.ASSURANCE_VIE, openingDate: '2019-03-12' };
+    const dataWith = (accounts: unknown[]) => base({ accounts: accounts as GlobalAppData['accounts'] });
+
+    it('le jour même du 5e anniversaire du PEA : une notification avec ce que ça change', () => {
+      const r = computeReminders(dataWith([pea]), new Date(2026, 2, 12, 9), APP).find(x => x.key === 'fiscal-anniversary:pea1')!;
+      expect(r.message.title).toBe("Anniversaire fiscal : PEA Bourse a 5 ans aujourd'hui.");
+      expect(r.message.body).toContain('Gains sans impôt sur le revenu');
+      expect(r.message.body).toContain('prélèvements sociaux');
+    });
+    it('assurance vie : 8 ans, impôt réduit', () => {
+      const r = computeReminders(dataWith([av]), new Date(2027, 2, 12, 9), APP).find(x => x.key === 'fiscal-anniversary:av1')!;
+      expect(r.message.title).toContain('8 ans');
+      expect(r.message.body).toContain('Impôt sur le revenu réduit');
+    });
+    it("la veille : rien ; trois jours après : plus rien ; même clé d'un jour à l'autre (une fois par compte)", () => {
+      expect(keysOf(dataWith([pea]), new Date(2026, 2, 11, 9))).not.toContain('fiscal-anniversary:pea1');
+      expect(keysOf(dataWith([pea]), new Date(2026, 2, 12, 9))).toContain('fiscal-anniversary:pea1');
+      expect(keysOf(dataWith([pea]), new Date(2026, 2, 13, 9))).toContain('fiscal-anniversary:pea1');
+      expect(keysOf(dataWith([pea]), new Date(2026, 2, 15, 9))).not.toContain('fiscal-anniversary:pea1');
+    });
+    it('compte vide ou sans date d’ouverture : rien', () => {
+      expect(keysOf(dataWith([{ ...pea, totalAmount: 0, ownedAmount: 0 }]), new Date(2026, 2, 12, 9))).not.toContain('fiscal-anniversary:pea1');
+      expect(keysOf(dataWith([{ ...pea, openingDate: undefined }]), new Date(2026, 2, 12, 9))).not.toContain('fiscal-anniversary:pea1');
+    });
+    it('mode discret et préférences', () => {
+      const all = computeReminders(dataWith([pea]), new Date(2026, 2, 12, 9), APP);
+      const r = applyDiscreetMode(all).find(x => x.key === 'fiscal-anniversary:pea1')!;
+      expect(r.message.body).toBe('Un de vos comptes atteint aujourd’hui une date fiscale : le détail est dans l’app.');
+      expect(isReminderEnabled('fiscal-anniversary:pea1', { tax: false })).toBe(false);
+    });
   });
 });

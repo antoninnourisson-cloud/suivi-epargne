@@ -11,11 +11,12 @@ import { createConfigFile, findConfigFiles, getFileMeta, readConfigFile, type Dr
 import { BACKUP_KEY, DUPLICATE_DISMISSED_KEY, PENDING_KEY } from './keys';
 import { browserOnline, canonicalWithoutView, classifySyncError, duplicateKey, type ConflictCtx, type ConflictInit, type StoredSnapshot } from './syncShared';
 import {
-  heldCopies, holdUnavailableCopies, newestUnsyncedCopy, releaseHeldCopies,
+  findDeviceTrace, heldCopies, holdUnavailableCopies, newestUnsyncedCopy, releaseHeldCopies,
   type OfflineStore, type PendingStore, type StoredCopies, type UnreadableCopy,
 } from './localCopies';
 import type { DocumentState } from './useDocument';
 import type { SyncRefs } from './syncRefs';
+import type { MissingFileStore } from './missingFile';
 
 interface LoadDeps {
   refs: SyncRefs;
@@ -38,12 +39,14 @@ interface LoadDeps {
   setOfflineDataAt: Dispatch<SetStateAction<string | null>>;
   setDataShown: Dispatch<SetStateAction<boolean>>;
   setLoadCount: Dispatch<SetStateAction<number>>;
+  /** Fichier introuvable alors que l'appareil garde des données : le choix s'affiche par là. */
+  missingFile: MissingFileStore;
 }
 
 export const useDriveLoad = ({
   refs, dispatch, docState, pending, offlineStore, makeStamp, markPersisted, hasLocalEdits, setConflict, openConflict,
   scheduleRetry, resetRetry, failSync, setDriveFileId, setLocalBackup, setUnreadableCopies, setOtherFiles,
-  setOfflineDataAt, setDataShown, setLoadCount,
+  setOfflineDataAt, setDataShown, setLoadCount, missingFile,
 }: LoadDeps) => {
   const { applyData, currentData, setLastView } = docState;
   const {
@@ -127,6 +130,10 @@ export const useDriveLoad = ({
     const inMemory: StoredSnapshot | null = keepUnsynced && !offline && hasLocalEdits()
       ? { savedAt: new Date().toISOString(), fileId: driveFileIdRef.current ?? undefined, data: currentData() }
       : null;
+    // Copie hors ligne affichée ET modifiée ici : ses saisies ne sont nulle part ailleurs (relevé aussi avant toute attente).
+    const shownOffline: StoredSnapshot | null = keepUnsynced && offline && hasLocalEdits()
+      ? { savedAt: new Date().toISOString(), fileId: driveFileIdRef.current ?? undefined, data: currentData() }
+      : null;
     const storedCopies: StoredCopies = keepUnsynced ? [...[PENDING_KEY, BACKUP_KEY].map(key => [key, lsGet(key)] as const), ...heldCopies()] : [];
     clearTimeout(retryTimerRef.current);
     if (!browserOnline() || opts?.startOffline) {
@@ -143,6 +150,20 @@ export const useDriveLoad = ({
     try {
       const files = await findConfigFiles();
       const head = files[0];
+      if (!head) {
+        // Aucun fichier. Si cet appareil garde des données (copie hors ligne, copie jamais
+        // envoyée, fichier déjà connu), c'est une DISPARITION (corbeille, accès retiré), pas un
+        // premier démarrage : rien n'est créé (un fichier vide serait affiché puis recopié sur
+        // la copie hors ligne) et rien n'est écrasé. L'utilisateur choisit (MissingFileDialog).
+        const trace = await findDeviceTrace(offlineStore, storedCopies, inMemory ?? shownOffline, driveFileIdRef.current ?? offline?.fileId ?? null);
+        if (gen !== sessionGenRef.current) return false;
+        if (trace.found) {
+          missingFile.show(trace.newest, trace.unreadable);
+          dispatch({ type: 'load-failed' });
+          return false;
+        }
+      }
+      missingFile.clear();
       const fileId = head?.id ?? await createConfigFile(withWriteStamp(emptyData(), makeStamp()));
       setDriveFileId(fileId);
       const dismissed = lsGetJSON<string[]>(DUPLICATE_DISMISSED_KEY, []);

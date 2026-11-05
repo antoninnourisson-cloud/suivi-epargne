@@ -92,6 +92,26 @@ jobs:
                 fi
               fi
 
+              # Envois de notifications (champ « notifications » de /status : tentés, reçus, en
+              # échec au dernier passage quotidien ; « en échec » = refusés ou en erreur, hors
+              # appareils disparus). Pas d'alerte pour un échec isolé : seulement si TOUS les
+              # envois du dernier passage ont échoué (au moins un tenté), ou si les 3 derniers
+              # passages quotidiens ont chacun eu au moins un échec. Champ absent (serveur
+              # antérieur à cette surveillance) : rien à vérifier.
+              if jq -e '(.notifications | type) == "object"' status.json > /dev/null 2>&1; then
+                n_att=$(jq -r '.notifications.attempted // 0' status.json)
+                n_ok=$(jq -r '.notifications.delivered // 0' status.json)
+                n_ko=$(jq -r '.notifications.failed // 0' status.json)
+                streak=$(jq -r '[(.history // [])[] | select(.cron == "daily")] | .[0:3] | if length == 3 and all(.[]; (.notifications.failed // 0) > 0) then "true" else "false" end' status.json 2>/dev/null || echo false)
+                if [ "$n_att" -gt 0 ] && [ "$n_ko" -gt 0 ] && [ "$n_ok" -eq 0 ]; then
+                  fail "Notifications : aucun des $n_att envoi(s) du dernier passage n'a abouti ($n_ko refusé(s) ou en erreur ; détail : Cloudflare → Workers → suivi-epargne-api → Logs)"
+                elif [ "$streak" = true ]; then
+                  fail "Notifications : au moins un envoi en échec lors de chacun des 3 derniers passages quotidiens (dernier passage : $n_ko sur $n_att ; détail : Cloudflare → Workers → suivi-epargne-api → Logs)"
+                else
+                  ok "Notifications ($n_ok reçu(s), $n_ko en échec sur $n_att tenté(s))"
+                fi
+              fi
+
               # Derniers passages des crons (heure, tâche, résultat, catégorie d'erreur : jamais
               # de donnée personnelle), recopiés dans l'issue « panne ».
               jq -r '
@@ -100,7 +120,7 @@ jobs:
                 | "| " + (.at | tostring)
                   + " | " + (if .cron == "fiscal-watch" then "veille fiscale" else "rappels quotidiens" end)
                   + " | " + (if .ok == true then "réussi" else "échec" end)
-                  + " | " + (if .ok == true then "" else ((.errors // []) | map($label[tostring] // "autre") | join(", ")) end)
+                  + " | " + (((.errors // []) | map($label[tostring] // "autre") | join(", ")) + (if (.notifications.failed // 0) > 0 then " (" + (.notifications.failed | tostring) + "/" + (.notifications.attempted | tostring) + " envoi(s))" else "" end))
                   + " |"' status.json > history.rows 2>/dev/null || : > history.rows
               if [ -s history.rows ]; then
                 { echo '| Heure (UTC) | Tâche | Résultat | Erreur |'; echo '|---|---|---|---|'; cat history.rows; } > history.md

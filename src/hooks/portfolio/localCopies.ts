@@ -263,3 +263,33 @@ export const releaseHeldCopies = async (held: HeldReadable[], newest: StoredSnap
 export const dropLostCopies = (copies: UnreadableCopy[]): void => {
   for (const c of copies) if (c.lost) removeStoredCopy(c.key, c.stored);
 };
+
+/**
+ * Ce que l'appareil garde de vos données quand le fichier Drive est introuvable : `found` dit
+ * s'il en reste une trace (copie hors ligne, copie jamais envoyée, identifiant de fichier déjà
+ * connu), `newest` la copie lisible la plus récente (saisies jamais envoyées comprises), et
+ * `unreadable` qu'une copie existe mais ne peut pas être relue. Rien n'est écrit ni effacé ici.
+ * `shown` : état affiché (copie hors ligne modifiée ici), relevé avant toute attente.
+ */
+export interface DeviceTrace { found: boolean; newest: StoredSnapshot | null; unreadable: boolean }
+export const findDeviceTrace = async (
+  offlineStore: OfflineStore, storedCopies: StoredCopies, shown: StoredSnapshot | null, knownFileId: string | null,
+): Promise<DeviceTrace> => {
+  const offlineRaw = lsGet(OFFLINE_KEY);
+  const found = !!knownFileId || !!offlineRaw || !!shown || storedCopies.some(([, stored]) => !!stored);
+  const candidates: StoredSnapshot[] = shown ? [shown] : [];
+  let unreadable = false;
+  const offline = await offlineStore.read();
+  if (offline) candidates.push({ savedAt: offline.savedAt, fileId: offline.fileId, data: offline.data as GlobalAppData });
+  else if (offlineRaw) unreadable = true;
+  for (const [, stored] of storedCopies) {
+    if (!stored) continue;
+    try {
+      const snap = await openJSON<StoredSnapshot>(stored);
+      if (!snap || typeof snap !== 'object' || !snap.data || typeof snap.data !== 'object') throw new Error('COPY_DAMAGED');
+      candidates.push(snap);
+    } catch { unreadable = true; }
+  }
+  const newest = candidates.reduce<StoredSnapshot | null>((best, s) => (!best || (s.savedAt || '') > (best.savedAt || '') ? s : best), null);
+  return { found, newest, unreadable };
+};

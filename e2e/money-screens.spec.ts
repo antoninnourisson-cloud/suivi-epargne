@@ -110,7 +110,7 @@ test.describe('Ma paie (démo)', () => {
     await expect(dialog.getByRole('heading', { level: 2 })).toBeVisible();
     if (await dialog.getByRole('heading', { name: /^Bilan/ }).count()) await dialog.getByRole('button', { name: 'Continuer' }).click();
     await dialog.getByRole('button', { name: 'Voir la répartition' }).click();
-    await dialog.getByRole('button', { name: 'Enregistrer', exact: true }).click();
+    await dialog.getByRole('button', { name: 'Enregistrer les cases cochées' }).click();
     await expect(dialog).toBeHidden();
     const livret = card.getByRole('region', { name: 'À faire' }).getByRole('checkbox', { name: 'Livret A' });
     await expect(livret).not.toBeChecked();

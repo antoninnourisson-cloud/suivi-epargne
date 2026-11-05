@@ -13,7 +13,7 @@
 //     répartir, la barre, puis les lignes dans l'ordre des virements (virements fixes,
 //     épargne par compte, épargne projets) ; le plaisir, ce qui reste sur le compte courant,
 //     est la ligne d'équilibre, sans case. Montants et comptes se corrigent (« Rétablir les
-//     montants conseillés »), « + Autre compte » ; « Tout est fait comme conseillé » ou
+//     montants conseillés »), « + Autre compte » ; « Tout marquer fait » ou
 //     « Enregistrer » (seulement les cases cochées) passent par UNE commande (recordPay), avec
 //     un seul « Annuler ». « Tout est fait » enregistre aussi le solde du compte courant.
 // « Modifier la paie » rouvre la même feuille sur la paie déclarée (étapes 1 et 2) : les
@@ -491,12 +491,12 @@ export const PayReceivedSheet: React.FC<SheetProps> = (props) => {
 
           {error && <p role="alert" className="mt-4 text-sm text-error flex items-start gap-2"><Info className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />{error}</p>}
 
-          <div className="mt-6 flex flex-wrap items-center justify-end gap-2">
+          <p className="mt-6 text-sm text-on-surface-variant">« Enregistrer les cases cochées » garde seulement ce qui est coché ; le reste reste à faire dans la carte « Ma paie ». « Tout marquer fait » coche tout, comme conseillé.</p>
+          <div className="mt-2 flex flex-wrap items-center justify-end gap-2">
             <Button variant="text" onClick={() => setStep(1)} className="mr-auto -ml-3 max-sm:h-12"><ArrowLeft className="w-4 h-4" aria-hidden="true" /> Retour</Button>
-            <Button variant="tonal" onClick={() => submit(false)} className="max-sm:h-12"><Wallet className="w-4 h-4" aria-hidden="true" /> Enregistrer</Button>
-            <Button onClick={() => submit(true)} className="max-sm:h-12"><CheckCheck className="w-4 h-4" aria-hidden="true" /> Tout est fait comme conseillé</Button>
+            <Button variant="tonal" onClick={() => submit(false)} className="max-sm:h-12"><Wallet className="w-4 h-4" aria-hidden="true" /> Enregistrer les cases cochées</Button>
+            <Button onClick={() => submit(true)} className="max-sm:h-12"><CheckCheck className="w-4 h-4" aria-hidden="true" /> Tout marquer fait</Button>
           </div>
-          <p className="mt-2 text-xs text-on-surface-variant text-right">« Enregistrer » garde seulement les cases cochées ; le reste reste à faire dans la carte « Ma paie ».</p>
         </>
       )}
     </Modal>

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
-  askGeminiWithSearch, extractBankStatement, extractPayslipData, extractTaxNotice, GeminiError, PAYSLIP_MAX_AMOUNT,
-  sanitizePayslip, sanitizeTaxNotice, validPayPeriod, validTaxParts,
+  askGeminiWithSearch, extractAnnualStatement, extractBankStatement, extractPayslipData, extractTaxNotice, GeminiError, PAYSLIP_MAX_AMOUNT,
+  sanitizeAnnualStatement, sanitizePayslip, sanitizeTaxNotice, validPayPeriod, validTaxParts,
 } from './geminiService';
 
 // Réponse Gemini réussie minimale (sortie structurée JSON dans le premier « part »).
@@ -198,5 +198,39 @@ describe('askGeminiWithSearch', () => {
     expect(JSON.parse(bodies[0]).tools).toEqual([{ google_search: {} }]);
     expect(await askGeminiWithSearch('k', 'question', 1000, false, { retryDelaysMs: [0] })).toBe('Sans recherche');
     expect(JSON.parse(bodies[2]).tools).toBeUndefined();
+  });
+});
+
+describe('extractTaxNotice : solde de l\'avis', () => {
+  const now = new Date(2026, 8, 20);
+  it('reste à payer et remboursement, avec date facultative', () => {
+    expect(sanitizeTaxNotice({ balanceKind: 'A_PAYER', balanceAmount: 320.456, balanceDate: '2026-12-15' }, now).balance).toEqual({ kind: 'due', amount: 320.46, date: '2026-12-15' });
+    expect(sanitizeTaxNotice({ balanceKind: 'REMBOURSEMENT', balanceAmount: 150 }, now).balance).toEqual({ kind: 'refund', amount: 150 });
+  });
+  it('nature inconnue, montant nul ou négatif, date impossible : solde ou date écartés', () => {
+    expect(sanitizeTaxNotice({ balanceKind: 'NUL', balanceAmount: 10 }, now).balance).toBeUndefined();
+    expect(sanitizeTaxNotice({ balanceKind: 'A_PAYER', balanceAmount: 0 }, now).balance).toBeUndefined();
+    expect(sanitizeTaxNotice({ balanceKind: 'A_PAYER', balanceAmount: -5 }, now).balance).toBeUndefined();
+    expect(sanitizeTaxNotice({ balanceKind: 'A_PAYER', balanceAmount: '320' }, now).balance).toBeUndefined();
+    expect(sanitizeTaxNotice({ balanceKind: 'A_PAYER', balanceAmount: 5, balanceDate: '2026-02-31' }, now).balance).toEqual({ kind: 'due', amount: 5 });
+    expect(sanitizeTaxNotice({ balanceKind: 'A_PAYER', balanceAmount: 5, balanceDate: '1999-01-01' }, now).balance).toEqual({ kind: 'due', amount: 5 });
+  });
+});
+
+describe('extractAnnualStatement', () => {
+  it('succès : valeurs arrondies', async () => {
+    stubFetch([ok({ year: 2026, valueAtYearEnd: 5230.456, deposits: 1200, rate: 2.6, interest: 130.5 })]);
+    expect(await extractAnnualStatement('k', 'b64', 'application/pdf', NO_WAIT)).toEqual({ year: 2026, valueAtYearEnd: 5230.46, deposits: 1200, rate: 2.6, interest: 130.5 });
+  });
+  it('réponse incohérente : textes, négatifs et aberrations écartés', () => {
+    const r = sanitizeAnnualStatement({ year: 2101, valueAtYearEnd: '5 000', deposits: -3, rate: 450, interest: 1e12 }, new Date(2027, 0, 10));
+    expect(r).toEqual({ year: undefined, valueAtYearEnd: undefined, deposits: undefined, rate: undefined, interest: undefined });
+  });
+  it('échec réseau, clé absente et réponse illisible', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('Failed to fetch'); }));
+    await expect(extractAnnualStatement('k', 'b64', 'application/pdf', NO_WAIT)).rejects.toBeInstanceOf(TypeError);
+    expect((await extractAnnualStatement('', 'b64', 'application/pdf').catch(e => e)).code).toBe('AUTH');
+    stubFetch([okParts([{ text: '{' }])]);
+    expect((await extractAnnualStatement('k', 'b64', 'application/pdf', NO_WAIT).catch(e => e)).message).toBe('RÉPONSE_GEMINI_ILLISIBLE');
   });
 });

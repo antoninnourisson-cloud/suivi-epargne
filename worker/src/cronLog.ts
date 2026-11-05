@@ -10,7 +10,14 @@ export type CronName = 'daily' | 'fiscal-watch';
 /** Catégorie d'erreur : lecture Drive, envoi de notification, jeton Google, veille, autre. */
 export type CronErrorCategory = 'drive' | 'notification' | 'token' | 'watch' | 'other';
 
-export interface CronLogEntry { at: string; cron: CronName; ok: boolean; errors?: CronErrorCategory[] }
+/** Envois de notifications d'un passage : tentés, reçus (2xx), refusés ou en erreur. Les appareils disparus (404/410) ne comptent dans aucun des deux. */
+export interface NotificationTally { attempted: number; delivered: number; failed: number }
+
+export interface CronLogEntry {
+  at: string; cron: CronName; ok: boolean; errors?: CronErrorCategory[];
+  /** Passage quotidien seulement ; absent des passages d'avant le suivi des envois. */
+  notifications?: NotificationTally;
+}
 export interface FiscalWatchHealth { lastSuccessAt: string | null; lastFailureAt: string | null; ok: boolean | null }
 
 export const CRON_LOG_KEY = 'health:cron-log';
@@ -36,6 +43,19 @@ export const categorizeCronError = (e: unknown): CronErrorCategory => {
 export class CronErrors {
   readonly messages: string[] = [];
   private readonly found = new Set<CronErrorCategory>();
+  /**
+   * Envois de notifications du passage. Un envoi refusé n'est PAS une erreur de la tâche
+   * (`count`, donc `ok`, n'en tient pas compte) : un échec isolé ne doit pas alerter. Il est
+   * compté ici, publié dans /status, et la surveillance décide (monitor.yml).
+   */
+  readonly notifications: NotificationTally = { attempted: 0, delivered: 0, failed: 0 };
+  /** Ajoute le bilan d'un envoi groupé (deliver). */
+  addNotifications(t: NotificationTally): void {
+    this.notifications.attempted += t.attempted;
+    this.notifications.delivered += t.delivered;
+    this.notifications.failed += t.failed;
+    if (t.failed > 0) this.found.add('notification');
+  }
   add(e: unknown): void {
     this.messages.push(e instanceof Error ? e.message : String(e));
     this.found.add(categorizeCronError(e));
@@ -53,9 +73,17 @@ export const readCronLog = async (store: KVNamespace): Promise<CronLogEntry[]> =
   return Array.isArray(raw) ? raw.filter(isEntry).slice(0, CRON_LOG_SIZE) : [];
 };
 
+const count = (n: unknown): number => (typeof n === 'number' && Number.isFinite(n) && n >= 0 ? Math.floor(n) : 0);
+const cleanTally = (t: NotificationTally): NotificationTally =>
+  ({ attempted: count(t.attempted), delivered: count(t.delivered), failed: count(t.failed) });
+
 /** Ajoute un passage en tête de l'historique, borné à CRON_LOG_SIZE entrées. */
 export const appendCronLog = async (store: KVNamespace, entry: CronLogEntry): Promise<void> => {
-  const clean: CronLogEntry = { at: entry.at, cron: entry.cron, ok: entry.ok, ...(!entry.ok && entry.errors?.length ? { errors: entry.errors } : {}) };
+  const clean: CronLogEntry = {
+    at: entry.at, cron: entry.cron, ok: entry.ok,
+    ...(entry.errors?.length && (!entry.ok || entry.notifications?.failed) ? { errors: entry.errors } : {}),
+    ...(entry.notifications ? { notifications: cleanTally(entry.notifications) } : {}),
+  };
   const log = [clean, ...(await readCronLog(store))].slice(0, CRON_LOG_SIZE);
   await store.put(CRON_LOG_KEY, JSON.stringify(log));
 };

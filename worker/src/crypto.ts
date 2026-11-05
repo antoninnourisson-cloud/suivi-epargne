@@ -59,9 +59,34 @@ export const encryptString = async (plaintext: string, keyB64url: string): Promi
   return b64urlEncode(concatBytes(iv, ct));
 };
 
+/** Texte chiffré illisible avec la clé essayée (mauvaise clé, texte tronqué ou altéré). */
+export class DecryptError extends Error {
+  constructor() { super('DECRYPT_FAILED'); this.name = 'DecryptError'; }
+}
+
 export const decryptString = async (payload: string, keyB64url: string): Promise<string> => {
   const key = await importAesKey(keyB64url);
-  const bytes = b64urlDecode(payload);
-  const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: bytes.slice(0, 12) }, key, bytes.slice(12));
-  return td.decode(pt);
+  try {
+    const bytes = b64urlDecode(payload);
+    if (bytes.length < 13) throw new DecryptError();
+    const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: bytes.slice(0, 12) }, key, bytes.slice(12));
+    return td.decode(pt);
+  } catch { throw new DecryptError(); }
+};
+
+/**
+ * Déchiffre avec la clé courante, puis, si elle échoue, avec l'ancienne (ENCRYPTION_KEY_PREVIOUS,
+ * le temps d'un changement de clé). `usedPrevious` : l'appelant peut réécrire la valeur avec la
+ * clé courante. Lève DecryptError si aucune des deux ne convient ; une clé mal formée (config)
+ * lève une autre erreur, qui n'est pas prise pour un jeton perdu.
+ */
+export const decryptWithFallback = async (
+  payload: string, currentKey: string, previousKey?: string,
+): Promise<{ plaintext: string; usedPrevious: boolean }> => {
+  try {
+    return { plaintext: await decryptString(payload, currentKey), usedPrevious: false };
+  } catch (e) {
+    if (!(e instanceof DecryptError) || !previousKey) throw e;
+  }
+  return { plaintext: await decryptString(payload, previousKey), usedPrevious: true };
 };

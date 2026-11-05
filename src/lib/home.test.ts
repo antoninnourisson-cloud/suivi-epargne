@@ -500,3 +500,60 @@ describe('liste « À faire »', () => {
     expect(buildHomeTodos(base({ backupProblem: { kind: 'stale', days: 34, never: false }, can: { ...can, openSettings: false } }))).toEqual([]);
   });
 });
+
+describe("liste « À faire » : avis d'impôt et anniversaire fiscal", () => {
+  const can = { navigate: true, recordRecurring: true, deleteAccount: true, updateFiscalConfig: true, updateAccounts: true, openSettings: true, acceptPayRaise: true, dismissPayRaise: true, exportData: true };
+  const base = (over: Partial<HomeTodoInput> = {}): HomeTodoInput => ({
+    now: new Date(2026, 7, 10), accounts: [], fiscalConfig: fiscal, can,
+    daysSinceUpdate: null, dueRecurring: [], lepTimeline: null, staleRates: null, dismissedRateRevision: null, ratesEditorOpen: false,
+    parentalYearEnd: null, inactiveEmpty: [], fiscalReview: { annualCheckDue: false }, taxReturnAlert: null, taxReturnFiled: null,
+    payRaise: null, avRatesDue: [], ceilingAlerts: [], lastExportAt: '2026-08-01', alerts: [], emergency: null, ...over,
+  });
+  const notice = (over: Partial<HomeTodoInput> = {}) => buildHomeTodos(base(over)).find(t => t.key.startsWith('tax-notice'));
+
+  it("avis d'impôt : de début août à fin septembre, ouvre la lecture de l'avis (comme « Importer mon avis »)", () => {
+    const t = notice()!;
+    expect(t.key).toBe('tax-notice-2026');
+    expect(t.text).toBe("Votre avis d'impôt est arrivé ?");
+    expect(t.primary).toEqual({ label: 'Importer mon avis', action: { type: 'navigate', view: 'settings' } });
+    expect(notice({ now: new Date(2026, 7, 1) })).toBeDefined();
+    expect(notice({ now: new Date(2026, 8, 30) })).toBeDefined();
+  });
+  it("avis d'impôt : rien avant août, ni à partir d'octobre", () => {
+    expect(notice({ now: new Date(2026, 6, 31) })).toBeUndefined();
+    expect(notice({ now: new Date(2026, 9, 1) })).toBeUndefined();
+  });
+  it("avis d'impôt : disparaît dès que le revenu fiscal de référence de l'année de revenus est saisi", () => {
+    expect(notice({ rfrByYear: { '2025': 18000 } })).toBeUndefined();
+    expect(notice({ rfrByYear: { '2024': 18000 } })).toBeDefined();
+    const lepTimeline = { ceiling: 30000, years: [{ year: 2025, rfr: 18000, source: 'avis' as const, over: false }], status: 'ok' as const, estimated: false };
+    expect(notice({ lepTimeline })).toBeUndefined();
+    const estimated = { ...lepTimeline, years: [{ year: 2025, rfr: 18000, source: 'fiches' as const, over: false }] };
+    expect(notice({ lepTimeline: estimated })).toBeDefined();
+  });
+
+  const pea = acc('pea', AccountType.PEA, 5000, { name: 'PEA Bourse', openingDate: '2021-08-05' });
+  const av = acc('av', AccountType.ASSURANCE_VIE, 8000, { name: 'Contrat vie', openingDate: '2018-08-20' });
+  const anniversaries = (now: Date, accounts: SavingsAccount[]) => buildHomeTodos(base({ now, accounts })).filter(t => t.key.startsWith('fiscal-anniversary'));
+
+  it('anniversaire fiscal : le jour des 5 ans du PEA, avec ce que ça change', () => {
+    const [t] = anniversaries(new Date(2026, 7, 5), [pea]);
+    expect(t.key).toBe('fiscal-anniversary-pea-2026-08-05');
+    expect(t.text).toBe("Anniversaire fiscal : PEA Bourse a 5 ans aujourd'hui.");
+    expect(t.detail).toMatch(/^Ce que ça change : Gains sans impôt sur le revenu ; les prélèvements sociaux/);
+    expect(t.tone).toBe('info');
+  });
+  it('anniversaire fiscal : assurance vie à 8 ans, affichée 30 jours puis retirée', () => {
+    const [t] = anniversaries(new Date(2026, 7, 20), [av]);
+    expect(t.text).toContain('Contrat vie a 8 ans');
+    expect(t.detail).toContain('Impôt sur le revenu réduit');
+    expect(anniversaries(new Date(2026, 8, 18), [av])).toHaveLength(1); // 29e jour
+    expect(anniversaries(new Date(2026, 8, 19), [av])).toHaveLength(0); // 30e jour
+    expect(anniversaries(new Date(2026, 7, 19), [av])).toHaveLength(0); // la veille
+  });
+  it("anniversaire fiscal : pas pour un compte vide, sans date d'ouverture, ni pour un livret", () => {
+    expect(anniversaries(new Date(2026, 7, 5), [{ ...pea, totalAmount: 0, ownedAmount: 0 }])).toEqual([]);
+    expect(anniversaries(new Date(2026, 7, 5), [{ ...pea, openingDate: undefined }])).toEqual([]);
+    expect(anniversaries(new Date(2026, 7, 5), [acc('la', AccountType.LIVRET_A, 1000, { openingDate: '2021-08-05' })])).toEqual([]);
+  });
+});

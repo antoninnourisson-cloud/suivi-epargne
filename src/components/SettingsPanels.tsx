@@ -336,9 +336,9 @@ export const CloudBackupPanel: React.FC<{
                   : mode === 'check' ? 'Retapez-le depuis votre note. La vérification a lieu sur cet appareil ; le code n\'est pas envoyé.'
                   : 'Le déchiffrement a lieu sur cet appareil ; le code n\'est pas envoyé.'} />
               <div className="flex flex-wrap gap-2">
-                {mode === 'check' ? <Button onClick={checkCode} disabled={busy || !codeInput.trim()} isLoading={busy}>Vérifier ce code</Button>
+                {mode === 'check' ? <Button onClick={checkCode} disabled={busy || !codeInput.trim()} isLoading={busy} loadingLabel="Vérification…">Vérifier ce code</Button>
                   : mode === 'join'
-                  ? <Button onClick={join} disabled={busy || !codeInput.trim()} isLoading={busy}>Activer avec ce code</Button>
+                  ? <Button onClick={join} disabled={busy || !codeInput.trim()} isLoading={busy} loadingLabel="Activation…">Activer avec ce code</Button>
                   : <Button onClick={restore} disabled={busy || !codeInput.trim() || !restoreDate}>{busy ? 'Déchiffrement…' : 'Déchiffrer et restaurer'}</Button>}
                 <Button variant="text" onClick={reset} disabled={busy}>Annuler</Button>
               </div>

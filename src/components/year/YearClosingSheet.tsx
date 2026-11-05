@@ -7,8 +7,8 @@
 // Un seul « Enregistrer » pour toutes ces saisies (une commande, un seul « Annuler »). Les autres
 // étapes (restitution, « Votre année », déclaration, paramètres fiscaux, archive, clôture)
 // gardent leurs boutons, dans l'ordre de la liste. Calculs dans lib/yearClosingSheet.
-import React, { useMemo, useState } from 'react';
-import { CalendarCheck, Check, CheckCircle2, Circle, X } from 'lucide-react';
+import React, { useMemo, useRef, useState } from 'react';
+import { CalendarCheck, Check, CheckCircle2, Circle, Loader2, ScanText, X } from 'lucide-react';
 import type { FiscalConfig, GlobalAppData } from '../../types';
 import type { View } from '../../navigation';
 import {
@@ -16,7 +16,7 @@ import {
   type YearClosingAction, type YearClosingButton, type YearClosingStep,
 } from '../../lib/yearClosing';
 import {
-  buildClosingSheet, closingSheetInput, creditedText, interestGap, readGoal, type ClosingDrafts, type ClosingSheetModel,
+  buildClosingSheet, closingSheetInput, creditedText, interestGap, readGoal, type ClosingDrafts, type ClosingSheetModel, type ClosingValueLine,
 } from '../../lib/yearClosingSheet';
 import type { YearClosingInput } from '../../lib/commands';
 import { applyTaxScale, findFiscalReview } from '../../lib/finance';
@@ -24,6 +24,8 @@ import { formatISODay } from '../../lib/dates';
 import { formatEUR, formatRate, toInputAmount } from '../../lib/format';
 import { parseFrenchNumber } from '../../lib/numbers';
 import { downloadCsv, downloadJSON } from '../../services/fileDownload';
+import { extractAnnualStatement, fileToBase64 } from '../../services/geminiService';
+import { checkAnnualStatement } from '../../lib/annualStatement';
 import { revealElementById } from '../revealElement';
 import { Modal } from '../Modal';
 import { Button, IconButton, TextField } from '../ui';
@@ -45,6 +47,8 @@ export interface YearClosingSheetProps {
   getArchiveData: () => GlobalAppData;
   confirm: (title: string, message: string, onConfirm: () => void, danger?: boolean, confirmLabel?: string) => void;
   onClose: () => void;
+  /** Clé Gemini de l'appareil : sans elle, pas de bouton « Lire le relevé ». Par défaut, celle des réglages. */
+  geminiApiKey?: string;
   /** Date du jour (tests). */
   now?: Date;
 }
@@ -74,7 +78,7 @@ const Line: React.FC<{ name: string; done: boolean; status?: string; children?: 
 );
 
 export const YearClosingSheet: React.FC<YearClosingSheetProps> = ({
-  year, data, onRecord, onPatchConfig, onUpdateFiscalConfig, onNavigate, getArchiveData, confirm, onClose, now: nowProp,
+  year, data, onRecord, onPatchConfig, onUpdateFiscalConfig, onNavigate, getArchiveData, confirm, onClose, geminiApiKey, now: nowProp,
 }) => {
   const now = useMemo(() => nowProp ?? new Date(), [nowProp]);
   const today = formatISODay(now);
@@ -85,6 +89,12 @@ export const YearClosingSheet: React.FC<YearClosingSheetProps> = ({
   const [drafts, setDrafts] = useState<ClosingDrafts>(EMPTY);
   const [goalText, setGoalText] = useState(() => String(model.goal.current ?? model.goal.suggested));
   const [error, setError] = useState<string | null>(null);
+  // Lecture d'un relevé par Gemini : compte en cours, et ce qui a été lu (résumé + avertissements) par compte.
+  const apiKey = geminiApiKey ?? data.config?.geminiApiKey ?? '';
+  const [reading, setReading] = useState<string | null>(null);
+  const [readNotes, setReadNotes] = useState<Record<string, { summary: string; warnings: string[] }>>({});
+  const fileRef = useRef<HTMLInputElement>(null);
+  const readFor = useRef<ClosingValueLine | null>(null);
 
   const edit = <K extends 'credited' | 'values' | 'deposits' | 'rates'>(field: K, id: string, value: string) => {
     setError(null);
@@ -153,6 +163,37 @@ export const YearClosingSheet: React.FC<YearClosingSheetProps> = ({
   const button = (b: YearClosingButton, variant: 'tonal' | 'outlined' | 'text' | 'filled', key?: string) => (
     <Button key={key ?? b.label} variant={variant} className="max-sm:h-12" onClick={() => run(b.action)}>{b.label}</Button>
   );
+
+  /** Lit le relevé choisi et préremplit les champs du compte ; l'utilisateur relit et enregistre comme d'habitude. */
+  const readStatement = async (line: ClosingValueLine, file: File) => {
+    const note = (summary: string, warnings: string[]) => setReadNotes(n => ({ ...n, [line.accountId]: { summary, warnings } }));
+    if (file.size > 15 * 1024 * 1024) { note('', ['Fichier trop lourd (15 Mo au plus).']); return; }
+    setReading(line.accountId);
+    try {
+      const read = await extractAnnualStatement(apiKey, await fileToBase64(file), file.type || 'application/pdf');
+      const { fill, warnings } = checkAnnualStatement(read, year);
+      const said: string[] = [];
+      if (fill.valueAtYearEnd !== undefined) { edit('values', line.accountId, toInputAmount(fill.valueAtYearEnd)); said.push(`valeur ${eur2(fill.valueAtYearEnd)}`); }
+      if (fill.deposits !== undefined && line.depositsOfYear !== undefined) { edit('deposits', line.accountId, toInputAmount(fill.deposits)); said.push(`versements ${eur2(fill.deposits)}`); }
+      if (fill.rate !== undefined && line.rate && !line.rate.done) { edit('rates', line.accountId, rateText(fill.rate)); said.push(`taux ${formatRate(fill.rate)}`); }
+      if (fill.interest !== undefined) {
+        const due = model.interest.find(i => i.accountId === line.accountId && !i.done);
+        if (due) edit('credited', line.accountId, toInputAmount(fill.interest));
+        said.push(`intérêts ${eur2(fill.interest)}${due ? '' : ' (non reportés : à noter si besoin)'}`);
+      }
+      note(said.length ? `Lu sur le relevé : ${said.join(', ')}. Vérifiez avant d'enregistrer.` : '', warnings);
+    } catch (err) {
+      note('', [err instanceof Error ? `Lecture impossible : ${err.message.slice(0, 160)}` : 'Lecture impossible.']);
+    } finally {
+      setReading(null);
+    }
+  };
+  const onStatementFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    const line = readFor.current;
+    if (file && line) void readStatement(line, file);
+  };
 
   const creditedOf = (id: string, computed: number) => drafts.credited[id] ?? creditedText(computed);
   /** Solde au 31 décembre proposé : celui de Pécule, plus les intérêts crédités ce jour-là. */
@@ -223,6 +264,21 @@ export const YearClosingSheet: React.FC<YearClosingSheetProps> = ({
                 value={drafts.deposits[l.accountId] ?? toInputAmount(l.depositsOfYear)} onChange={e => edit('deposits', l.accountId, e.target.value)} />
             )}
           </div>
+          {apiKey && (
+            <div>
+              <Button variant="text" className="-ml-3 max-sm:h-12" disabled={reading !== null} aria-label={`Lire le relevé, ${l.name}`}
+                onClick={() => { readFor.current = l; fileRef.current?.click(); }}>
+                {reading === l.accountId ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> : <ScanText className="w-4 h-4" aria-hidden="true" />}
+                {reading === l.accountId ? 'Lecture du relevé…' : 'Lire le relevé'}
+              </Button>
+            </div>
+          )}
+          {readNotes[l.accountId] && (
+            <div aria-live="polite" data-read-note={l.accountId} className="space-y-1">
+              {readNotes[l.accountId].summary && <p className="text-sm text-on-surface">{readNotes[l.accountId].summary}</p>}
+              {readNotes[l.accountId].warnings.map(w => <p key={w} role="alert" className="text-sm font-medium text-error">{w}</p>)}
+            </div>
+          )}
           {l.rate && (l.rate.done ? (
             <p className="text-sm text-on-surface-variant flex items-center gap-2"><StepStatus done small /> Taux servi {year} vérifié</p>
           ) : (
@@ -324,6 +380,7 @@ export const YearClosingSheet: React.FC<YearClosingSheetProps> = ({
 
   return (
     <Modal open onClose={onClose} label={title} variant="page" closeOnScrim={false} className="sm:max-w-xl p-0">
+      {apiKey && <input ref={fileRef} type="file" accept="application/pdf,image/*" onChange={onStatementFile} className="hidden" tabIndex={-1} aria-hidden="true" data-statement-input />}
       <div className="px-4 sm:px-6 pt-4 sm:pt-6">
         <div className="flex items-start justify-between gap-2">
           <h2 className="text-xl font-normal text-on-surface flex items-center gap-2">

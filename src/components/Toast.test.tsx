@@ -4,7 +4,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import React, { useState } from 'react';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { ToastContext, useUndoableRemove, UNDO_TOAST_KEYBOARD_MS, UNDO_TOAST_MS, type ToastItem } from './Toast';
+import { ToastContainer, ToastContext, toastDurationMs, useUndoableRemove, UNDO_TOAST_KEYBOARD_MS, UNDO_TOAST_MS, type ToastItem } from './Toast';
 
 afterEach(cleanup);
 
@@ -50,5 +50,50 @@ describe('useUndoableRemove', () => {
     fireEvent.pointerDown(window);
     fireEvent.click(screen.getByRole('button', { name: 'Supprimer C' }));
     expect(toasts[1].durationMs).toBe(UNDO_TOAST_MS);
+  });
+});
+
+describe('toastDurationMs', () => {
+  it('une confirmation courte garde 3 s, un message avec action 10 s', () => {
+    expect(toastDurationMs({ message: 'Enregistré', kind: 'success' })).toBe(3000);
+    expect(toastDurationMs({ message: 'Supprimé', action: { label: 'Annuler', onClick: () => {} } })).toBe(10_000);
+  });
+  it('une erreur reste 10 s au moins, même si une durée plus courte est demandée', () => {
+    expect(toastDurationMs({ message: 'Échec', kind: 'error' })).toBe(10_000);
+    expect(toastDurationMs({ message: 'Échec', kind: 'error', durationMs: 3000 })).toBe(10_000);
+    expect(toastDurationMs({ message: 'Échec', kind: 'error', durationMs: 30_000 })).toBe(30_000);
+  });
+  it('une erreur de plus de 80 caractères reste jusqu’à fermeture', () => {
+    expect(toastDurationMs({ message: 'a'.repeat(80), kind: 'error' })).toBe(10_000);
+    expect(toastDurationMs({ message: 'a'.repeat(81), kind: 'error' })).toBeNull();
+  });
+});
+
+describe('ToastContainer : durée réelle', () => {
+  afterEach(() => vi.useRealTimers());
+  const mount = (t: Omit<ToastItem, 'id'>) => {
+    vi.useFakeTimers();
+    const onDismiss = vi.fn();
+    render(<ToastContainer toasts={[{ ...t, id: 't1' }]} onDismiss={onDismiss} />);
+    return onDismiss;
+  };
+  it('confirmation courte : fermée après 3 s', () => {
+    const onDismiss = mount({ message: 'Enregistré', kind: 'success' });
+    act(() => { vi.advanceTimersByTime(2999); });
+    expect(onDismiss).not.toHaveBeenCalled();
+    act(() => { vi.advanceTimersByTime(2); });
+    expect(onDismiss).toHaveBeenCalledWith('t1');
+  });
+  it('erreur : toujours là après 9 s, fermée après 10 s', () => {
+    const onDismiss = mount({ message: 'Échec de l’envoi', kind: 'error' });
+    act(() => { vi.advanceTimersByTime(9000); });
+    expect(onDismiss).not.toHaveBeenCalled();
+    act(() => { vi.advanceTimersByTime(1100); });
+    expect(onDismiss).toHaveBeenCalledWith('t1');
+  });
+  it('erreur longue : jamais fermée toute seule', () => {
+    const onDismiss = mount({ message: 'x'.repeat(120), kind: 'error' });
+    act(() => { vi.advanceTimersByTime(10 * 60_000); });
+    expect(onDismiss).not.toHaveBeenCalled();
   });
 });

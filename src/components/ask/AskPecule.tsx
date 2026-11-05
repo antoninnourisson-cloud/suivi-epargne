@@ -11,14 +11,34 @@ import { askDateLabel, askPecule, describeAskError, ASK_QUESTION_MAX, type ChatT
 import { Modal } from '../Modal';
 import { Button, Chip, IconButton, fieldClass } from '../ui';
 
-export const ASK_SUGGESTIONS = [
+/** Quatre questions de toute l'année ; les deux dernières places suivent le mois (askSuggestions). */
+const BASE_SUGGESTIONS = [
   'Combien ai-je épargné ce trimestre ?',
   'Quel compte me rapporte le plus ?',
   'Où en est mon Livret A par rapport au plafond ?',
-  "Combien d'intérêts cette année ?",
   'Quels prélèvements arrivent dans les 30 prochains jours ?',
-  'Combien me coûtent mes abonnements par an ?',
 ];
+/** Le reste de l'année. */
+const USUAL_SUGGESTIONS = ["Combien d'intérêts cette année ?", 'Combien me coûtent mes abonnements par an ?'];
+
+/**
+ * Suggestions du moment. Chaque question trouve sa réponse dans le résumé (askSnapshot) :
+ * impôt estimé et revenu fiscal de référence, intérêts de l'année entière, épargne depuis le
+ * 1er janvier, épargne sur 12 mois, soldes de fin de mois.
+ * - avril à juin (déclaration de revenus) : impôt estimé, revenu fiscal de référence ;
+ * - novembre et décembre (fin d'année) : intérêts attendus, épargne depuis janvier ;
+ * - janvier (clôture de l'année) : épargne des 12 derniers mois, solde de fin décembre.
+ */
+export const askSuggestions = (today: Date = new Date()): string[] => {
+  const month = today.getMonth();
+  if (month >= 3 && month <= 5) return [...BASE_SUGGESTIONS, 'Quel impôt est estimé pour cette année ?', 'Quel revenu fiscal de référence est enregistré ?'];
+  if (month >= 10) return [...BASE_SUGGESTIONS, "Combien d'intérêts vais-je toucher d'ici la fin de l'année ?", 'Combien ai-je épargné depuis le 1er janvier ?'];
+  if (month === 0) return [...BASE_SUGGESTIONS, 'Combien ai-je épargné sur les 12 derniers mois ?', 'Quel était mon solde total fin décembre ?'];
+  return [...BASE_SUGGESTIONS, ...USUAL_SUGGESTIONS];
+};
+
+/** Les six suggestions du reste de l'année. */
+export const ASK_SUGGESTIONS = [...BASE_SUGGESTIONS, ...USUAL_SUGGESTIONS];
 
 export interface AskPeculeProps {
   data: GlobalAppData;
@@ -33,6 +53,8 @@ export interface AskPeculeProps {
 export const AskPecule: React.FC<AskPeculeProps> = ({ data, geminiApiKey, taxEstimate, monthPlan, onClose, onOpenSettings }) => {
   // Résumé figé à l'ouverture : toute la conversation porte sur la même photographie.
   const [snapshot] = useState(() => (geminiApiKey ? buildAskSnapshot(data, new Date(), { taxEstimate, monthPlan }) : null));
+  // Suggestions du mois, figées à l'ouverture comme le résumé.
+  const [suggestions] = useState(() => askSuggestions());
   const [turns, setTurns] = useState<ChatTurn[]>([]);
   const [question, setQuestion] = useState('');
   const [pending, setPending] = useState(false);
@@ -98,7 +120,7 @@ export const AskPecule: React.FC<AskPeculeProps> = ({ data, geminiApiKey, taxEst
               <div>
                 <p className="text-xs font-medium text-on-surface-variant mb-2">Suggestions</p>
                 <div className="flex flex-wrap gap-2">
-                  {ASK_SUGGESTIONS.map(s => (
+                  {suggestions.map(s => (
                     <Chip key={s} kind="suggestion" onClick={() => void ask(s)} className="max-w-full text-left h-auto! min-h-8 py-1.5 whitespace-normal">{s}</Chip>
                   ))}
                 </div>

@@ -58,7 +58,7 @@ export const RecoveryCodeCheck: React.FC<{
         </div>
         <p role="alert" className="mt-2 min-h-4 text-xs font-medium text-error">{error}</p>
         <div className="mt-2 flex flex-wrap gap-2">
-          <Button type="submit" disabled={busy || inputs.some(v => !v.trim())} isLoading={busy}>Vérifier et activer</Button>
+          <Button type="submit" disabled={busy || inputs.some(v => !v.trim())} isLoading={busy} loadingLabel="Vérification…">Vérifier et activer</Button>
           <Button type="button" variant="outlined" onClick={onShowAgain} disabled={busy}>Revoir le code</Button>
           <Button type="button" variant="text" onClick={onCancel} disabled={busy}>Annuler</Button>
         </div>

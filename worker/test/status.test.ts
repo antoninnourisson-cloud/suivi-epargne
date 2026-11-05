@@ -20,7 +20,7 @@ describe('GET /status', () => {
     const res = await status(makeEnv(await withSite(new MemoryKV())));
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
-      ok: true, cron: { lastRunAt: null, ok: null }, site: SITE,
+      ok: true, cron: { lastRunAt: null, ok: null }, site: SITE, notifications: null,
       fiscalWatch: { lastSuccessAt: null, lastFailureAt: null, ok: null }, history: [],
     });
   });
@@ -30,7 +30,7 @@ describe('GET /status', () => {
     await kv.put('health:cron', JSON.stringify({ lastRunAt: '2026-10-07T07:00:00.000Z', ok: false, error: 'détail interne', usersProcessed: 3 }));
     const body = await (await status(makeEnv(kv))).json();
     expect(body).toEqual({
-      ok: true, cron: { lastRunAt: '2026-10-07T07:00:00.000Z', ok: false }, site: SITE,
+      ok: true, cron: { lastRunAt: '2026-10-07T07:00:00.000Z', ok: false }, site: SITE, notifications: null,
       fiscalWatch: { lastSuccessAt: null, lastFailureAt: null, ok: null }, history: [],
     });
   });

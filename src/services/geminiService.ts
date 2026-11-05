@@ -13,10 +13,11 @@
 // ou hors des bornes de vraisemblance devient `undefined` (à saisir à la main), jamais NaN,
 // une chaîne vide ou un montant aberrant.
 // ================================================
-import { PayslipExtractedData } from '../types';
+import { PayslipExtractedData, TaxNoticeBalance } from '../types';
 import { round2 } from '../lib/money';
 import { DEFAULT_GEMINI_MODEL, getGeminiModelOverride } from './geminiModel';
 import { sanitizeStatement, type StatementData } from '../lib/statementImport';
+import type { AnnualStatementData } from '../lib/annualStatement';
 
 // Modèle par défaut et choix fait dans Paramètres : services/geminiModel.ts.
 const GEMINI_MODEL = DEFAULT_GEMINI_MODEL;
@@ -254,6 +255,7 @@ export interface TaxNoticeData {
   rfr?: number;          // revenu fiscal de référence
   parts?: number;        // nombre de parts
   netTax?: number;       // impôt net
+  balance?: TaxNoticeBalance; // reste à payer ou remboursement, tel qu'écrit sur l'avis
 }
 
 const TAX_NOTICE_SCHEMA = {
@@ -263,10 +265,13 @@ const TAX_NOTICE_SCHEMA = {
     rfr: { type: 'NUMBER', description: 'Revenu fiscal de référence, en euros' },
     parts: { type: 'NUMBER', description: 'Nombre de parts du foyer fiscal' },
     netTax: { type: 'NUMBER', description: "Impôt sur le revenu net à payer (ou 0), en euros" },
+    balanceKind: { type: 'STRING', enum: ['A_PAYER', 'REMBOURSEMENT', 'NUL'], description: "Solde écrit sur l'avis : A_PAYER (« reste à payer » / « montant à payer »), REMBOURSEMENT (« remboursement » / « restitution »), NUL (rien à payer ni à recevoir)" },
+    balanceAmount: { type: 'NUMBER', description: "Montant du solde (reste à payer ou remboursement), en euros, toujours positif, tel qu'écrit sur l'avis" },
+    balanceDate: { type: 'STRING', description: "Date écrite sur l'avis à laquelle la somme sera prélevée (reste à payer) ou versée (remboursement), au format AAAA-MM-JJ ; à omettre si l'avis n'en donne pas" },
   },
 };
 
-const TAX_NOTICE_PROMPT = `Ce document est un avis d'impôt sur le revenu français (ou un avis de situation déclarative). Relève l'année des revenus, le revenu fiscal de référence, le nombre de parts et l'impôt net. N'invente rien : omets un champ illisible ou absent.`;
+const TAX_NOTICE_PROMPT = `Ce document est un avis d'impôt sur le revenu français (ou un avis de situation déclarative). Relève l'année des revenus, le revenu fiscal de référence, le nombre de parts et l'impôt net. Relève aussi le solde : s'il reste à payer ou s'il y a un remboursement, son montant et la date de prélèvement ou de versement SI l'avis l'écrit (n'en déduis aucune, ne calcule aucun échéancier). N'invente rien : omets un champ illisible ou absent.`;
 
 /** Borne de vraisemblance d'un montant de l'avis (RFR, impôt) : au-delà, lecture aberrante. */
 const TAX_MAX_AMOUNT = 100_000_000;
@@ -283,17 +288,33 @@ export const validTaxParts = (v: unknown): number | undefined => {
   return n !== undefined && Math.abs(n * 4 - Math.round(n * 4)) < 1e-9 ? n : undefined;
 };
 
+/** Date « AAAA-MM-JJ » existante, d'une année dans [minYear, maxYear], sinon `undefined`. */
+const validIsoDay = (v: unknown, minYear: number, maxYear: number): string | undefined => {
+  const s = text(v, 10);
+  const m = s ? /^(\d{4})-(\d{2})-(\d{2})$/.exec(s) : null;
+  if (!s || !m) return undefined;
+  const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const dt = new Date(Date.UTC(y, mo - 1, d));
+  const real = dt.getUTCFullYear() === y && dt.getUTCMonth() === mo - 1 && dt.getUTCDate() === d;
+  return real && y >= minYear && y <= maxYear ? s : undefined;
+};
+
 /** Champs d'un avis d'imposition relus par Gemini, filtrés : ils alimentent l'éligibilité au LEP. */
 export const sanitizeTaxNotice = (parsed: Record<string, unknown>, now = new Date()): TaxNoticeData => {
   const year = finite(parsed.incomeYear);
   const rfr = inRange(parsed.rfr, 0, TAX_MAX_AMOUNT);
   const netTax = inRange(parsed.netTax, 0, TAX_MAX_AMOUNT);
+  const amount = inRange(parsed.balanceAmount, 0, TAX_MAX_AMOUNT);
+  const kind = parsed.balanceKind === 'A_PAYER' ? 'due' : parsed.balanceKind === 'REMBOURSEMENT' ? 'refund' : undefined;
+  const balanceDate = validIsoDay(parsed.balanceDate, now.getFullYear() - 1, now.getFullYear() + 1);
   return {
     // Année des revenus : entière, jamais dans le futur (un avis porte sur l'année passée).
     incomeYear: year !== undefined && Number.isInteger(year) && year >= 2000 && year <= now.getFullYear() ? year : undefined,
     rfr: rfr === undefined ? undefined : Math.round(rfr),
     parts: validTaxParts(parsed.parts),
     netTax: netTax === undefined ? undefined : round2(netTax),
+    // Solde : seulement une nature connue ET un montant positif ; la date reste facultative.
+    balance: kind && amount !== undefined && round2(amount) > 0 ? { kind, amount: round2(amount), ...(balanceDate ? { date: balanceDate } : {}) } : undefined,
   };
 };
 
@@ -302,6 +323,49 @@ export const extractTaxNotice = async (apiKey: string, base64Data: string, mimeT
   const answer = await generate(apiKey, documentRequest(TAX_NOTICE_PROMPT, base64Data, mimeType, TAX_NOTICE_SCHEMA),
     options.retryDelaysMs ?? [3_000, 6_000], options.requestTimeoutMs ?? 60_000);
   return sanitizeTaxNotice(parseObject(answer));
+};
+
+// --- Relevé annuel d'un placement (Clôture de l'année) ---
+
+const ANNUAL_STATEMENT_SCHEMA = {
+  type: 'OBJECT',
+  properties: {
+    year: { type: 'INTEGER', description: "Année du relevé (celle du 31 décembre de la valeur indiquée)" },
+    valueAtYearEnd: { type: 'NUMBER', description: 'Valeur du contrat ou du compte au 31 décembre, en euros' },
+    deposits: { type: 'NUMBER', description: "Total des versements de l'année (cotisations, dépôts), en euros, hors intérêts" },
+    rate: { type: 'NUMBER', description: "Taux de rendement servi sur l'année, en pourcentage (2,6 pour 2,6 %)" },
+    interest: { type: 'NUMBER', description: "Intérêts ou gains crédités sur l'année, en euros" },
+  },
+};
+
+const ANNUAL_STATEMENT_PROMPT = `Ce document est le relevé annuel d'un placement français (assurance vie, PEA, compte-titres, livret). Relève : l'année du relevé, la valeur au 31 décembre, le total des versements de l'année, le taux servi sur l'année (en pourcentage) et les intérêts ou gains de l'année. N'invente rien et ne calcule rien : omets un champ absent ou illisible.`;
+
+/** Borne de vraisemblance d'un montant du relevé annuel (garde-fou contre une lecture aberrante). */
+const ANNUAL_MAX_AMOUNT = 100_000_000;
+
+/**
+ * Champs d'un relevé annuel relus par Gemini, filtrés : nombres finis seulement, montants
+ * positifs ou nuls. Le taux est gardé jusqu'à 100 % : c'est le contrôle croisé (lib/annualStatement)
+ * qui signale un taux hors de 0 à 10 %, pour que la feuille puisse le dire.
+ */
+export const sanitizeAnnualStatement = (parsed: Record<string, unknown>, now = new Date()): AnnualStatementData => {
+  const year = finite(parsed.year);
+  const money = (v: unknown) => { const n = inRange(v, 0, ANNUAL_MAX_AMOUNT); return n === undefined ? undefined : round2(n); };
+  const rate = inRange(parsed.rate, -100, 100);
+  return {
+    year: year !== undefined && Number.isInteger(year) && year >= 2000 && year <= now.getFullYear() ? year : undefined,
+    valueAtYearEnd: (() => { const n = finite(parsed.valueAtYearEnd); return n !== undefined && Math.abs(n) <= ANNUAL_MAX_AMOUNT ? round2(n) : undefined; })(),
+    deposits: money(parsed.deposits),
+    rate: rate === undefined ? undefined : Math.round(rate * 1000) / 1000,
+    interest: money(parsed.interest),
+  };
+};
+
+/** Lit le relevé annuel d'un placement (PDF ou photo). Rien n'est enregistré ici : la feuille de clôture préremplit, l'utilisateur valide. */
+export const extractAnnualStatement = async (apiKey: string, base64Data: string, mimeType: string, options: ExtractOptions = {}): Promise<AnnualStatementData> => {
+  const answer = await generate(apiKey, documentRequest(ANNUAL_STATEMENT_PROMPT, base64Data, mimeType, ANNUAL_STATEMENT_SCHEMA),
+    options.retryDelaysMs ?? [2_000, 6_000], options.requestTimeoutMs ?? 90_000);
+  return sanitizeAnnualStatement(parseObject(answer));
 };
 
 // --- Relevés bancaires ---

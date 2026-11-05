@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { setDiscreetAmounts } from '../../lib/format';
+import { cleanup, render, screen, fireEvent } from '@testing-library/react';
 import { useState } from 'react';
 import { DataTable, DeltaBadge, InTabPanelContext, MoneyText, PageHeader, SegmentedButton, Tabs, TextField, sparkPath } from './index';
 
@@ -23,6 +24,26 @@ describe('MoneyText et DeltaBadge', () => {
   it('annonce la variation en toutes lettres', () => {
     render(<DeltaBadge value={120} period="sur 30 jours" />);
     expect(screen.getByText('en hausse de 120 € sur 30 jours')).toBeTruthy();
+  });
+});
+
+describe('MoneyText en mode discret', () => {
+  afterEach(() => { cleanup(); setDiscreetAmounts(false); });
+  it('points cachés aux lecteurs d’écran, « montant masqué » à la place', () => {
+    setDiscreetAmounts(true);
+    const { container } = render(<MoneyText value={250} />);
+    const dots = screen.getByText(/••••/);
+    expect(dots.getAttribute('aria-hidden')).toBe('true');
+    const sr = screen.getByText('montant masqué');
+    expect(sr.className).toContain('sr-only');
+    expect(sr.getAttribute('aria-hidden')).toBeNull();
+    expect(container.textContent).not.toMatch(/250/);
+  });
+  it('hors mode discret : le montant seul, sans texte caché', () => {
+    setDiscreetAmounts(false);
+    render(<MoneyText value={250} />);
+    expect(screen.getByText(/250/)).toBeTruthy();
+    expect(screen.queryByText('montant masqué')).toBeNull();
   });
 });
 

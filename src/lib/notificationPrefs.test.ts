@@ -26,3 +26,13 @@ describe('préférences de notifications', () => {
     expect(isReminderEnabled('recap:2026-09', { recap: false })).toBe(false);
   });
 });
+
+describe('rappels fiscaux', () => {
+  it('déclaration datée, avis d’impôt et anniversaire fiscal suivent le réglage « Impôts »', () => {
+    for (const key of ['tax-return:2025:may', 'tax-return:2025:deadline', 'tax-notice:2026', 'fiscal-anniversary:pea1']) {
+      expect(categoryOfKey(key)?.id).toBe('tax');
+      expect(isReminderEnabled(key, { tax: false })).toBe(false);
+      expect(isReminderEnabled(key, {})).toBe(true);
+    }
+  });
+});

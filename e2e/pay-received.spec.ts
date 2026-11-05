@@ -46,7 +46,7 @@ test('déclarer la paie depuis le Pilotage, corriger une ligne, enregistrer puis
   await expect(dialog.getByRole('heading', { name: 'Que faire de votre paie' })).toBeFocused();
   await dialog.getByRole('checkbox', { name: /^Livret A/ }).check();
   await dialog.getByRole('textbox', { name: 'Montant fait pour Livret A' }).fill('123');
-  await dialog.getByRole('button', { name: 'Enregistrer', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Enregistrer les cases cochées' }).click();
   await expect(dialog).toBeHidden();
 
   // Carte « Ma paie » : la paie reçue, le reste à faire (sans la ligne Plaisir), la ligne faite dans le détail.
@@ -95,7 +95,7 @@ test('compte courant : solde prérempli, reste du mois dernier à répartir, mon
   await expect(livret).toHaveValue(advised);
   await expect(dialog.getByRole('button', { name: 'Rétablir les montants conseillés' })).toHaveCount(0);
 
-  await dialog.getByRole('button', { name: 'Tout est fait comme conseillé' }).click();
+  await dialog.getByRole('button', { name: 'Tout marquer fait' }).click();
   await expect(dialog).toBeHidden();
   // « Tout est fait » note aussi ce qui reste sur le compte courant ; un seul « Annuler » défait tout.
   const status = page.getByRole('status').filter({ hasText: 'Compte courant :' });
@@ -118,7 +118,7 @@ test('lien direct : prime placée en entier, « Tout est fait », et l’Accueil
   await expect(dialog.getByText(/dont prime 500\s€/).first()).toBeVisible();
   // L'épargne conseillée : le sous-total du groupe Épargne (prime et reste du compte courant compris).
   const toSave = euros((await dialog.getByRole('heading', { level: 3, name: /^Épargne\s*\d/ }).textContent())!);
-  await dialog.getByRole('button', { name: 'Tout est fait comme conseillé' }).click();
+  await dialog.getByRole('button', { name: 'Tout marquer fait' }).click();
   await expect(dialog).toBeHidden();
 
   // Carte « Ma paie » : tout est fait ; ce qui est placé (prime comprise, placée en entier) vaut l'épargne du rituel.
@@ -146,7 +146,7 @@ test('fiche de paie saisie dans le rituel : son net payé devient le montant, et
   await expect(dialog.getByLabel('Montant reçu')).toHaveValue('2600,40');
   await expect(slip).toContainText('Net payé');
   await dialog.getByRole('button', { name: 'Voir la répartition' }).click();
-  await dialog.getByRole('button', { name: 'Enregistrer', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Enregistrer les cases cochées' }).click();
   await expect(dialog).toBeHidden();
   await expect(card(page).getByText(/^Paie reçue le .* : 2\s600,40\s€/)).toBeVisible();
 
@@ -165,7 +165,7 @@ test("Accueil : la routine et la carte du mois d'épargne ouvrent le rituel, pui
 
   const dialog = await ritual(page);
   await dialog.getByRole('button', { name: 'Voir la répartition' }).click();
-  await dialog.getByRole('button', { name: 'Tout est fait comme conseillé' }).click();
+  await dialog.getByRole('button', { name: 'Tout marquer fait' }).click();
   await expect(dialog).toBeHidden();
 
   // De retour sur l'Accueil : plus d'invitation, l'étape « Paie reçue et répartie » est faite.
@@ -186,7 +186,7 @@ test('autre argent reçu : la nature d’abord, un cadeau placé (avec la questi
   await card(page).getByRole('button', { name: "J'ai reçu ma paie" }).click();
   const pay = await ritual(page);
   await pay.getByRole('button', { name: 'Voir la répartition' }).click();
-  await pay.getByRole('button', { name: 'Tout est fait comme conseillé' }).click();
+  await pay.getByRole('button', { name: 'Tout marquer fait' }).click();
   await expect(pay).toBeHidden();
 
   /** « Autre argent reçu » : la feuille du versement en plus, bilan éventuel passé. */
@@ -213,7 +213,7 @@ test('autre argent reçu : la nature d’abord, un cadeau placé (avec la questi
   await dialog.getByRole('button', { name: 'Voir la répartition' }).click();
   await expect(dialog.getByRole('heading', { level: 2, name: 'Que faire de ce cadeau' })).toBeVisible();
   await expect(dialog.getByText(/^150\s€ reçus en plus : tout est placé$/)).toBeVisible();
-  await dialog.getByRole('button', { name: 'Tout est fait comme conseillé' }).click();
+  await dialog.getByRole('button', { name: 'Tout marquer fait' }).click();
   await expect(dialog).toBeHidden();
   await expect(page.getByRole('status').filter({ hasText: /Cadeau reçu|Argent reçu enregistré/ }).first()).toBeVisible();
 
@@ -224,7 +224,7 @@ test('autre argent reçu : la nature d’abord, un cadeau placé (avec la questi
   await dialog.getByRole('button', { name: 'Voir la répartition' }).click();
   await expect(dialog.getByRole('heading', { level: 2, name: 'Que faire de ce remboursement' })).toBeVisible();
   await expect(dialog.getByText(/^Rien à placer : un remboursement/)).toBeVisible();
-  await dialog.getByRole('button', { name: 'Tout est fait comme conseillé' }).click();
+  await dialog.getByRole('button', { name: 'Tout marquer fait' }).click();
   await expect(dialog).toBeHidden();
 
   // L'historique montre la nature de chaque versement.

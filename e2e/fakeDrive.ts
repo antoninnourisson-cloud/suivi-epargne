@@ -42,6 +42,10 @@ export interface FakeDrive {
   failStatus: number;
   /** Drive refuse le jeton (401) ; le serveur refuse aussi d'en donner un nouveau. */
   sessionRevoked: boolean;
+  /** Le fichier de données n'existe plus (corbeille) : la liste est vide jusqu'à sa recréation. */
+  fileMissing: boolean;
+  /** Contenus envoyés pour CRÉER le fichier de données (recréation après une disparition). */
+  created: unknown[];
   /** Écriture d'un autre appareil : nouvelle révision en tête. */
   remoteWrite: (content: unknown) => void;
 }
@@ -55,6 +59,8 @@ export const installFakeDrive = async (page: Page, initial: unknown = DEMO_DATA,
     writes: [],
     failStatus: 0,
     sessionRevoked: false,
+    fileMissing: false,
+    created: [],
     remoteWrite(content) {
       const id = `r${this.revisions.length + 1}`;
       this.modifiedTime = new Date(Date.parse(this.modifiedTime) + 60_000).toISOString();
@@ -98,7 +104,17 @@ export const installFakeDrive = async (page: Page, initial: unknown = DEMO_DATA,
 
     // Copies mensuelles (fichiers à part) : liste vide, création acceptée.
     if (url.includes('suivi_epargne_backup_')) return json({ files: [] });
-    if (method === 'POST' && url.includes('/upload/drive/v3/files?uploadType=multipart')) return json({ id: `copie-${Date.now()}` });
+    if (method === 'POST' && url.includes('/upload/drive/v3/files?uploadType=multipart')) {
+      const body = req.postData() ?? '';
+      if (!body.includes('"name":"suivi_epargne.json"')) return json({ id: `copie-${Date.now()}` });
+      // Création du fichier de données : le contenu est la dernière partie JSON du formulaire.
+      const parts = [...body.matchAll(/Content-Type: application\/json\r?\n\r?\n([\s\S]*?)\r?\n--/g)].map(m => m[1]);
+      const content: unknown = JSON.parse(parts[parts.length - 1] ?? 'null');
+      drive.created.push(content);
+      drive.fileMissing = false;
+      drive.remoteWrite(content);
+      return json({ id: FILE_ID });
+    }
     // Écriture du fichier de données.
     if (method === 'PATCH' && url.includes(`/upload/drive/v3/files/${FILE_ID}`)) {
       const content = JSON.parse(req.postData() ?? 'null');
@@ -116,6 +132,7 @@ export const installFakeDrive = async (page: Page, initial: unknown = DEMO_DATA,
     if (url.includes(`/files/${FILE_ID}?alt=media`)) return json(drive.content);
     if (url.includes(`/files/${FILE_ID}?fields=`)) return json({ headRevisionId: drive.head, modifiedTime: drive.modifiedTime });
     if (url.includes('/drive/v3/files?')) {
+      if (drive.fileMissing) return json({ files: [] });
       return json({ files: [{ id: FILE_ID, name: 'suivi_epargne.json', createdTime: '2026-01-01T00:00:00.000Z', modifiedTime: drive.modifiedTime, headRevisionId: drive.head }] });
     }
     return json({ error: { code: 404 } }, 404);

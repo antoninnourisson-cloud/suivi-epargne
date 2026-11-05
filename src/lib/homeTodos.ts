@@ -12,6 +12,7 @@ import { describeStaleBalances, type StaleBalance } from './freshness';
 import type { YearClosingStatus } from './yearClosing';
 import { type DueRecurring, type FiscalReview } from './finance';
 import { daysBetween, parseISODate } from './dates';
+import { describeFiscalAnniversary, findFiscalAnniversaries } from './fiscalClock';
 import type { RateProposalInfo } from './rateChanges';
 import type { BackupUploadProblem } from './recoveryCodeCheck';
 import { elideDe, elideLe, formatEUR, formatPeriod, formatRate, frenchDay } from './format';
@@ -128,7 +129,15 @@ export interface HomeTodoInput {
   plannedWithdrawals?: PlannedWithdrawal[];
   /** Taux réglementés relevés par la veille fiscale, en attente (lib/rateChanges). */
   rateChanges?: RateProposalInfo[];
+  /**
+   * Revenu fiscal de référence saisi, par année de revenus (config.rfrByYear). Absent : la tâche
+   * « avis d'impôt » se fie à la frise du LEP (années lues sur un avis), si elle existe.
+   */
+  rfrByYear?: Record<string, number>;
 }
+
+/** Début d'août à fin septembre : les avis arrivent fin juillet à fin août, quelques-uns début octobre. */
+export const isTaxNoticeSeason = (now: Date): boolean => now.getMonth() === 7 || now.getMonth() === 8;
 
 const ALERT_ICONS: Record<AlertKind, HomeTodoIcon> = {
   'dormant-cash': 'wallet', 'better-rate': 'transfer', 'livret-full': 'alert', 'restitution-room': 'gift', 'payslip-anomaly': 'file-warning',
@@ -262,6 +271,29 @@ export const buildHomeTodos = (i: HomeTodoInput): HomeTodo[] => {
     primary: i.can.navigate ? { label: 'Voir les cases', action: { type: 'show-tax-return' } } : undefined,
     secondary: { label: 'C\'est déclaré', action: { type: 'mark-tax-return-filed', incomeYear: tr.incomeYear } },
   });
+  // Avis d'impôt (début août à fin septembre) : tant que le revenu fiscal de référence de l'année
+  // n'est pas saisi. Même cible que « Importer mon avis » du LEP (Paramètres).
+  // Source (vérifiée le 2026-11-05) : https://www.impots.gouv.fr/particulier/questions/quelle-date-mon-avis-dimpot-sur-le-revenu-sera-disponible
+  // (en ligne du 24 au 31 juillet 2026, papier en août, certains cas début octobre ou mi-décembre).
+  if (isTaxNoticeSeason(i.now)) {
+    const entered = (i.rfrByYear?.[String(year - 1)] ?? 0) > 0
+      || !!i.lepTimeline?.years.some(y => y.year === year - 1 && y.source === 'avis');
+    if (!entered) out.push({
+      key: `tax-notice-${year}`, icon: 'landmark', tone: 'action', snoozable: true,
+      text: "Votre avis d'impôt est arrivé ?",
+      detail: `Importez-le : Pécule y lit votre revenu fiscal de référence ${year - 1}, qui sert à vérifier votre droit au LEP.`,
+      primary: go('Importer mon avis', 'settings'),
+    });
+  }
+  // Anniversaire fiscal d'un PEA (5 ans) ou d'une assurance vie (8 ans) : 30 jours.
+  for (const a of findFiscalAnniversaries(i.accounts, i.fiscalConfig, i.now)) {
+    const text = describeFiscalAnniversary(a);
+    out.push({
+      key: `fiscal-anniversary-${a.accountId}-${a.date}`, icon: 'calendar-check', tone: 'info', snoozable: true,
+      text: text.title, detail: text.detail,
+      primary: go('Voir mes comptes', 'accounts'),
+    });
+  }
   const raise = i.payRaise;
   if (raise) out.push({
     key: `raise-${raise.period}`, icon: 'trending-up', tone: 'action',

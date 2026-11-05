@@ -12,7 +12,7 @@ export const NOTIFICATION_CATEGORIES: NotificationCategory[] = [
   { id: 'stale', label: 'Soldes non actualisés depuis un mois', prefixes: ['stale'] },
   { id: 'rates', label: 'Révision des taux des livrets', prefixes: ['rates'] },
   { id: 'lep', label: 'Éligibilité au LEP', prefixes: ['lep'] },
-  { id: 'tax', label: 'Impôts : déclaration, dons, paramètres fiscaux', prefixes: ['tax-return', 'donations', 'fiscal-review', 'annual-statement'] },
+  { id: 'tax', label: 'Impôts : déclaration, avis, dons, paramètres et dates fiscales', prefixes: ['tax-return', 'tax-notice', 'fiscal-anniversary', 'donations', 'fiscal-review', 'annual-statement'] },
   { id: 'parents', label: 'Capital des parents : intérêts et restitution', prefixes: ['parental', 'restitution-prep', 'restitution-day'] },
   // Id et préfixe « recap » gardés (préférences existantes) : le bilan du mois d'épargne écoulé.
   { id: 'recap', label: "Bilan du mois d'épargne écoulé", prefixes: ['recap'] },

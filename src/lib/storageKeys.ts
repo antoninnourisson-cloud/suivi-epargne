@@ -42,6 +42,8 @@ export const STORAGE_KEYS = {
   lockPinSalt: { key: 'app_lock_pin_salt', kind: 'secret' },
   lockPinIterations: { key: 'app_lock_pin_iterations', kind: 'secret' },
   lockPinFails: { key: 'app_lock_pin_fails', kind: 'secret' },
+  /** Jour où « Renforcez votre code » a été proposé (une fois par jour au plus). */
+  lockPinUpgradeAsked: { key: 'app_lock_pin_upgrade_asked', kind: 'device' },
   lockResetRequested: { key: 'app_lock_reset_requested', kind: 'secret' },
   lockResetPending: { key: 'app_lock_reset_pending', kind: 'secret' },
   lockResetAlerted: { key: 'app_lock_reset_alerted', kind: 'secret' },

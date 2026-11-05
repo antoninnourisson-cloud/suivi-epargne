@@ -5,7 +5,7 @@
 // entre dans l'app : chargement Drive, import, restauration locale, synchronisation entre
 // onglets, et lecture par le serveur de notifications.
 // ================================================
-import { AccountType, AppDoc, ExpenseSnapshot, FiscalConfig, GlobalAppData, PayBalance, PayBalanceSource, PayChecklist, PayRecord, PortfolioSnapshot, TaxBracket, YearClosingRecord } from '../types';
+import { AccountType, AppDoc, ExpenseSnapshot, FiscalConfig, GlobalAppData, PayBalance, PayBalanceSource, PayChecklist, PayRecord, PortfolioSnapshot, TaxBracket, TaxNoticeBalance, YearClosingRecord } from '../types';
 import { DEFAULT_DECOTE, DEFAULT_FISCAL_CONFIG, DEFAULT_WORK_BENEFITS } from '../constants';
 import { normalizeAccounts, dedupeMonthlySnapshots, migrateFiscalConfig, computeMonthlyPay } from './finance';
 import { round2 } from './money';
@@ -209,6 +209,19 @@ const sanitizeYearGoals = (raw: unknown): Record<string, number> | undefined => 
   return Object.keys(out).length > 0 ? out : undefined;
 };
 
+/** Soldes d'avis d'imposition : « AAAA » → { nature, montant positif, date facultative } ; `undefined` s'il n'en reste rien. */
+const sanitizeTaxNoticeBalances = (raw: unknown): Record<string, TaxNoticeBalance> | undefined => {
+  if (!isObj(raw)) return undefined;
+  const out: Record<string, TaxNoticeBalance> = {};
+  for (const [year, b] of Object.entries(raw)) {
+    if (!/^\d{4}$/.test(year) || !isObj(b)) continue;
+    if ((b.kind !== 'due' && b.kind !== 'refund') || typeof b.amount !== 'number' || !Number.isFinite(b.amount) || b.amount <= 0) continue;
+    const date = typeof b.date === 'string' && ISO_DAY.test(b.date) && new Date(`${b.date}T00:00:00Z`).toISOString().slice(0, 10) === b.date ? b.date : undefined;
+    out[year] = { kind: b.kind, amount: round2(b.amount), ...(date ? { date } : {}) };
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+};
+
 /**
  * Clôtures d'année (lib/yearClosing) remises d'aplomb : seules les années « AAAA » à objet
  * restent ; une date de clôture illisible est retirée (année rouverte), les coches gardent
@@ -379,6 +392,16 @@ export const migrate = (raw: unknown): AppDoc => {
   if (config.yearGoals !== undefined) {
     const goals = sanitizeYearGoals(config.yearGoals);
     if (goals) config.yearGoals = goals; else delete config.yearGoals;
+  }
+  // Soldes des avis d'imposition : année « AAAA », nature connue, montant positif, date valide.
+  if (config.taxNoticeBalances !== undefined) {
+    const balances = sanitizeTaxNoticeBalances(config.taxNoticeBalances);
+    if (balances) config.taxNoticeBalances = balances; else delete config.taxNoticeBalances;
+  }
+  // Déclaration marquée faite : une année entière plausible, sinon retirée.
+  if (config.taxReturnFiledYear !== undefined) {
+    const y = config.taxReturnFiledYear;
+    if (!(typeof y === 'number' && Number.isInteger(y) && y >= 2000 && y <= 2100)) delete config.taxReturnFiledYear;
   }
   // Retraits prévus (« J'ai besoin d'argent ») : entrées illisibles écartées, sans changer de version.
   if (config.plannedWithdrawals !== undefined) {

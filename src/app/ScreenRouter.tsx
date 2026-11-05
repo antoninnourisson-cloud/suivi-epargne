@@ -24,6 +24,7 @@ import {
 import type { DerivedData } from './useDerivedData';
 import { lepStillEligible } from '../lib/idleCash';
 import { localTodayISO } from '../lib/dates';
+import { withTaxNoticeBalance } from '../lib/taxNoticeBalance';
 import { splitFiscalProposals, type RateProposalInfo } from '../lib/rateChanges';
 import type { AccountActions } from './useAccountActions';
 import { usePayRaise } from './usePayRaise';
@@ -193,6 +194,7 @@ export const ScreenRouter = memo(function ScreenRouter({ place, setView, onSelec
           agendaNext={derived.agendaNext} lepTimeline={derived.lepTimeline} taxReturnAlert={derived.taxReturnAlert}
           payslips={doc.payslips} gamification={c.gamification} goodMonthThreshold={c.goodMonthThreshold}
           milestonesSeen={c.milestonesSeen} payReviewsDone={c.payReviewsDone} rfrByYear={c.rfrByYear}
+          taxReturnFiledYear={c.taxReturnFiledYear} onMarkTaxReturnFiled={y => data.patchConfig({ taxReturnFiledYear: y })}
           restitutionDoneOn={doc.parentalRestitution?.done?.date} restitutionPlannedDate={doc.parentalRestitution?.plannedDate}
           yearClosing={derived.yearClosing} pays={doc.pays}
           rateChanges={rateChanges} onOpenRateChanges={openRates}
@@ -215,7 +217,7 @@ export const ScreenRouter = memo(function ScreenRouter({ place, setView, onSelec
           onReadStatement={() => setStatementFor({})} onRateChanged={openRates} />}
         {ratesOpen && <Lazy><RateChangesSheet accounts={doc.accounts} proposals={rateChanges} onApply={applyRates}
           onIgnore={rateChanges.length > 0 ? ignoreRates : undefined} onClose={() => setRatesOpen(false)} /></Lazy>}
-        {closingOpen && <Lazy><YearClosingSheet year={Number(localTodayISO().slice(0, 4)) - 1} data={derived.fullData} onRecord={actions.recordYearClosing}
+        {closingOpen && <Lazy><YearClosingSheet year={Number(localTodayISO().slice(0, 4)) - 1} data={derived.fullData} geminiApiKey={data.geminiApiKey} onRecord={actions.recordYearClosing}
           onPatchConfig={data.patchConfig} onUpdateFiscalConfig={data.setFiscalConfig}
           onNavigate={v => { if (v === 'settings') openSettingsSection('fiscal'); setView(v); }}
           getArchiveData={data.currentData} confirm={dialog.confirm} onClose={() => setClosingOpen(false)} /></Lazy>}
@@ -273,6 +275,7 @@ export const ScreenRouter = memo(function ScreenRouter({ place, setView, onSelec
           fiscalWatchSlot={fiscalWatchCard(false)}
           taxNoticeSlot={<Lazy><TaxNoticePanel geminiApiKey={data.geminiApiKey} rfrByYear={c.rfrByYear || {}} householdParts={doc.fiscalConfig.lepHouseholdParts}
             onSave={(y, v) => data.patchConfig({ rfrByYear: { ...(c.rfrByYear || {}), [String(y)]: v } })}
+            balances={c.taxNoticeBalances} onSaveBalance={(y, b) => data.patchConfig({ taxNoticeBalances: withTaxNoticeBalance(c.taxNoticeBalances, y, b) })}
             onSetParts={parts => data.setFiscalConfig(prev => ({ ...prev, lepHouseholdParts: parts }))} /></Lazy>}
           securitySlot={<Lazy><ServerSecurityPanel discreet={!!c.discreetNotifications} onToggleDiscreet={v => data.patchConfig({ discreetNotifications: v || undefined })} confirm={dialog.confirm}
             onSignedOutEverywhere={onSignedOutEverywhere} /></Lazy>}

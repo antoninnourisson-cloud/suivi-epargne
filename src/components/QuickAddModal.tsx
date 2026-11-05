@@ -46,6 +46,36 @@ const SUGGESTIONS: Record<Direction, string[]> = {
   OUT: ['Retrait', 'Dépense imprévue', 'Projet'],
 };
 
+/** Libellés récents : combien en proposer en tête des puces. */
+const RECENT_COUNT = 3;
+
+/** Libellé déjà utilisé sur le compte, avec le dernier montant qui l'accompagnait. */
+export interface RecentLabel { label: string; amount: number }
+
+/**
+ * Les trois derniers libellés distincts (sans tenir compte des majuscules) des dépôts ou des
+ * retraits du compte, du plus récent au plus ancien, chacun avec son dernier montant. Seuls
+ * les vrais versements comptent : ni virements entre comptes, ni valorisations, corrections,
+ * part des parents ou mouvement de départ.
+ */
+export const recentLabels = (account: SavingsAccount | undefined, dir: Direction): RecentLabel[] => {
+  const real = (account?.movements ?? [])
+    .map((m, i) => ({ m, i }))
+    .filter(({ m }) => m.type === dir && !m.kind && !m.tag && !m.linkId && m.label.trim() !== '' && m.amount > 0)
+    // Plus récent d'abord ; à date égale, le dernier saisi.
+    .sort((a, b) => b.m.date.localeCompare(a.m.date) || b.i - a.i);
+  const seen = new Set<string>();
+  const out: RecentLabel[] = [];
+  for (const { m } of real) {
+    const key = m.label.trim().toLocaleLowerCase('fr');
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ label: m.label.trim(), amount: m.amount });
+    if (out.length === RECENT_COUNT) break;
+  }
+  return out;
+};
+
 /** Puces de 32 px, zone tactile de 48 px (Material 3). */
 const CHIP_TARGET = 'relative after:absolute after:inset-x-0 after:-inset-y-2';
 
@@ -81,8 +111,20 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ open, accounts, in
   }, [open, accounts, initialKind, canTransfer]);
 
   const account = accounts.find(a => a.id === accountId);
+  // Puces : les libellés récents de ce compte d'abord, puis les fixes (sans doublon).
+  const recents = React.useMemo(() => recentLabels(account, dir), [account, dir]);
+  const chips = React.useMemo(() => {
+    const taken = new Set(recents.map(r => r.label.toLocaleLowerCase('fr')));
+    return [...recents, ...SUGGESTIONS[dir].filter(l => !taken.has(l.toLocaleLowerCase('fr'))).map(l => ({ label: l, amount: 0 }))];
+  }, [recents, dir]);
   const tip = open && type === 'OUT' && account ? quinzaineWithdrawalTip(account, amount, parseISODate(date)) : null;
   const since = parseISODate(date).getDate() < 16 ? '1er' : '16';
+  // Montant repris d'un libellé récent. Le champ, s'il a le focus, garde sa saisie brute : on le
+  // quitte d'abord (sa validation passe avant), puis la nouvelle valeur s'affiche.
+  const prefillAmount = (value: number) => {
+    if (amountRef.current && document.activeElement === amountRef.current) amountRef.current.blur();
+    setAmount(value);
+  };
   // Un retrait, comme un virement, ne prend que sur votre part du compte (de départ).
   const tooMuch = type !== 'IN' && !!account && amount > 0 && !canWithdrawOwn(account, amount);
   const canSubmit = !!accountId && amount > 0 && !tooMuch && (!transfer || (!!destId && destId !== accountId));
@@ -169,8 +211,10 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ open, accounts, in
           {!transfer && <div>
             <TextField label="Libellé (facultatif)" value={label} onChange={e => setLabel(e.target.value)} placeholder={SUGGESTIONS[dir][0]} />
             <div role="group" aria-label="Libellés proposés" className="flex flex-wrap gap-x-2 gap-y-4 mt-3 py-1">
-              {SUGGESTIONS[dir].map(sug => (
-                <Chip key={sug} selected={label === sug} className={CHIP_TARGET} onClick={() => setLabel(label === sug ? '' : sug)}>{sug}</Chip>
+              {chips.map(sug => (
+                <Chip key={sug.label} selected={label === sug.label} className={CHIP_TARGET}
+                  // Un libellé récent reprend aussi son dernier montant (modifiable).
+                  onClick={() => { if (label === sug.label) { setLabel(''); return; } setLabel(sug.label); if (sug.amount > 0) { prefillAmount(sug.amount); } }}>{sug.label}</Chip>
               ))}
             </div>
             {isQuickAddInterest({ type: dir, label }) && (

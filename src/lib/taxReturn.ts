@@ -40,7 +40,8 @@
 // ================================================
 import { AccountMovement, AccountType, GlobalAppData, SavingsAccount } from '../types';
 import { computeAccruedInterest, computeDonationSummary, cryptoDisposalsOfYear, CRYPTO_EXEMPT_DISPOSALS, hasTaxableYearlyInterest, isInitialBalance } from './finance';
-import { elideDe, formatEUR, plainEUR } from './format';
+import { elideDe, formatEUR, frenchDay, plainEUR } from './format';
+import { parseISODate } from './dates';
 import { countedPayslips } from './payslipChecks';
 
 export type TaxReturnSection = 'income' | 'savings' | 'deductions' | 'abroad' | 'crypto';
@@ -391,4 +392,64 @@ export const buildTaxReturnAlert = (
   const season = taxReturnSeason(asOf);
   if (!season) return null;
   return { key: `tax-return-${season.incomeYear}`, ...buildTaxReturnReminder(data, season.incomeYear) };
+};
+
+// ---------------------------------------------------------------------------
+// Rappels datés : début mai et semaine de la date limite
+// ---------------------------------------------------------------------------
+
+/**
+ * Calendrier des campagnes de déclaration, par année du dépôt (au printemps) : dates limites
+ * de la déclaration EN LIGNE, de la plus proche à la plus lointaine selon le département.
+ * Une année absente = dates pas encore publiées : aucun rappel daté n'est envoyé (jamais de
+ * date inventée). À compléter chaque printemps, après vérification sur la page officielle.
+ */
+export const TAX_RETURN_CALENDAR: Record<number, { onlineDeadlines: string[] }> = {
+  // Vérifié le 2026-11-05 sur https://www.impots.gouv.fr/toutes-les-questions/particulier/quelle-date-dois-je-faire-ma-declaration
+  // (revenus 2025) : 21 mai (départements 01 à 19 et non-résidents), 28 mai (20 à 54), 4 juin (55 à 974/976).
+  2026: { onlineDeadlines: ['2026-05-21', '2026-05-28', '2026-06-04'] },
+};
+
+export interface TaxReturnDatedStage { stage: 'may' | 'deadline'; incomeYear: number; deadlines: string[] }
+
+/**
+ * Rappels datés de la déclaration des revenus de l'année précédente (campagne de l'année
+ * du jour), seulement si le calendrier de cette année est connu :
+ * - « may » : du 1er au 7 mai ;
+ * - « deadline » : la semaine de la première date limite (les 6 jours d'avant, et le jour même).
+ * `null` sinon. La date est civile (mois de 1 à 12).
+ */
+export const taxReturnDatedStage = (today: { year: number; month: number; day: number }): TaxReturnDatedStage | null => {
+  const calendar = TAX_RETURN_CALENDAR[today.year];
+  if (!calendar || calendar.onlineDeadlines.length === 0) return null;
+  const deadlines = [...calendar.onlineDeadlines].sort();
+  const dayN = (iso: string) => { const [y, m, d] = iso.split('-').map(Number); return Date.UTC(y, m - 1, d) / 86_400_000; };
+  const todayN = Date.UTC(today.year, today.month - 1, today.day) / 86_400_000;
+  const first = dayN(deadlines[0]);
+  const incomeYear = today.year - 1;
+  if (todayN >= first - 6 && todayN <= first) return { stage: 'deadline', incomeYear, deadlines };
+  if (today.month === 5 && today.day <= 7 && todayN < first - 6) return { stage: 'may', incomeYear, deadlines };
+  return null;
+};
+
+/** « le 21 mai, le 28 mai ou le 4 juin ». */
+export const describeTaxDeadlines = (deadlines: string[]): string => {
+  const days = deadlines.map(iso => `le ${frenchDay(parseISODate(iso))}`);
+  return days.length <= 1 ? days.join('') : `${days.slice(0, -1).join(', ')} ou ${days[days.length - 1]}`;
+};
+
+/** Rappel daté (début mai, semaine de la date limite) : points à vérifier, dates limites, « déjà fait ? ». */
+export const buildTaxReturnDatedReminder = (
+  data: Pick<GlobalAppData, 'payslips' | 'donations' | 'accounts'>,
+  dated: TaxReturnDatedStage,
+): TaxReturnReminder => {
+  const topics = taxReturnTopics(buildTaxReturnChecklist(data, dated.incomeYear));
+  const summary = topics.length > 0 ? `À vérifier : ${listFr(topics)}. ` : '';
+  return {
+    incomeYear: dated.incomeYear,
+    title: dated.stage === 'may'
+      ? `Déclaration des revenus ${dated.incomeYear} : l'avez-vous faite ?`
+      : `Déclaration des revenus ${dated.incomeYear} : la date limite approche`,
+    detail: `${summary}Date limite de la déclaration en ligne : ${describeTaxDeadlines(dated.deadlines)}, selon votre département. Déjà déclaré ? Ignorez ce rappel.`,
+  };
 };

@@ -158,9 +158,34 @@ const storePin = async (pin: string): Promise<void> => {
   localStorage.setItem(PIN_HASH_KEY, hash);
   localStorage.setItem(PIN_ITERATIONS_KEY, String(PIN_ITERATIONS));
   localStorage.removeItem(PIN_FAILS_KEY);
+  localStorage.removeItem(PIN_UPGRADE_ASKED_KEY);
 };
 
+// --- Ancien code court (4 ou 5 chiffres) ---
+// Un code créé avant l'obligation de 6 chiffres reste en SHA-256 simple (voir verifyPin) : il
+// ne migre pas vers PBKDF2. Après un déverrouillage réussi, l'écran de verrouillage propose
+// d'en choisir un plus long, une fois par jour au plus. Choisir un nouveau code (enablePin)
+// réécrit sel, empreinte et nombre d'itérations : l'ancien format est alors effacé.
+const PIN_UPGRADE_ASKED_KEY = 'app_lock_pin_upgrade_asked';
+export const PIN_MIN_DIGITS = 6;
+
+/** Jour local « 2026-11-05 » (pas le jour UTC : « une fois par jour » suit la journée de l'utilisateur). */
+const localDay = (now: Date): string =>
+  `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+/** Le code enregistré est-il encore à l'ancien format (SHA-256 simple, sans itérations) ? */
+export const isPinLegacyFormat = (): boolean =>
+  isPinEnabled() && !(parseInt(lsGet(PIN_ITERATIONS_KEY) || '0', 10) > 0);
+
+/** Faut-il proposer de renforcer le code ? Ancien format, et pas déjà proposé aujourd'hui. */
+export const shouldSuggestStrongerPin = (now: Date = new Date()): boolean =>
+  isPinLegacyFormat() && lsGet(PIN_UPGRADE_ASKED_KEY) !== localDay(now);
+
+/** Note que la proposition a été faite aujourd'hui (à appeler quand on l'affiche). */
+export const markStrongerPinSuggested = (now: Date = new Date()): void => lsSet(PIN_UPGRADE_ASKED_KEY, localDay(now));
+
 export const disablePin = (): void => {
+  localStorage.removeItem(PIN_UPGRADE_ASKED_KEY);
   localStorage.removeItem(PIN_HASH_KEY);
   localStorage.removeItem(PIN_SALT_KEY);
   localStorage.removeItem(PIN_ITERATIONS_KEY);

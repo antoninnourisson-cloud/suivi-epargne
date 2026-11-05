@@ -31,6 +31,8 @@ import { useSyncRefs } from './syncRefs';
 import { useDriveLoad } from './useDriveLoad';
 import { useAutoSave, useSaveQueue } from './useSaveQueue';
 import { useSyncConflicts } from './useSyncConflicts';
+import { createMissingFileStore } from './missingFile';
+import { useMissingFile } from './useMissingFile';
 
 export const useDriveSync = (isAuthenticated: boolean, docState: DocumentState) => {
   const { doc, applyData, buildData, currentData, docRef, setDoc } = docState;
@@ -77,6 +79,8 @@ export const useDriveSync = (isAuthenticated: boolean, docState: DocumentState) 
     offline: createOfflineStore(() => sessionGenRef.current),
   }));
   const { pending, mirror, offline: offlineStore } = copies;
+  // Fichier Drive introuvable alors que l'appareil garde des données : le choix à faire (une instance par montage).
+  const [missingFile] = useState(createMissingFileStore);
 
   /** Des modifications affichées ne sont pas encore sur Drive (y compris sur la copie hors ligne). */
   const hasLocalEdits = () => (hasLoadedRef.current || offlineRef.current !== null) && canonicalDoc(docRef.current) !== persistedRef.current;
@@ -164,7 +168,11 @@ export const useDriveSync = (isAuthenticated: boolean, docState: DocumentState) 
   const { loadDriveDataRef, loadDriveDataStable, loadDemoData } = useDriveLoad({
     refs, dispatch, docState, pending, offlineStore, makeStamp, markPersisted, hasLocalEdits, setConflict, openConflict,
     scheduleRetry, resetRetry, failSync, setDriveFileId, setLocalBackup, setUnreadableCopies, setOtherFiles,
-    setOfflineDataAt, setDataShown, setLoadCount,
+    setOfflineDataAt, setDataShown, setLoadCount, missingFile,
+  });
+  const missingActions = useMissingFile({
+    refs, dispatch, docState, pending, makeStamp, markPersisted, resetRetry, missingFile, loadDriveData: loadDriveDataStable,
+    setDriveFileId, setOtherFiles, setOfflineDataAt, setDataShown, setLoadCount,
   });
 
   useEffect(() => { isSavingRef.current = status.saving; }, [status.saving, isSavingRef]);
@@ -275,11 +283,14 @@ export const useDriveSync = (isAuthenticated: boolean, docState: DocumentState) 
     clearTimeout(retryTimerRef.current);
     const s = statusRef.current;
     if (!s.isAuthenticated || s.loading || s.sessionExpired) return;
+    // Fichier introuvable : rien ne se recharge tout seul (la fenêtre de choix serait refermée
+    // à chaque retour dans l'app) ; « Chercher à nouveau » relance la recherche.
+    if (missingFile.getSnapshot()) return;
     if (!hasLoadedRef.current || s.loadFailed) { void loadDriveDataRef.current(); return; }
     if (browserOnline()) dispatch({ type: 'online' });
     dispatch({ type: 'error-cleared' });
     setRetryTick(t => t + 1);
-  }, [hasLoadedRef, loadDriveDataRef, retryTimerRef, statusRef]);
+  }, [hasLoadedRef, loadDriveDataRef, retryTimerRef, statusRef, missingFile]);
   retrySyncRef.current = retrySync;
 
   // Retour au premier plan : nouvel essai si la synchro est en échec PASSAGER, sinon
@@ -376,6 +387,7 @@ export const useDriveSync = (isAuthenticated: boolean, docState: DocumentState) 
     headSavedAtRef.current = null;
     localEditedAtRef.current = null;
     setConflict(null);
+    missingFile.clear();
     setOtherFiles([]);
     dispatch({ type: 'reset' });
     setDoc(emptyData());
@@ -393,8 +405,8 @@ export const useDriveSync = (isAuthenticated: boolean, docState: DocumentState) 
 
   // Actions exposées : identité stable (le corps le plus récent est toujours appelé), pour
   // que les écrans mémoïsés ne soient pas re-rendus à chaque changement de l'état de synchro.
-  const latest = useRef({ resolveConflict, loadConflictRemote, compareDuplicate, closeDuplicateComparison, dismissDuplicate, restoreLocalBackup, dismissLocalBackup, dismissUnreadableCopies, flushPendingChanges, hasPendingEdits, forgetOfflineCopy, hasUnsyncedChanges, resetData });
-  latest.current = { resolveConflict, loadConflictRemote, compareDuplicate, closeDuplicateComparison, dismissDuplicate, restoreLocalBackup, dismissLocalBackup, dismissUnreadableCopies, flushPendingChanges, hasPendingEdits, forgetOfflineCopy, hasUnsyncedChanges, resetData };
+  const latest = useRef({ resolveConflict, loadConflictRemote, compareDuplicate, closeDuplicateComparison, dismissDuplicate, restoreLocalBackup, dismissLocalBackup, dismissUnreadableCopies, flushPendingChanges, hasPendingEdits, forgetOfflineCopy, hasUnsyncedChanges, resetData, missingActions });
+  latest.current = { resolveConflict, loadConflictRemote, compareDuplicate, closeDuplicateComparison, dismissDuplicate, restoreLocalBackup, dismissLocalBackup, dismissUnreadableCopies, flushPendingChanges, hasPendingEdits, forgetOfflineCopy, hasUnsyncedChanges, resetData, missingActions };
   const actions = useMemo(() => ({
     loadDriveData: loadDriveDataStable,
     loadDemoData,
@@ -415,7 +427,13 @@ export const useDriveSync = (isAuthenticated: boolean, docState: DocumentState) 
     dismissLocalBackup: () => latest.current.dismissLocalBackup(),
     dismissUnreadableCopy: () => latest.current.dismissUnreadableCopies(),
     resetData: (opts?: { discardUnsynced?: boolean }) => latest.current.resetData(opts),
-  }), [loadDriveDataStable, loadDemoData, retrySync]);
+    /** Fichier Drive introuvable (voir MissingFileDialog) : ce qu'il faut montrer, et les choix. */
+    missingFile: { subscribe: missingFile.subscribe, getSnapshot: missingFile.getSnapshot },
+    restoreMissingFromDevice: () => latest.current.missingActions.restoreFromDevice(),
+    startOverMissing: () => latest.current.missingActions.startOver(),
+    restoreMissingFromBackup: (id: string, label?: string) => latest.current.missingActions.restoreFromBackup(id, label),
+    retryFindMissing: () => latest.current.missingActions.retryFind(),
+  }), [loadDriveDataStable, loadDemoData, retrySync, missingFile]);
 
   const restore = useRestoreActions(docState, { hasLoadedRef, offlineRef, driveFileIdRef });
 

@@ -11,13 +11,15 @@ import { isSettingsSection, openSettingsSection } from '../components/settings/s
 import { requestPaySheet } from '../components/pilot/paySheetRequest';
 import { lsGetJSON, lsSetJSON } from '../lib/storage';
 import { storageKey } from '../lib/storageKeys';
+import { getNavDepth, initNavDepth, pushNavEntry, registerNav, setNavDepth } from './backHistory';
 
 /** Retire un paramètre de l'adresse sans recharger la page (les autres paramètres restent). */
 export const stripParam = (name: string) => {
   const params = new URLSearchParams(window.location.search);
   params.delete(name);
   const rest = params.toString();
-  window.history.replaceState({}, '', window.location.pathname + (rest ? `?${rest}` : ''));
+  // L'état de l'entrée est gardé : il porte la profondeur de navigation (geste Retour).
+  window.history.replaceState(window.history.state, '', window.location.pathname + (rest ? `?${rest}` : ''));
 };
 
 // ---------------------------------------------------------------------------
@@ -54,11 +56,24 @@ interface NavState {
  * - `navigate(view, tab?)` : liens internes et liens directs, toujours l'onglet de l'alias ;
  * - `openScreen(screen)` : barre du bas, « Plus », menu latéral, l'onglet mémorisé ;
  * - `selectTab(tab)` : un onglet touché dans l'écran (le focus reste sur l'onglet).
+ * Geste Retour : changer d'écran ajoute une entrée à l'historique (l'adresse ne change pas) ;
+ * Retour revient à l'écran précédent, avec son onglet. Un onglet touché n'en ajoute pas. Sur
+ * l'entrée de départ, Retour quitte l'app comme avant.
  */
 export const useViewState = (lastView: string, setLastView: (v: string) => void) => {
   const [{ place, seq }, setState] = useState<NavState>({ place: { screen: 'dashboard' }, seq: 0 });
   const deepLinkedRef = useRef(false);
-  const go = useCallback((next: Place) => setState(s => (samePlace(s.place, next) ? s : { place: next, seq: s.seq + 1 })), []);
+  // Endroit de chaque profondeur d'historique (Retour y revient), et endroit courant lisible
+  // hors d'un setState (l'entrée d'historique ne se pose pas dans une mise à jour d'état).
+  const placesRef = useRef<Place[]>([]);
+  const currentRef = useRef<Place>({ screen: 'dashboard' });
+  const go = useCallback((next: Place) => {
+    const current = currentRef.current;
+    if (samePlace(current, next)) return;
+    if (current.screen !== next.screen) pushNavEntry();
+    currentRef.current = next;
+    setState(s => (samePlace(s.place, next) ? s : { place: next, seq: s.seq + 1 }));
+  }, []);
   const navigate = useCallback((v: View, tab?: string) => go(placeOf(v, tab)), [go]);
   /** Endroit ouvert par un lien direct : le dernier endroit enregistré ne le remplace plus. */
   const openLinkedView = useCallback((v: View, tab?: string) => { deepLinkedRef.current = true; navigate(v, tab); }, [navigate]);
@@ -66,6 +81,18 @@ export const useViewState = (lastView: string, setLastView: (v: string) => void)
   const selectTab = useCallback((tab: ScreenTab) => setState(s => (
     isTabOf(s.place.screen, tab) && s.place.tab !== tab ? { place: { screen: s.place.screen, tab }, seq: s.seq } : s
   )), []);
+  useEffect(() => {
+    initNavDepth();
+    return registerNav(state => {
+      const depth = typeof state.pecNav === 'number' ? state.pecNav : 0;
+      // Entrée de fenêtre restée dans l'historique (même profondeur) : rien à changer.
+      if (depth === getNavDepth()) return;
+      setNavDepth(depth);
+      const target = placesRef.current[depth] ?? { screen: 'dashboard' };
+      currentRef.current = target;
+      setState(s => ({ place: target, seq: s.seq + 1 }));
+    });
+  }, []);
   // Mise à jour fonctionnelle : on lit l'endroit courant sans dépendre de lui, sinon revenir
   // à l'Accueil relancerait l'effet (avec l'ancien `lastView`) et renverrait aussitôt vers
   // l'écran précédent.
@@ -75,6 +102,8 @@ export const useViewState = (lastView: string, setLastView: (v: string) => void)
     setState(s => (s.place.screen === 'dashboard' && !samePlace(s.place, saved) ? { place: saved, seq: s.seq + 1 } : s));
   }, [lastView]);
   useEffect(() => {
+    currentRef.current = place;
+    placesRef.current[getNavDepth()] = place;
     setLastView(encodePlace(place));
     if (place.tab) rememberTab(place.screen, place.tab);
   }, [place, setLastView]);

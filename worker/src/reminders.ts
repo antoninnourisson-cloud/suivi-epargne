@@ -37,7 +37,8 @@ import { computeMonthTarget } from '../../src/lib/payAdjustment';
 import { isPayReviewDone, liveDone } from '../../src/lib/payRecords';
 import { savingsMonthOfPay, validPayday } from '../../src/lib/payCalendar';
 import { payBalanceBefore, recommendPayDistribution, usualPayDistribution } from '../../src/lib/payDistribution';
-import { buildTaxReturnReminder } from '../../src/lib/taxReturn';
+import { buildTaxReturnDatedReminder, buildTaxReturnReminder, taxReturnDatedStage } from '../../src/lib/taxReturn';
+import { describeFiscalAnniversary, findFiscalAnniversaries } from '../../src/lib/fiscalClock';
 import type { PushMessage } from './webpush';
 
 export interface Reminder {
@@ -439,6 +440,50 @@ export const computeReminders = (data: GlobalAppData, today: CivilDate | Date, a
     });
   }
 
+  // 9 bis. Rappels datés de la déclaration : début mai, puis la semaine de la première date
+  //     limite. Seulement si les dates de l'année sont connues (TAX_RETURN_CALENDAR : jamais de
+  //     date inventée). Une fois chacun (clé par année de revenus). Rien si « C'est déclaré » a été
+  //     touché pour cette année (config.taxReturnFiledYear, noté dans le fichier).
+  const dated = taxReturnDatedStage(civil);
+  if (dated && data.config?.taxReturnFiledYear !== dated.incomeYear) {
+    const reminder = buildTaxReturnDatedReminder(data, dated);
+    out.push({
+      key: `tax-return:${dated.incomeYear}:${dated.stage}`,
+      message: { title: reminder.title, body: reminder.detail, url: link('donations'), tag: 'tax-return' },
+    });
+  }
+
+  // 9 ter. Avis d'impôt (début août à fin septembre) : tant que le revenu fiscal de référence
+  //     de l'année de revenus n'est pas saisi. Les avis sont en ligne du 24 au 31 juillet 2026 ;
+  //     papier en août ; quelques cas début octobre (impots.gouv.fr/particulier/questions/
+  //     quelle-date-mon-avis-dimpot-sur-le-revenu-sera-disponible, vérifié le 2026-11-05).
+  //     Une fois par an : la clé ne change pas jusqu'à fin septembre.
+  if (M === 7 || M === 8) {
+    const rfr = (data.config as { rfrByYear?: Record<string, number> } | undefined)?.rfrByYear?.[String(Y - 1)] ?? 0;
+    if (!(rfr > 0)) {
+      out.push({
+        key: `tax-notice:${Y}`,
+        message: {
+          title: "Votre avis d'impôt est arrivé ?",
+          body: `Importez-le dans Pécule : il y lit votre revenu fiscal de référence ${Y - 1}, qui sert à vérifier votre droit au LEP.`,
+          url: link('settings'),
+          tag: 'tax-notice',
+        },
+      });
+    }
+  }
+
+  // 9 quater. Anniversaire fiscal : le jour où un PEA atteint 5 ans ou une assurance vie 8 ans
+  //     (mêmes dates que le calendrier fiscal). Fenêtre de 3 jours pour un cron manqué ; une
+  //     seule fois par compte (la clé ne contient pas la date).
+  for (const a of findFiscalAnniversaries(accounts, data.fiscalConfig ?? DEFAULT_FISCAL_CONFIG, now, 3)) {
+    const text = describeFiscalAnniversary(a);
+    out.push({
+      key: `fiscal-anniversary:${a.accountId}`,
+      message: { title: text.title, body: text.detail, url: link('accounts'), tag: `fiscal-anniversary-${a.accountId}` },
+    });
+  }
+
 
   // 10. Fin janvier : vérifier les paramètres fiscaux de l'année (barème, plafond LEP,
   //     abattement), tant qu'ils n'ont pas été marqués comme vérifiés dans l'app. Tant que la
@@ -542,6 +587,8 @@ const DISCREET_BODIES: Record<string, string> = {
   sub: 'Un prélèvement approche : le détail est dans l’app.',
   recap: 'Le bilan du mois est prêt.',
   'tax-return': 'Votre aide à la déclaration de revenus est prête dans l’app.',
+  'tax-notice': 'Votre avis d’impôt est peut-être arrivé : importez-le dans l’app.',
+  'fiscal-anniversary': 'Un de vos comptes atteint aujourd’hui une date fiscale : le détail est dans l’app.',
   'restitution-prep': 'La restitution approche : le détail est dans l’app.',
   'restitution-day': 'C’est le jour de la restitution : le détail est dans l’app.',
   'year-closing': 'La clôture de l’année est prête dans Historique.',

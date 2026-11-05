@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 // Rituel « J'ai reçu ma paie » : montant prérempli (fiche du mois, sinon paie estimée), écart
-// annoncé, paie plus basse ou plus haute que prévu, « Tout est fait comme conseillé » ou
+// annoncé, paie plus basse ou plus haute que prévu, « Tout marquer fait » ou
 // enregistrement partiel (une seule commande), fiche de paie importée sur place, bilan du
 // mois précédent en tête, modification d'une paie déclarée, accessibilité.
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
@@ -118,13 +118,13 @@ describe('Rituel « J’ai reçu ma paie » : votre paie', () => {
     expect(replaced.size).toBe(0);
     expect(amountField().value).toBe('2600,40');
     toPlan();
-    fireEvent.click(screen.getByRole('button', { name: 'Tout est fait comme conseillé' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Tout marquer fait' }));
     expect(props.onRecordPay.mock.calls[0][0].pay).toMatchObject({ amount: 2600.4, payslipId: record.id });
   });
 });
 
 describe('Rituel : répartition et enregistrement', () => {
-  it('« Tout est fait comme conseillé » : une seule commande, toutes les lignes faites, date des virements', () => {
+  it('« Tout marquer fait » : une seule commande, toutes les lignes faites, date des virements', () => {
     const doc = makeDoc();
     const props = setup(doc);
     fireEvent.change(amountField(), { target: { value: '2500' } });
@@ -132,7 +132,7 @@ describe('Rituel : répartition et enregistrement', () => {
     // Le titre de l'étape reçoit le focus.
     expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Que faire de votre paie' }));
     fireEvent.change(screen.getByLabelText('Virements faits le'), { target: { value: '2026-10-29' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Tout est fait comme conseillé' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Tout marquer fait' }));
     expect(props.onRecordPay).toHaveBeenCalledTimes(1);
     const input = props.onRecordPay.mock.calls[0][0];
     expect(input.pay).toMatchObject({ receivedOn: '2026-10-30', savingsMonth: '2026-11', amount: 2500 });
@@ -151,7 +151,7 @@ describe('Rituel : répartition et enregistrement', () => {
     fireEvent.click(box);
     fireEvent.change(screen.getByRole('textbox', { name: 'Montant fait pour Livret A' }), { target: { value: '321,5' } });
     fireEvent.change(screen.getByRole('combobox', { name: 'Compte crédité pour Livret A' }), { target: { value: 'av' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Enregistrer les cases cochées' }));
     const input = props.onRecordPay.mock.calls[0][0];
     expect(input.done).toEqual([{ key: 's:la', amount: 321.5, accountId: 'av' }]);
   });
@@ -161,7 +161,7 @@ describe('Rituel : répartition et enregistrement', () => {
     toPlan();
     fireEvent.click(screen.getByRole('button', { name: 'Autre compte' }));
     fireEvent.change(screen.getByRole('textbox', { name: "Montant versé sur l'autre compte" }), { target: { value: '50' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Enregistrer les cases cochées' }));
     const input = props.onRecordPay.mock.calls[0][0];
     const added = input.lines.find(l => l.added);
     expect(added).toMatchObject({ kind: 'saving', amount: 50, added: true });
@@ -224,12 +224,12 @@ describe('Rituel : répartition et enregistrement', () => {
     // Montant raisonnable, puis « Enregistrer » : seulement la case cochée, le plaisir n'est pas fait.
     fireEvent.change(screen.getByRole('textbox', { name: 'Montant fait pour Livret A' }), { target: { value: String(base + 50).replace('.', ',') } });
     fireEvent.click(screen.getByRole('checkbox', { name: /^Livret A/ }));
-    fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Enregistrer les cases cochées' }));
     const partial = props.onRecordPay.mock.calls[0][0];
     expect(partial.done).toEqual([{ key: 's:la', amount: Math.round((base + 50) * 100) / 100 }]);
     expect(partial.lines.find(l => l.key === 't:leisure')?.amount).toBe(150);
     // « Tout est fait » : le plaisir est fait avec ce qui reste vraiment ; la somme vaut l'argent à répartir.
-    fireEvent.click(screen.getByRole('button', { name: 'Tout est fait comme conseillé' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Tout marquer fait' }));
     const all = props.onRecordPay.mock.calls[1][0];
     expect(all.done.find(d => d.key === 't:leisure')).toEqual({ key: 't:leisure', amount: 150 });
     expect(Math.round(all.done.reduce((s, d) => s + d.amount, 0) * 100)).toBe(250000);
@@ -238,7 +238,7 @@ describe('Rituel : répartition et enregistrement', () => {
   it('refus de la commande : affiché dans la feuille, qui reste ouverte', () => {
     const props = setup(makeDoc(), { onRecordPay: vi.fn(() => 'Le compte « Livret A » n\'existe plus : choisissez-en un autre.') });
     toPlan();
-    fireEvent.click(screen.getByRole('button', { name: 'Tout est fait comme conseillé' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Tout marquer fait' }));
     expect(screen.getByRole('alert').textContent).toMatch(/n'existe plus/);
     expect(props.onClose).not.toHaveBeenCalled();
   });
@@ -270,7 +270,7 @@ describe('Rituel : bilan, deuxième paie, modification', () => {
     fireEvent.click(screen.getByRole('radio', { name: /^Autre/ }));
     toPlan();
     expect(screen.queryByText("Virements de la paie, déduits avant l'épargne")).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'Tout est fait comme conseillé' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Tout marquer fait' }));
     const input = props.onRecordPay.mock.calls[0][0];
     expect(input.pay).toMatchObject({ kind: 'extra', amount: 300 });
     expect(input.done.reduce((s, d) => s + d.amount, 0)).toBeCloseTo(300, 2);
@@ -298,7 +298,7 @@ describe('Rituel : bilan, deuxième paie, modification', () => {
     // On peut quand même en placer une partie : « Autre compte ».
     fireEvent.click(screen.getByRole('button', { name: 'Autre compte' }));
     fireEvent.change(screen.getByRole('textbox', { name: "Montant versé sur l'autre compte" }), { target: { value: '15' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Enregistrer les cases cochées' }));
     const input = props.onRecordPay.mock.calls[0][0];
     expect(input.pay).toMatchObject({ kind: 'extra', nature: 'refund', amount: 40 });
     expect(input.done).toEqual([{ key: 'a:la', amount: 15 }]);
@@ -322,7 +322,7 @@ describe('Rituel : bilan, deuxième paie, modification', () => {
     toPlan();
     expect(screen.getByRole('heading', { level: 2, name: 'Que faire de ce cadeau' })).toBeTruthy();
     expect(toSaveValue()).toBe(150);
-    fireEvent.click(screen.getByRole('button', { name: 'Tout est fait comme conseillé' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Tout marquer fait' }));
     expect(props.onRecordPay.mock.calls[0][0].pay).toMatchObject({ kind: 'extra', nature: 'gift', amount: 150 });
   });
 
@@ -353,7 +353,7 @@ describe('Rituel : bilan, deuxième paie, modification', () => {
     expect(screen.getByText(/Plan figé/)).toBeTruthy();
     const loyer = screen.getByRole('checkbox', { name: /^Loyer/ }) as HTMLInputElement;
     expect(loyer.checked && loyer.disabled).toBe(true);
-    fireEvent.click(screen.getByRole('button', { name: 'Tout est fait comme conseillé' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Tout marquer fait' }));
     const input = props.onRecordPay.mock.calls[0][0];
     expect(input.pay).toMatchObject({ id: 'pay-2026-11' });
     // L'ancien « à placer » reste sur la paie (la commande le garde) ; pas de solde ajouté à une ancienne paie.
@@ -404,7 +404,7 @@ describe('Rituel : le compte courant', () => {
     toPlan();
     expect(screen.getByText((_, el) => el?.tagName === 'P' && /^2 000 € de paie \+ 30 € déjà sur le compte = 2 030 € à répartir$/.test(nbsp(el.textContent)))).toBeTruthy();
     expect(nbsp(screen.getByRole('img').getAttribute('aria-label'))).toMatch(/^Répartition de 2 030 €/);
-    fireEvent.click(screen.getByRole('button', { name: 'Tout est fait comme conseillé' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Tout marquer fait' }));
     const input = props.onRecordPay.mock.calls[0][0];
     expect(input.pay.balance).toEqual({ seen: 2030, before: 30, source: 'typed' });
     expect(input.currentAccountId).toBe('cc');
@@ -420,7 +420,7 @@ describe('Rituel : le compte courant', () => {
     expect(nbsp(within(region()).getByRole('status').textContent)).toBe('Découvert de 50 € avant la paie.');
     toPlan();
     expect(screen.getByText((_, el) => el?.tagName === 'P' && /^2 000 € de paie − 50 € de découvert = 1 950 € à répartir$/.test(nbsp(el.textContent)))).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Enregistrer les cases cochées' }));
     const input = props.onRecordPay.mock.calls[0][0];
     expect(input.pay.balance).toEqual({ seen: -50, before: -50, source: 'typed' });
     // « Enregistrer » (partiel) : pas de constat du compte courant.
@@ -435,7 +435,7 @@ describe('Rituel : le compte courant', () => {
     expect(screen.queryByRole('button', { name: 'Je ne sais pas' })).toBeNull();
     toPlan();
     expect(screen.getByText('Sans votre solde, Pécule suppose que le compte courant était vide avant la paie.')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Tout est fait comme conseillé' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Tout marquer fait' }));
     const input = props.onRecordPay.mock.calls[0][0];
     expect(input.pay.balance).toEqual({ before: 0, source: 'unknown' });
     expect(input.currentAccountId).toBeUndefined();
@@ -458,7 +458,7 @@ describe('Rituel : le compte courant', () => {
     expect(balanceField().value).toBe('30');
     expect((screen.getByRole('checkbox', { name: 'Ma paie apparaît déjà dans ce solde' }) as HTMLInputElement).checked).toBe(false);
     toPlan();
-    fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Enregistrer les cases cochées' }));
     expect(props.onRecordPay.mock.calls[0][0].pay.balance).toEqual({ seen: 30, before: 30, source: 'typed' });
   });
 });

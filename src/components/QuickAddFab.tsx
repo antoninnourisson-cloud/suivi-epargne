@@ -42,6 +42,10 @@ export const QuickAddFab: React.FC<{ scrollRef: React.RefObject<HTMLElement | nu
     <button
       type="button"
       onClick={onClick}
+      // Replié : le bouton est invisible, il ne doit donc plus être atteignable (Tab, TalkBack).
+      inert={hidden}
+      aria-hidden={hidden || undefined}
+      tabIndex={hidden ? -1 : undefined}
       // Nom accessible complet ; le libellé visible « Mouvement » en fait partie (WCAG 2.5.3).
       aria-label={LABEL}
       className={`md:hidden fixed bottom-[calc(6rem+env(safe-area-inset-bottom))] right-4 z-40 h-14 pl-4 pr-5 rounded-2xl bg-primary-container text-on-primary-container shadow-lg hover:shadow-xl flex items-center gap-3 font-medium transition-all duration-300 ${hidden ? 'translate-y-28 opacity-0 pointer-events-none' : ''}`}
