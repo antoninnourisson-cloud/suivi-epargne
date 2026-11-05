@@ -114,7 +114,7 @@ jobs:
           workingDirectory: worker
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: rollback --yes --message "Retour arrière automatique : le serveur ne répond pas après ${{ github.sha }}"
+          command: rollback --yes --message "Retour arrière automatique, le serveur ne répond pas après ${{ github.sha }}"
 
   edge:
     name: Déploiement des en-têtes de sécurité
@@ -171,7 +171,7 @@ jobs:
           workingDirectory: edge
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: rollback --yes --message "Retour arrière automatique : en-têtes absents après ${{ github.sha }}"
+          command: rollback --yes --message "Retour arrière automatique, en-têtes absents après ${{ github.sha }}"
 
   build:
     name: Build vérifié
