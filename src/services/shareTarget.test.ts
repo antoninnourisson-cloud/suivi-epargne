@@ -1,7 +1,7 @@
 // @vitest-environment node
 // « Partager vers Pécule » : le service worker (public/share-sw.js) reçoit le fichier partagé,
 // le range et redirige toujours vers l'app ; la page (services/sharedFile) le prend une seule
-// fois, jamais au-delà d'une heure. Cache Storage simulé en mémoire.
+// fois, jamais au-delà de 10 minutes. Cache Storage simulé en mémoire.
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -34,7 +34,7 @@ const loadWorker = (caches: FakeCaches) => {
   const listeners: Record<string, (e: unknown) => void> = {};
   const self = { registration: { scope: SCOPE }, caches, addEventListener: (type: string, fn: (e: unknown) => void) => { listeners[type] = fn; } };
   new Function('self', readFileSync(resolve(__dirname, '../../public/share-sw.js'), 'utf8'))(self);
-  return (request: Request) => {
+  const run = (request: Request) => {
     const event = {
       request, response: undefined as Promise<Response> | undefined, wait: undefined as Promise<unknown> | undefined,
       respondWith(p: Promise<Response>) { this.response = p; },
@@ -43,6 +43,12 @@ const loadWorker = (caches: FakeCaches) => {
     listeners.fetch(event);
     return event;
   };
+  run.activate = () => {
+    const event = { wait: undefined as Promise<unknown> | undefined, waitUntil(p: Promise<unknown>) { this.wait = p; } };
+    listeners.activate(event);
+    return event;
+  };
+  return run;
 };
 
 const share = (files: File[], url = `${SCOPE}partager`) => {
@@ -93,7 +99,7 @@ describe('service worker : réception du partage', () => {
     expect((await e.response!).headers.get('Location')).toBe(`${SCOPE}?partage=erreur`);
   });
 
-  it('autres requêtes : pas de réponse ; ouverture de l’app : ménage des fichiers de plus d’une heure', async () => {
+  it('autres requêtes : pas de réponse ; ouverture de l’app : ménage des fichiers de plus de 10 minutes', async () => {
     expect(dispatch(new Request(`${SCOPE}autre`, { method: 'POST', body: 'x' })).response).toBeUndefined();
     expect(dispatch(new Request(`${SCOPE}partager`)).response).toBeUndefined();
 
@@ -108,6 +114,27 @@ describe('service worker : réception du partage', () => {
     e = dispatch(navigate());
     await e.wait;
     expect(caches.stores.get('pecule-partage')!.has(ENTRY)).toBe(false);
+  });
+});
+
+describe('service worker : ménage des fichiers périmés', () => {
+  it('à l’activation et à chaque nouveau partage, pas seulement à la navigation', async () => {
+    const caches = fakeCaches();
+    const dispatch = loadWorker(caches);
+    const stale = () => caches.open('pecule-partage').then(s => s.put(ENTRY, new Response('vieux', { headers: { 'X-Pecule-Recu': String(Date.now() - SHARE_MAX_AGE_MS - 1) } })));
+    await stale();
+    await dispatch.activate().wait;
+    expect(caches.stores.get('pecule-partage')!.has(ENTRY)).toBe(false);
+
+    await stale();
+    const e = dispatch(share([new File(['nouveau'], 'b.pdf', { type: 'application/pdf' })]));
+    await e.response;
+    const res = await (await caches.open('pecule-partage')).match(ENTRY);
+    expect(await res!.text()).toBe('nouveau');
+  });
+
+  it('dix minutes : un fichier de 9 minutes reste, un de 11 minutes part', () => {
+    expect(SHARE_MAX_AGE_MS).toBe(10 * 60 * 1000);
   });
 });
 
@@ -133,7 +160,7 @@ describe('page : prise du fichier partagé', () => {
     expect(await takeSharedFile(now)).toBeNull();
   });
 
-  it('plus d’une heure, date illisible ou nom illisible', async () => {
+  it('plus de 10 minutes, date illisible ou nom illisible', async () => {
     const now = Date.now();
     await put('x', { 'X-Pecule-Recu': String(now - SHARE_MAX_AGE_MS - 1) });
     expect(await takeSharedFile(now)).toBeNull();

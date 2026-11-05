@@ -8,6 +8,8 @@ name: Déploiement
 # (artefact site-dist) : rien n'est reconstruit entre le test et la mise en ligne. Après un
 # déploiement réussi, la version en tête de src/changelog.ts est publiée comme tag + GitHub
 # Release (une fois).
+# Après chaque déploiement d'un Worker (serveur, en-têtes), un contrôle vérifie qu'il répond ; sinon
+# `wrangler rollback` revient à la version précédente et le job échoue (scripts/check-*.mjs).
 # Retour arrière sans terminal : Actions → Déploiement → Run workflow, « Use workflow from »
 # = l'onglet Tags, puis le tag de la version voulue. Toute l'exécution tourne alors sur ce tag
 # (ses vérifications, son code, son cache, isolé de celui de main) et le republie partout
@@ -85,12 +87,34 @@ jobs:
         run: npm ci --prefix worker
 
       - name: Déploiement
+        id: deploy
         uses: cloudflare/wrangler-action@953926a2e2182532811c01a25e53647d93bf07c0 # v4
         with:
           workingDirectory: worker
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: deploy --message "${{ github.sha }}"
+
+      - name: Contrôle du serveur mis en ligne
+        id: verify
+        # GET /status sur l'adresse de .env.production, 5 essais à 10 s d'intervalle (le temps
+        # que la nouvelle version soit servie partout). Même script que le job « Serveur joignable ».
+        env:
+          CHECK_ATTEMPTS: '5'
+          CHECK_DELAY_MS: '10000'
+        run: node scripts/check-backend.mjs .env.production
+
+      - name: Retour à la version précédente du serveur
+        # Seulement si le déploiement a réussi mais que le serveur ne répond pas : retour à la
+        # version d'avant (wrangler rollback, sans question), puis le job reste en échec
+        # (l'étape de contrôle ci-dessus a échoué : la Release n'est pas publiée).
+        if: ${{ failure() && steps.deploy.outcome == 'success' && steps.verify.outcome == 'failure' }}
+        uses: cloudflare/wrangler-action@953926a2e2182532811c01a25e53647d93bf07c0 # v4
+        with:
+          workingDirectory: worker
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: rollback --yes --message "Retour arrière automatique : le serveur ne répond pas après ${{ github.sha }}"
 
   edge:
     name: Déploiement des en-têtes de sécurité
@@ -121,6 +145,7 @@ jobs:
         run: npm ci --prefix edge
 
       - name: Déploiement
+        id: deploy
         # Le jeton doit avoir, en plus des droits du Worker serveur :
         # Zone → Workers Routes → Edit (et Zone → Zone → Read) sur pecule-app.com.
         uses: cloudflare/wrangler-action@953926a2e2182532811c01a25e53647d93bf07c0 # v4
@@ -129,6 +154,24 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: deploy --message "${{ github.sha }}"
+
+      - name: Contrôle des en-têtes mis en ligne
+        id: verify
+        # La page d'accueil doit porter Content-Security-Policy, 5 essais à 10 s d'intervalle.
+        env:
+          CHECK_ATTEMPTS: '5'
+          CHECK_DELAY_MS: '10000'
+        run: node scripts/check-edge.mjs https://pecule-app.com/
+
+      - name: Retour à la version précédente des en-têtes
+        # Voir le job « worker » : retour arrière sans question, puis le job reste en échec.
+        if: ${{ failure() && steps.deploy.outcome == 'success' && steps.verify.outcome == 'failure' }}
+        uses: cloudflare/wrangler-action@953926a2e2182532811c01a25e53647d93bf07c0 # v4
+        with:
+          workingDirectory: edge
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: rollback --yes --message "Retour arrière automatique : en-têtes absents après ${{ github.sha }}"
 
   build:
     name: Build vérifié

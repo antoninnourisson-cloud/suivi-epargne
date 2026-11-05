@@ -56,3 +56,6 @@ export const daysBetween = (from: Date, to: Date): number =>
  */
 export const monthsBetween = (from: Date, to: Date): number =>
   daysBetween(from, to) / AVG_DAYS_PER_MONTH;
+
+/** Clé de mois 'YYYY-MM' en heure LOCALE (jamais UTC : un 1er du mois à 00h30 reste dans son mois). */
+export const localMonthKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;

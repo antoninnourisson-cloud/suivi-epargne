@@ -58,7 +58,11 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   const file = process.argv[2] || '.env.production';
   let text;
   try { text = readFileSync(file, 'utf8'); } catch { text = ''; }
-  const { ok, message } = text ? await checkBackend(text) : { ok: false, message: `Fichier ${file} introuvable ou vide.` };
+  // Après un déploiement du serveur (deploy.yml) : plus d'essais, plus espacés, le temps que la
+  // nouvelle version soit servie partout (CHECK_ATTEMPTS, CHECK_DELAY_MS).
+  const attempts = Number(process.env.CHECK_ATTEMPTS) || undefined;
+  const delayMs = Number(process.env.CHECK_DELAY_MS) || undefined;
+  const { ok, message } = text ? await checkBackend(text, { attempts, delayMs }) : { ok: false, message: `Fichier ${file} introuvable ou vide.` };
   (ok ? console.log : console.error)(message);
   // exitCode plutôt que process.exit() : quitter de force juste après un fetch fait planter
   // Node sous Windows (assertion libuv, code 127).

@@ -12,7 +12,7 @@
 import { AccountType, type FiscalConfig, type GlobalAppData, type SavingsAccount } from '../types';
 import { DEFAULT_FISCAL_CONFIG } from '../constants';
 import { round2 } from './money';
-import { formatISODay } from './dates';
+import { formatISODay, localMonthKey } from './dates';
 import {
   computeAccruedInterest, computeAccruedParentalInterest, computeMaturityCountdown,
   computeMonthlyPay, subscriptionMonthlyCost, type SalaryTaxEstimate,
@@ -40,7 +40,7 @@ export interface AskSnapshotResult {
 }
 
 const eur = (n: number | undefined): number | undefined => (typeof n === 'number' && Number.isFinite(n) ? round2(n) : undefined);
-const monthKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+const monthKey = localMonthKey;
 const sum = (xs: number[]) => round2(xs.reduce((s, x) => s + x, 0));
 
 /** Plafond d'un compte : celui saisi sur le compte, sinon le plafond légal des livrets réglementés. */

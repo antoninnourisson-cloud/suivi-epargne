@@ -170,6 +170,8 @@ export const useAppLock = () => {
       if (lockedRef.current) return;
       lockedRef.current = true;
       returnFocusRef.current = restorableFocus(document.activeElement);
+      // Pas de vidage du cache `pecule-partage` ici : au partage, le retour de Pécule au premier
+      // plan peut verrouiller l'ancienne page pendant que la nouvelle attend le fichier reçu.
       // Rendu synchrone : au retour au premier plan, la surcouche doit être en place avant
       // la prochaine image, pas une image plus tard.
       flushSync(() => setLocked(true));

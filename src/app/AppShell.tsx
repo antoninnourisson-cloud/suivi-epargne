@@ -105,7 +105,7 @@ export const AppShell: React.FC<AppShellProps> = ({ place, onNavigate, onOpenScr
         <SideNav place={place} onOpenScreen={onOpenScreen} />
         <div className="px-3 py-3 border-t border-outline-variant">
           <button onClick={() => onRequestLogout(false)} className="w-full h-12 flex items-center gap-3 px-4 text-error hover:bg-error/8 rounded-full font-medium text-sm transition-colors"><LogOut className="w-5 h-5" aria-hidden="true" /> Déconnexion</button>
-          <button onClick={() => { openSettingsSection('about'); onNavigate('settings'); }} className="w-full mt-1 px-4 text-left text-[11px] font-medium text-on-surface-variant hover:text-on-surface" title="Historique des mises à jour dans Paramètres">Pécule · version {APP_VERSION}{typeof __BUILD_SHA__ !== "undefined" && __BUILD_SHA__ !== "dev" ? ` · ${__BUILD_SHA__}` : ""}</button>
+          <button onClick={() => { openSettingsSection('about'); onNavigate('settings'); }} className="w-full mt-1 px-4 text-left text-xs font-medium text-on-surface-variant hover:text-on-surface" title="Historique des mises à jour dans Paramètres">Pécule · version {APP_VERSION}{typeof __BUILD_SHA__ !== "undefined" && __BUILD_SHA__ !== "dev" ? ` · ${__BUILD_SHA__}` : ""}</button>
         </div>
       </aside>
 

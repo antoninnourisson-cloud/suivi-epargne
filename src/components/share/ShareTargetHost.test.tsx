@@ -142,7 +142,7 @@ describe('Partager vers Pécule', () => {
     expect(screen.queryByText(/clé Gemini/)).toBeNull();
   });
 
-  it('fichier introuvable (déjà lu, ou plus d’une heure)', async () => {
+  it('fichier introuvable (déjà lu, ou plus de 10 minutes)', async () => {
     take.mockResolvedValue(null);
     const { props } = setup();
     expect((await screen.findByRole('dialog', { name: 'Fichier non importé' })).textContent).toMatch(/plus disponible/);

@@ -30,6 +30,13 @@ import type { AddToast, DialogApi } from './UiProviders';
 type Setters = Pick<PortfolioData,
   'setAccounts' | 'setPays' | 'setParentalRestitution' | 'setActivePayslipId' | 'setFiscalConfig' | 'patchConfig' | 'exportData'>;
 
+// Ce que la suppression d'un compte efface : son solde et ses mouvements (rangés dans le compte).
+const deletionStake = (acc: SavingsAccount): string => {
+  const n = acc.movements.length;
+  const moves = n === 0 ? '' : n === 1 ? ' et 1 mouvement' : ` et ${n} mouvements`;
+  return `${acc.name} : ${plainEUR(acc.totalAmount)}${moves} seront effacés. Supprimer définitivement ?`;
+};
+
 export const useAccountActions = (doc: AppDoc, setters: Setters, addToast: AddToast, dialog: DialogApi) => {
   // État le plus récent : une confirmation ou une annulation (toast) s'applique à l'état du
   // moment, pas à celui du rendu qui l'a créée.
@@ -272,7 +279,7 @@ export const useAccountActions = (doc: AppDoc, setters: Setters, addToast: AddTo
         deps.current.dialog.open({
           kind: 'confirm', danger: true, confirmLabel: 'Supprimer',
           title: `Supprimer « ${acc.name} »`,
-          message: isEmpty ? 'Ce compte est vide, il sera supprimé.' : 'Ce compte contient encore un solde. Supprimer définitivement ?',
+          message: isEmpty ? 'Ce compte est vide, il sera supprimé.' : deletionStake(acc),
           onConfirm: () => {
             // L'annulation remet le compte à sa place d'origine (voir deleteAccount).
             const r = deleteAccount(commandStateRef.current, { accountId: acc.id });

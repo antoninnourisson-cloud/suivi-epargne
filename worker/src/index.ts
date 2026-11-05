@@ -58,7 +58,7 @@ import { sendPush, PushMessage } from './webpush';
 import { fetchFiscalSources, FiscalSource } from './fiscalSources';
 import { cachedSiteCheck } from './siteCheck';
 import { CronErrors, appendCronLog, readCronLog, readFiscalWatchHealth, recordFiscalWatchCron } from './cronLog';
-import { AiRunner, FISCAL_WATCH_CRON, LATEST_KEY, FAILURE_KEY, FiscalWatchRun, runAndStoreFiscalWatch, canRunOnDemand } from './fiscalWatchJob';
+import { AiRunner, FISCAL_WATCH_CRON, LATEST_KEY, FAILURE_KEY, FiscalWatchRun, runAndStoreFiscalWatch, canRunOnDemand, isFiscalRetryDue, noteFiscalRetry } from './fiscalWatchJob';
 import { isReminderEnabled } from '../../src/lib/notificationPrefs';
 import { computeReminders, applyDiscreetMode, isDiscreet, parisCivilDate } from './reminders';
 import {
@@ -1135,6 +1135,23 @@ const runScheduledFiscalWatch = async (env: Env): Promise<void> => {
   await recordFiscalWatchCron(env.STORE, startedAt, ok).catch(e => console.error('fiscal watch health failed', e));
 };
 
+/**
+ * Relance quotidienne de la veille après un échec (cron de 7 h) : une fois par jour au plus,
+ * 6 fois par semaine au plus, jusqu'au premier succès (isFiscalRetryDue). Sans effet si le
+ * dernier essai a réussi. Le seuil d'alerte de /status (8 jours sans succès) reste valable.
+ */
+const retryFiscalWatchIfFailed = async (env: Env): Promise<void> => {
+  try {
+    if (!env.AI) return;
+    const now = new Date();
+    if (!(await isFiscalRetryDue(env.STORE, now))) return;
+    await noteFiscalRetry(env.STORE, now);
+    await runScheduledFiscalWatch(env);
+  } catch (e) {
+    console.error('fiscal watch retry failed', e);
+  }
+};
+
 // ---------- Point d'entrée ----------
 
 /** Routes ouvertes par navigation (redirection OAuth), exemptées du contrôle d'origine. Les
@@ -1222,6 +1239,7 @@ export default {
       ctx.waitUntil(runScheduledFiscalWatch(env));
       return;
     }
-    ctx.waitUntil(runDailyReminders(env));
+    // Le cron quotidien relance aussi la veille fiscale si son dernier essai a échoué.
+    ctx.waitUntil(runDailyReminders(env).finally(() => retryFiscalWatchIfFailed(env)));
   },
 };

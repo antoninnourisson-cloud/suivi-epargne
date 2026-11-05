@@ -6,7 +6,7 @@
 // des mouvements (`balanceAt`, même convention que le graphique d'évolution), sinon un
 // nouvel utilisateur ne verrait aucune tendance pendant des mois.
 import type { PortfolioSnapshot } from '../types';
-import { parseISODate, formatISODay } from './dates';
+import { parseISODate, formatISODay, localMonthKey } from './dates';
 import { round2 } from './money';
 
 const monthOf = (iso: string) => iso.slice(0, 7);
@@ -14,8 +14,7 @@ const monthOf = (iso: string) => iso.slice(0, 7);
 /** Mois `YYYY-MM` décalé de `delta` mois. */
 export const shiftMonth = (month: string, delta: number): string => {
   const [y, m] = month.split('-').map(Number);
-  const d = new Date(y, m - 1 + delta, 1);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  return localMonthKey(new Date(y, m - 1 + delta, 1));
 };
 
 /** Valeur d'un point d'historique : votre part si connue, sinon le total. */

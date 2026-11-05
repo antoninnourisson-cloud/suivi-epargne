@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { monthsBetween, daysBetween, parseISODate, AVG_DAYS_PER_MONTH, formatISODay } from './dates';
+import { monthsBetween, daysBetween, parseISODate, AVG_DAYS_PER_MONTH, formatISODay, localMonthKey } from './dates';
 
 describe('parseISODate', () => {
   it("parse 'YYYY-MM-DD' en date locale à minuit (pas de décalage de fuseau)", () => {
@@ -74,5 +74,12 @@ describe('formatISODay', () => {
   });
   it('est l inverse de parseISODate', () => {
     expect(formatISODay(parseISODate('2025-10-26'))).toBe('2025-10-26');
+  });
+});
+
+describe('localMonthKey', () => {
+  it("donne 'YYYY-MM' en heure locale, avec un zéro devant les mois courts", () => {
+    expect(localMonthKey(new Date(2026, 0, 1, 0, 30))).toBe('2026-01');
+    expect(localMonthKey(new Date(2026, 10, 30, 23, 59))).toBe('2026-11');
   });
 });

@@ -26,8 +26,49 @@ interface ModalProps {
 
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
+// Fenêtres ouvertes, de la plus ancienne à la plus haute : seule la dernière réagit à Échap et
+// à Tab (une confirmation posée sur une feuille ne referme pas la feuille avec elle).
+const stack: symbol[] = [];
+
+// Éléments rendus inertes pendant qu'une fenêtre est ouverte, avec le nombre de fenêtres qui
+// les ont demandés : ils ne redeviennent actifs qu'à la fermeture de la dernière.
+const inertCounts = new Map<Element, number>();
+
+/**
+ * Rend inerte tout ce qui entoure la fenêtre (frères de chacun de ses ancêtres), sauf la zone
+ * des toasts (annoncée aux lecteurs d'écran) et le verrou de l'app. Ce qui était déjà inerte
+ * (l'app sous le verrou) n'est pas touché. Renvoie la fonction qui annule.
+ */
+const isolate = (overlay: HTMLElement): (() => void) => {
+  const mine: Element[] = [];
+  for (let node: HTMLElement | null = overlay; node && node !== document.body; node = node.parentElement) {
+    const parent: HTMLElement | null = node.parentElement;
+    if (!parent) break;
+    for (const sibling of Array.from(parent.children)) {
+      if (sibling === node || sibling.matches('script, style, [role="status"], [data-app-lock]')) continue;
+      const count = inertCounts.get(sibling);
+      if (count === undefined) {
+        if (sibling.hasAttribute('inert')) continue;
+        sibling.setAttribute('inert', '');
+      }
+      inertCounts.set(sibling, (count ?? 0) + 1);
+      mine.push(sibling);
+    }
+  }
+  return () => {
+    for (const el of mine) {
+      const count = (inertCounts.get(el) ?? 1) - 1;
+      if (count > 0) { inertCounts.set(el, count); continue; }
+      inertCounts.delete(el);
+      // Verrou posé entre-temps : l'app y reste inerte (App.tsx la rouvre au déverrouillage).
+      if (!document.querySelector('[data-app-lock]')) el.removeAttribute('inert');
+    }
+  };
+};
+
 export const Modal: React.FC<ModalProps> = ({ open, onClose, label, children, variant = 'center', className = '', initialFocusRef, closeOnScrim = true }) => {
   const panelRef = useRef<HTMLDivElement>(null);
+  const overlayRef = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
 
@@ -40,7 +81,13 @@ export const Modal: React.FC<ModalProps> = ({ open, onClose, label, children, va
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
 
+    const id = Symbol('modal');
+    stack.push(id);
+    const release = overlayRef.current ? isolate(overlayRef.current) : undefined;
+
     const onKey = (e: KeyboardEvent) => {
+      // Fenêtre empilée sous une autre : seule la plus haute répond.
+      if (stack[stack.length - 1] !== id) return;
       // Verrou posé par-dessus l'app (App.tsx) : la fenêtre, restée ouverte derrière, ne
       // réagit pas aux touches (Échap ou Tab tapés sur l'écran de verrouillage).
       if (panel?.closest('[inert]')) return;
@@ -55,6 +102,9 @@ export const Modal: React.FC<ModalProps> = ({ open, onClose, label, children, va
     document.addEventListener('keydown', onKey);
     return () => {
       document.removeEventListener('keydown', onKey);
+      release?.();
+      const at = stack.indexOf(id);
+      if (at !== -1) stack.splice(at, 1);
       document.body.style.overflow = prevOverflow;
       previouslyFocused?.focus?.();
     };
@@ -65,6 +115,7 @@ export const Modal: React.FC<ModalProps> = ({ open, onClose, label, children, va
   const page = variant === 'page';
   return (
     <div
+      ref={overlayRef}
       className={`fixed inset-0 z-70 flex ${sheet || page ? 'items-end sm:items-center' : 'items-center p-4'} justify-center bg-scrim/40 animate-fade-in`}
       onClick={closeOnScrim ? onClose : undefined}
     >

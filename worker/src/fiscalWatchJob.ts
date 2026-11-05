@@ -17,6 +17,7 @@
 //    valide chaque changement (src/lib/fiscalWatch.ts, diffFiscalWatch).
 // ================================================
 import { fetchFiscalSources, FiscalSource } from './fiscalSources';
+import { readFiscalWatchHealth } from './cronLog';
 
 /** Modèle : le plus solide des modèles Workers AI qui acceptent le mode JSON (json_schema). */
 export const FISCAL_AI_MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
@@ -410,4 +411,41 @@ export const canRunOnDemand = async (store: KVNamespace, now: Date = new Date())
   if (await store.get(ATTEMPT_KEY)) return false;
   const latest = await store.get<FiscalWatchRun>(LATEST_KEY, 'json');
   return !latest || now.getTime() - new Date(latest.checkedAt).getTime() >= MIN_INTERVAL_AFTER_SUCCESS_MS;
+};
+
+/** Relances après un échec : dates (ISO) des dernières, gardées 8 jours. */
+export const RETRIES_KEY = 'fiscal-watch:retries';
+/** Au plus 6 relances par semaine glissante (quota Workers AI), jamais deux le même jour. */
+export const MAX_RETRIES_PER_WEEK = 6;
+const WEEK_MS = 7 * 86400_000;
+
+const dayOf = (iso: string): string => iso.slice(0, 10);
+
+const readRetries = async (store: KVNamespace): Promise<string[]> => {
+  const raw = await store.get<unknown>(RETRIES_KEY, 'json').catch(() => null);
+  return Array.isArray(raw) ? raw.filter((x): x is string => typeof x === 'string') : [];
+};
+
+/**
+ * Le cron quotidien doit-il relancer la veille ? Oui si le dernier essai a échoué, qu'aucun essai
+ * n'a eu lieu aujourd'hui (jour UTC), que moins de 6 relances ont eu lieu sur 7 jours, et qu'aucun
+ * succès à la demande n'est venu réparer l'échec depuis. Le succès du lundi n'est pas concerné.
+ */
+export const isFiscalRetryDue = async (store: KVNamespace, now: Date = new Date()): Promise<boolean> => {
+  const health = await readFiscalWatchHealth(store);
+  if (!health || health.ok !== false || !health.lastFailureAt) return false;
+  const today = dayOf(now.toISOString());
+  if (dayOf(health.lastFailureAt) === today) return false;
+  const retries = (await readRetries(store)).filter(t => now.getTime() - new Date(t).getTime() < WEEK_MS);
+  if (retries.some(t => dayOf(t) === today) || retries.length >= MAX_RETRIES_PER_WEEK) return false;
+  if (await store.get(ATTEMPT_KEY)) return false;
+  const latest = await store.get<FiscalWatchRun>(LATEST_KEY, 'json');
+  if (latest && new Date(latest.checkedAt).getTime() > new Date(health.lastFailureAt).getTime()) return false;
+  return true;
+};
+
+/** Note une relance (avant de la lancer : une relance interrompue compte quand même). */
+export const noteFiscalRetry = async (store: KVNamespace, now: Date = new Date()): Promise<void> => {
+  const kept = (await readRetries(store)).filter(t => now.getTime() - new Date(t).getTime() < WEEK_MS);
+  await store.put(RETRIES_KEY, JSON.stringify([...kept, now.toISOString()]), { expirationTtl: 8 * 86400 });
 };

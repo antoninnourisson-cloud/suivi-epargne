@@ -86,7 +86,7 @@ export const GoodMonthsCard: React.FC<GoodMonthsCardProps> = ({ summary, today, 
                   <span className={`w-7 h-7 rounded-full flex items-center justify-center ${dot}`} aria-hidden="true">
                     <Icon className="w-3.5 h-3.5" />
                   </span>
-                  <span className="text-[11px] text-on-surface-variant" aria-hidden="true">{parseISODate(`${m.key}-01`).toLocaleDateString('fr-FR', { month: 'short' })}</span>
+                  <span className="text-xs text-on-surface-variant" aria-hidden="true">{parseISODate(`${m.key}-01`).toLocaleDateString('fr-FR', { month: 'short' })}</span>
                   <span className="sr-only">{text}</span>
                 </li>
               );

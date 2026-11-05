@@ -16,7 +16,8 @@ export default defineConfig({
   timeout: 60_000,
   forbidOnly: CI,
   retries: CI ? 1 : 0,
-  reporter: CI ? [['github'], ['html', { open: 'never' }]] : 'list',
+  // Le reporter maison signale les tests réussis seulement à la relance (::warning + résumé du job).
+  reporter: CI ? [['github'], ['html', { open: 'never' }], ['./scripts/playwright-flaky-reporter.mjs']] : 'list',
   use: {
     baseURL: `http://localhost:${PORT}`,
     locale: 'fr-FR',

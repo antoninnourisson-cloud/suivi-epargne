@@ -1,7 +1,7 @@
 // Rythme d'épargne, mouvements récurrents, placé ce mois-ci, taux d'épargne.
 // Partie de src/lib/finance.ts (qui réexporte tout) : importez depuis '../finance'.
 import { AccountType, AccountMovement, RecurringMovement } from '../../types';
-import { MS_PER_DAY, formatISODay } from '../dates';
+import { MS_PER_DAY, formatISODay, localMonthKey } from '../dates';
 import { signedAmount } from '../money';
 
 // --- RYTHME D'ÉPARGNE RÉEL OBSERVÉ ---
@@ -144,7 +144,7 @@ export const computeMonthSavedAmount = (
   asOfDate: Date = new Date(),
   trackingStartISO?: string
 ): number => {
-  const monthKey = `${asOfDate.getFullYear()}-${String(asOfDate.getMonth() + 1).padStart(2, '0')}`;
+  const monthKey = localMonthKey(asOfDate);
   const todayKey = formatISODay(asOfDate);
   let total = 0;
   for (const a of accounts) {

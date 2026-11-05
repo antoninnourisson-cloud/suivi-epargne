@@ -13,7 +13,7 @@
 // fenêtres passées.
 // ================================================
 import type { PayRecord, PayslipRecord } from '../types';
-import { formatISODay, parseISODate, MS_PER_DAY } from './dates';
+import { formatISODay, parseISODate, MS_PER_DAY, localMonthKey } from './dates';
 
 /** Durée de la fenêtre en cours tant que la paie suivante n'est pas tombée. */
 export const PAY_WINDOW_DAYS = 30;
@@ -52,10 +52,7 @@ export interface PayWindow {
   payMonth: string;
 }
 
-const monthKeyOf = (y: number, month0: number) => {
-  const d = new Date(y, month0, 1);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-};
+const monthKeyOf = (y: number, month0: number) => localMonthKey(new Date(y, month0, 1));
 
 /** Mois `key` décalé de `delta` mois ('2026-12', +1 → '2027-01'). */
 export const shiftMonth = (key: string, delta: number) => {

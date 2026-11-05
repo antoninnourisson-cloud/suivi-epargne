@@ -93,7 +93,10 @@ describe('comptes', () => {
     act(() => result.current.deleteAccount(doc.accounts[1]));
     expect(dialog.open.mock.calls[0][0]).toMatchObject({ danger: true, title: 'Supprimer « vide »', message: 'Ce compte est vide, il sera supprimé.' });
     act(() => result.current.deleteAccount(doc.accounts[0]));
-    expect(dialog.open.mock.calls[1][0].message).toMatch(/encore un solde/);
+    expect(dialog.open.mock.calls[1][0].message).toMatch(/^a : 100 € seront effacés/);
+    const withMoves = account('m', { totalAmount: 4200, ownedAmount: 4200, name: 'Livret A', movements: Array.from({ length: 37 }, (_, i) => ({ id: `m${i}`, date: '2026-10-01', amount: 10, label: 'V', type: 'IN' as const })) });
+    act(() => result.current.deleteAccount(withMoves));
+    expect(dialog.open.mock.calls[2][0].message).toMatch(/^Livret A : 4.200 € et 37 mouvements seront effacés./);
 
     act(() => dialog.open.mock.calls[0][0].onConfirm!());
     expect(accountsWritten(0).map(a => a.id)).toEqual(['a', 'c']);

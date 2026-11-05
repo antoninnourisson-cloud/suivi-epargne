@@ -6,13 +6,15 @@
 //   à 17,2 %, paramètres fiscaux de 2025, ancien écran « Objectifs », adresse des parents,
 //   clé Gemini dans le fichier, lignes abîmées) ;
 // - fichier-2026-10 : schéma v2, avant les paies reçues (liste de la paie, réglages de la paie
-//   en cours et points de paie validés au mois de versement).
+//   en cours et points de paie validés au mois de versement) ;
+// - fichier-2026-11 : schéma v3 (format actuel), tiré des données fictives de la démo.
+// Un test échoue si le format de l'app passe devant le plus récent de ces fichiers.
 // Le résultat complet est comparé à un instantané (`*.migrated.json`) : tout changement de la
 // migration d'un ancien fichier se voit dans la revue. Un changement voulu (nouvelle
 // migration, nouvelles valeurs par défaut de src/constants.ts) se valide avec
 // `npx vitest run src/lib/schema.fixtures.test.ts -u`, puis se relit dans le diff.
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { AccountType } from '../types';
 import { APP_SCHEMA_VERSION, canonicalize, migrate, withoutDeviceOnlyFields } from './schema';
@@ -22,7 +24,7 @@ import { round2 } from './money';
 const fixture = (name: string): unknown =>
   JSON.parse(readFileSync(fileURLToPath(new URL(`./__fixtures__/${name}.json`, import.meta.url)), 'utf8'));
 
-const ERAS = ['fichier-2026-01', 'fichier-2026-09', 'fichier-2026-10'] as const;
+const ERAS = ['fichier-2026-01', 'fichier-2026-09', 'fichier-2026-10', 'fichier-2026-11'] as const;
 
 describe.each(ERAS)('ancien fichier %s', name => {
   const raw = fixture(name);
@@ -35,6 +37,8 @@ describe.each(ERAS)('ancien fichier %s', name => {
   it('migration stable, soldes cohérents, rien de perdu', () => {
     expect(m.schemaVersion).toBe(APP_SCHEMA_VERSION);
     expect(migrate(m)).toEqual(m);
+    // Migrer deux fois = migrer une fois, à l'octet près (ordre des clés compris).
+    expect(JSON.stringify(migrate(migrate(raw)))).toBe(JSON.stringify(m));
     expect(canonicalize(m)).toBe(canonicalize(raw));
     for (const a of m.accounts) {
       expect(a.totalAmount, a.id).toBe(round2(a.ownedAmount + a.parentalCapital));
@@ -42,6 +46,25 @@ describe.each(ERAS)('ancien fichier %s', name => {
     }
     // Le fichier d'origine n'est jamais modifié en place.
     expect(raw).toEqual(fixture(name));
+  });
+});
+
+describe('fichiers d’exemple et version du format', () => {
+  const dir = fileURLToPath(new URL('./__fixtures__/', import.meta.url));
+  const files = readdirSync(dir).filter(f => f.endsWith('.json') && !f.endsWith('.migrated.json')).map(f => f.replace(/\.json$/, ''));
+  /** Format d'un fichier : sans numéro, c'est le format d'avant le versionnage (1). */
+  const versionOf = (raw: unknown): number => {
+    const v = (raw as { schemaVersion?: unknown }).schemaVersion;
+    return typeof v === 'number' ? v : 1;
+  };
+
+  it('la liste des époques couvre tous les fichiers du dossier', () => {
+    expect([...files].sort()).toEqual([...ERAS].sort());
+  });
+
+  it('au moins un fichier d’exemple est au format actuel', () => {
+    const newest = Math.max(...files.map(f => versionOf(fixture(f))));
+    expect(newest, `Le format est passé à ${APP_SCHEMA_VERSION} : ajoutez un fichier d'exemple au format ${APP_SCHEMA_VERSION} (src/lib/__fixtures__) et listez-le dans ERAS.`).toBe(APP_SCHEMA_VERSION);
   });
 });
 

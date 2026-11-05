@@ -15,6 +15,18 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '2026.11.05',
+    date: '2026-11-05',
+    title: 'Fenêtres plus sûres, veille relancée',
+    items: [
+      "Supprimer un compte : la confirmation dit ce qui sera effacé, par exemple « Livret A : 4 200 € et 37 mouvements seront effacés ».",
+      "Fenêtres : quand une confirmation s'ouvre sur une feuille, Échap ne ferme plus que la confirmation. Avec TalkBack, la page derrière une fenêtre ouverte n'est plus lue. La ligne de version du menu est un peu plus grande.",
+      "Fichier partagé vers Pécule et jamais ouvert : effacé de l'appareil au bout de 10 minutes au lieu d'une heure.",
+      "Veille fiscale : si l'essai du lundi échoue, elle est relancée chaque jour jusqu'à ce qu'elle réussisse.",
+      "Coulisses : le serveur est vérifié juste après chaque mise en ligne et remis à la version précédente s'il ne répond pas. Nouveaux tests sur les calculs d'argent, les vieilles sauvegardes et la copie faite quand l'app passe en arrière-plan.",
+    ],
+  },
+  {
     version: '2026.11.04-12',
     date: '2026-11-04',
     title: 'Relevés mieux lus, sauvegarde surveillée',

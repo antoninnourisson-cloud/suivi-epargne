@@ -31,7 +31,8 @@ export const canonicalDoc = (doc: GlobalAppData): string => {
 export const canonicalWithoutView = (data: unknown): string =>
   data && typeof data === 'object' ? canonicalize({ ...(data as Record<string, unknown>), lastView: undefined }) : '';
 
-export const localMonthKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+// Clé de mois locale (« 2026-11 ») : une seule définition, dans lib/dates.
+export { localMonthKey } from '../../lib/dates';
 
 /**
  * Nouvelles tentatives après un échec PASSAGER (délai dépassé, Drive saturé…) alors que le

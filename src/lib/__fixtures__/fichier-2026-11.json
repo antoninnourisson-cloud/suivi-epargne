@@ -1,0 +1,515 @@
+{
+  "accounts": [
+    {
+      "id": "demo-la",
+      "name": "Livret A",
+      "institution": "Banque Démo",
+      "type": "Livret A",
+      "totalAmount": 15200,
+      "ownedAmount": 8200,
+      "parentalCapital": 7000,
+      "interestRate": 1.5,
+      "rateHistory": [
+        {
+          "date": "2026-02-01",
+          "rate": 1.7
+        }
+      ],
+      "openingDate": "2019-03-01",
+      "ceiling": 22950,
+      "balanceCheckedAt": "2026-10-26",
+      "movements": [
+        {
+          "id": "m1",
+          "date": "2019-03-01",
+          "amount": 9000,
+          "label": "Solde initial",
+          "type": "IN",
+          "tag": "initial"
+        },
+        {
+          "id": "la-8",
+          "date": "2026-02-28",
+          "amount": 400,
+          "label": "Épargne du mois",
+          "type": "IN"
+        },
+        {
+          "id": "la-7",
+          "date": "2026-03-28",
+          "amount": 450,
+          "label": "Épargne du mois",
+          "type": "IN"
+        },
+        {
+          "id": "la-6",
+          "date": "2026-04-28",
+          "amount": 320,
+          "label": "Épargne du mois",
+          "type": "IN"
+        },
+        {
+          "id": "la-5",
+          "date": "2026-05-28",
+          "amount": 500,
+          "label": "Épargne du mois",
+          "type": "IN"
+        },
+        {
+          "id": "la-4",
+          "date": "2026-06-28",
+          "amount": 400,
+          "label": "Épargne du mois",
+          "type": "IN"
+        },
+        {
+          "id": "la-3",
+          "date": "2026-07-28",
+          "amount": 480,
+          "label": "Épargne du mois",
+          "type": "IN"
+        },
+        {
+          "id": "la-2",
+          "date": "2026-08-28",
+          "amount": 420,
+          "label": "Épargne du mois",
+          "type": "IN"
+        },
+        {
+          "id": "la-1",
+          "date": "2026-09-28",
+          "amount": 450,
+          "label": "Épargne du mois",
+          "type": "IN"
+        },
+        {
+          "id": "la-0",
+          "date": "2026-10-28",
+          "amount": 320,
+          "label": "Épargne du mois",
+          "type": "IN"
+        }
+      ]
+    },
+    {
+      "id": "demo-lep",
+      "name": "LEP",
+      "institution": "Banque Démo",
+      "type": "LEP",
+      "totalAmount": 10000,
+      "ownedAmount": 7500,
+      "parentalCapital": 2500,
+      "interestRate": 2.5,
+      "openingDate": "2022-01-10",
+      "ceiling": 10000,
+      "movements": [],
+      "balanceCheckedAt": "2026-07-08"
+    },
+    {
+      "id": "demo-ldds",
+      "name": "LDDS",
+      "institution": "Banque Démo",
+      "type": "LDDS",
+      "totalAmount": 3000,
+      "ownedAmount": 3000,
+      "parentalCapital": 0,
+      "interestRate": 1.5,
+      "rateHistory": [
+        {
+          "date": "2026-02-01",
+          "rate": 1.7
+        }
+      ],
+      "openingDate": "2023-05-02",
+      "ceiling": 12000,
+      "balanceCheckedAt": "2026-10-26",
+      "movements": [
+        {
+          "id": "ldds-7",
+          "date": "2026-03-29",
+          "amount": 200,
+          "label": "Épargne du mois",
+          "type": "IN"
+        },
+        {
+          "id": "ldds-5",
+          "date": "2026-05-29",
+          "amount": 200,
+          "label": "Épargne du mois",
+          "type": "IN"
+        },
+        {
+          "id": "ldds-3",
+          "date": "2026-07-29",
+          "amount": 200,
+          "label": "Épargne du mois",
+          "type": "IN"
+        },
+        {
+          "id": "ldds-out-1",
+          "date": "2026-10-09",
+          "amount": 200,
+          "label": "Réparation voiture",
+          "type": "OUT"
+        }
+      ]
+    },
+    {
+      "id": "demo-av",
+      "name": "Assurance vie",
+      "institution": "Assureur Démo",
+      "type": "Assurance Vie",
+      "totalAmount": 4300,
+      "ownedAmount": 4300,
+      "parentalCapital": 0,
+      "interestRate": 2.6,
+      "openingDate": "2024-06-15",
+      "totalDeposits": 4000,
+      "balanceCheckedAt": "2026-10-26",
+      "movements": [
+        {
+          "id": "av-init",
+          "date": "2024-06-15",
+          "amount": 3000,
+          "label": "Solde initial",
+          "type": "IN",
+          "tag": "initial"
+        },
+        {
+          "id": "av-val",
+          "date": "2025-12-31",
+          "amount": 300,
+          "label": "Valorisation (+)",
+          "type": "IN",
+          "kind": "valuation"
+        },
+        {
+          "id": "av-8",
+          "date": "2026-03-02",
+          "amount": 200,
+          "label": "Versement",
+          "type": "IN"
+        },
+        {
+          "id": "av-6",
+          "date": "2026-04-30",
+          "amount": 200,
+          "label": "Versement",
+          "type": "IN"
+        },
+        {
+          "id": "av-4",
+          "date": "2026-06-30",
+          "amount": 200,
+          "label": "Versement",
+          "type": "IN"
+        },
+        {
+          "id": "av-2",
+          "date": "2026-08-30",
+          "amount": 200,
+          "label": "Versement",
+          "type": "IN"
+        },
+        {
+          "id": "av-1",
+          "date": "2026-09-30",
+          "amount": 200,
+          "label": "Versement",
+          "type": "IN"
+        }
+      ]
+    },
+    {
+      "id": "demo-cc",
+      "name": "Compte courant",
+      "institution": "Banque Démo",
+      "type": "Compte Courant",
+      "totalAmount": 3900,
+      "ownedAmount": 3900,
+      "parentalCapital": 0,
+      "interestRate": 0,
+      "movements": [],
+      "balanceCheckedAt": "2026-11-03"
+    }
+  ],
+  "expenses": [
+    {
+      "id": "e1",
+      "name": "Loyer",
+      "amount": 750
+    },
+    {
+      "id": "e2",
+      "name": "Électricité",
+      "amount": 45
+    },
+    {
+      "id": "e3",
+      "name": "Téléphone",
+      "amount": 15
+    }
+  ],
+  "history": [
+    {
+      "date": "2025-12-01",
+      "ownedAmount": 21760,
+      "totalAmount": 31260
+    },
+    {
+      "date": "2026-01-01",
+      "ownedAmount": 21760,
+      "totalAmount": 31260
+    },
+    {
+      "date": "2026-02-01",
+      "ownedAmount": 22160,
+      "totalAmount": 31660
+    },
+    {
+      "date": "2026-03-01",
+      "ownedAmount": 23010,
+      "totalAmount": 32510
+    },
+    {
+      "date": "2026-04-01",
+      "ownedAmount": 23530,
+      "totalAmount": 33030
+    },
+    {
+      "date": "2026-05-01",
+      "ownedAmount": 24230,
+      "totalAmount": 33730
+    },
+    {
+      "date": "2026-06-01",
+      "ownedAmount": 24830,
+      "totalAmount": 34330
+    },
+    {
+      "date": "2026-07-01",
+      "ownedAmount": 25510,
+      "totalAmount": 35010
+    },
+    {
+      "date": "2026-08-01",
+      "ownedAmount": 26130,
+      "totalAmount": 35630
+    },
+    {
+      "date": "2026-09-01",
+      "ownedAmount": 26780,
+      "totalAmount": 36280
+    },
+    {
+      "date": "2026-10-01",
+      "ownedAmount": 26900,
+      "totalAmount": 36400
+    },
+    {
+      "date": "2026-11-01",
+      "ownedAmount": 26900,
+      "totalAmount": 36400
+    }
+  ],
+  "expensesHistory": [],
+  "subscriptions": [
+    {
+      "id": "s1",
+      "name": "Musique",
+      "amount": 10.99,
+      "debitAccount": "Carte",
+      "frequency": "monthly",
+      "anchorDate": "2026-10-11",
+      "active": true
+    }
+  ],
+  "donations": [
+    {
+      "id": "d1",
+      "date": "2026-07-28",
+      "amount": 120,
+      "organization": "Association démo",
+      "rate": 66,
+      "receiptReceived": true
+    }
+  ],
+  "payslips": [
+    {
+      "id": "ps-2026-04",
+      "fileId": "demo-2026-04",
+      "fileName": "Bulletin 2026-04.pdf",
+      "addedAt": "2026-04-27T09:00:00.000Z",
+      "reviewed": true,
+      "extracted": {
+        "period": "2026-04",
+        "employer": "Entreprise Démo",
+        "grossAmount": 2667,
+        "netAmount": 2173,
+        "netPaid": 2050
+      }
+    },
+    {
+      "id": "ps-2026-05",
+      "fileId": "demo-2026-05",
+      "fileName": "Bulletin 2026-05.pdf",
+      "addedAt": "2026-05-27T09:00:00.000Z",
+      "reviewed": true,
+      "extracted": {
+        "period": "2026-05",
+        "employer": "Entreprise Démo",
+        "grossAmount": 2667,
+        "netAmount": 2194,
+        "netPaid": 2070
+      }
+    },
+    {
+      "id": "ps-2026-06",
+      "fileId": "demo-2026-06",
+      "fileName": "Bulletin 2026-06.pdf",
+      "addedAt": "2026-06-27T09:00:00.000Z",
+      "reviewed": true,
+      "extracted": {
+        "period": "2026-06",
+        "employer": "Entreprise Démo",
+        "grossAmount": 2667,
+        "netAmount": 2162,
+        "netPaid": 2040
+      }
+    },
+    {
+      "id": "ps-2026-07",
+      "fileId": "demo-2026-07",
+      "fileName": "Bulletin 2026-07.pdf",
+      "addedAt": "2026-07-27T09:00:00.000Z",
+      "reviewed": true,
+      "extracted": {
+        "period": "2026-07",
+        "employer": "Entreprise Démo",
+        "grossAmount": 2667,
+        "netAmount": 2184,
+        "netPaid": 2060
+      }
+    },
+    {
+      "id": "ps-2026-08",
+      "fileId": "demo-2026-08",
+      "fileName": "Bulletin 2026-08.pdf",
+      "addedAt": "2026-08-27T09:00:00.000Z",
+      "reviewed": true,
+      "extracted": {
+        "period": "2026-08",
+        "employer": "Entreprise Démo",
+        "grossAmount": 2667,
+        "netAmount": 2178,
+        "netPaid": 2055
+      }
+    },
+    {
+      "id": "ps-2026-09",
+      "fileId": "demo-2026-09",
+      "fileName": "Bulletin 2026-09.pdf",
+      "addedAt": "2026-09-27T09:00:00.000Z",
+      "reviewed": true,
+      "extracted": {
+        "period": "2026-09",
+        "employer": "Entreprise Démo",
+        "grossAmount": 2230,
+        "netAmount": 1823,
+        "netPaid": 1720
+      }
+    }
+  ],
+  "config": {
+    "grossAnnual": 32000,
+    "leisureBudget": 250,
+    "projectSavings": 100,
+    "taxRateManual": 0,
+    "extraMonthlyIncome": 0,
+    "paydayDay": 27,
+    "milestonesSeen": [
+      "good-month-1",
+      "streak-3",
+      "streak-6",
+      "emergency-3",
+      "emergency-6",
+      "savings-10000",
+      "savings-25000"
+    ]
+  },
+  "parentalRestitution": {
+    "plannedDate": "2027-01-01"
+  },
+  "schemaVersion": 3,
+  "pays": [],
+  "recurringMovements": [],
+  "fiscalConfig": {
+    "salaryChargesRate": 0.2232,
+    "socialChargesCapital": 0.186,
+    "socialChargesLifeInsurance": 0.172,
+    "standardAllowance": 0.1,
+    "standardAllowanceCap": 14555,
+    "standardAllowanceMin": 509,
+    "decote": {
+      "single": 897,
+      "rate": 0.4525,
+      "threshold": 1982
+    },
+    "donation75Ceiling": 2000,
+    "ceilings": {
+      "livretA": 22950,
+      "ldds": 12000,
+      "lep": 10000
+    },
+    "legalMaturity": {
+      "pea": 5,
+      "assuranceVie": 8,
+      "pee": 5
+    },
+    "lepIncomeCeiling": 23028,
+    "lepCeilingPerHalfPart": 6149,
+    "lepHouseholdParts": 1,
+    "taxBrackets": [
+      {
+        "limit": 11600,
+        "rate": 0
+      },
+      {
+        "limit": 29579,
+        "rate": 0.11
+      },
+      {
+        "limit": 84577,
+        "rate": 0.3
+      },
+      {
+        "limit": 181917,
+        "rate": 0.41
+      },
+      {
+        "limit": null,
+        "rate": 0.45
+      }
+    ],
+    "taxScaleYear": 2026
+  },
+  "workBenefits": {
+    "navigo": {
+      "active": true,
+      "basePrice": 90.8,
+      "refundRate": 67.24
+    },
+    "mutuelle": {
+      "active": true,
+      "totalCost": 50,
+      "employerRate": 50
+    },
+    "mealVouchers": {
+      "active": true,
+      "faceValue": 10,
+      "employerRate": 60,
+      "daysPerMonth": 20
+    }
+  }
+}

@@ -5,8 +5,9 @@
 // Fichiers…) en POST multipart sur `partager`. Le fichier est rangé dans un cache à part,
 // sur l'appareil seulement, puis l'app est ouverte avec `?partage=…` : c'est elle qui,
 // après le verrou et le chargement des données, demande quoi en faire, et efface le fichier
-// dès qu'elle l'a lu. Un fichier jamais lu est effacé au bout d'une heure, à la prochaine
-// ouverture de l'app.
+// dès qu'elle l'a lu. Un fichier jamais lu est effacé au bout de 10 minutes, à l'activation du
+// service worker, à chaque nouveau partage et à chaque ouverture de l'app (l'app le vide aussi
+// à la déconnexion).
 // ================================================
 (function (root) {
   var CACHE = 'pecule-partage';
@@ -15,7 +16,7 @@
   var FIELD = 'fichiers';
   // Même limite que la lecture d'un relevé ou d'un avis d'imposition dans l'app.
   var MAX_BYTES = 15 * 1024 * 1024;
-  var MAX_AGE_MS = 60 * 60 * 1000;
+  var MAX_AGE_MS = 10 * 60 * 1000;
   // Relevés OFX et CSV : lus sur l'appareil par l'app (lib/statementFiles), sans clé.
   var TYPES = ['application/pdf', 'image/png', 'image/jpeg', 'image/webp', 'text/csv', 'application/x-ofx'];
 
@@ -58,7 +59,7 @@
       .then(function (marker) { return Response.redirect(scope + '?partage=' + marker, 303); });
   }
 
-  // Fichier reçu il y a plus d'une heure et jamais lu : effacé.
+  // Fichier reçu il y a plus de 10 minutes et jamais lu : effacé.
   function purgeStale(now) {
     return root.caches.open(CACHE)
       .then(function (cache) {
@@ -72,11 +73,17 @@
       .catch(function () { return undefined; });
   }
 
+  // Activation du service worker : un fichier resté d'une version précédente est effacé aussitôt.
+  root.addEventListener('activate', function (event) {
+    event.waitUntil(purgeStale(Date.now()));
+  });
+
   root.addEventListener('fetch', function (event) {
     var request = event.request;
     var scope = root.registration.scope;
     if (request.method === 'POST' && request.url.split('?')[0] === scope + ENDPOINT) {
-      event.respondWith(receive(request, scope));
+      // Nouveau partage : le ménage passe d'abord, puis le nouveau fichier est rangé.
+      event.respondWith(purgeStale(Date.now()).then(function () { return receive(request, scope); }));
       return;
     }
     // Ouverture de l'app : le ménage se fait en parallèle, la page est servie comme d'habitude
