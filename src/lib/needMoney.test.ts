@@ -3,7 +3,7 @@ import { describe, it, expect } from 'vitest';
 import { AccountType, type SavingsAccount } from '../types';
 import { DEFAULT_FISCAL_CONFIG } from '../constants';
 import { computeWithdrawalTax } from './finance';
-import { bestWithdrawalDay, needSources, planNeed, plannedDay, precautionAfter, withdrawalCost } from './needMoney';
+import { bestWithdrawalDay, needSources, planNeed, plannedDay, precautionAfter, spendableBeyondPrecaution, withdrawalCost } from './needMoney';
 
 const CFG = DEFAULT_FISCAL_CONFIG;
 const TODAY = '2026-11-04';
@@ -128,5 +128,22 @@ describe('precautionAfter : prévenir seulement', () => {
     expect(precautionAfter([acc('la', AccountType.LIVRET_A, 10000), cc], [{ accountId: 'la', amount: 800 }], emergency)).toBeNull();
     expect(precautionAfter([la, cc, av], [{ accountId: 'av', amount: 800 }], emergency)).toBeNull();
     expect(precautionAfter([la, cc], [{ accountId: 'la', amount: 800 }], null)).toBeNull();
+  });
+});
+
+describe('spendableBeyondPrecaution (même notion que la phrase de précaution)', () => {
+  it("ce qui dépasse l'objectif, jamais négatif, rien sans jauge", () => {
+    expect(spendableBeyondPrecaution({ target: 5000, current: 7300 })).toBe(2300);
+    expect(spendableBeyondPrecaution({ target: 5000, current: 4000 })).toBe(0);
+    expect(spendableBeyondPrecaution(null)).toBeNull();
+    expect(spendableBeyondPrecaution({ target: 0, current: 900 })).toBeNull();
+  });
+  it("un retrait de l'excédent ne déclenche pas la phrase de précaution, un euro de plus oui", () => {
+    const cc = acc('cc', AccountType.COMPTE_COURANT, 0);
+    const la = acc('la', AccountType.LIVRET_A, 7300, { interestRate: 1.7 });
+    const emergency = { target: 5000, cashBuffer: 0, current: 7300 };
+    const room = spendableBeyondPrecaution(emergency)!;
+    expect(precautionAfter([la, cc], [{ accountId: 'la', amount: room }], emergency)).toBeNull();
+    expect(precautionAfter([la, cc], [{ accountId: 'la', amount: room + 1 }], emergency)).not.toBeNull();
   });
 });

@@ -13,6 +13,7 @@ import { sanitizePayAdjustment } from './payAdjustment';
 import { expectedPayDate, savingsMonthOf, savingsMonthOfPay } from './payCalendar';
 import { isExtraNature } from './extraNature';
 import { sanitizePlannedWithdrawals } from './plannedWithdrawals';
+import { sanitizeWishCategories, sanitizeWishes } from './wishes';
 
 /**
  * Version du format. À augmenter quand un changement rend le fichier illisible pour une
@@ -408,6 +409,11 @@ export const migrate = (raw: unknown): AppDoc => {
     const planned = sanitizePlannedWithdrawals(config.plannedWithdrawals);
     if (planned) config.plannedWithdrawals = planned; else delete config.plannedWithdrawals;
   }
+  // Catégories des envies : noms nettoyés et sans doublon, sans changer de version ; retirées si rien n'est lisible.
+  if (config.wishCategories !== undefined) {
+    const cats = sanitizeWishCategories(config.wishCategories);
+    if (cats) config.wishCategories = cats; else delete config.wishCategories;
+  }
   // Ancien format : l'avantage Navigo vivait dans config (navigoBase / navigoRate, gardés tels quels).
   // Fichier abîmé ou incomplet : chaque avantage est complété champ par champ.
   const workBenefits = isObj(r.workBenefits)
@@ -439,6 +445,9 @@ export const migrate = (raw: unknown): AppDoc => {
   } as AppDoc & Record<string, unknown>;
   migratePays(doc, typeof r.schemaVersion === 'number' ? r.schemaVersion : 0);
   if (doc.payChecklist === undefined) delete doc.payChecklist;
+  // Envies : liste facultative, entrées illisibles écartées ; absente du fichier, elle reste absente.
+  const wishes = sanitizeWishes(r.wishes);
+  if (wishes) doc.wishes = wishes; else delete doc.wishes;
   return doc;
 };
 

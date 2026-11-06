@@ -21,7 +21,7 @@ vi.mock('./screens', () => {
   const names = ['AccountUpdate', 'AccountsView', 'Agenda', 'AskPeculeEntry', 'AssistantPilot', 'CloudBackupPanel', 'Dashboard', 'Donations', 'DriveBackupsPanel',
     'FiscalCalendar', 'FiscalWatchCard', 'History', 'Journal', 'MotivationSettings', 'ParentalShare', 'Payslips', 'ServerSecurityPanel',
     'SetAsideVersionsPanel', 'Settings', 'ShareTargetHost', 'Simulator', 'SoloPlanCard', 'Subscriptions', 'TaxNoticePanel', 'TaxReturnHelper',
-    'TransferManager', 'Yield', 'ViewLoader'];
+    'TransferManager', 'Wishes', 'Yield', 'ViewLoader'];
   return {
     ...Object.fromEntries(names.map(n => [n, stub(n)])),
     Lazy: ({ children }: { children: React.ReactNode }) => <>{children}</>,
@@ -584,9 +584,10 @@ describe('écrans à onglets', () => {
     [{ screen: 'accounts', tab: 'balances' }, 'Comptes', ['Soldes', 'Mouvements', 'Parents'], ['AccountsView']],
     [{ screen: 'accounts', tab: 'movements' }, 'Comptes', ['Soldes', 'Mouvements', 'Parents'], ['Journal']],
     [{ screen: 'accounts', tab: 'parents' }, 'Comptes', ['Soldes', 'Mouvements', 'Parents'], ['ParentalShare']],
-    [{ screen: 'pilot', tab: 'month' }, 'Pilotage', ['Ce mois', 'Abonnements', 'Fiches de paie'], ['AssistantPilot']],
-    [{ screen: 'pilot', tab: 'subscriptions' }, 'Pilotage', ['Ce mois', 'Abonnements', 'Fiches de paie'], ['Subscriptions']],
-    [{ screen: 'pilot', tab: 'payslips' }, 'Pilotage', ['Ce mois', 'Abonnements', 'Fiches de paie'], ['Payslips']],
+    [{ screen: 'pilot', tab: 'month' }, 'Pilotage', ['Ce mois', 'Abonnements', 'Fiches de paie', 'Envies'], ['AssistantPilot']],
+    [{ screen: 'pilot', tab: 'subscriptions' }, 'Pilotage', ['Ce mois', 'Abonnements', 'Fiches de paie', 'Envies'], ['Subscriptions']],
+    [{ screen: 'pilot', tab: 'payslips' }, 'Pilotage', ['Ce mois', 'Abonnements', 'Fiches de paie', 'Envies'], ['Payslips']],
+    [{ screen: 'pilot', tab: 'wishes' }, 'Pilotage', ['Ce mois', 'Abonnements', 'Fiches de paie', 'Envies'], ['Wishes']],
     [{ screen: 'analyses', tab: 'evolution' }, 'Analyses', ['Évolution', 'Rendement', 'Agenda', 'Et si…'], ['History']],
     [{ screen: 'analyses', tab: 'yield' }, 'Analyses', ['Évolution', 'Rendement', 'Agenda', 'Et si…'], ['Yield']],
     [{ screen: 'analyses', tab: 'agenda' }, 'Analyses', ['Évolution', 'Rendement', 'Agenda', 'Et si…'], ['Agenda']],
@@ -616,7 +617,7 @@ describe('écrans à onglets', () => {
     const current = screen.getByRole('tab', { name: 'Ce mois' });
     current.focus();
     fireEvent.keyDown(current, { key: 'ArrowLeft' });
-    expect(onSelectTab).toHaveBeenLastCalledWith('payslips');
+    expect(onSelectTab).toHaveBeenLastCalledWith('wishes');
   });
 
   it('mode solo : l’onglet Parents est masqué', () => {

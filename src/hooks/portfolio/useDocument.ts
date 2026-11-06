@@ -7,7 +7,7 @@ import { lsDel, lsGet, lsSet } from '../../lib/storage';
 import { migrate, emptyData, withoutDeviceOnlyFields, APP_SCHEMA_VERSION } from '../../lib/schema';
 import { downloadJSON } from '../../services/fileDownload';
 import { localTodayISO } from '../../lib/dates';
-import type { AppDoc, WorkBenefits } from '../../types';
+import type { AppDoc, WorkBenefits, Wish } from '../../types';
 import { GEMINI_KEY, LAST_VIEW_KEY } from './keys';
 
 type Config = AppDoc['config'];
@@ -67,6 +67,8 @@ export const useDocument = () => {
       setRecurringMovements: top('recurringMovements'),
       setSubscriptions: top('subscriptions'),
       setDonations: top('donations'),
+      /** Envies d'achats (liste facultative du fichier : absente = vide). */
+      setWishes: (u: Updater<Wish[]>) => setDoc(d => ({ ...d, wishes: resolve(u, d.wishes ?? []) })),
       setPays: top('pays'),
       setParentalRestitution: top('parentalRestitution'),
       setActivePayslipId: top('activePayslipId'),

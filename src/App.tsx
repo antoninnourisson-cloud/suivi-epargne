@@ -33,6 +33,7 @@ import { useDeepLinks, useViewFocus, useViewState } from './app/useAppNavigation
 import { useDerivedData } from './app/useDerivedData';
 import { useAccountActions } from './app/useAccountActions';
 import { useAppBadge, useCloudBackup, usePersistentStorage } from './app/useBackgroundTasks';
+import type { NeedPrefill } from './components/need/NeedMoneySheet';
 import { AppLockScreen, AskPeculeSheet, Lazy, NeedMoneySheet, QuickAddModal, WhatsNewModal, usePreloadScreens } from './app/screens';
 import { openSettingsSection } from './components/settings/sections';
 import { ScreenRouter, useAccountForm, useScreenData } from './app/ScreenRouter';
@@ -79,8 +80,11 @@ const AppRoot: React.FC = () => {
   const closeQuickAdd = useCallback(() => setQuickAddKind(null), []);
   // « J'ai besoin d'argent : où le prendre ? » (lien du bouton « Mouvement » et de Comptes › Mouvements).
   const [needOpen, setNeedOpen] = useState(false);
-  const openNeed = useCallback(() => { setQuickAddKind(null); setNeedOpen(true); }, []);
-  const closeNeed = useCallback(() => setNeedOpen(false), []);
+  // « Je l'achète » (Pilotage › Envies) ouvre le même parcours, prérempli ; le bouton simple l'ouvre vide.
+  const [needPrefill, setNeedPrefill] = useState<NeedPrefill | null>(null);
+  const openNeed = useCallback(() => { setQuickAddKind(null); setNeedPrefill(null); setNeedOpen(true); }, []);
+  const openNeedFor = useCallback((prefill: NeedPrefill) => { setQuickAddKind(null); setNeedPrefill(prefill); setNeedOpen(true); }, []);
+  const closeNeed = useCallback(() => { setNeedOpen(false); setNeedPrefill(null); }, []);
   // « Demander à Pécule » depuis la navigation : la fenêtre (et sa conversation) est retirée à
   // la déconnexion, et ne se rouvre pas d'elle-même ensuite. Le verrou, posé par-dessus, la
   // laisse en place comme les autres fenêtres.
@@ -177,7 +181,7 @@ const AppRoot: React.FC = () => {
             )}
             {quickAddKind && <Lazy><QuickAddModal open accounts={data.accounts} initialKind={quickAddKind} onClose={closeQuickAdd} onSubmit={actions.quickAdd} onTransfer={actions.transfer} onOpenNeed={openNeed} /></Lazy>}
             {needOpen && <Lazy><NeedMoneySheet accounts={data.accounts} config={data.doc.config} fiscalConfig={data.fiscalConfig} emergency={derived.emergency}
-              onClose={closeNeed} onRecord={actions.recordNeed} onPlan={actions.planNeed} /></Lazy>}
+              onClose={closeNeed} onRecord={actions.recordNeed} onPlan={actions.planNeed} prefill={needPrefill ?? undefined} /></Lazy>}
             <StableBottomNav place={place} onOpenScreen={openScreen} moreOpen={moreNavOpen} setMoreOpen={setMoreNavOpen} onAsk={openAsk} />
             {askOpen && <Lazy><AskPeculeSheet data={fullData} geminiApiKey={data.geminiApiKey} taxEstimate={derived.taxEstimate} monthPlan={derived.monthPlan}
               onClose={closeAsk} onOpenSettings={section => { openSettingsSection(section); setView('settings'); }} /></Lazy>}
@@ -191,7 +195,7 @@ const AppRoot: React.FC = () => {
           <BackupDeletionNotice active={data.dataShown && !data.isLoadingData} onOpenSettings={() => setView('settings')} />
           <ScreenRouter key={discreet ? 'montants-masques' : 'montants'} place={place} setView={setView} onSelectTab={selectTab} hiddenTabs={hiddenTabs} data={screenData} derived={derived} actions={actions}
             fiscalWatch={fiscalWatch} accountForm={accountForm} onSignedOutEverywhere={auth.signedOutEverywhere} onRequestLogout={auth.requestLogout}
-            shareMarker={shareMarker} shareReady={data.dataShown && !data.isLoadingData} onShareDone={endShare} onOpenTransfer={openTransfer} onOpenNeed={openNeed} />
+            shareMarker={shareMarker} shareReady={data.dataShown && !data.isLoadingData} onShareDone={endShare} onOpenTransfer={openTransfer} onOpenNeed={openNeed} onBuyWish={openNeedFor} />
         </AppShell>
       </LastSavedAtContext.Provider>
     );

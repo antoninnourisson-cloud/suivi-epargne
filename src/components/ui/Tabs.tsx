@@ -34,7 +34,7 @@ export const Tabs = <T extends string>({ label, tabs, value, onChange, children,
               aria-controls={`${base}-panel`}
               tabIndex={selected ? 0 : -1}
               onClick={() => onChange(t.value)}
-              className={`relative h-12 ${fill ? 'flex-1 sm:flex-none px-3 max-[359px]:px-2 max-[359px]:text-xs' : 'px-4'} flex items-center justify-center gap-2 text-sm font-medium whitespace-nowrap transition-colors hover:bg-on-surface/8 ${selected ? 'text-primary' : 'text-on-surface-variant'}`}
+              className={`relative h-12 ${fill ? 'flex-1 sm:flex-none px-3 max-[359px]:px-2 max-[359px]:text-xs max-[359px]:whitespace-normal max-[359px]:leading-tight max-[359px]:text-center' : 'px-4'} flex items-center justify-center gap-2 text-sm font-medium whitespace-nowrap transition-colors hover:bg-on-surface/8 ${selected ? 'text-primary' : 'text-on-surface-variant'}`}
             >
               {t.icon && <t.icon className="w-4 h-4" aria-hidden="true" />}
               {t.label}

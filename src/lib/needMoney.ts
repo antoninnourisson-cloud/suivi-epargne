@@ -149,3 +149,12 @@ export const precautionAfter = (
   return after < emergency.target - EPS && after < before - EPS ? { after, target: emergency.target } : null;
 };
 
+
+/**
+ * Ce qu'on peut dépenser sans toucher à l'épargne de précaution : ce qui dépasse son objectif
+ * (même jauge que l'Accueil et que precautionAfter : un retrait plus petit que cet excédent ne
+ * fait jamais passer la précaution sous son objectif). 0 si l'objectif n'est pas atteint ;
+ * `null` quand la jauge est absente (aucune dépense connue : pas d'objectif, donc rien à comparer).
+ */
+export const spendableBeyondPrecaution = (emergency: { target: number; current: number } | null | undefined): number | null =>
+  (emergency && emergency.target > 0 ? Math.max(0, round2(emergency.current - emergency.target)) : null);

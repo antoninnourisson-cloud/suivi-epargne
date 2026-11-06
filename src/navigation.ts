@@ -21,7 +21,7 @@ export const isScreen = (v: unknown): v is Screen => typeof v === 'string' && (S
 /** Onglets de chaque écran à onglets, dans l'ordre d'affichage (le premier est celui par défaut). */
 export const SCREEN_TABS = {
   accounts: [{ key: 'balances', label: 'Soldes' }, { key: 'movements', label: 'Mouvements' }, { key: 'parents', label: 'Parents' }],
-  pilot: [{ key: 'month', label: 'Ce mois' }, { key: 'subscriptions', label: 'Abonnements' }, { key: 'payslips', label: 'Fiches de paie' }],
+  pilot: [{ key: 'month', label: 'Ce mois' }, { key: 'subscriptions', label: 'Abonnements' }, { key: 'payslips', label: 'Fiches de paie' }, { key: 'wishes', label: 'Envies' }],
   analyses: [{ key: 'evolution', label: 'Évolution' }, { key: 'yield', label: 'Rendement' }, { key: 'agenda', label: 'Agenda' }, { key: 'simulator', label: 'Et si…' }],
   taxes: [{ key: 'donations', label: 'Dons et déclaration' }, { key: 'calendar', label: 'Calendrier fiscal' }],
 } as const;

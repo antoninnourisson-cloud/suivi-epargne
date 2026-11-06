@@ -65,6 +65,7 @@ const SECTION_LABELS: [keyof GlobalAppData, string][] = [
   ['pays', 'Paies reçues'],
   ['payChecklist', 'Liste de la paie'],
   ['donations', 'Dons'],
+  ['wishes', 'Envies'],
   ['parentalRestitution', 'Restitution aux parents'],
   ['fiscalConfig', 'Paramètres fiscaux'],
   ['workBenefits', 'Avantages salariés'],

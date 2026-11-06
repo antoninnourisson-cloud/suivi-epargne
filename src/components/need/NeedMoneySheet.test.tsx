@@ -133,3 +133,54 @@ describe('NeedMoneySheet', () => {
     expect(setup().dialog.textContent).toMatch(/La part de vos parents n'est jamais touchée/);
   });
 });
+
+describe('NeedMoneySheet : préremplissage pour une envie (« Je l’achète »)', () => {
+  it('sans préremplissage : champ vide, aucun rappel, comportement habituel', () => {
+    const { dialog } = setup();
+    expect((within(dialog).getByLabelText("Montant dont j'ai besoin") as HTMLInputElement).value).toBe('');
+    expect(dialog.textContent).not.toMatch(/Pour votre envie/);
+  });
+
+  it('montant et nom préremplis, rappel de l’envie', () => {
+    const { dialog } = setup({ prefill: { amount: 349.5, label: 'Aspirateur robot' } });
+    expect((within(dialog).getByLabelText("Montant dont j'ai besoin") as HTMLInputElement).value).toBe('349,50');
+    expect(dialog.textContent).toMatch(/Pour votre envie : Aspirateur robot\./);
+    expect((within(dialog).getByRole('button', { name: 'Voir où le prendre' }) as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Voir où le prendre' }));
+    expect(within(dialog).getByRole('heading', { name: /^Où prendre 349,50\s€$/ })).toBeTruthy();
+  });
+
+  it('retrait enregistré : le rappel de fin est appelé, une fois, avant la fermeture', () => {
+    const calls: string[] = [];
+    const onDone = vi.fn(() => calls.push('fin'));
+    const { props, dialog } = setup({ prefill: { amount: 800, label: 'Vélo', onDone }, onClose: vi.fn(() => calls.push('fermé')) });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Voir où le prendre' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Enregistrer' }));
+    expect(props.onRecord).toHaveBeenCalledTimes(1);
+    expect(onDone).toHaveBeenCalledTimes(1);
+    expect(calls).toEqual(['fin', 'fermé']);
+  });
+
+  it('retrait prévu à une date future : le rappel de fin est aussi appelé', () => {
+    const onDone = vi.fn();
+    const { props, dialog } = setup({ prefill: { amount: 800, label: 'Vélo', onDone } });
+    fireEvent.change(within(dialog).getByLabelText('Pour le'), { target: { value: '2026-12-20' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Voir où le prendre' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Prévoir le retrait' }));
+    expect(props.onPlan).toHaveBeenCalledTimes(1);
+    expect(onDone).toHaveBeenCalledTimes(1);
+  });
+
+  it('abandon (Annuler, Fermer) ou refus de l’enregistrement : le rappel de fin n’est pas appelé', () => {
+    const onDone = vi.fn();
+    const { props, dialog } = setup({ prefill: { amount: 800, label: 'Vélo', onDone }, onRecord: vi.fn(() => 'Refusé') });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Voir où le prendre' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Enregistrer' }));
+    expect(within(dialog).getByRole('alert').textContent).toBe('Refusé');
+    expect(props.onClose).not.toHaveBeenCalled();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Retour' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Annuler' }));
+    expect(props.onClose).toHaveBeenCalledTimes(1);
+    expect(onDone).not.toHaveBeenCalled();
+  });
+});

@@ -43,7 +43,7 @@ const nouvelles = async (page: Page, vue: string): Promise<string[]> => {
 };
 
 // Mêmes écrans que dans contrast.spec.ts (les échéances récurrentes sont dans Comptes › Mouvements).
-const VIEWS = ['dashboard', 'transfers', 'pilot', 'journal', 'parental', 'accounts', 'yield', 'donations', 'payslips', 'agenda', 'subscriptions', 'history', 'taxes&tab=calendar', 'update'];
+const VIEWS = ['dashboard', 'transfers', 'pilot', 'pilot&tab=wishes', 'journal', 'parental', 'accounts', 'yield', 'donations', 'payslips', 'agenda', 'subscriptions', 'history', 'taxes&tab=calendar', 'update'];
 
 // Le script d'axe est injecté dans la page : la politique de sécurité de l'app l'interdirait.
 // Mouvement réduit : les boîtes s'affichent sans fondu.
@@ -78,6 +78,14 @@ test.describe('Accessibilité WCAG A et AA (thème clair)', () => {
     await page.getByRole('button', { name: 'Ajouter un mouvement' }).click();
     await expect(page.getByRole('dialog', { name: 'Ajouter un mouvement' })).toBeVisible();
     expect(await nouvelles(page, 'feuille Ajouter un mouvement')).toEqual([]);
+  });
+
+  test('feuille « Nouvelle envie »', async ({ page }) => {
+    await page.goto('/?demo=1&view=pilot&tab=wishes');
+    await screenReady(page);
+    await page.getByRole('button', { name: 'Ajouter une envie' }).click();
+    await expect(page.getByRole('dialog', { name: 'Nouvelle envie' })).toBeVisible();
+    expect(await nouvelles(page, 'feuille Nouvelle envie')).toEqual([]);
   });
 
   test("feuille « J'ai reçu ma paie »", async ({ page }) => {

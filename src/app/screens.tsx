@@ -10,6 +10,7 @@ export const Journal = lazyWithRetry(() => import('../components/Journal').then(
 export const Agenda = lazyWithRetry(() => import('../components/agendaQuickAdd').then(m => ({ default: m.Agenda })));
 export const Donations = lazyWithRetry(() => import('../components/Donations').then(m => ({ default: m.Donations })));
 export const Subscriptions = lazyWithRetry(() => import('../components/Subscriptions').then(m => ({ default: m.Subscriptions })));
+export const Wishes = lazyWithRetry(() => import('../components/Wishes').then(m => ({ default: m.Wishes })));
 export const Dashboard = lazyWithRetry(() => import('../components/Dashboard').then(m => ({ default: m.Dashboard })));
 export const AccountUpdate = lazyWithRetry(() => import('../components/AccountUpdate').then(m => ({ default: m.AccountUpdate })));
 export const AssistantPilot = lazyWithRetry(() => import('../components/AssistantPilot').then(m => ({ default: m.AssistantPilot })));
@@ -76,6 +77,7 @@ const START_VIEW_LOADERS: Record<string, () => Promise<unknown>> = {
   'pilot/month': () => import('../components/AssistantPilot'),
   'pilot/subscriptions': () => import('../components/Subscriptions'),
   'pilot/payslips': () => import('../components/Payslips'),
+  'pilot/wishes': () => import('../components/Wishes'),
   'analyses/evolution': () => import('../components/History'),
   'analyses/yield': () => import('../components/Yield'),
   'analyses/agenda': () => import('../components/agendaQuickAdd'),

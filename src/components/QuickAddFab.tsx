@@ -15,7 +15,7 @@ import type { Place } from '../navigation';
  * deviner lequel ajoute quoi. Comptes › Mouvements le garde : c'est là qu'on voit les
  * mouvements, et « Faire un virement » y ouvre la même feuille.
  */
-const HIDDEN_ON: ReadonlySet<string> = new Set(['update', 'settings', 'parents', 'subscriptions', 'payslips', 'donations']);
+const HIDDEN_ON: ReadonlySet<string> = new Set(['update', 'settings', 'parents', 'subscriptions', 'payslips', 'wishes', 'donations']);
 
 export const showQuickAddFab = (place: Place): boolean => !HIDDEN_ON.has(place.tab ?? place.screen);
 

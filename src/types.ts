@@ -176,6 +176,26 @@ export interface Subscription {
   noticeDays?: number;
 }
 
+// Envie : un achat envisagé (onglet « Envies » du Pilotage). Ne touche jamais aux soldes ;
+// n'est jamais envoyée à Gemini. La catégorie est le NOM d'une catégorie de
+// `config.wishCategories` (ou des catégories par défaut, voir lib/wishes).
+export interface Wish {
+  id: string;
+  name: string;
+  /** Lien http ou https seulement (ouvert dans un nouvel onglet). */
+  url?: string;
+  /** Prix relevé, en euros. */
+  price: number;
+  /** 'YYYY-MM-DD' : jour où ce prix a été relevé (à revérifier au-delà de 3 mois). */
+  priceDate: string;
+  category: string;
+  note?: string;
+  /** 'YYYY-MM-DD' : jour de l'achat (envie passée dans « Achetées »). */
+  boughtAt?: string;
+  /** Prix payé, au moment de l'achat. */
+  boughtPrice?: number;
+}
+
 // Don à une association, noté pour la déclaration de revenus (réduction d'impôt).
 export interface Donation {
   id: string;
@@ -456,6 +476,8 @@ export interface GlobalAppData {
     // Retraits prévus par « J'ai besoin d'argent » (lib/needMoney) pour une date future : une
     // tâche de l'Accueil le jour venu, retirée une fois faite ou supprimée.
     plannedWithdrawals?: PlannedWithdrawal[];
+    // Catégories des envies (lib/wishes), dans l'ordre d'affichage. Absent = catégories par défaut.
+    wishCategories?: string[];
   };
   // Les anciens fichiers peuvent contenir `goals` (objectifs d'épargne) : jamais lu, gardé tel
   // quel par migrate() comme tout champ inconnu.
@@ -464,6 +486,8 @@ export interface GlobalAppData {
   recurringMovements?: RecurringMovement[];
   subscriptions?: Subscription[];
   donations?: Donation[];
+  // Envies d'achats (lib/wishes). Facultative : absente = aucune envie.
+  wishes?: Wish[];
   // Paies reçues (lib/payRecords) : une par mois d'épargne, plus les versements en plus.
   pays?: PayRecord[];
   // Ancien format (schéma v2) : liste unique de la paie en cours. Convertie en PayRecord par

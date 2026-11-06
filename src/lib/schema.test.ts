@@ -273,3 +273,53 @@ describe('migrate : soldes des avis d\'imposition', () => {
     expect('taxNoticeBalances' in migrate({ config: {} }).config).toBe(false);
   });
 });
+
+describe('migrate : envies', () => {
+  const wish = (id: string, over: Record<string, unknown> = {}) => ({ id, name: `Envie ${id}`, price: 40, priceDate: '2026-11-01', category: 'Livres', ...over });
+
+  it("garde absente une liste d'envies absente, sans changer de version", () => {
+    const d = migrate({});
+    expect('wishes' in d).toBe(false);
+    expect('wishCategories' in d.config).toBe(false);
+    expect(d.schemaVersion).toBe(APP_SCHEMA_VERSION);
+    expect(APP_SCHEMA_VERSION).toBe(3);
+  });
+
+  it('nettoie la liste : entrées illisibles écartées, lien non http(s) retiré', () => {
+    const d = migrate({ wishes: [
+      wish('ok', { url: 'https://exemple.fr/livre', note: 'Poche' }),
+      wish('nom', { name: '' }),
+      wish('prix', { price: Number.POSITIVE_INFINITY }),
+      wish('neg', { price: -5 }),
+      wish('date', { priceDate: '2026-13-01' }),
+      wish('lien', { url: 'javascript:alert(1)' }),
+      'pas un objet', null,
+    ] });
+    expect(d.wishes?.map(w => w.id)).toEqual(['ok', 'lien']);
+    expect(d.wishes?.[0]).toMatchObject({ url: 'https://exemple.fr/livre', note: 'Poche' });
+    expect(d.wishes?.[1].url).toBeUndefined();
+  });
+
+  it("une liste qui n'en est pas une est retirée ; une liste vide reste vide", () => {
+    expect('wishes' in migrate({ wishes: 'non' })).toBe(false);
+    expect(migrate({ wishes: [] }).wishes).toEqual([]);
+  });
+
+  it('nettoie les catégories : noms propres, sans doublon, retirées si rien de lisible', () => {
+    expect(migrate({ config: { wishCategories: [' Maison ', 'maison', 3, 'Voyages'] } }).config.wishCategories).toEqual(['Maison', 'Voyages']);
+    expect('wishCategories' in migrate({ config: { wishCategories: [1, ''] } }).config).toBe(false);
+    expect('wishCategories' in migrate({ config: { wishCategories: 'Maison' } }).config).toBe(false);
+  });
+
+  it('est stable (pas d’écriture inutile à l’ouverture) et se retrouve dans la forme comparable', () => {
+    const raw = { wishes: [wish('a', { url: 'https://exemple.fr' }), wish('b', { boughtAt: '2026-10-10', boughtPrice: 35 })], config: { wishCategories: ['Livres', 'Maison'] } };
+    const once = migrate(raw);
+    expect(migrate(once)).toEqual(once);
+    expect(canonicalize(once)).toBe(canonicalize(raw));
+    expect(canonicalize(raw)).not.toBe(canonicalize({ ...raw, wishes: [wish('a')] }));
+  });
+
+  it("garde l'envie achetée avec sa date et son prix payé", () => {
+    expect(migrate({ wishes: [wish('b', { boughtAt: '2026-10-10', boughtPrice: 35 })] }).wishes?.[0]).toMatchObject({ boughtAt: '2026-10-10', boughtPrice: 35 });
+  });
+});

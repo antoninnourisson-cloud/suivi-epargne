@@ -15,6 +15,16 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '2026.11.06',
+    date: '2026-11-06',
+    title: 'Vos envies d’achats',
+    items: [
+      "Nouvel onglet « Envies » dans le Pilotage : vos achats envisagés avec leur prix, la date du prix, un lien et une catégorie (Maison, Livres, Gros projets, Loisirs, Tech, à votre goût).",
+      "Totaux par catégorie, comparés à ce que vous pouvez dépenser sans toucher à votre épargne de précaution. Un prix vieux de plus de 3 mois est signalé « à revérifier ».",
+      "« Je l'achète » ouvre « J'ai besoin d'argent » avec le prix et le nom déjà remplis ; une fois le retrait fait ou prévu, l'envie passe dans « Achetées ». Vos envies ne sont jamais envoyées à Gemini.",
+    ],
+  },
+  {
     version: '2026.11.05-3',
     date: '2026-11-05',
     title: 'Mises à jour plus légères',

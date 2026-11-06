@@ -9,7 +9,8 @@ import { payChecklistOf } from '../lib/payRecords';
 import { withSavedPayslip } from '../components/payslips/usePayslipImport';
 import type { PayRitualProps } from '../components/pilot/PayReceivedSheet';
 import type { FiscalWatch } from '../hooks/useFiscalWatch';
-import type { SavingsAccount } from '../types';
+import type { SavingsAccount, Wish } from '../types';
+import type { NeedPrefill } from '../components/need/NeedMoneySheet';
 import { isView, SCREEN_LABELS, tabsOf, type Place, type ScreenTab, type View } from '../navigation';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import { openSettingsSection } from '../components/settings/sections';
@@ -19,7 +20,7 @@ import {
   AccountUpdate, AccountsView, Agenda, AskPeculeEntry, AssistantPilot, CloudBackupPanel, Dashboard, Donations, DriveBackupsPanel,
   FiscalCalendar, FiscalWatchCard, History, Journal, Lazy, MotivationSettings, ParentalShare, Payslips, RateChangesSheet, ServerSecurityPanel,
   SetAsideVersionsPanel, Settings, ShareTargetHost, Simulator, SoloPlanCard, StatementImport, Subscriptions, TaxNoticePanel, TaxReturnHelper,
-  TransferManager, ViewLoader, Yield, YearClosingCard, YearClosingSheet,
+  TransferManager, ViewLoader, Wishes, Yield, YearClosingCard, YearClosingSheet,
 } from './screens';
 import type { DerivedData } from './useDerivedData';
 import { lepStillEligible } from '../lib/idleCash';
@@ -31,21 +32,24 @@ import { usePayRaise } from './usePayRaise';
 import { useAddToast, useDialog } from './UiProviders';
 import { InTabPanelContext, PageHeader, Tabs } from '../components/ui';
 
+/** Liste d'envies vide, toujours la même (pas de nouveau tableau à chaque rendu). */
+const NO_WISHES: Wish[] = [];
+
 /** Ce que les écrans lisent et modifient : le document et des fonctions stables. */
 export const useScreenData = (data: PortfolioData) => {
   const {
     doc, geminiApiKey, setGeminiApiKey, setAccounts, setExpenses, setPayslips, setRecurringMovements, setSubscriptions,
-    setDonations, setActivePayslipId, setFiscalConfig, updateWorkBenefits, patchConfig,
+    setDonations, setWishes, setActivePayslipId, setFiscalConfig, updateWorkBenefits, patchConfig,
     importData, recoverSetAside, listDriveBackups,
     restoreDriveBackup, listSetAsideVersions, currentData,
   } = data;
   return useMemo(() => ({
     doc, geminiApiKey, setGeminiApiKey, setAccounts, setExpenses, setPayslips, setRecurringMovements, setSubscriptions,
-    setDonations, setActivePayslipId, setFiscalConfig, updateWorkBenefits, patchConfig,
+    setDonations, setWishes, setActivePayslipId, setFiscalConfig, updateWorkBenefits, patchConfig,
     importData, recoverSetAside, listDriveBackups,
     restoreDriveBackup, listSetAsideVersions, currentData,
   }), [doc, geminiApiKey, setGeminiApiKey, setAccounts, setExpenses, setPayslips, setRecurringMovements, setSubscriptions,
-    setDonations, setActivePayslipId, setFiscalConfig, updateWorkBenefits, patchConfig,
+    setDonations, setWishes, setActivePayslipId, setFiscalConfig, updateWorkBenefits, patchConfig,
     importData, recoverSetAside, listDriveBackups,
     restoreDriveBackup, listSetAsideVersions, currentData]);
 };
@@ -114,9 +118,11 @@ interface ScreenRouterProps {
   onOpenTransfer: () => void;
   /** « J'ai besoin d'argent : où le prendre ? » (Comptes › Mouvements, près de « Faire un virement »). */
   onOpenNeed?: () => void;
+  /** « Je l'achète » (Pilotage › Envies) : « J'ai besoin d'argent » prérempli avec le prix et le nom de l'envie. */
+  onBuyWish?: (prefill: NeedPrefill) => void;
 }
 
-export const ScreenRouter = memo(function ScreenRouter({ place, setView, onSelectTab, hiddenTabs, data, derived, actions, fiscalWatch, accountForm, onSignedOutEverywhere, onRequestLogout, shareMarker, shareReady, onShareDone, onOpenTransfer, onOpenNeed }: ScreenRouterProps) {
+export const ScreenRouter = memo(function ScreenRouter({ place, setView, onSelectTab, hiddenTabs, data, derived, actions, fiscalWatch, accountForm, onSignedOutEverywhere, onRequestLogout, shareMarker, shareReady, onShareDone, onOpenTransfer, onOpenNeed, onBuyWish }: ScreenRouterProps) {
   const addToast = useAddToast();
   const dialog = useDialog();
   const { doc } = data;
@@ -249,6 +255,8 @@ export const ScreenRouter = memo(function ScreenRouter({ place, setView, onSelec
         {tab === 'donations' && <Donations donations={doc.donations} onUpdate={data.setDonations} pickerApiKey={c.pickerApiKey ?? ''} taxEstimates={derived.taxEstimates} ceiling75={doc.fiscalConfig.donation75Ceiling}
           taxHelper={<Lazy><TaxReturnHelper data={derived.fullData} taxEstimates={derived.taxEstimates} allowanceRate={doc.fiscalConfig.standardAllowance} allowanceCap={doc.fiscalConfig.standardAllowanceCap} ceiling75={doc.fiscalConfig.donation75Ceiling} /></Lazy>} />}
         {tab === 'subscriptions' && <Subscriptions subscriptions={doc.subscriptions} onUpdate={data.setSubscriptions} monthlyPay={derived.monthlyPay} />}
+        {tab === 'wishes' && <Wishes wishes={doc.wishes ?? NO_WISHES} categories={c.wishCategories} onUpdateWishes={data.setWishes}
+          onUpdateCategories={wishCategories => data.patchConfig({ wishCategories })} emergency={derived.emergency} onBuy={prefill => onBuyWish?.(prefill)} />}
         {tab === 'payslips' && <Payslips payslips={doc.payslips} onUpdatePayslips={data.setPayslips} geminiApiKey={data.geminiApiKey} pickerApiKey={c.pickerApiKey ?? ''} onApplyToPilotage={actions.applyPayslip} activePayslipId={doc.activePayslipId} onClearActivePayslip={actions.clearActivePayslip}
           onOpenKeys={() => { openSettingsSection('keys'); setView('settings'); }}
           sharedFile={sharedPayslip} onSharedFileTaken={sharedPayslipTaken} onPayslipSaved={actions.attachPayslip} />}

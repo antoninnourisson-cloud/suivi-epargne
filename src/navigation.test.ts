@@ -18,7 +18,7 @@ describe('écrans et onglets', () => {
     expect(isScreen('journal')).toBe(false);
     expect(Object.keys(SCREEN_TABS)).toEqual(['accounts', 'pilot', 'analyses', 'taxes']);
     expect(tabsOf('accounts').map(t => t.label)).toEqual(['Soldes', 'Mouvements', 'Parents']);
-    expect(tabsOf('pilot').map(t => t.label)).toEqual(['Ce mois', 'Abonnements', 'Fiches de paie']);
+    expect(tabsOf('pilot').map(t => t.label)).toEqual(['Ce mois', 'Abonnements', 'Fiches de paie', 'Envies']);
     expect(tabsOf('analyses').map(t => t.label)).toEqual(['Évolution', 'Rendement', 'Agenda', 'Et si…']);
     expect(tabsOf('taxes').map(t => t.label)).toEqual(['Dons et déclaration', 'Calendrier fiscal']);
     expect(tabsOf('settings')).toEqual([]);
@@ -31,6 +31,7 @@ describe('écrans et onglets', () => {
 
   it('endroit d’un écran : onglet demandé s’il existe, sinon le premier', () => {
     expect(placeIn('pilot', 'payslips')).toEqual({ screen: 'pilot', tab: 'payslips' });
+    expect(placeIn('pilot', 'wishes')).toEqual({ screen: 'pilot', tab: 'wishes' });
     expect(placeIn('pilot', 'agenda')).toEqual({ screen: 'pilot', tab: 'month' });
     expect(placeIn('pilot')).toEqual({ screen: 'pilot', tab: 'month' });
     expect(placeIn('settings', 'month')).toEqual({ screen: 'settings' });
@@ -100,6 +101,7 @@ describe('`lastView` enregistré', () => {
     const p: Place = { screen: 'analyses', tab: 'agenda' };
     expect(encodePlace(p)).toBe('analyses/agenda');
     expect(parsePlace(encodePlace(p))).toEqual(p);
+    expect(parsePlace('pilot/wishes')).toEqual({ screen: 'pilot', tab: 'wishes' });
     expect(encodePlace({ screen: 'dashboard' })).toBe('dashboard');
     expect(parsePlace('dashboard')).toEqual({ screen: 'dashboard' });
   });

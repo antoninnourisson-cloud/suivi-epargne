@@ -24,6 +24,7 @@ const TARGETS: Record<string, Target> = {
   'Pilotage': { menu: 'Pilotage', screen: 'Pilotage', tab: 'Ce mois' },
   'Abonnements': { menu: 'Pilotage', screen: 'Pilotage', tab: 'Abonnements' },
   'Fiches de paie': { menu: 'Pilotage', screen: 'Pilotage', tab: 'Fiches de paie' },
+  'Envies': { menu: 'Pilotage', screen: 'Pilotage', tab: 'Envies' },
   'Dons et impôts': { menu: 'Impôts', screen: 'Impôts', tab: 'Dons et déclaration' },
   'Calendrier fiscal': { menu: 'Impôts', screen: 'Impôts', tab: 'Calendrier fiscal' },
   'Rendement': { menu: 'Analyses', screen: 'Analyses', tab: 'Rendement' },

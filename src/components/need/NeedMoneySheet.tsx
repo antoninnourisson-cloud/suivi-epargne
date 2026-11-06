@@ -21,6 +21,16 @@ import { elideLe, formatEUR, frenchDay, toInputAmount } from '../../lib/format';
 import { Modal } from '../Modal';
 import { Button, IconButton, TextField, fieldClass } from '../ui';
 
+/** Parcours ouvert pour une envie d'achat (onglet Envies) : montant prérempli, rappel du nom, et suite à donner. */
+export interface NeedPrefill {
+  amount: number;
+  /** Nom de l'envie, rappelé en tête du parcours. */
+  label: string;
+  /** Appelé quand le parcours se termine par un retrait enregistré ou prévu (jamais si on abandonne),
+   *  avec le montant finalement demandé (il a pu être modifié dans le parcours). */
+  onDone?: (amount: number) => void;
+}
+
 export interface NeedMoneySheetProps {
   accounts: SavingsAccount[];
   config: GlobalAppData['config'];
@@ -32,6 +42,8 @@ export interface NeedMoneySheetProps {
   onRecord: (lines: PlannedWithdrawalLine[], date: string) => string | null;
   /** Besoin futur : le retrait prévu (tâche de l'Accueil le jour venu). */
   onPlan: (plan: PlannedWithdrawal) => void;
+  /** Montant et nom préremplis (« Je l'achète » d'une envie) ; absent : le parcours habituel. */
+  prefill?: NeedPrefill;
 }
 
 interface Row { id: string; accountId: string; amount: string }
@@ -52,10 +64,10 @@ const costText = (c: WithdrawalCost): string => {
   return parts.length > 0 ? `Coût : ${parts.join(', ')}.` : 'Coût : rien.';
 };
 
-export const NeedMoneySheet: React.FC<NeedMoneySheetProps> = ({ accounts, config, fiscalConfig, emergency, onClose, onRecord, onPlan }) => {
+export const NeedMoneySheet: React.FC<NeedMoneySheetProps> = ({ accounts, config, fiscalConfig, emergency, onClose, onRecord, onPlan, prefill }) => {
   const today = localTodayISO();
   const [step, setStep] = useState<1 | 2>(1);
-  const [amountText, setAmountText] = useState('');
+  const [amountText, setAmountText] = useState(prefill ? toInputAmount(prefill.amount) : '');
   const [needDate, setNeedDate] = useState(today);
   const [rows, setRows] = useState<Row[]>([]);
   const [missing, setMissing] = useState(0);
@@ -111,6 +123,8 @@ export const NeedMoneySheet: React.FC<NeedMoneySheetProps> = ({ accounts, config
     } else {
       onPlan({ id: crypto.randomUUID(), date: day, needDate, lines });
     }
+    // Envie d'achat : retrait enregistré ou prévu, l'envie peut passer dans « Achetées ».
+    prefill?.onDone?.(amount ?? prefill.amount);
     onClose();
   };
 
@@ -126,6 +140,7 @@ export const NeedMoneySheet: React.FC<NeedMoneySheetProps> = ({ accounts, config
       {step === 1 && (
         <>
           {heading("J'ai besoin d'argent")}
+          {prefill && <p className="text-sm font-medium text-on-surface mb-5">Pour votre envie : {prefill.label}.</p>}
           <p className="text-sm text-on-surface-variant mb-5">Pécule cherche où le prendre en coûtant le moins : vos livrets d'abord, puis seulement si besoin l'assurance vie et le PEA.{withParents && " La part de vos parents n'est jamais touchée."}</p>
           <div className="space-y-5">
             <TextField label="Montant dont j'ai besoin" inputMode="decimal" value={amountText} onChange={e => setAmountText(e.target.value)} suffix="€" placeholder="800"

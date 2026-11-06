@@ -114,3 +114,16 @@ describe('buildAskSnapshot', () => {
     expect(s.impot).toEqual({ annee: 2026, impotEstime: 1234.57, revenuImposableSalaires: 30000 });
   });
 });
+
+describe('buildAskSnapshot : envies', () => {
+  it("n'envoie jamais les envies d'achat (nom, lien, prix, note, catégories)", () => {
+    const withWishes = base({
+      wishes: [{ id: 'w-secret', name: 'ENVIE-SECRETE', url: 'https://secret.example/ENVIE-LIEN', price: 4321.98, priceDate: '2026-10-01', category: 'CATEGORIE-SECRETE', note: 'NOTE-ENVIE-PRIVEE' }],
+      config: { ...base().config, wishCategories: ['CATEGORIE-SECRETE'] },
+    });
+    const a = buildAskSnapshot(withWishes, NOW).json;
+    for (const secret of ['ENVIE-SECRETE', 'ENVIE-LIEN', 'secret.example', '4321', 'CATEGORIE-SECRETE', 'NOTE-ENVIE-PRIVEE', 'w-secret']) expect(a).not.toContain(secret);
+    // Même résumé avec ou sans envies.
+    expect(a).toBe(buildAskSnapshot(base(), NOW).json);
+  });
+});

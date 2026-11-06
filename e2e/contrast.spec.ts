@@ -79,7 +79,7 @@ const iconContrastViolations = (page: Page): Promise<string[]> => page.evaluate(
 // Écrans les plus lus, et ceux qui ont de petites icônes (Mes comptes, Dons, Fiches de paie ;
 // les échéances récurrentes sont dans Comptes › Mouvements, ancienne adresse « transfers »,
 // panneau ouvert avant la mesure), et le Calendrier fiscal d'Impôts.
-const VIEWS = ['dashboard', 'transfers', 'pilot', 'journal', 'parental', 'accounts', 'yield', 'donations', 'payslips', 'agenda', 'subscriptions', 'history', 'taxes&tab=calendar'];
+const VIEWS = ['dashboard', 'transfers', 'pilot', 'pilot&tab=wishes', 'journal', 'parental', 'accounts', 'yield', 'donations', 'payslips', 'agenda', 'subscriptions', 'history', 'taxes&tab=calendar'];
 
 for (const theme of ['light', 'dark'] as const) {
   test.describe(`Contrastes AA, thème ${theme === 'light' ? 'clair' : 'sombre'}`, () => {
