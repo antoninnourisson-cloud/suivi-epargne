@@ -24,6 +24,8 @@ import { AskNavButton } from './components/AskNavButton';
 import { whatsNewPending } from './components/whatsNewGate';
 import { registerReloadBlocker } from './services/swUpdates';
 import { isSettledOnDrive, syncPhase } from './lib/sync/syncStatus';
+import { wishCategoriesOf } from './lib/wishes';
+import type { Wish } from './types';
 // Importé ici (et pas dans l'écran, chargé à la demande) pour capter l'invitation d'installation dès le démarrage.
 import './services/installPrompt';
 import { UiProviders, useAddToast, useDialog, useMainUiShown } from './app/UiProviders';
@@ -77,6 +79,12 @@ const AppRoot: React.FC = () => {
   const [quickAddKind, setQuickAddKind] = useState<QuickAddKind | null>(null);
   const openQuickAdd = useCallback((kind: QuickAddKind = 'IN') => setQuickAddKind(kind), []);
   const openTransfer = useCallback(() => setQuickAddKind('TRANSFER'), []);
+  // Envie notée à la volée (choix « Envie » de la feuille) : « Annuler » la retire.
+  const { setWishes } = data;
+  const addWish = useCallback((wish: Wish) => {
+    setWishes(list => [...list, wish]);
+    addToast({ message: 'Envie ajoutée', kind: 'success', action: { label: 'Annuler', onClick: () => setWishes(list => list.filter(w => w.id !== wish.id)) } });
+  }, [setWishes, addToast]);
   const closeQuickAdd = useCallback(() => setQuickAddKind(null), []);
   // « J'ai besoin d'argent : où le prendre ? » (lien du bouton « Mouvement » et de Comptes › Mouvements).
   const [needOpen, setNeedOpen] = useState(false);
@@ -179,7 +187,8 @@ const AppRoot: React.FC = () => {
             {data.accounts.length > 0 && showQuickAddFab(place) && (
               <QuickAddFab scrollRef={mainRef} resetKey={encodePlace(place)} onClick={() => openQuickAdd()} />
             )}
-            {quickAddKind && <Lazy><QuickAddModal open accounts={data.accounts} initialKind={quickAddKind} onClose={closeQuickAdd} onSubmit={actions.quickAdd} onTransfer={actions.transfer} onOpenNeed={openNeed} /></Lazy>}
+            {quickAddKind && <Lazy><QuickAddModal open accounts={data.accounts} initialKind={quickAddKind} onClose={closeQuickAdd} onSubmit={actions.quickAdd} onTransfer={actions.transfer} onOpenNeed={openNeed}
+              onAddWish={addWish} wishCategories={wishCategoriesOf(data.doc.config.wishCategories)} /></Lazy>}
             {needOpen && <Lazy><NeedMoneySheet accounts={data.accounts} config={data.doc.config} fiscalConfig={data.fiscalConfig} emergency={derived.emergency}
               onClose={closeNeed} onRecord={actions.recordNeed} onPlan={actions.planNeed} prefill={needPrefill ?? undefined} /></Lazy>}
             <StableBottomNav place={place} onOpenScreen={openScreen} moreOpen={moreNavOpen} setMoreOpen={setMoreNavOpen} onAsk={openAsk} />

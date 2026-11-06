@@ -71,6 +71,7 @@ describe('table d’alias', () => {
       pilot: { screen: 'pilot', tab: 'month' },
       subscriptions: { screen: 'pilot', tab: 'subscriptions' },
       payslips: { screen: 'pilot', tab: 'payslips' },
+      wishes: { screen: 'pilot', tab: 'wishes' },
       donations: { screen: 'taxes', tab: 'donations' },
       taxes: { screen: 'taxes', tab: 'donations' },
       yield: { screen: 'analyses', tab: 'yield' },

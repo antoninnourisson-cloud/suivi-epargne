@@ -1,6 +1,7 @@
 // Feuille « Nouvelle envie » / « Modifier l'envie » (feuille du bas). Nom et prix obligatoires ;
 // lien, date du prix, catégorie et note au choix. Le prix change : sa date repasse à aujourd'hui
-// (le prix est alors celui d'aujourd'hui) ; la date reste modifiable à la main.
+// (le prix est alors celui d'aujourd'hui) ; la date reste modifiable à la main. Une envie notée
+// sans prix (ajout rapide) s'ouvre avec le champ Prix vide : le prix reste obligatoire ici, c'est là qu'on le complète.
 import React, { useState } from 'react';
 import { X } from 'lucide-react';
 import type { Wish } from '../../types';

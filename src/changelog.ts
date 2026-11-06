@@ -15,6 +15,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '2026.11.06-2',
+    date: '2026-11-06',
+    title: 'Une envie à la volée',
+    items: [
+      "Appui long sur l'icône de Pécule, « Ajouter », puis « Envie » : il suffit d'un nom, le clavier s'ouvre tout de suite. Le prix, le lien et la catégorie sont facultatifs.",
+      "Une envie sans prix affiche « Prix à compléter » et ne compte pas dans les totaux ; une tâche « Envies à compléter » apparaît sur l'Accueil tant qu'il en reste.",
+    ],
+  },
+  {
     version: '2026.11.06',
     date: '2026-11-06',
     title: 'Vos envies d’achats',

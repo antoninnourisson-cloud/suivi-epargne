@@ -4,26 +4,36 @@ import type { Wish } from '../types';
 import {
   addWishCategory, boughtWishes, DEFAULT_WISH_CATEGORIES, groupWishes, isPriceStale, markWishBought, moveWishes, normalizeWishUrl, openWishes,
   removeWishCategory, renameWishCategory, restoreWish, safeWishUrl, sanitizeWishCategories, sanitizeWishes, stalePriceNote, wishCategoriesOf,
-  wishCountIn, wishesTotal,
+  wishCountIn, wishesToComplete, wishesTotal,
 } from './wishes';
 
 const wish = (id: string, over: Partial<Wish> = {}): Wish => ({ id, name: `Envie ${id}`, price: 100, priceDate: '2026-11-01', category: 'Maison', ...over });
 
 describe('sanitizeWishes', () => {
-  it('écarte les entrées illisibles : nom vide, prix non fini ou négatif, date invalide, identifiant absent ou en double', () => {
+  it('écarte les entrées illisibles : nom vide, identifiant absent ou en double', () => {
     const out = sanitizeWishes([
       wish('ok'),
       wish('a', { name: '   ' }),
+      { name: 'sans id', price: 5, priceDate: '2026-11-01', category: 'Maison' },
+      { ...wish('ok'), name: 'doublon' },
+      null, 'texte', 42,
+    ]);
+    expect(out?.map(w => w.id)).toEqual(['ok']);
+  });
+
+  it("garde l'envie sans prix ; un prix présent mais illisible est retiré avec sa date, l'envie reste à compléter", () => {
+    const out = sanitizeWishes([
+      { id: 'sans', name: 'Valise', category: 'Loisirs' },
       wish('b', { price: Number.NaN }),
       wish('c', { price: -1 }),
       wish('d', { priceDate: '2026-02-31' }),
       wish('e', { priceDate: 'hier' }),
-      { name: 'sans id', price: 5, priceDate: '2026-11-01', category: 'Maison' },
-      { ...wish('ok'), name: 'doublon' },
-      null, 'texte', 42,
       { ...wish('f'), price: '12' },
-    ]);
-    expect(out?.map(w => w.id)).toEqual(['ok']);
+      wish('ok', { price: 0 }),
+    ])!;
+    expect(out.map(w => w.id)).toEqual(['sans', 'b', 'c', 'd', 'e', 'f', 'ok']);
+    for (const w of out.slice(0, 6)) { expect('price' in w).toBe(false); expect('priceDate' in w).toBe(false); }
+    expect(out[6]).toMatchObject({ price: 0, priceDate: '2026-11-01' });
   });
 
   it("retire un lien qui n'est pas en http(s), garde l'envie", () => {
@@ -139,6 +149,20 @@ describe('regroupement et totaux', () => {
     expect(wishesTotal(openWishes(list))).toBe(425);
     expect(wishesTotal([])).toBe(0);
     expect(wishesTotal([wish('x', { price: 0.1 }), wish('y', { price: 0.2 })])).toBe(0.3);
+  });
+  it('une envie sans prix ne compte pas dans les totaux ; les envies à compléter sont comptées, achetées exclues', () => {
+    const noPrice = (id: string, over: Partial<Wish> = {}): Wish => ({ id, name: id, category: 'Maison', ...over });
+    const mixed = [wish('a', { price: 30 }), noPrice('b'), noPrice('c', { boughtAt: '2026-10-10' }), noPrice('d')];
+    expect(wishesTotal(openWishes(mixed))).toBe(30);
+    expect(groupWishes(mixed, ['Maison'])[0].total).toBe(30);
+    expect(wishesToComplete(mixed)).toBe(2);
+    expect(wishesToComplete([wish('a')])).toBe(0);
+    expect(wishesToComplete([])).toBe(0);
+  });
+  it('acheter une envie sans prix : pas de prix payé inventé', () => {
+    const done = markWishBought([{ id: 'a', name: 'a', category: 'Maison' }], 'a', '2026-11-05');
+    expect(done[0].boughtAt).toBe('2026-11-05');
+    expect('boughtPrice' in done[0]).toBe(false);
   });
   it('achetées : la plus récente d’abord', () => {
     const got = boughtWishes([wish('a', { boughtAt: '2026-09-01' }), wish('b'), wish('c', { boughtAt: '2026-10-10' })]);

@@ -93,8 +93,9 @@ export const moveWishes = (wishes: Wish[], from: string, to: string): Wish[] =>
 // ---------------------------------------------------------------------------
 
 /**
- * Envies lisibles (migrate) : une entrée sans nom, au prix non fini ou négatif ou à la date
- * invalide est écartée ; un lien qui n'est pas en http(s) est retiré (l'envie reste) ; une date
+ * Envies lisibles (migrate) : une entrée sans nom est écartée. Le prix est facultatif (envie
+ * notée sans prix, « à compléter ») : un prix présent mais non fini, négatif ou sans date
+ * valide est retiré avec sa date, l'envie reste. Un lien qui n'est pas en http(s) est retiré (l'envie reste) ; une date
  * d'achat illisible fait revenir l'envie dans la liste. Champs inconnus conservés.
  * `undefined` si ce n'est pas une liste.
  */
@@ -104,21 +105,23 @@ export const sanitizeWishes = (raw: unknown): Wish[] | undefined => {
   return raw.flatMap((e): Wish[] => {
     if (!isObj(e) || typeof e.id !== 'string' || !e.id || seen.has(e.id)) return [];
     const name = typeof e.name === 'string' ? e.name.trim() : '';
-    const price = typeof e.price === 'number' ? e.price : Number.NaN;
-    if (!name || !Number.isFinite(price) || price < 0 || !isValidDay(e.priceDate)) return [];
+    if (!name) return [];
     seen.add(e.id);
-    const { url: _url, note: _note, boughtAt: _boughtAt, boughtPrice: _boughtPrice, ...rest } = e;
+    const priced = typeof e.price === 'number' && Number.isFinite(e.price) && e.price >= 0 && isValidDay(e.priceDate);
+    const price = priced ? round2(e.price as number) : undefined;
+    const { url: _url, note: _note, boughtAt: _boughtAt, boughtPrice: _boughtPrice, price: _price, priceDate: _priceDate, ...rest } = e;
     const wish: Wish = {
-      ...(rest as unknown as Wish), id: e.id, name, price: round2(price), priceDate: e.priceDate,
+      ...(rest as unknown as Wish), id: e.id, name,
       category: typeof e.category === 'string' && e.category.trim() ? e.category.trim() : FALLBACK_WISH_CATEGORY,
     };
+    if (price !== undefined) { wish.price = price; wish.priceDate = e.priceDate as string; }
     const url = safeWishUrl(e.url);
     if (url) wish.url = url;
     if (typeof e.note === 'string' && e.note.trim()) wish.note = e.note.trim();
     if (isValidDay(e.boughtAt)) {
       wish.boughtAt = e.boughtAt;
       const paid = typeof e.boughtPrice === 'number' && Number.isFinite(e.boughtPrice) && e.boughtPrice >= 0 ? round2(e.boughtPrice) : price;
-      wish.boughtPrice = paid;
+      if (paid !== undefined) wish.boughtPrice = paid;
     }
     return [wish];
   });
@@ -134,8 +137,11 @@ export const openWishes = (wishes: readonly Wish[]): Wish[] => wishes.filter(w =
 export const boughtWishes = (wishes: readonly Wish[]): Wish[] =>
   wishes.filter(isBought).sort((a, b) => (b.boughtAt ?? '').localeCompare(a.boughtAt ?? ''));
 
-/** Total des prix (euros et centimes exacts). */
-export const wishesTotal = (wishes: readonly Wish[]): number => round2(wishes.reduce((s, w) => s + w.price, 0));
+/** Total des prix (euros et centimes exacts) ; une envie sans prix ne compte pas. */
+export const wishesTotal = (wishes: readonly Wish[]): number => round2(wishes.reduce((s, w) => s + (w.price ?? 0), 0));
+
+/** Envies à acheter dont le prix reste à compléter (notées à la volée). */
+export const wishesToComplete = (wishes: readonly Wish[]): number => openWishes(wishes).filter(w => w.price === undefined).length;
 
 export interface WishGroup { category: string; wishes: Wish[]; total: number }
 
@@ -161,8 +167,8 @@ export const groupWishes = (wishes: readonly Wish[], categories: readonly string
 // ---------------------------------------------------------------------------
 
 /** Le prix date de plus de 3 mois (jour pour jour : relevé le 6 août, à revérifier à partir du 7 novembre). */
-export const isPriceStale = (priceDate: string, today: Date): boolean => {
-  if (!isValidDay(priceDate)) return false;
+export const isPriceStale = (priceDate: string | undefined, today: Date): boolean => {
+  if (!priceDate || !isValidDay(priceDate)) return false;
   const d = parseISODate(priceDate);
   const limit = new Date(d.getFullYear(), d.getMonth() + STALE_PRICE_MONTHS, d.getDate());
   const day = new Date(today.getFullYear(), today.getMonth(), today.getDate());
@@ -170,16 +176,20 @@ export const isPriceStale = (priceDate: string, today: Date): boolean => {
 };
 
 /** « prix du 6 août : à revérifier », ou `null` tant que le prix est récent. */
-export const stalePriceNote = (priceDate: string, today: Date): string | null =>
-  (isPriceStale(priceDate, today) ? `prix du ${frenchDay(parseISODate(priceDate))} : à revérifier` : null);
+export const stalePriceNote = (priceDate: string | undefined, today: Date): string | null =>
+  (priceDate && isPriceStale(priceDate, today) ? `prix du ${frenchDay(parseISODate(priceDate))} : à revérifier` : null);
 
 // ---------------------------------------------------------------------------
 // Opérations sur la liste
 // ---------------------------------------------------------------------------
 
-/** Envie achetée : date et prix payé gardés (le prix de l'envie, sauf indication). */
+/** Envie achetée : date et prix payé gardés (le prix de l'envie, sauf indication ; sans prix, rien à garder). */
 export const markWishBought = (wishes: Wish[], id: string, todayISO: string, paid?: number): Wish[] =>
-  wishes.map(w => (w.id === id && !isBought(w) ? { ...w, boughtAt: todayISO, boughtPrice: paid ?? w.price } : w));
+  wishes.map(w => {
+    if (w.id !== id || isBought(w)) return w;
+    const price = paid ?? w.price;
+    return price === undefined ? { ...w, boughtAt: todayISO } : { ...w, boughtAt: todayISO, boughtPrice: price };
+  });
 
 /** « Remettre en envie » : l'achat est défait, l'envie retrouve sa catégorie et son prix. */
 export const restoreWish = (wishes: Wish[], id: string): Wish[] =>

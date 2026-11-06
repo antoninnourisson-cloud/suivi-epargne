@@ -72,7 +72,7 @@ export const visiblePlace = (p: Place, hiddenTabs: readonly ScreenTab[]): Place 
 
 const VIEWS = [
   'dashboard', 'update', 'accounts', 'transfers', 'journal', 'pilot', 'subscriptions', 'payslips',
-  'donations', 'yield', 'history', 'simulator', 'agenda', 'parental', 'settings', 'analyses', 'taxes',
+  'wishes', 'donations', 'yield', 'history', 'simulator', 'agenda', 'parental', 'settings', 'analyses', 'taxes',
 ] as const;
 /** Clé d'écran des liens (`?view=`, liens internes, notifications) : un alias vers un endroit. */
 export type View = typeof VIEWS[number];
@@ -89,6 +89,7 @@ export const VIEW_ALIASES: Record<View, Place> = {
   pilot: { screen: 'pilot', tab: 'month' },
   subscriptions: { screen: 'pilot', tab: 'subscriptions' },
   payslips: { screen: 'pilot', tab: 'payslips' },
+  wishes: { screen: 'pilot', tab: 'wishes' },
   history: { screen: 'analyses', tab: 'evolution' },
   yield: { screen: 'analyses', tab: 'yield' },
   agenda: { screen: 'analyses', tab: 'agenda' },

@@ -22,7 +22,7 @@ const openDemo = async (page: Page) => {
 const openNeed = async (page: Page) => {
   await page.getByRole('button', { name: 'Ajouter un mouvement' }).click();
   const quick = page.getByRole('dialog', { name: 'Ajouter un mouvement' });
-  await expect(quick.getByRole('group', { name: 'Type de mouvement' }).getByRole('button')).toHaveText(['Dépôt', 'Retrait', 'Virement']);
+  await expect(quick.getByRole('group', { name: 'Type de mouvement' }).getByRole('button')).toHaveText(['Dépôt', 'Retrait', 'Virement', 'Envie']);
   await quick.getByRole('button', { name: "J'ai besoin d'argent : où le prendre ?" }).click();
   await expect(quick).toBeHidden();
   const sheet = page.getByRole('dialog', { name: "J'ai besoin d'argent" });

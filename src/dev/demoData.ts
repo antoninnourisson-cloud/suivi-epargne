@@ -106,12 +106,13 @@ export const DEMO_DATA: GlobalAppData = {
     { id: 's1', name: 'Musique', amount: 10.99, debitAccount: 'Carte', frequency: 'monthly', anchorDate: d(25), active: true },
   ],
   donations: [{ id: 'd1', date: d(100), amount: 120, organization: 'Association démo', rate: 66, receiptReceived: true }],
-  // Envies fictives : trois catégories à acheter, un prix de plus de 3 mois, un achat fait.
+  // Envies fictives : trois catégories à acheter, un prix de plus de 3 mois, une envie sans prix, un achat fait.
   wishes: [
     { id: 'w1', name: 'Aspirateur robot', price: 349, priceDate: d(12), category: 'Maison' },
     { id: 'w2', name: 'Lampe de bureau', price: 89, priceDate: d(20), category: 'Maison', note: 'Blanche, avec variateur' },
     { id: 'w3', name: 'Atlas du monde', price: 45, priceDate: d(150), category: 'Livres' },
     { id: 'w4', name: 'Vélo électrique', price: 1490, priceDate: d(30), category: 'Gros projets', url: 'https://example.org/velo-electrique' },
+    { id: 'w6', name: 'Valise cabine', category: 'Loisirs' },
     { id: 'w5', name: 'Casque audio', price: 199, priceDate: d(60), category: 'Tech', boughtAt: d(25), boughtPrice: 189 },
   ],
   payslips: PAYSLIPS,

@@ -59,6 +59,37 @@ describe('Envies', () => {
     expect(screen.queryByText(/Vos envies :/)).toBeNull();
   });
 
+  it('envie sans prix : « Prix à compléter », hors des totaux, sans « Je l’achète » ; la phrase le dit', () => {
+    render(<Harness initial={[...SAMPLE, { id: 'z', name: 'Valise cabine', category: 'Loisirs' }, { id: 'y', name: 'Tente', category: 'Loisirs' }]} />);
+    const loisirs = screen.getByRole('region', { name: 'Loisirs' });
+    expect(within(loisirs).getAllByText('Prix à compléter')).toHaveLength(2);
+    expect(screen.queryByRole('button', { name: "Je l'achète : Valise cabine" })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Modifier Valise cabine' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: "Je l'achète : Lampe" })).toBeTruthy();
+    const summary = screen.getByRole('region', { name: "Vos envies et l'argent disponible" });
+    expect(flat(summary)).toContain('Vosenvies:1973€,et2enviessansprix.');
+  });
+
+  it('seulement des envies sans prix : pas de total ni de comparaison inventés', () => {
+    render(<Harness initial={[{ id: 'z', name: 'Valise cabine', category: 'Loisirs' }]} />);
+    const summary = screen.getByRole('region', { name: "Vos envies et l'argent disponible" });
+    expect(summary.textContent).toContain('Vos envies : 1 envie sans prix.');
+    expect(summary.textContent).not.toContain('Disponible');
+  });
+
+  it('modifier une envie sans prix : le champ Prix est vide et le prix reste obligatoire', () => {
+    render(<Harness initial={[{ id: 'z', name: 'Valise cabine', category: 'Loisirs' }]} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Modifier Valise cabine' }));
+    const sheet = screen.getByRole('dialog', { name: "Modifier l'envie" });
+    expect((within(sheet).getByLabelText('Prix') as HTMLInputElement).value).toBe('');
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Enregistrer' }));
+    expect(screen.getByText('Saisissez un prix supérieur à 0.')).toBeTruthy();
+    fireEvent.change(within(sheet).getByLabelText('Prix'), { target: { value: '60' } });
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Enregistrer' }));
+    expect(screen.queryByText('Prix à compléter')).toBeNull();
+    expect(flat(screen.getByRole('region', { name: 'Loisirs' }))).toContain('60€');
+  });
+
   it('groupée par catégorie, total de chaque catégorie, total général et comparaison avec l’argent disponible', () => {
     render(<Harness initial={SAMPLE} />);
     const maison = screen.getByRole('region', { name: 'Maison' });

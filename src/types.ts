@@ -184,10 +184,10 @@ export interface Wish {
   name: string;
   /** Lien http ou https seulement (ouvert dans un nouvel onglet). */
   url?: string;
-  /** Prix relevé, en euros. */
-  price: number;
-  /** 'YYYY-MM-DD' : jour où ce prix a été relevé (à revérifier au-delà de 3 mois). */
-  priceDate: string;
+  /** Prix relevé, en euros. Absent : envie notée à la volée, prix à compléter. */
+  price?: number;
+  /** 'YYYY-MM-DD' : jour où ce prix a été relevé (à revérifier au-delà de 3 mois). Absent avec le prix. */
+  priceDate?: string;
   category: string;
   note?: string;
   /** 'YYYY-MM-DD' : jour de l'achat (envie passée dans « Achetées »). */

@@ -91,7 +91,7 @@ describe('QuickAddModal', () => {
 });
 
 describe('QuickAddModal, virement', () => {
-  const setupTransfer = (props: Partial<React.ComponentProps<typeof QuickAddModal>> = {}) => {
+  const setupTransfer = (props: Partial<Parameters<typeof QuickAddModal>[0]> = {}) => {
     const onClose = vi.fn();
     const onSubmit = vi.fn();
     const onTransfer = vi.fn<(r: TransferRequest) => string | null>(() => null);
@@ -208,5 +208,109 @@ describe('QuickAddModal, « J’ai besoin d’argent »', () => {
   it('absent sans gestionnaire', () => {
     render(<QuickAddModal open accounts={accounts} onClose={vi.fn()} onSubmit={vi.fn()} />);
     expect(screen.queryByRole('button', { name: /besoin d'argent/ })).toBeNull();
+  });
+});
+
+describe('QuickAddModal : choix Envie', () => {
+  const setupWish = (props: Partial<Parameters<typeof QuickAddModal>[0]> = {}) => {
+    const onClose = vi.fn();
+    const onSubmit = vi.fn();
+    const onAddWish = vi.fn();
+    render(<QuickAddModal open accounts={accounts} onClose={onClose} onSubmit={onSubmit} onAddWish={onAddWish} wishCategories={['Maison', 'Livres']} {...props} />);
+    return { onClose, onSubmit, onAddWish };
+  };
+  const chooseWish = () => fireEvent.click(screen.getByRole('button', { name: 'Envie' }));
+
+  it('sans gestionnaire : pas de choix « Envie »', () => {
+    render(<QuickAddModal open accounts={accounts} onClose={vi.fn()} onSubmit={vi.fn()} />);
+    expect(screen.queryByRole('button', { name: 'Envie' })).toBeNull();
+  });
+
+  it('quatre choix ; Envie : nom (focus), prix, lien, catégories, ni compte, ni montant, ni date', () => {
+    setupWish({ onTransfer: vi.fn(() => null) });
+    expect(screen.getAllByRole('button', { name: /^(Dépôt|Retrait|Virement|Envie)$/ })).toHaveLength(4);
+    chooseWish();
+    expect(screen.getByRole('button', { name: 'Envie' }).getAttribute('aria-pressed')).toBe('true');
+    expect(document.activeElement).toBe(screen.getByLabelText('Nom'));
+    expect((screen.getByLabelText('Prix (facultatif)') as HTMLInputElement).value).toBe('');
+    expect(screen.getByLabelText('Lien (facultatif)')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Maison' }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('button', { name: 'Livres' }).getAttribute('aria-pressed')).toBe('false');
+    for (const l of ['Compte', 'Montant', 'Date', 'Libellé (facultatif)']) expect(screen.queryByLabelText(l)).toBeNull();
+    expect(screen.queryByRole('button', { name: /besoin d'argent/ })).toBeNull();
+  });
+
+  it('ouverte sur Envie (?action=wish) : le focus est sur le nom', () => {
+    setupWish({ initialKind: 'WISH' });
+    expect(screen.getByRole('button', { name: 'Envie' }).getAttribute('aria-pressed')).toBe('true');
+    expect(document.activeElement).toBe(screen.getByLabelText('Nom'));
+  });
+
+  it('le nom est obligatoire : bouton grisé avec sa raison', () => {
+    const { onAddWish } = setupWish({ initialKind: 'WISH' });
+    const add = screen.getByRole('button', { name: 'Ajouter' }) as HTMLButtonElement;
+    expect(add.disabled).toBe(true);
+    expect(document.getElementById(add.getAttribute('aria-describedby') ?? '')?.textContent).toBe("Donnez un nom à l'envie pour pouvoir l'ajouter.");
+    fireEvent.change(screen.getByLabelText('Nom'), { target: { value: '   ' } });
+    expect(add.disabled).toBe(true);
+    fireEvent.click(add);
+    expect(onAddWish).not.toHaveBeenCalled();
+  });
+
+  it('nom seul : envie sans prix ni date de prix, première catégorie, feuille fermée', () => {
+    const { onAddWish, onClose, onSubmit } = setupWish({ initialKind: 'WISH' });
+    fireEvent.change(screen.getByLabelText('Nom'), { target: { value: '  Valise cabine ' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Ajouter' }));
+    expect(onAddWish).toHaveBeenCalledTimes(1);
+    const w = onAddWish.mock.calls[0][0];
+    expect(w).toEqual({ id: expect.any(String), name: 'Valise cabine', category: 'Maison' });
+    expect('price' in w || 'priceDate' in w || 'url' in w).toBe(false);
+    expect(onClose).toHaveBeenCalledOnce();
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("avec prix, lien et catégorie : la date du prix est aujourd'hui, le lien est complété en https", () => {
+    const { onAddWish } = setupWish({ initialKind: 'WISH' });
+    fireEvent.change(screen.getByLabelText('Nom'), { target: { value: 'Roman' } });
+    fireEvent.change(screen.getByLabelText('Prix (facultatif)'), { target: { value: '12,5' } });
+    fireEvent.change(screen.getByLabelText('Lien (facultatif)'), { target: { value: 'exemple.fr/roman' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Livres' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Ajouter' }));
+    expect(onAddWish).toHaveBeenCalledWith({
+      id: expect.any(String), name: 'Roman', category: 'Livres', price: 12.5, url: 'https://exemple.fr/roman',
+      priceDate: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+    });
+  });
+
+  it("un lien qui n'est pas en http ou https est refusé : rien n'est enregistré", () => {
+    const { onAddWish, onClose } = setupWish({ initialKind: 'WISH' });
+    fireEvent.change(screen.getByLabelText('Nom'), { target: { value: 'Roman' } });
+    fireEvent.change(screen.getByLabelText('Lien (facultatif)'), { target: { value: 'javascript:alert(1)' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Ajouter' }));
+    expect(screen.getByText('Le lien doit commencer par http:// ou https://.')).toBeTruthy();
+    expect(onAddWish).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('saisie commencée : le voile ne ferme plus la feuille', () => {
+    const { onClose } = setupWish({ initialKind: 'WISH' });
+    const scrim = screen.getByRole('dialog', { name: 'Ajouter un mouvement' }).parentElement!;
+    fireEvent.click(scrim);
+    expect(onClose).toHaveBeenCalledTimes(1);
+    fireEvent.change(screen.getByLabelText('Nom'), { target: { value: 'Roman' } });
+    fireEvent.click(scrim);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('les autres choix ne changent pas : un dépôt reste un dépôt, sans passer par les envies', () => {
+    const { onSubmit, onAddWish } = setupWish();
+    chooseWish();
+    fireEvent.change(screen.getByLabelText('Nom'), { target: { value: 'Roman' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Dépôt' }));
+    expect(screen.queryByLabelText('Nom')).toBeNull();
+    fireEvent.change(screen.getByLabelText('Montant'), { target: { value: '20' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Ajouter' }));
+    expect(onSubmit).toHaveBeenCalledWith('la', 20, 'IN', 'Dépôt', expect.any(String));
+    expect(onAddWish).not.toHaveBeenCalled();
   });
 });

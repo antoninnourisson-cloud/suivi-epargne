@@ -116,6 +116,7 @@ export const useViewState = (lastView: string, setLastView: (v: string) => void)
  * qu'un simple rechargement ne les rejoue pas.
  * - `?action=quickadd` : raccourci PWA « Ajouter un mouvement » (appui long sur l'icône) ;
  *   `?action=transfer` : la même feuille, ouverte sur Virement (« Faire un virement ») ;
+ *   `?action=wish` : la même feuille, ouverte sur Envie (noter un achat envisagé à la volée) ;
  * - `?action=pay` (avec ou sans `view=pilot`) : raccourci « J'ai reçu ma paie » et
  *   notification de paie : le Pilotage s'ouvre directement sur le rituel (onglet « Ce mois »,
  *   jamais l'onglet mémorisé) ;
@@ -125,13 +126,13 @@ export const useViewState = (lastView: string, setLastView: (v: string) => void)
  *   après, l'ouvre ;
  * - message `open-view` du service worker : app déjà ouverte au clic sur une notification.
  */
-export const useDeepLinks = (ready: boolean, openLinkedView: (v: View, tab?: string) => void, openQuickAdd: (kind?: 'TRANSFER') => void) => {
+export const useDeepLinks = (ready: boolean, openLinkedView: (v: View, tab?: string) => void, openQuickAdd: (kind?: 'TRANSFER' | 'WISH') => void) => {
   useEffect(() => {
     if (!ready) return;
     const params = new URLSearchParams(window.location.search);
     const action = params.get('action');
-    if (action === 'quickadd' || action === 'transfer') {
-      if (action === 'transfer') openQuickAdd('TRANSFER'); else openQuickAdd();
+    if (action === 'quickadd' || action === 'transfer' || action === 'wish') {
+      if (action === 'transfer') openQuickAdd('TRANSFER'); else if (action === 'wish') openQuickAdd('WISH'); else openQuickAdd();
       stripParam('action');
     }
     const target = params.get('view');

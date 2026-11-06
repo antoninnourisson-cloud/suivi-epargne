@@ -49,7 +49,7 @@ test.describe('Virements (démo)', () => {
     await expect(accountRow(page, 'Livret A')).toContainText(/15\s200/);
   });
 
-  test('un seul formulaire : le bouton « Mouvement » propose Dépôt, Retrait et Virement ; Mouvements garde les échéances récurrentes', async ({ page }) => {
+  test('un seul formulaire : le bouton « Mouvement » propose Dépôt, Retrait, Virement et Envie ; Mouvements garde les échéances récurrentes', async ({ page }) => {
     await page.addInitScript(v => { try { localStorage.setItem('last_seen_version', v); } catch { /* ignoré */ } }, LATEST_VERSION);
     await page.goto('/?demo=1&view=transfers');
     await expect(page).toHaveTitle('Comptes · Mouvements · Pécule');
@@ -61,7 +61,7 @@ test.describe('Virements (démo)', () => {
     await page.getByRole('button', { name: 'Ajouter un mouvement' }).click();
     const sheet = page.getByRole('dialog', { name: 'Ajouter un mouvement' });
     const kinds = sheet.getByRole('group', { name: 'Type de mouvement' }).getByRole('button');
-    await expect(kinds).toHaveText(['Dépôt', 'Retrait', 'Virement']);
+    await expect(kinds).toHaveText(['Dépôt', 'Retrait', 'Virement', 'Envie']);
     await expect(sheet.getByRole('button', { name: 'Dépôt' })).toHaveAttribute('aria-pressed', 'true');
   });
 

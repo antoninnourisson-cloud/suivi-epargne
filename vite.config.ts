@@ -137,9 +137,9 @@ export default defineConfig({
         // (useDeepLinks, src/app/useAppNavigation.ts).
         shortcuts: [
           {
-            name: 'Ajouter un mouvement',
+            name: 'Ajouter un mouvement ou une envie',
             short_name: 'Ajouter',
-            description: 'Enregistrer rapidement un dépôt ou un retrait',
+            description: "Enregistrer rapidement un dépôt, un retrait, un virement ou une envie d'achat",
             url: './?action=quickadd',
             icons: [{ src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png' }]
           },

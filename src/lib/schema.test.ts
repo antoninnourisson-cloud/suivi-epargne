@@ -289,15 +289,26 @@ describe('migrate : envies', () => {
     const d = migrate({ wishes: [
       wish('ok', { url: 'https://exemple.fr/livre', note: 'Poche' }),
       wish('nom', { name: '' }),
-      wish('prix', { price: Number.POSITIVE_INFINITY }),
-      wish('neg', { price: -5 }),
-      wish('date', { priceDate: '2026-13-01' }),
       wish('lien', { url: 'javascript:alert(1)' }),
       'pas un objet', null,
     ] });
     expect(d.wishes?.map(w => w.id)).toEqual(['ok', 'lien']);
     expect(d.wishes?.[0]).toMatchObject({ url: 'https://exemple.fr/livre', note: 'Poche' });
     expect(d.wishes?.[1].url).toBeUndefined();
+  });
+
+  it("une envie sans prix reste (à compléter) ; un prix illisible est retiré avec sa date, l'envie reste", () => {
+    const d = migrate({ wishes: [
+      { id: 'sans', name: 'Valise', category: 'Loisirs' },
+      wish('inf', { price: Number.POSITIVE_INFINITY }),
+      wish('neg', { price: -5 }),
+      wish('date', { priceDate: '2026-13-01' }),
+      wish('bon'),
+    ] });
+    expect(d.wishes?.map(w => w.id)).toEqual(['sans', 'inf', 'neg', 'date', 'bon']);
+    for (const w of d.wishes!.slice(0, 4)) { expect('price' in w).toBe(false); expect('priceDate' in w).toBe(false); }
+    expect(d.wishes?.[4]).toMatchObject({ price: 40, priceDate: '2026-11-01' });
+    expect(d.schemaVersion).toBe(APP_SCHEMA_VERSION);
   });
 
   it("une liste qui n'en est pas une est retirée ; une liste vide reste vide", () => {

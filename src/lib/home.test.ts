@@ -344,6 +344,15 @@ describe('liste « À faire »', () => {
     expect(buildHomeTodos(base())).toEqual([]);
   });
 
+  it('envies sans prix : une tâche ponctuelle « Envies à compléter », absente quand tout est complété', () => {
+    const todo = (n: number) => buildHomeTodos(base({ wishesToComplete: n })).find(t => t.key === 'wishes-to-complete');
+    expect(todo(0)).toBeUndefined();
+    expect(buildHomeTodos(base())).toEqual([]);
+    expect(todo(1)).toMatchObject({ text: 'Envies à compléter', detail: '1 envie sans prix', primary: { label: 'Compléter', action: { type: 'navigate', view: 'wishes' } } });
+    expect(todo(3)?.detail).toBe('3 envies sans prix');
+    expect(todo(3)?.snoozable).toBeUndefined();
+  });
+
   it('keeps the historic keys (snoozes depend on them) and names actions', () => {
     const la = acc('la', AccountType.LIVRET_A, 100, { name: 'Livret A' });
     const recurring = { id: 'r1', label: 'Virement', amount: 50, type: 'IN' as const, accountId: 'la', dayOfMonth: 5, active: true };

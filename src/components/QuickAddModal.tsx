@@ -1,11 +1,12 @@
-// Bouton « Mouvement » : un dépôt, un retrait, ou un virement entre deux de vos comptes (seul
-// endroit pour ce geste depuis la fin de l'écran Virements). Une fois la saisie commencée, un
+// Bouton « Mouvement » : un dépôt, un retrait, un virement entre deux de vos comptes (seul
+// endroit pour ce geste depuis la fin de l'écran Virements), ou une envie d'achat notée à la
+// volée (le nom suffit ; prix et lien se complètent plus tard, voir lib/wishes). Une fois la saisie commencée, un
 // toucher hors de la feuille ne la ferme plus (Échap et « Fermer » restent) ; après l'ajout,
 // le message de confirmation propose « Annuler » (voir useAccountActions).
 import React, { useEffect, useRef, useState } from 'react';
 import { lsGet, lsSet } from '../lib/storage';
-import { SavingsAccount } from '../types';
-import { X, ArrowUpCircle, ArrowDownCircle, ArrowRightLeft, Lightbulb, AlertCircle } from 'lucide-react';
+import { SavingsAccount, type Wish } from '../types';
+import { X, ArrowUpCircle, ArrowDownCircle, ArrowRightLeft, Gift, Lightbulb, AlertCircle } from 'lucide-react';
 import { NumberInput } from './NumberInput';
 import { localTodayISO, parseISODate } from '../lib/dates';
 import { quinzaineWithdrawalTip } from '../lib/finance';
@@ -13,10 +14,11 @@ import { formatEUR, frenchDay } from '../lib/format';
 import { Modal } from './Modal';
 import { canWithdrawOwn } from '../lib/accountOps';
 import { isQuickAddInterest } from '../lib/commands/quickAdd';
+import { normalizeWishUrl } from '../lib/wishes';
 import { Button, Chip, IconButton, SegmentedButton, TextField } from './ui';
 
-/** Choix de la feuille : dépôt, retrait ou virement entre deux comptes. */
-export type QuickAddKind = 'IN' | 'OUT' | 'TRANSFER';
+/** Choix de la feuille : dépôt, retrait, virement entre deux comptes ou envie d'achat. */
+export type QuickAddKind = 'IN' | 'OUT' | 'TRANSFER' | 'WISH';
 
 /** Virement demandé ; la réponse est le refus à afficher, ou `null` s'il est enregistré. */
 export interface TransferRequest { sourceId: string; destId: string; amount: number; date: string }
@@ -32,6 +34,10 @@ interface QuickAddModalProps {
   onTransfer?: (request: TransferRequest) => string | null;
   /** « J'ai besoin d'argent : où le prendre ? » : ferme cette feuille et ouvre le retrait guidé. */
   onOpenNeed?: () => void;
+  /** Envie d'achat notée à la volée. Sans lui, pas de choix « Envie ». */
+  onAddWish?: (wish: Wish) => void;
+  /** Catégories proposées pour l'envie (la première par défaut). */
+  wishCategories?: string[];
 }
 
 type Direction = 'IN' | 'OUT';
@@ -40,6 +46,7 @@ const KINDS: { value: QuickAddKind; label: string; icon: React.ComponentType<{ c
   { value: 'IN', label: 'Dépôt', icon: ArrowUpCircle },
   { value: 'OUT', label: 'Retrait', icon: ArrowDownCircle },
   { value: 'TRANSFER', label: 'Virement', icon: ArrowRightLeft },
+  { value: 'WISH', label: 'Envie', icon: Gift },
 ];
 const SUGGESTIONS: Record<Direction, string[]> = {
   IN: ['Virement de paie', 'Épargne du mois', 'Intérêts', 'Cadeau'],
@@ -79,11 +86,19 @@ export const recentLabels = (account: SavingsAccount | undefined, dir: Direction
 /** Puces de 32 px, zone tactile de 48 px (Material 3). */
 const CHIP_TARGET = 'relative after:absolute after:inset-x-0 after:-inset-y-2';
 
-export const QuickAddModal: React.FC<QuickAddModalProps> = ({ open, accounts, initialKind = 'IN', onClose, onSubmit, onTransfer, onOpenNeed }) => {
+export const QuickAddModal: React.FC<QuickAddModalProps> = ({ open, accounts, initialKind = 'IN', onClose, onSubmit, onTransfer, onOpenNeed, onAddWish, wishCategories = [] }) => {
   const [accountId, setAccountId] = useState('');
   const [destId, setDestId] = useState('');
   const [amount, setAmount] = useState(0);
-  const [type, setType] = useState<QuickAddKind>('IN');
+  // Ouverte sur « Envie » : le choix est là dès le premier affichage (le focus va sur le nom).
+  const [type, setType] = useState<QuickAddKind>(initialKind === 'WISH' && onAddWish ? 'WISH' : 'IN');
+  // Envie : nom, prix (vide = à compléter), lien, catégorie.
+  const [wishName, setWishName] = useState('');
+  const [wishPrice, setWishPrice] = useState(Number.NaN);
+  const [wishUrl, setWishUrl] = useState('');
+  const [wishCategory, setWishCategory] = useState('');
+  const [wishUrlError, setWishUrlError] = useState<string | null>(null);
+  const nameRef = useRef<HTMLInputElement>(null);
   const [label, setLabel] = useState('');
   const [date, setDate] = useState(localTodayISO());
   // Virement refusé par la commande : la raison reste écrite dans la feuille.
@@ -91,10 +106,12 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ open, accounts, in
   const amountRef = useRef<HTMLInputElement>(null);
   // Un virement demande deux comptes.
   const canTransfer = !!onTransfer && accounts.length >= 2;
-  const kinds = canTransfer ? KINDS : KINDS.filter(k => k.value !== 'TRANSFER');
+  const canWish = !!onAddWish;
+  const kinds = KINDS.filter(k => (k.value !== 'TRANSFER' || canTransfer) && (k.value !== 'WISH' || canWish));
   const transfer = type === 'TRANSFER';
-  // Sens d'un dépôt ou d'un retrait (libellés proposés) ; sans objet pour un virement.
-  const dir: Direction = type === 'TRANSFER' ? 'IN' : type;
+  const wish = type === 'WISH';
+  // Sens d'un dépôt ou d'un retrait (libellés proposés) ; sans objet pour un virement ou une envie.
+  const dir: Direction = type === 'OUT' ? 'OUT' : 'IN';
 
   // Chaque ouverture repart d'un formulaire propre, sur le dernier compte utilisé (les
   // comptes ont pu être créés depuis le montage).
@@ -104,11 +121,21 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ open, accounts, in
     setAccountId(accounts.some(a => a.id === last) ? last : accounts[0]?.id || '');
     setDestId('');
     setAmount(0);
-    setType(initialKind === 'TRANSFER' && !canTransfer ? 'IN' : initialKind);
+    setType((initialKind === 'TRANSFER' && !canTransfer) || (initialKind === 'WISH' && !canWish) ? 'IN' : initialKind);
+    setWishName('');
+    setWishPrice(Number.NaN);
+    setWishUrl('');
+    setWishCategory(wishCategories[0] ?? '');
+    setWishUrlError(null);
     setLabel('');
     setDate(localTodayISO());
     setTransferError(null);
-  }, [open, accounts, initialKind, canTransfer]);
+    // Les catégories ne sont lues qu'à l'ouverture : une mise à jour en cours de saisie ne l'efface pas.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, accounts, initialKind, canTransfer, canWish]);
+
+  // Choisir « Envie » : le clavier s'ouvre tout de suite sur le nom.
+  useEffect(() => { if (open && type === 'WISH') nameRef.current?.focus(); }, [open, type]);
 
   const account = accounts.find(a => a.id === accountId);
   // Puces : les libellés récents de ce compte d'abord, puis les fixes (sans doublon).
@@ -126,20 +153,34 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ open, accounts, in
     setAmount(value);
   };
   // Un retrait, comme un virement, ne prend que sur votre part du compte (de départ).
-  const tooMuch = type !== 'IN' && !!account && amount > 0 && !canWithdrawOwn(account, amount);
-  const canSubmit = !!accountId && amount > 0 && !tooMuch && (!transfer || (!!destId && destId !== accountId));
+  const tooMuch = (type === 'OUT' || transfer) && !!account && amount > 0 && !canWithdrawOwn(account, amount);
+  const canSubmit = wish ? wishName.trim() !== ''
+    : !!accountId && amount > 0 && !tooMuch && (!transfer || (!!destId && destId !== accountId));
   // Bouton grisé : la raison est écrite sous le bouton et lui est reliée (un montant trop
   // élevé est déjà expliqué sous le champ « Montant »).
   const verb = transfer ? 'enregistrer' : 'ajouter';
-  const whyDisabled = !accountId ? `Choisissez un compte pour pouvoir ${verb}.`
+  const whyDisabled = wish ? (wishName.trim() === '' ? "Donnez un nom à l'envie pour pouvoir l'ajouter." : null)
+    : !accountId ? `Choisissez un compte pour pouvoir ${verb}.`
     : transfer && !destId ? "Choisissez le compte d'arrivée pour pouvoir enregistrer."
       : !(amount > 0) ? `Indiquez un montant pour pouvoir ${verb}.` : null;
   // Saisie commencée : un toucher sur le voile ne doit pas l'effacer.
-  const dirty = amount > 0 || label.trim() !== '' || (transfer && destId !== '');
+  const dirty = wish ? wishName.trim() !== '' || wishUrl.trim() !== '' || wishPrice > 0
+    : amount > 0 || label.trim() !== '' || (transfer && destId !== '');
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!canSubmit) return;
+    if (wish) {
+      const url = wishUrl.trim() ? normalizeWishUrl(wishUrl) : undefined;
+      if (wishUrl.trim() && !url) { setWishUrlError('Le lien doit commencer par http:// ou https://.'); return; }
+      // Prix facultatif : sans prix, l'envie reste « à compléter » (pas de date de prix non plus).
+      const added: Wish = { id: crypto.randomUUID(), name: wishName.trim(), category: wishCategory || wishCategories[0] || '' };
+      if (wishPrice > 0) { added.price = wishPrice; added.priceDate = localTodayISO(); }
+      if (url) added.url = url;
+      onAddWish?.(added);
+      onClose();
+      return;
+    }
     lsSet(LAST_ACCOUNT_KEY, accountId);
     if (transfer) {
       const refused = onTransfer?.({ sourceId: accountId, destId, amount, date }) ?? null;
@@ -165,8 +206,8 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ open, accounts, in
   );
 
   return (
-    <Modal open={open} onClose={onClose} label="Ajouter un mouvement" variant="sheet" className="max-w-md p-6" initialFocusRef={amountRef} closeOnScrim={!dirty}>
-      <form onSubmit={submit}>
+    <Modal open={open} onClose={onClose} label="Ajouter un mouvement" variant="sheet" className="max-w-md p-6" initialFocusRef={initialKind === 'WISH' ? nameRef : amountRef} closeOnScrim={!dirty}>
+      <form onSubmit={submit} noValidate>
         <div className="flex items-center justify-between gap-2 mb-5">
           <h2 className="text-2xl font-normal text-on-surface">Ajouter un mouvement</h2>
           <IconButton icon={X} label="Fermer" onClick={onClose} className="-mr-3" />
@@ -175,21 +216,44 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ open, accounts, in
         <div className="space-y-5">
           <SegmentedButton
             label="Type de mouvement" options={kinds} value={type} onChange={k => { setTransferError(null); setType(k); }}
-            className="w-full [&>button]:flex-1 [&>button]:px-2 max-sm:[&>button]:h-12"
+            className="w-full [&>button]:flex-1 [&>button]:px-2 max-sm:[&>button]:h-12 max-[359px]:[&>button]:px-1 max-[359px]:[&>button]:text-xs max-[359px]:[&>button>svg]:hidden"
           />
-          {/* Retrait guidé : un lien sous les trois choix, pas un quatrième. */}
-          {onOpenNeed && (
+          {/* Retrait guidé : un lien sous les choix, pas un choix de plus. Sous 360 px, les quatre choix perdent leur icône pour tenir. */}
+          {onOpenNeed && !wish && (
             <button type="button" onClick={onOpenNeed} className="-mt-2 min-h-12 text-sm font-medium text-primary underline underline-offset-4 decoration-primary/40 hover:decoration-primary text-left">
               J'ai besoin d'argent : où le prendre ?
             </button>
           )}
 
-          {transfer ? (<>
+          {wish ? (<>
+            <TextField
+              label="Nom"
+              render={p => (
+                <input id={p.id} ref={nameRef} className={p.className} value={wishName} onChange={e => setWishName(e.target.value)}
+                  placeholder="Aspirateur robot, un roman…" autoComplete="off" enterKeyHint="next" />
+              )}
+            />
+            <TextField label="Prix (facultatif)" supporting="Sans prix, l'envie reste à compléter plus tard." render={p => (
+              <NumberInput id={p.id} describedBy={p.describedBy} invalid={p.invalid} value={wishPrice} onChange={setWishPrice} min={0} suffix="€" placeholder="0,00" className={`${p.className} tabular-nums`} />
+            )} />
+            <TextField label="Lien (facultatif)" type="url" inputMode="url" value={wishUrl} onChange={e => { setWishUrl(e.target.value); setWishUrlError(null); }}
+              placeholder="https://…" autoComplete="off" error={wishUrlError ?? undefined} />
+            {wishCategories.length > 0 && (
+              <div>
+                <p id="quick-wish-category" className="block text-sm font-medium text-on-surface-variant mb-1.5">Catégorie</p>
+                <div role="group" aria-labelledby="quick-wish-category" className="flex flex-wrap gap-x-2 gap-y-4 py-1">
+                  {wishCategories.map(c => (
+                    <Chip key={c} selected={wishCategory === c} className={CHIP_TARGET} onClick={() => setWishCategory(c)}>{c}</Chip>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>) : transfer ? (<>
             {accountSelect('Compte de départ', accountId, v => { setAccountId(v); if (v === destId) setDestId(''); })}
             {accountSelect("Compte d'arrivée", destId, setDestId, accountId)}
           </>) : accountSelect('Compte', accountId, setAccountId)}
 
-          <div>
+          {!wish && <div>
             <TextField
               label="Montant"
               error={!tooMuch ? undefined : account!.parentalCapital > 0
@@ -206,9 +270,9 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ open, accounts, in
                 <span>Retiré à cette date, ce montant ne rapporte déjà plus rien depuis le {since}. En attendant le {frenchDay(parseISODate(tip.waitUntil))}, vous gardez environ {formatEUR(tip.gain, 0)} d'intérêts.</span>
               </p>
             )}
-          </div>
+          </div>}
 
-          {!transfer && <div>
+          {!transfer && !wish && <div>
             <TextField label="Libellé (facultatif)" value={label} onChange={e => setLabel(e.target.value)} placeholder={SUGGESTIONS[dir][0]} />
             <div role="group" aria-label="Libellés proposés" className="flex flex-wrap gap-x-2 gap-y-4 mt-3 py-1">
               {chips.map(sug => (
@@ -222,7 +286,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ open, accounts, in
             )}
           </div>}
 
-          <TextField label="Date" type="date" value={date} onChange={e => setDate(e.target.value)} />
+          {!wish && <TextField label="Date" type="date" value={date} onChange={e => setDate(e.target.value)} />}
         </div>
 
         {transferError && (

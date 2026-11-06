@@ -65,6 +65,14 @@ describe('liens directs', () => {
     expect(window.location.search).toBe('');
   });
 
+  it('« Noter une envie » (`?action=wish`) : la feuille du bouton « Mouvement » sur Envie', () => {
+    window.history.replaceState({}, '', '/?action=wish');
+    const openQuickAdd = vi.fn();
+    renderHook(() => useDeepLinks(true, vi.fn(), openQuickAdd));
+    expect(openQuickAdd).toHaveBeenCalledWith('WISH');
+    expect(window.location.search).toBe('');
+  });
+
   it('« J’ai reçu ma paie » (raccourci, notification) : Pilotage et rituel demandés, adresse nettoyée', () => {
     const onRequest = vi.fn();
     window.addEventListener(OPEN_PAY_SHEET_EVENT, onRequest);

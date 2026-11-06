@@ -120,6 +120,8 @@ interface DashboardProps {
   /** Taux réglementés relevés par la veille fiscale : la tâche « Les taux ont changé ». */
   rateChanges?: RateProposalInfo[];
   onOpenRateChanges?: () => void;
+  /** Envies à acheter sans prix : la tâche « Envies à compléter ». */
+  wishesToComplete?: number;
   /** Ouvre la feuille « Clôture de l'année » (sinon : la carte de l'Historique). */
   onOpenYearClosing?: () => void;
   /** Objectif de l'année en cours (fixé à la clôture) : une ligne dans la carte de l'objectif du mois. */
@@ -140,7 +142,7 @@ const SLICE_STYLE: Record<'available' | 'tax' | 'locked', Pick<AvailabilitySegme
   locked: { color: 'bg-outline', hatch: 'dense' },
 };
 
-export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalConfig, onDeleteAccount, recurringMovements = [], onRecordRecurring, monthPlan, monthGoal, monthlyPay = 0, paydayDay, trackingStartDate, subscriptions = [], onUpdateFiscalConfig, onOpenSettings, onUpdateAccounts, payRaise, onAcceptPayRaise, onDismissPayRaise, onNavigate, onAddAccount, lastExportAt, onExport, emergency, onSetEmergencyMonths, agendaNext = [], lepTimeline, taxReturnAlert, payslips = [], gamification, goodMonthThreshold, milestonesSeen, payReviewsDone, rfrByYear, taxReturnFiledYear, onMarkTaxReturnFiled, restitutionDoneOn, restitutionPlannedDate, onMarkMilestonesSeen, onValidatePayReview, yearClosing, pays, askSlot, plannedWithdrawals, onRecordPlannedWithdrawal, onDeletePlannedWithdrawal, rateChanges, onOpenRateChanges, onOpenYearClosing, yearGoal }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalConfig, onDeleteAccount, recurringMovements = [], onRecordRecurring, monthPlan, monthGoal, monthlyPay = 0, paydayDay, trackingStartDate, subscriptions = [], onUpdateFiscalConfig, onOpenSettings, onUpdateAccounts, payRaise, onAcceptPayRaise, onDismissPayRaise, onNavigate, onAddAccount, lastExportAt, onExport, emergency, onSetEmergencyMonths, agendaNext = [], lepTimeline, taxReturnAlert, payslips = [], gamification, goodMonthThreshold, milestonesSeen, payReviewsDone, rfrByYear, taxReturnFiledYear, onMarkTaxReturnFiled, restitutionDoneOn, restitutionPlannedDate, onMarkMilestonesSeen, onValidatePayReview, yearClosing, pays, askSlot, plannedWithdrawals, onRecordPlannedWithdrawal, onDeletePlannedWithdrawal, rateChanges, onOpenRateChanges, onOpenYearClosing, yearGoal, wishesToComplete }) => {
   // Date du jour partagée (useToday) : l'Accueil resté ouvert passe au lendemain à minuit.
   const today = useToday();
   const choices = useHomeChoices(today);
@@ -270,6 +272,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalC
     backupProblem,
     plannedWithdrawals: duePlannedWithdrawals(plannedWithdrawals, today),
     rateChanges,
+    wishesToComplete,
   });
 
   const run = (a: HomeAction) => {

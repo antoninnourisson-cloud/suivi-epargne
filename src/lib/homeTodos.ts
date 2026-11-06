@@ -134,6 +134,8 @@ export interface HomeTodoInput {
    * « avis d'impôt » se fie à la frise du LEP (années lues sur un avis), si elle existe.
    */
   rfrByYear?: Record<string, number>;
+  /** Envies à acheter notées sans prix (lib/wishes, wishesToComplete) : une tâche ponctuelle tant qu'il en reste. */
+  wishesToComplete?: number;
 }
 
 /** Début d'août à fin septembre : les avis arrivent fin juillet à fin août, quelques-uns début octobre. */
@@ -238,6 +240,14 @@ export const buildHomeTodos = (i: HomeTodoInput): HomeTodo[] => {
     detail: 'Un taux périmé fausse le rendement, la projection et le plan de placement.',
     primary: i.can.updateAccounts ? { label: i.ratesEditorOpen ? 'Fermer' : 'Mettre à jour', action: { type: 'toggle-rates-editor' } } : undefined,
     secondary: { label: 'Taux inchangé', action: { type: 'dismiss-rate-reminder', revisionKey: i.staleRates.revision.key } },
+  });
+  // Envies notées à la volée, sans prix : une tâche qui disparaît d'elle-même une fois complétées.
+  const unpriced = i.wishesToComplete ?? 0;
+  if (unpriced > 0) out.push({
+    key: 'wishes-to-complete', icon: 'gift', tone: 'info',
+    text: 'Envies à compléter',
+    detail: unpriced > 1 ? `${unpriced} envies sans prix` : '1 envie sans prix',
+    primary: go('Compléter', 'wishes'),
   });
   if (i.parentalYearEnd !== null) out.push({
     key: `parental-ye-${year}`, icon: 'piggy-bank', tone: 'info', snoozable: true,

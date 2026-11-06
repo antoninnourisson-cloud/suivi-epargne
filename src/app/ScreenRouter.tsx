@@ -25,6 +25,7 @@ import {
 import type { DerivedData } from './useDerivedData';
 import { lepStillEligible } from '../lib/idleCash';
 import { localTodayISO } from '../lib/dates';
+import { wishesToComplete } from '../lib/wishes';
 import { withTaxNoticeBalance } from '../lib/taxNoticeBalance';
 import { splitFiscalProposals, type RateProposalInfo } from '../lib/rateChanges';
 import type { AccountActions } from './useAccountActions';
@@ -204,7 +205,7 @@ export const ScreenRouter = memo(function ScreenRouter({ place, setView, onSelec
           restitutionDoneOn={doc.parentalRestitution?.done?.date} restitutionPlannedDate={doc.parentalRestitution?.plannedDate}
           yearClosing={derived.yearClosing} pays={doc.pays}
           rateChanges={rateChanges} onOpenRateChanges={openRates}
-          onOpenYearClosing={openClosing} yearGoal={derived.yearGoal}
+          onOpenYearClosing={openClosing} yearGoal={derived.yearGoal} wishesToComplete={wishesToComplete(doc.wishes ?? NO_WISHES)}
           plannedWithdrawals={c.plannedWithdrawals} onRecordPlannedWithdrawal={actions.recordPlannedWithdrawal} onDeletePlannedWithdrawal={actions.deletePlannedWithdrawal}
           askSlot={<Lazy><AskPeculeEntry data={derived.fullData} geminiApiKey={data.geminiApiKey} taxEstimate={derived.taxEstimate} monthPlan={derived.monthPlan} onOpenSettings={openSettings} /></Lazy>}
           onMarkMilestonesSeen={actions.markMilestonesSeen} onValidatePayReview={actions.validatePayReview} />}

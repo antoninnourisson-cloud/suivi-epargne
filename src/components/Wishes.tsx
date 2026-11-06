@@ -15,7 +15,7 @@ import { frenchDay } from '../lib/format';
 import { spendableBeyondPrecaution } from '../lib/needMoney';
 import {
   addWishCategory, boughtWishes, groupWishes, markWishBought, moveWishes, openWishes, removeWishCategory, renameWishCategory, restoreWish,
-  stalePriceNote, wishCategoriesOf, wishCountIn, wishesTotal,
+  stalePriceNote, wishCategoriesOf, wishCountIn, wishesToComplete, wishesTotal,
 } from '../lib/wishes';
 import { useUndoableRemove } from './Toast';
 import { focusAfterRemoval } from './focusAfterRemoval';
@@ -55,6 +55,9 @@ export const Wishes: React.FC<WishesProps> = ({ wishes, categories, onUpdateWish
   const bought = useMemo(() => boughtWishes(wishes), [wishes]);
   const open = openWishes(wishes);
   const total = wishesTotal(open);
+  // Envies notées sans prix : hors du total, à compléter.
+  const unpriced = wishesToComplete(wishes);
+  const hasPriced = open.length > unpriced;
   const spendable = spendableBeyondPrecaution(emergency);
   const counts = useMemo(() => Object.fromEntries(wishCategoriesOf(categories).map(c => [c, wishCountIn(wishes, c)])), [wishes, categories]);
 
@@ -70,11 +73,11 @@ export const Wishes: React.FC<WishesProps> = ({ wishes, categories, onUpdateWish
     focusAfterRemoval(() => listRef.current, index, () => addButtonRef.current);
   };
 
-  const buy = (wish: Wish) => onBuy({
-    amount: wish.price,
+  const buy = (wish: Wish, price: number) => onBuy({
+    amount: price,
     label: wish.name,
     // Retrait enregistré ou prévu : l'envie passe dans « Achetées », avec la date du jour et son prix.
-    onDone: paid => onUpdateWishes(list => markWishBought(list, wish.id, localTodayISO(), Number.isFinite(paid) && paid > 0 ? paid : wish.price)),
+    onDone: paid => onUpdateWishes(list => markWishBought(list, wish.id, localTodayISO(), Number.isFinite(paid) && paid > 0 ? paid : price)),
   });
 
   // --- Catégories : le refus (texte) est rendu à la feuille, sinon `null` ---
@@ -107,6 +110,7 @@ export const Wishes: React.FC<WishesProps> = ({ wishes, categories, onUpdateWish
 
   const wishRow = (w: Wish) => {
     const stale = stalePriceNote(w.priceDate, today);
+    const price = w.price;
     return (
       <ListItem
         key={w.id}
@@ -121,9 +125,10 @@ export const Wishes: React.FC<WishesProps> = ({ wishes, categories, onUpdateWish
           )}
           {stale && <span className="block">{stale}</span>}
         </> : undefined}
-        trailing={<MoneyText value={w.price} />}
+        trailing={price !== undefined ? <MoneyText value={price} /> : <span className="text-sm font-medium text-tertiary">Prix à compléter</span>}
         actions={<>
-          <Button variant="tonal" onClick={() => buy(w)} aria-label={`Je l'achète : ${w.name}`} className="max-sm:h-12"><ShoppingBag className="w-4 h-4" aria-hidden="true" /> Je l'achète</Button>
+          {/* Sans prix, rien à retirer : on complète d'abord (crayon). */}
+          {price !== undefined && <Button variant="tonal" onClick={() => buy(w, price)} aria-label={`Je l'achète : ${w.name}`} className="max-sm:h-12"><ShoppingBag className="w-4 h-4" aria-hidden="true" /> Je l'achète</Button>}
           <IconButton icon={Pencil} label={`Modifier ${w.name}`} onClick={() => setSheet({ wish: w })} data-focus-after-removal />
           <IconButton icon={Trash2} tone="danger" label={`Supprimer ${w.name}`} onClick={() => remove(w)} />
         </>}
@@ -145,10 +150,12 @@ export const Wishes: React.FC<WishesProps> = ({ wishes, categories, onUpdateWish
       {open.length > 0 ? (
         <Card variant="filled" aria-label="Vos envies et l'argent disponible">
           <p className="text-base text-on-surface">
-            Vos envies : <b className="font-medium"><MoneyText value={total} /></b>.
-            {spendable !== null && <> Disponible sans toucher à votre épargne de précaution : <b className="font-medium"><MoneyText value={spendable} /></b>.</>}
+            {hasPriced
+              ? <>Vos envies : <b className="font-medium"><MoneyText value={total} /></b>{unpriced > 0 && <>, et {unpriced} {unpriced > 1 ? 'envies sans prix' : 'envie sans prix'}</>}.</>
+              : <>Vos envies : {unpriced} {unpriced > 1 ? 'envies sans prix' : 'envie sans prix'}.</>}
+            {hasPriced && spendable !== null && <> Disponible sans toucher à votre épargne de précaution : <b className="font-medium"><MoneyText value={spendable} /></b>.</>}
           </p>
-          {spendable !== null && (
+          {hasPriced && spendable !== null && (
             <p className="mt-1 text-sm text-on-surface-variant">
               {total <= spendable
                 ? 'Tout est possible sans toucher à votre épargne de précaution.'
@@ -191,7 +198,7 @@ export const Wishes: React.FC<WishesProps> = ({ wishes, categories, onUpdateWish
                       className="px-4 sm:px-6"
                       headline={w.name}
                       supporting={<>{w.category} · acheté le <span className="whitespace-nowrap">{frenchDay(parseISODate(w.boughtAt!))}</span></>}
-                      trailing={<MoneyText value={w.boughtPrice ?? w.price} />}
+                      trailing={(w.boughtPrice ?? w.price) !== undefined ? <MoneyText value={(w.boughtPrice ?? w.price)!} /> : undefined}
                       actions={<>
                         <Button variant="text" onClick={() => onUpdateWishes(list => restoreWish(list, w.id))} aria-label={`Remettre en envie : ${w.name}`} className="max-sm:h-12" data-focus-after-removal>
                           <Undo2 className="w-4 h-4" aria-hidden="true" /> Remettre en envie
