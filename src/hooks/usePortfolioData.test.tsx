@@ -129,7 +129,7 @@ vi.mock('../services/googleDriveService', () => {
       drive.revision += 1;
       drive.history.set(String(drive.revision), drive.file);
       const ours = String(drive.revision);
-      if (drive.loseResponse) { drive.loseResponse = false; throw new TypeError('Failed to fetch'); }
+      if (drive.loseResponse) { drive.loseResponse = false; throw new NetworkError('Failed to fetch'); }
       if (expected != null && previous !== expected) {
         throw new ConcurrentWriteError(ours, previous, drive.otherUnreadable ? undefined : copy(drive.history.get(previous)));
       }
@@ -143,6 +143,7 @@ vi.mock('../services/googleDriveService', () => {
 import { usePortfolioData } from './usePortfolioData';
 import { APP_SCHEMA_VERSION } from '../lib/schema';
 import { listSetAside } from '../services/setAsideVersions';
+import { NetworkError } from '../lib/networkError';
 
 const baseFile = () => ({
   schemaVersion: APP_SCHEMA_VERSION,
@@ -522,7 +523,7 @@ describe('chargement raté', () => {
 
   it('le chargement est retenté tout seul', async () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    drive.readFail = new TypeError('NETWORK_TIMEOUT');
+    drive.readFail = new NetworkError('NETWORK_TIMEOUT');
     const { result } = await load();
     expect(result.current.loadFailed).toBe(true);
     drive.readFail = null;
@@ -571,7 +572,7 @@ describe('déconnexion', () => {
 describe('réseau', () => {
   it("un délai dépassé n'arrête pas la synchronisation : nouvel essai sans événement « online »", async () => {
     const { result } = await load();
-    drive.writeFail = new TypeError('NETWORK_TIMEOUT');
+    drive.writeFail = new NetworkError('NETWORK_TIMEOUT');
     act(() => result.current.patchConfig({ leisureBudget: 5 }));
     await flushSave();
     await waitFor(() => expect(result.current.isOffline).toBe(true));
@@ -618,7 +619,7 @@ describe('réseau', () => {
 
   it('« Réessayer » et le retour au premier plan relancent tout de suite', async () => {
     const { result } = await load();
-    drive.writeFail = new TypeError('Failed to fetch');
+    drive.writeFail = new NetworkError('Failed to fetch');
     act(() => result.current.patchConfig({ leisureBudget: 5 }));
     await flushSave();
     await waitFor(() => expect(result.current.isOffline).toBe(true));
@@ -1197,7 +1198,7 @@ describe('démarrage rapide et hors ligne', () => {
     await waitFor(() => expect(localStorage.getItem(OFFLINE)).not.toBeNull());
     cleanup();
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    drive.listFail = new TypeError('NETWORK_TIMEOUT');
+    drive.listFail = new NetworkError('NETWORK_TIMEOUT');
     const { result } = renderHook(() => usePortfolioData(true));
     await act(async () => { await result.current.loadDriveData(); });
     expect(result.current.offlineDataAt).not.toBeNull();
@@ -1429,7 +1430,7 @@ describe('filets anti-perte', () => {
 
   it('réseau coupé pendant une écriture : « hors ligne », puis l’écriture repart seule', async () => {
     const { result } = await load();
-    drive.writeFail = new TypeError('Failed to fetch');
+    drive.writeFail = new NetworkError('Failed to fetch');
     act(() => result.current.patchConfig({ leisureBudget: 5 }));
     await flushSave();
     await waitFor(() => expect(result.current.isOffline).toBe(true));

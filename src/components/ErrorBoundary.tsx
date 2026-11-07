@@ -5,14 +5,26 @@
 // écran de verrou, fournisseurs). Chaque erreur rattrapée est notée dans le journal de
 // l'appareil (lib/errorJournal, Paramètres > Appareil).
 import React from 'react';
-import { AlertTriangle, RotateCw } from 'lucide-react';
+import { AlertTriangle, RotateCw, WifiOff } from 'lucide-react';
 import { Button } from './ui';
 import { storageKey } from '../lib/storageKeys';
 import { recordError } from '../lib/errorJournal';
 
 interface State { error: Error | null }
 
+/**
+ * Écran chargé à la demande, absent du cache de l'appareil, alors que l'appareil est hors
+ * réseau : ce n'est ni un bug ni une nouvelle version, il suffit d'attendre le réseau.
+ * `retry` : prépare un nouveau chargement (React.lazy garde sinon l'échec en mémoire).
+ */
+export class NeedsNetworkError extends Error {
+  retry: () => void;
+  constructor(retry: () => void) { super('SCREEN_NEEDS_NETWORK'); this.name = 'NeedsNetworkError'; this.retry = retry; }
+}
+
 const noteError = (error: Error, info: React.ErrorInfo) => {
+  // Attendu hors réseau : rien à journaliser.
+  if (error instanceof NeedsNetworkError) return;
   console.error('Erreur d\'affichage', error);
   recordError('affichage', error, info.componentStack);
 };
@@ -32,6 +44,14 @@ export class RootErrorBoundary extends React.Component<{ children: React.ReactNo
 
   override render() {
     if (!this.state.error) return this.props.children;
+    const needsNetwork = this.state.error instanceof NeedsNetworkError ? this.state.error : null;
+    if (needsNetwork) {
+      return (
+        <main className="min-h-dvh bg-surface text-on-surface flex items-center justify-center px-4 py-8">
+          <NeedsNetworkNotice onRetry={() => { needsNetwork.retry(); this.setState({ error: null }); }} />
+        </main>
+      );
+    }
     return (
       <main className="min-h-dvh bg-surface text-on-surface flex items-center justify-center px-4 py-8">
         <div role="alert" className="max-w-md w-full bg-surface-container-low rounded-3xl p-6 text-center">
@@ -54,6 +74,18 @@ export class RootErrorBoundary extends React.Component<{ children: React.ReactNo
   }
 }
 
+/** « Cet écran a besoin du réseau la première fois. » : sobre, avec un nouvel essai. */
+const NeedsNetworkNotice: React.FC<{ onRetry: () => void }> = ({ onRetry }) => (
+  <div role="alert" className="max-w-md w-full mx-auto mt-12 bg-surface-container-low text-on-surface rounded-3xl p-6 text-center">
+    <WifiOff className="w-8 h-8 mx-auto mb-3 text-on-surface-variant" aria-hidden="true" />
+    <h2 className="text-[22px] leading-7 font-normal mb-1">Pas de réseau</h2>
+    <p className="text-sm text-on-surface-variant mb-4">Cet écran a besoin du réseau la première fois.</p>
+    <Button variant="filled" onClick={onRetry}>
+      <RotateCw className="w-4 h-4" aria-hidden="true" /> Réessayer
+    </Button>
+  </div>
+);
+
 export class ErrorBoundary extends React.Component<{ children: React.ReactNode; resetKey?: string }, State> {
   override state: State = { error: null };
 
@@ -68,6 +100,8 @@ export class ErrorBoundary extends React.Component<{ children: React.ReactNode; 
 
   override render() {
     if (!this.state.error) return this.props.children;
+    const needsNetwork = this.state.error instanceof NeedsNetworkError ? this.state.error : null;
+    if (needsNetwork) return <NeedsNetworkNotice onRetry={() => { needsNetwork.retry(); this.setState({ error: null }); }} />;
     return (
       <div role="alert" className="max-w-md mx-auto mt-12 bg-tertiary-container text-on-tertiary-container rounded-3xl p-6 text-center">
         <AlertTriangle className="w-8 h-8 mx-auto mb-3" aria-hidden="true" />
@@ -85,18 +119,25 @@ export class ErrorBoundary extends React.Component<{ children: React.ReactNode; 
  * `React.lazy` qui survit à un déploiement : si le fichier demandé n'existe plus (onglet
  * resté ouvert sur l'ancienne version), on réessaie une fois, puis on recharge la page une
  * seule fois pour récupérer la nouvelle version.
+ * Hors réseau (navigator.onLine faux), un échec n'est PAS une nouvelle version : pas de
+ * rechargement (qui ne ferait que perdre l'écran en cours), mais NeedsNetworkError, que le
+ * filet d'erreur explique avec un bouton « Réessayer » qui relance le chargement.
  */
+const isOffline = () => typeof navigator !== 'undefined' && navigator.onLine === false;
+
 // Même contrainte que React.lazy (ComponentType<any>) : tout autre type perd les props des écrans.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export const lazyWithRetry = <T extends React.ComponentType<any>>(factory: () => Promise<{ default: T }>) =>
-  React.lazy(async () => {
+export const lazyWithRetry = <T extends React.ComponentType<any>>(factory: () => Promise<{ default: T }>): React.ComponentType<React.ComponentProps<T>> => {
+  const makeLazy = () => React.lazy(async () => {
     try {
       return await factory();
     } catch {
+      if (isOffline()) throw new NeedsNetworkError(retry);
       await new Promise(r => setTimeout(r, 800));
       try {
         return await factory();
       } catch (e) {
+        if (isOffline()) throw new NeedsNetworkError(retry);
         const KEY = storageKey('chunkReloadAt');
         const last = Number(sessionStorage.getItem(KEY) || 0);
         if (Date.now() - last > 60_000) {
@@ -108,3 +149,10 @@ export const lazyWithRetry = <T extends React.ComponentType<any>>(factory: () =>
       }
     }
   });
+  let Inner = makeLazy();
+  // React.lazy garde l'échec en mémoire : un nouvel essai demande un nouveau composant, pris au
+  // prochain affichage (le filet d'erreur remonte les enfants après « Réessayer »).
+  const retry = () => { Inner = makeLazy(); };
+  const Screen = (props: React.ComponentProps<T>) => React.createElement(Inner as React.ComponentType<React.ComponentProps<T>>, props);
+  return Screen;
+};

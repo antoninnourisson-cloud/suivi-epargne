@@ -15,10 +15,12 @@ import { lsDel, lsGet } from '../../lib/storage';
 import { canonicalize, emptyData, isFromNewerApp } from '../../lib/schema';
 import { readWriteStamp, stampIsFromDevice } from '../../lib/writeStamp';
 import { classifySyncFailure, type SyncErrorInfo } from '../../lib/syncErrors';
+import { recordError } from '../../lib/errorJournal';
 import { initialSyncStatus, syncReducer } from '../../lib/sync/syncStatus';
 import { clearSetAside } from '../../services/setAsideVersions';
 import { readConfigFile, getFileMeta, setOnAuthLost, type DriveFileInfo } from '../../services/googleDriveService';
-import { BACKUP_KEY, HELD_KEY, LAST_BACKUP_MONTH_KEY, LAST_SAVE_KEY, PENDING_KEY } from './keys';
+import { BACKUP_KEY, HELD_KEY, LAST_SAVE_KEY, PENDING_KEY } from './keys';
+import { resetMonthlyBackup } from './monthlyBackup';
 import {
   browserOnline, canonicalDoc, classifySyncError, failureOf, LONG_PAUSE_MS, REMOTE_CHECK_THROTTLE_MS, RETRY_DELAYS_MS,
   type ConflictChoice, type StoredSnapshot, type SyncConflictView,
@@ -104,6 +106,8 @@ export const useDriveSync = (isAuthenticated: boolean, docState: DocumentState) 
   /** Échec à montrer : nouvel essai automatique seulement s'il est passager. */
   const failSync = (err: unknown): SyncErrorInfo => {
     const info = classifySyncFailure(failureOf(err));
+    // Bug de code (et non panne de Drive) : noté dans le journal de l'appareil, comme les autres erreurs.
+    if (info.reason === 'unexpected') recordError('chargement', err);
     dispatch({ type: 'error', info });
     if (info.transient) scheduleRetry(); else clearTimeout(retryTimerRef.current);
     return info;
@@ -392,7 +396,7 @@ export const useDriveSync = (isAuthenticated: boolean, docState: DocumentState) 
     dispatch({ type: 'reset' });
     setDoc(emptyData());
     setDriveFileId(null);
-    lsDel(LAST_BACKUP_MONTH_KEY);
+    resetMonthlyBackup();
     setLocalBackup(null);
     setUnreadableCopies([]);
   };

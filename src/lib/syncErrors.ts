@@ -11,7 +11,7 @@
 
 export type SyncErrorReason =
   | 'network' | 'server' | 'rate-limit'
-  | 'permission' | 'quota' | 'rejected' | 'malformed' | 'unknown';
+  | 'permission' | 'quota' | 'rejected' | 'malformed' | 'unexpected' | 'unknown';
 
 export interface SyncErrorInfo {
   reason: SyncErrorReason;
@@ -40,8 +40,11 @@ export const classifySyncFailure = (f: FailureLike): SyncErrorInfo => {
     if (status === 403 || status === 401) return { reason: 'permission', transient: false };
     if (status >= 400) return { reason: 'rejected', transient: false };
   }
-  // fetch échoue par TypeError quand la requête ne part pas (réseau, délai dépassé).
-  if (f.name === 'TypeError') return { reason: 'network', transient: true };
+  // Réseau : seule NetworkError (échec de fetch enveloppé à la source, voir lib/networkError).
+  if (f.name === 'NetworkError') return { reason: 'network', transient: true };
+  // Autre TypeError (« Cannot read properties of undefined »…) : un bug de code, pas le réseau.
+  // Réessayer en boucle ne le réparerait pas : on le dit, sans nouvel essai automatique.
+  if (f.name === 'TypeError') return { reason: 'unexpected', transient: false };
   // Contenu reçu mais illisible (JSON abîmé, fichier vide) : réessayer ne le réparera pas.
   if (f.name === 'SyntaxError' || f.message === 'EMPTY_FILE') return { reason: 'malformed', transient: false };
   if (f.message === 'TOKEN_REQUEST_TIMEOUT' || f.message === 'REVISION_UNAVAILABLE') return { reason: 'network', transient: true };
@@ -57,6 +60,7 @@ export const SYNC_ERROR_MESSAGES: Record<SyncErrorReason, string> = {
   quota: 'Votre espace Google Drive est plein. Libérez de la place, puis touchez « Réessayer ».',
   rejected: 'Drive a refusé l\'enregistrement. Touchez « Réessayer » ; si cela continue, exportez vos données depuis Paramètres.',
   malformed: 'Le fichier de données sur Drive est illisible. Rien n\'y a été modifié : vous pouvez revenir à une copie depuis Paramètres, Sauvegardes.',
+  unexpected: 'Une erreur inattendue s\'est produite dans Pécule. Touchez « Réessayer » ; si cela continue, exportez vos données depuis Paramètres.',
   unknown: 'Nouvel essai automatique.',
 };
 

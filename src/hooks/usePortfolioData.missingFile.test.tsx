@@ -22,7 +22,7 @@ vi.mock('../services/googleDriveService', () => {
     setOnAuthLost: () => {},
     findConfigFiles: async () => [...drive.files].map(([id, f]) => ({ id, modifiedTime: f.modifiedTime })),
     createConfigFile: async (data: unknown) => {
-      if (drive.createFail) throw new TypeError('Failed to fetch');
+      if (drive.createFail) throw new NetworkError('Failed to fetch');
       const id = `file-new-${drive.created.length + 1}`;
       drive.created.push({ id, content: copy(data) });
       drive.files.set(id, { content: copy(data), modifiedTime: '2026-11-05T09:00:00.000Z' });
@@ -41,6 +41,7 @@ vi.mock('../services/googleDriveService', () => {
 import { usePortfolioData } from './usePortfolioData';
 import { APP_SCHEMA_VERSION } from '../lib/schema';
 import { listSetAside } from '../services/setAsideVersions';
+import { NetworkError } from '../lib/networkError';
 
 const fileWithBudget = (leisureBudget: number) => ({
   schemaVersion: APP_SCHEMA_VERSION,

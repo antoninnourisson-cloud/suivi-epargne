@@ -8,7 +8,7 @@ describe('classifySyncFailure', () => {
     expect(classifySyncFailure({ status: 429 })).toEqual({ reason: 'rate-limit', transient: true });
     expect(classifySyncFailure({ status: 403, reason: 'userRateLimitExceeded' })).toEqual({ reason: 'rate-limit', transient: true });
     expect(classifySyncFailure({ status: 403, reason: 'rateLimitExceeded' })).toEqual({ reason: 'rate-limit', transient: true });
-    expect(classifySyncFailure({ name: 'TypeError', message: 'Failed to fetch' })).toEqual({ reason: 'network', transient: true });
+    expect(classifySyncFailure({ name: 'NetworkError', message: 'Failed to fetch' })).toEqual({ reason: 'network', transient: true });
     expect(classifySyncFailure({ name: 'Error', message: 'REVISION_UNAVAILABLE' }).transient).toBe(true);
   });
 
@@ -19,6 +19,12 @@ describe('classifySyncFailure', () => {
     expect(classifySyncFailure({ status: 400, reason: 'badRequest' })).toEqual({ reason: 'rejected', transient: false });
     expect(classifySyncFailure({ name: 'SyntaxError', message: 'Unexpected token' })).toEqual({ reason: 'malformed', transient: false });
     expect(classifySyncFailure({ name: 'Error', message: 'EMPTY_FILE' })).toEqual({ reason: 'malformed', transient: false });
+  });
+
+  it("une TypeError de code n'est pas le réseau : erreur inattendue, sans nouvel essai en boucle", () => {
+    expect(classifySyncFailure({ name: 'TypeError', message: 'Cannot read properties of undefined' })).toEqual({ reason: 'unexpected', transient: false });
+    expect(syncErrorText('save', 'unexpected')).toMatch(/erreur inattendue/);
+    expect(syncErrorText('load', 'unexpected')).not.toMatch(/enregistrement|modifier/);
   });
 
   it('inconnu : on préfère réessayer', () => {

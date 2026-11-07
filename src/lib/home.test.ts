@@ -353,6 +353,57 @@ describe('liste « À faire »', () => {
     expect(todo(3)?.snoozable).toBeUndefined();
   });
 
+  describe('« Avant le 31 décembre »', () => {
+    const at = (month: number, day: number) => new Date(2026, month, day, 10);
+    const todo = (now: Date, yearEndTax?: HomeTodoInput['yearEndTax'], over: Partial<HomeTodoInput> = {}) =>
+      buildHomeTodos(base({ now, yearEndTax, ...over })).find(t => t.key.startsWith('year-end-tax'));
+    const figures = { year: 2026, per: { amount: 1000, saving: 300 }, donations: { acquired: 132, example: 100, extra: 66 } };
+
+    it('apparaît du 15 novembre au 31 décembre, avec les montants de l\'utilisateur', () => {
+      const t = todo(at(10, 15), figures);
+      expect(t).toMatchObject({ key: 'year-end-tax-2026-early', text: 'Avant le 31 décembre', snoozable: true, primary: { label: 'Voir mes dons', action: { type: 'navigate', view: 'donations' } } });
+      const detail = (t?.detail ?? '').replace(/\s/g, ' ');
+      expect(detail).toContain('Verser 1 000 € sur votre PER réduirait votre impôt 2026 d\'environ 300 €.');
+      expect(detail).toContain('Vos dons de 2026 vous donnent déjà 132 € de réduction ; 100 € de plus en donneraient 66 €.');
+      expect(todo(at(11, 31), figures)).toBeDefined();
+    });
+
+    it('absente avant le 15 novembre et après le 31 décembre', () => {
+      expect(todo(at(10, 14), figures)).toBeUndefined();
+      expect(todo(at(9, 20), figures)).toBeUndefined();
+      expect(todo(new Date(2027, 0, 2, 10), { ...figures, year: 2027 })).toBeUndefined();
+    });
+
+    it('dernier rappel à partir du 15 décembre : autre clé, donc un « Plus tard » de novembre ne le masque pas', () => {
+      expect(todo(at(11, 14), figures)?.key).toBe('year-end-tax-2026-early');
+      expect(todo(at(11, 15), figures)?.key).toBe('year-end-tax-2026-last');
+    });
+
+    it('sans revenu connu, la tâche reste générale : aucun montant', () => {
+      for (const f of [undefined, null, { year: 2026 }]) {
+        const t = todo(at(11, 1), f);
+        expect(t?.detail).toBe('Les versements sur un PER et les dons faits avant le 31 décembre réduisent l\'impôt de 2026.');
+        expect(t?.detail).not.toMatch(/€/);
+      }
+    });
+
+    it('sans PER : seule la phrase des dons ; sans don acquis : le don d\'exemple seul', () => {
+      expect(todo(at(11, 1), { year: 2026, donations: figures.donations })?.detail).not.toContain('PER');
+      const none = todo(at(11, 1), { year: 2026, donations: { acquired: 0, example: 100, extra: 66 } })?.detail?.replace(/\s/g, ' ');
+      expect(none).toContain('100 € donnés avant le 31 décembre réduiraient votre impôt 2026 de 66 €.');
+    });
+
+    it('plafond des dons atteint : seule la réduction acquise est citée', () => {
+      const d = todo(at(11, 1), { year: 2026, donations: { acquired: 132, example: 100, extra: 0 } })?.detail?.replace(/\s/g, ' ');
+      expect(d).toContain('Vos dons de 2026 vous donnent déjà 132 € de réduction.');
+      expect(d).not.toContain('de plus');
+    });
+
+    it('sans navigation possible : pas de bouton « Voir mes dons »', () => {
+      expect(todo(at(11, 1), figures, { can: { ...can, navigate: false } })?.primary).toBeUndefined();
+    });
+  });
+
   it('keeps the historic keys (snoozes depend on them) and names actions', () => {
     const la = acc('la', AccountType.LIVRET_A, 100, { name: 'Livret A' });
     const recurring = { id: 'r1', label: 'Virement', amount: 50, type: 'IN' as const, accountId: 'la', dayOfMonth: 5, active: true };

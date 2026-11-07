@@ -2,7 +2,7 @@
 // écritures concurrentes, sauvegarde automatique différée et envoi immédiat. Code déplacé tel
 // quel de useDriveSync ; les références partagées arrivent par `refs`.
 import { useEffect, useRef, type Dispatch, type SetStateAction, type MutableRefObject } from 'react';
-import { lsDel, lsGet, lsSet } from '../../lib/storage';
+import { lsDel, lsSet } from '../../lib/storage';
 import { canonicalize } from '../../lib/schema';
 import { readWriteStamp, withWriteStamp, type WriteStamp } from '../../lib/writeStamp';
 import type { SyncEvent } from '../../lib/sync/syncStatus';
@@ -10,11 +10,12 @@ import type { SyncErrorInfo } from '../../lib/syncErrors';
 import type { GlobalAppData } from '../../types';
 import {
   findConfigFiles, createConfigFile, readConfigFile, updateConfigFile, getFileRevision, getFileMeta,
-  ConcurrentWriteError, writeMonthlyBackup, type DriveFileInfo,
+  ConcurrentWriteError, type DriveFileInfo,
 } from '../../services/googleDriveService';
-import { BACKUP_KEY, LAST_BACKUP_MONTH_KEY, LAST_SAVE_KEY } from './keys';
+import { BACKUP_KEY, LAST_SAVE_KEY } from './keys';
+import { attemptMonthlyBackup } from './monthlyBackup';
 import {
-  browserOnline, canonicalDoc, classifySyncError, localMonthKey, RemoteChanged, SaveSkipped,
+  browserOnline, canonicalDoc, classifySyncError, RemoteChanged, SaveSkipped,
   type ConflictInit, type SaveResult, type SyncFailure,
 } from './syncShared';
 import type { DocumentState } from './useDocument';
@@ -53,14 +54,12 @@ export const useSaveQueue = ({
   const announceSave = (fileId: string, revision: string | null) =>
     lsSet(LAST_SAVE_KEY, JSON.stringify({ fileId, revision, at: Date.now() }));
 
-  /** Copie mensuelle sur Drive, à la première sauvegarde réussie du mois (non bloquante). */
-  const maybeMonthlyBackup = (data: GlobalAppData) => {
-    const month = localMonthKey(new Date());
-    if (lsGet(LAST_BACKUP_MONTH_KEY) === month) return;
-    writeMonthlyBackup(month, data)
-      .then(() => lsSet(LAST_BACKUP_MONTH_KEY, month))
-      .catch(err => console.warn('Copie mensuelle Drive non créée', err));
-  };
+  /**
+   * Copie mensuelle sur Drive, à la première sauvegarde réussie du mois (non bloquante). Un
+   * échec est noté : un seul nouvel essai par jour, et un message dans les Paramètres si cela
+   * dure (voir monthlyBackup).
+   */
+  const maybeMonthlyBackup = (data: GlobalAppData) => { void attemptMonthlyBackup(data); };
 
   const onSaved = (fileId: string, revision: string, saved: GlobalAppData, stamp: WriteStamp, canon?: string) => {
     attemptsRef.current = [];

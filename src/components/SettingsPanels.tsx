@@ -3,7 +3,7 @@
 // Ils s'affichent dans les cartes repliables de l'écran (voir settings/SettingsCard) et y
 // signalent leur état pour le résumé de la carte (useCardSummary).
 import React, { useCallback, useEffect, useState } from 'react';
-import { ArchiveRestore, Smartphone, Loader2, Trash2, LogOut, Activity, ShieldCheck, Copy, CloudUpload, CloudDownload, KeyRound } from 'lucide-react';
+import { AlertTriangle, ArchiveRestore, Smartphone, Loader2, Trash2, LogOut, Activity, ShieldCheck, Copy, CloudUpload, CloudDownload, KeyRound } from 'lucide-react';
 import type { DriveBackup } from '../services/googleDriveService';
 import type { GlobalAppData } from '../types';
 import {
@@ -25,6 +25,9 @@ import { useToast } from './Toast';
 import { CardSubheading, Hint, Notice, useCardSummary } from './settings/SettingsCard';
 import { SwitchRow } from './settings/fields';
 import { elideDe } from '../lib/format';
+import {
+  attemptMonthlyBackup, monthlyBackupMessage, monthlyBackupProblem, subscribeMonthlyBackup,
+} from '../hooks/portfolio/monthlyBackup';
 
 const monthLabel = (m: string) => {
   const [y, mo] = m.split('-').map(Number);
@@ -47,17 +50,43 @@ export const DriveBackupsPanel: React.FC<{
   /** Annule une restauration (remet la version mise de côté). */
   undo?: (undoId: string) => Promise<boolean>;
   confirm: (title: string, message: string, onOk: () => void | Promise<void>, confirmLabel?: string) => void;
-}> = ({ list, restore, undo, confirm }) => {
+  /** Données à copier pour « Réessayer maintenant » (sans elles, le bouton n'est pas proposé). */
+  getData?: () => GlobalAppData;
+}> = ({ list, restore, undo, confirm, getData }) => {
   const toast = useToast();
   const [items, setItems] = useState<DriveBackup[] | null>(null);
   const [busy, setBusy] = useState(false);
-  useEffect(() => { list().then(setItems).catch(() => setItems([])); }, [list]);
+  const [reloads, setReloads] = useState(0);
+  const [retrying, setRetrying] = useState(false);
+  // Copie mensuelle en échec depuis plus de 45 jours : dite clairement, avec un nouvel essai à la demande.
+  const [problem, setProblem] = useState(() => monthlyBackupProblem());
+  useEffect(() => subscribeMonthlyBackup(() => setProblem(monthlyBackupProblem())), []);
+  useEffect(() => { list().then(setItems).catch(() => setItems([])); }, [list, reloads]);
+  const retryNow = async () => {
+    if (!getData) return;
+    setRetrying(true);
+    try {
+      const ok = await attemptMonthlyBackup(getData(), { force: true });
+      toast?.(ok ? { message: 'Copie mensuelle créée sur Drive', kind: 'success' } : { message: 'La copie n\'a pas pu être faite. Pécule réessaiera demain.', kind: 'error' });
+      if (ok) setReloads(n => n + 1);
+    } finally { setRetrying(false); }
+  };
   const latest = items && items.length > 0 ? [...items].sort((a, b) => b.createdTime.localeCompare(a.createdTime))[0] : null;
   useCardSummary('drive', items === null ? null : latest ? `Dernière copie Drive : ${shortDay(latest.createdTime)}` : 'Pas encore de copie Drive');
   return (
     <div className="pt-5 mt-5 border-t border-outline-variant">
       <CardSubheading icon={ArchiveRestore}>Copies mensuelles sur Drive</CardSubheading>
       <Hint className="mt-1">Une copie complète est créée au premier enregistrement de chaque mois ; les 12 dernières sont gardées. Choisissez un mois pour y revenir.</Hint>
+      {problem && (
+        <Notice tone="warning" icon={AlertTriangle} className="mt-3">
+          <p role="status">{monthlyBackupMessage(problem)}</p>
+          {getData && (
+            <Button variant="tonal" className="mt-2" onClick={() => { void retryNow(); }} disabled={retrying}>
+              {retrying && <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />} Réessayer maintenant
+            </Button>
+          )}
+        </Notice>
+      )}
       {items === null ? <Loader2 className="w-4 h-4 animate-spin mt-3 text-on-surface-variant" aria-label="Chargement" />
         : items.length === 0 ? <p className="text-sm text-on-surface-variant mt-3">Pas encore de copie : la première sera créée au prochain enregistrement.</p>
         : (

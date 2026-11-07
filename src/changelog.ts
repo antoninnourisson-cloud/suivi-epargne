@@ -15,6 +15,16 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '2026.11.07',
+    date: '2026-11-07',
+    title: 'Avant le 31 décembre',
+    items: [
+      "Du 15 novembre au 31 décembre, une tâche de l'Accueil chiffre ce qu'un versement sur votre PER ou un don ferait économiser d'impôt cette année, et ce que vos dons de l'année vous rapportent déjà.",
+      "Copie mensuelle sur Drive : si elle échoue, Pécule réessaie une fois par jour ; sans copie depuis 45 jours, les Paramètres le disent, avec « Réessayer maintenant ».",
+      "Un bug n'est plus présenté comme une coupure réseau. Hors réseau, un écran pas encore gardé sur le téléphone dit qu'il a besoin du réseau la première fois, au lieu d'annoncer une nouvelle version.",
+    ],
+  },
+  {
     version: '2026.11.06-2',
     date: '2026-11-06',
     title: 'Une envie à la volée',

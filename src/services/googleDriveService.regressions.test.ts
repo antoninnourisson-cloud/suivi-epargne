@@ -26,6 +26,7 @@ import {
   findConfigFiles, readConfigFile, updateConfigFile, writeMonthlyBackup, listBackups, setOnAuthLost, handleSignOut,
   getFileRevision, ApiError,
 } from './googleDriveService';
+import { NetworkError } from '../lib/networkError';
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 const storeToken = (token: string, validMs = 3_600_000) => {
@@ -48,6 +49,35 @@ beforeEach(() => {
   setOnAuthLost(authLost as unknown as () => void);
 });
 afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); setOnAuthLost(null); });
+
+describe('échec du réseau : enveloppé en NetworkError à la source', () => {
+  it('un fetch qui échoue devient une NetworkError (la seule erreur classée « hors ligne »)', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('Failed to fetch'); }));
+    const err = await findConfigFiles().catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(NetworkError);
+    expect(err).toBeInstanceOf(TypeError);
+    expect((err as Error).cause).toBeInstanceOf(TypeError);
+  });
+
+  it('un délai dépassé aussi', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('fetch', vi.fn((_url: string, init?: RequestInit) => new Promise((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
+    })));
+    const pending = findConfigFiles().catch((e: unknown) => e);
+    await vi.advanceTimersByTimeAsync(31_000);
+    const err = await pending;
+    expect(err).toBeInstanceOf(NetworkError);
+    expect((err as Error).message).toBe('NETWORK_TIMEOUT');
+  });
+
+  it('une TypeError qui ne vient pas de fetch reste une TypeError ordinaire', async () => {
+    // Réponse sans corps lisible : res.json() ne doit pas être pris pour une coupure réseau.
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('pas du json', { status: 200 })));
+    const err = await findConfigFiles().catch((e: unknown) => e);
+    expect(err).not.toBeInstanceOf(NetworkError);
+  });
+});
 
 describe('recherche du fichier de données : une panne n’est jamais « aucun fichier »', () => {
   it.each([

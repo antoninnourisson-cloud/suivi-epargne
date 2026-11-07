@@ -13,7 +13,7 @@ import type { EmergencyFund } from '../lib/planning';
 import type { AgendaEvent } from '../lib/agenda';
 import type { TaxReturnAlert } from '../lib/taxReturn';
 import { revealElementById } from './revealElement';
-import type { SavingsAccount, PortfolioSnapshot, FiscalConfig, RecurringMovement, Subscription, PayslipRecord, PayRecord, PlannedWithdrawal } from '../types';
+import type { SavingsAccount, Donation, PortfolioSnapshot, FiscalConfig, RecurringMovement, Subscription, PayslipRecord, PayRecord, PlannedWithdrawal } from '../types';
 import type { RateProposalInfo } from '../lib/rateChanges';
 import type { YearGoalProgress } from '../lib/yearGoal';
 import { duePlannedWithdrawals } from '../lib/plannedWithdrawals';
@@ -51,6 +51,7 @@ import { MonthRoutineCard } from './dashboard/MonthRoutineCard';
 import { computeMonthRoutine, type RoutineStepKey } from '../lib/monthRoutine';
 import { isPayReviewDone } from '../lib/payRecords';
 import { requestPaySheet } from './pilot/paySheetRequest';
+import { computeYearEndTax, isYearEndTaxSeason } from '../lib/yearEndTax';
 
 interface DashboardProps {
   accounts: SavingsAccount[];
@@ -126,6 +127,10 @@ interface DashboardProps {
   onOpenYearClosing?: () => void;
   /** Objectif de l'année en cours (fixé à la clôture) : une ligne dans la carte de l'objectif du mois. */
   yearGoal?: YearGoalProgress | null;
+  /** « Avant le 31 décembre » (mi-novembre à fin décembre) : dons de l'année, impôt estimé et plafond PER de l'avis. */
+  donations?: Donation[];
+  taxEstimate?: { taxDue: number; taxableIncome: number };
+  retirementCeiling?: { year: number; amount: number };
 }
 
 const TODO_ICONS: Record<HomeTodoIcon, TodoSpec['icon']> = {
@@ -142,7 +147,7 @@ const SLICE_STYLE: Record<'available' | 'tax' | 'locked', Pick<AvailabilitySegme
   locked: { color: 'bg-outline', hatch: 'dense' },
 };
 
-export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalConfig, onDeleteAccount, recurringMovements = [], onRecordRecurring, monthPlan, monthGoal, monthlyPay = 0, paydayDay, trackingStartDate, subscriptions = [], onUpdateFiscalConfig, onOpenSettings, onUpdateAccounts, payRaise, onAcceptPayRaise, onDismissPayRaise, onNavigate, onAddAccount, lastExportAt, onExport, emergency, onSetEmergencyMonths, agendaNext = [], lepTimeline, taxReturnAlert, payslips = [], gamification, goodMonthThreshold, milestonesSeen, payReviewsDone, rfrByYear, taxReturnFiledYear, onMarkTaxReturnFiled, restitutionDoneOn, restitutionPlannedDate, onMarkMilestonesSeen, onValidatePayReview, yearClosing, pays, askSlot, plannedWithdrawals, onRecordPlannedWithdrawal, onDeletePlannedWithdrawal, rateChanges, onOpenRateChanges, onOpenYearClosing, yearGoal, wishesToComplete }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalConfig, onDeleteAccount, recurringMovements = [], onRecordRecurring, monthPlan, monthGoal, monthlyPay = 0, paydayDay, trackingStartDate, subscriptions = [], onUpdateFiscalConfig, onOpenSettings, onUpdateAccounts, payRaise, onAcceptPayRaise, onDismissPayRaise, onNavigate, onAddAccount, lastExportAt, onExport, emergency, onSetEmergencyMonths, agendaNext = [], lepTimeline, taxReturnAlert, payslips = [], gamification, goodMonthThreshold, milestonesSeen, payReviewsDone, rfrByYear, taxReturnFiledYear, onMarkTaxReturnFiled, restitutionDoneOn, restitutionPlannedDate, onMarkMilestonesSeen, onValidatePayReview, yearClosing, pays, askSlot, plannedWithdrawals, onRecordPlannedWithdrawal, onDeletePlannedWithdrawal, rateChanges, onOpenRateChanges, onOpenYearClosing, yearGoal, wishesToComplete, donations, taxEstimate, retirementCeiling }) => {
   // Date du jour partagée (useToday) : l'Accueil resté ouvert passe au lendemain à minuit.
   const today = useToday();
   const choices = useHomeChoices(today);
@@ -235,6 +240,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalC
     payslips,
   }), [accounts, fiscalConfig, today, monthlySpending, monthPlan, lepTimeline, restitutionDoneOn, restitutionPlannedDate, hasParentalCapital, payslips]);
 
+  // « Avant le 31 décembre » : calculé seulement de mi-novembre à fin décembre.
+  const yearEndTax = useMemo(() => {
+    const at = parseISODate(today);
+    if (!isYearEndTaxSeason(at)) return null;
+    return computeYearEndTax({
+      accounts, donations: donations ?? [], year: at.getFullYear(), fiscalConfig,
+      taxableIncome: taxEstimate?.taxableIncome, taxDue: taxEstimate?.taxDue, notice: retirementCeiling, ceiling75: fiscalConfig.donation75Ceiling,
+    });
+  }, [today, accounts, donations, fiscalConfig, taxEstimate, retirementCeiling]);
+
   if (accounts.length === 0) return <WelcomeCard onAddAccount={onAddAccount} onNavigate={onNavigate} />;
 
   // Liste « À faire » (lib/home) : recalculée à chaque rendu, comme avant (l'écran n'est
@@ -273,6 +288,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalC
     plannedWithdrawals: duePlannedWithdrawals(plannedWithdrawals, today),
     rateChanges,
     wishesToComplete,
+    yearEndTax,
   });
 
   const run = (a: HomeAction) => {

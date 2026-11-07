@@ -28,6 +28,7 @@
 // ================================================
 import { lsDel, lsGet } from '../lib/storage';
 import { describeDevice } from '../lib/writeStamp';
+import { NetworkError, asNetworkError } from '../lib/networkError';
 
 export const BACKEND_URL: string = (import.meta.env.VITE_BACKEND_URL || '').replace(/\/+$/, '');
 export const isBackendEnabled = (): boolean => BACKEND_URL !== '';
@@ -249,6 +250,8 @@ const call = async (path: string, init: RequestInit = {}, withSession = true, ti
     }
     const send = async () => {
       const proof = record ? await signProof(record, method, proofPath(path)) : null;
+      // Seul un échec du fetch lui-même devient NetworkError (« hors ligne ») ; le délai dépassé
+      // (AbortError) est converti plus bas.
       const res = await fetch(`${BACKEND_URL}${path}`, {
         ...init,
         signal: controller.signal,
@@ -258,7 +261,7 @@ const call = async (path: string, init: RequestInit = {}, withSession = true, ti
           ...(proof ? { [PROOF_HEADER]: proof } : {}),
           ...(init.headers || {}),
         },
-      });
+      }).catch((e: unknown) => { throw (e as { name?: string } | null)?.name === 'AbortError' ? e : asNetworkError(e); });
       rememberNonce(res);
       return res;
     };
@@ -267,14 +270,14 @@ const call = async (path: string, init: RequestInit = {}, withSession = true, ti
     // comme « hors ligne », surtout pas comme une session expirée (qui effacerait la clé).
     if (keyUnreadable && res.status === 401) {
       const body = await res.clone().json().catch(() => null) as { error?: string } | null;
-      if (body?.error === 'PROOF_REQUIRED') throw new TypeError('DEVICE_KEY_UNREADABLE');
+      if (body?.error === 'PROOF_REQUIRED') throw new NetworkError('DEVICE_KEY_UNREADABLE');
     }
     // Pas encore de nonce (démarrage) ou nonce périmé : le serveur en rend un, un seul nouvel essai.
     return record && (await learnNonce(res)) ? await send() : res;
   } catch (e: unknown) {
     // Même convention que googleDriveService : un problème réseau (y compris un délai
-    // dépassé) remonte en TypeError, ce que la sauvegarde traite comme « hors ligne ».
-    if ((e as { name?: string } | null)?.name === 'AbortError') throw new TypeError('BACKEND_TIMEOUT', { cause: e });
+    // dépassé) remonte en NetworkError, ce que la sauvegarde traite comme « hors ligne ».
+    if ((e as { name?: string } | null)?.name === 'AbortError') throw new NetworkError('BACKEND_TIMEOUT', { cause: e });
     throw e;
   } finally {
     clearTimeout(timer);
@@ -349,7 +352,7 @@ export const fetchAccessToken = async (): Promise<AccessTokenResponse> => {
     clearBackendSession();
     throw new Error('SESSION_EXPIRED');
   }
-  if (!res.ok) throw new TypeError(`BACKEND_${res.status}`);
+  if (!res.ok) throw new NetworkError(`BACKEND_${res.status}`);
   return res.json();
 };
 

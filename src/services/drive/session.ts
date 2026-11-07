@@ -5,6 +5,7 @@
 // ================================================
 import { isBackendEnabled, hasBackendSession, fetchAccessToken, startBackendLogin, backendLogout, consumeLoginCode, saveBackendSession, type LoginOptions } from '../backendService';
 import { storageKey } from '../../lib/storageKeys';
+import { NetworkError, asNetworkError } from '../../lib/networkError';
 
 const TOKEN_KEY = storageKey('googleToken');
 const TOKEN_EXPIRY_KEY = storageKey('googleTokenExpiry');
@@ -71,8 +72,8 @@ export const GAPI_SRC = 'https://apis.google.com/js/api.js';
 // laisser l'écran en attente.
 const SDK_WAIT_TIMEOUT_MS = 20_000;
 
-/** Échec de chargement d'un SDK Google : traité comme un problème réseau (TypeError). */
-const sdkUnavailable = (what: string) => new TypeError(`GOOGLE_SDK_UNAVAILABLE:${what}`);
+/** Échec de chargement d'un SDK Google : traité comme un problème réseau (NetworkError). */
+const sdkUnavailable = (what: string) => new NetworkError(`GOOGLE_SDK_UNAVAILABLE:${what}`);
 
 const scriptLoads = new Map<string, Promise<void>>();
 /** Insère le script une seule fois ; un échec (hors ligne, bloqueur) laisse réessayer plus tard. */
@@ -163,7 +164,7 @@ export const isTokenValid = (): boolean => {
 // timeout pour qu'une promesse orpheline échoue au lieu de pendre pour toujours.
 const TOKEN_TIMEOUT_MS = 30_000;
 const requestToken = async (prompt: '' | 'none' | 'consent' | 'select_account consent'): Promise<void> => {
-  // GIS chargé au premier besoin ; un échec de chargement remonte en TypeError (« hors ligne »).
+  // GIS chargé au premier besoin ; un échec de chargement remonte en NetworkError (« hors ligne »).
   const client = await ensureTokenClient();
   return new Promise((resolve, reject) => {
     let settled = false;
@@ -336,8 +337,9 @@ const ensureOk = async (res: Response): Promise<Response> => {
 
 // Toute requête a un délai maximal : sans lui, un fetch qui pend (portail captif, TLS
 // bloqué) laisserait le mutex de sauvegarde occupé POUR TOUJOURS — plus aucune écriture
-// Drive ne partirait, isSaving resterait allumé, zéro message. AbortError est converti en
-// TypeError pour rejoindre le chemin "problème réseau" existant des appelants.
+// Drive ne partirait, isSaving resterait allumé, zéro message. Tout échec du fetch lui-même
+// (réseau coupé, DNS, délai dépassé) est enveloppé en NetworkError : c'est la SEULE erreur que
+// la synchronisation classe « hors ligne » (voir lib/networkError).
 const FETCH_TIMEOUT_MS = 30_000;
 const fetchWithTimeout = async (url: string, options: RequestInit = {}): Promise<Response> => {
   const controller = new AbortController();
@@ -345,8 +347,8 @@ const fetchWithTimeout = async (url: string, options: RequestInit = {}): Promise
   try {
     return await fetch(url, { ...options, signal: controller.signal });
   } catch (e: unknown) {
-    if ((e as { name?: string } | null)?.name === 'AbortError') throw new TypeError('NETWORK_TIMEOUT', { cause: e });
-    throw e;
+    if ((e as { name?: string } | null)?.name === 'AbortError') throw new NetworkError('NETWORK_TIMEOUT', { cause: e });
+    throw asNetworkError(e);
   } finally {
     clearTimeout(timer);
   }

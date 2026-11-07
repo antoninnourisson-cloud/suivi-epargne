@@ -15,6 +15,7 @@ import { daysBetween, parseISODate } from './dates';
 import { describeFiscalAnniversary, findFiscalAnniversaries } from './fiscalClock';
 import type { RateProposalInfo } from './rateChanges';
 import type { BackupUploadProblem } from './recoveryCodeCheck';
+import { isYearEndFinalReminder, isYearEndTaxSeason, type YearEndTaxFigures } from './yearEndTax';
 import { elideDe, elideLe, formatEUR, formatPeriod, formatRate, frenchDay } from './format';
 
 // ---------------------------------------------------------------------------
@@ -136,6 +137,11 @@ export interface HomeTodoInput {
   rfrByYear?: Record<string, number>;
   /** Envies à acheter notées sans prix (lib/wishes, wishesToComplete) : une tâche ponctuelle tant qu'il en reste. */
   wishesToComplete?: number;
+  /**
+   * Chiffres de « Avant le 31 décembre » (lib/yearEndTax, computeYearEndTax) : calculés par
+   * l'écran de mi-novembre à fin décembre seulement. Absent : la tâche reste générale.
+   */
+  yearEndTax?: YearEndTaxFigures | null;
 }
 
 /** Début d'août à fin septembre : les avis arrivent fin juillet à fin août, quelques-uns début octobre. */
@@ -249,6 +255,28 @@ export const buildHomeTodos = (i: HomeTodoInput): HomeTodo[] => {
     detail: unpriced > 1 ? `${unpriced} envies sans prix` : '1 envie sans prix',
     primary: go('Compléter', 'wishes'),
   });
+  // Du 15 novembre au 31 décembre : un versement PER et un don d'ici là réduisent l'impôt de l'année.
+  // Deux clés : un « Plus tard » de novembre ne masque pas le dernier rappel, à partir du 15 décembre.
+  // Sans chiffre connu (pas de revenu), la tâche reste générale : aucun montant inventé.
+  if (isYearEndTaxSeason(i.now)) {
+    const f = i.yearEndTax;
+    const sentences: string[] = [];
+    if (f?.per && f.per.saving > 0) sentences.push(`Verser ${eur0(f.per.amount)} sur votre PER réduirait votre impôt ${year} d'environ ${eur0(f.per.saving)}.`);
+    if (f?.donations) {
+      const d = f.donations;
+      if (d.acquired > 0 && d.extra > 0) sentences.push(`Vos dons de ${year} vous donnent déjà ${eur0(d.acquired)} de réduction ; ${eur0(d.example)} de plus en donneraient ${eur0(d.extra)}.`);
+      else if (d.acquired > 0) sentences.push(`Vos dons de ${year} vous donnent déjà ${eur0(d.acquired)} de réduction.`);
+      else if (d.extra > 0) sentences.push(`${eur0(d.example)} donnés avant le 31 décembre réduiraient votre impôt ${year} de ${eur0(d.extra)}.`);
+    }
+    out.push({
+      key: `year-end-tax-${year}-${isYearEndFinalReminder(i.now) ? 'last' : 'early'}`, icon: 'calendar-check', tone: 'info', snoozable: true,
+      text: 'Avant le 31 décembre',
+      detail: sentences.length > 0
+        ? `${sentences.join(' ')} Estimation d'après votre salaire.`
+        : `Les versements sur un PER et les dons faits avant le 31 décembre réduisent l'impôt de ${year}.`,
+      primary: go('Voir mes dons', 'donations'),
+    });
+  }
   if (i.parentalYearEnd !== null) out.push({
     key: `parental-ye-${year}`, icon: 'piggy-bank', tone: 'info', snoozable: true,
     text: `Fin d'année : le capital de vos parents a produit environ ${eur0(i.parentalYearEnd)} d'intérêts cette année. Ils vous reviennent ; le capital, lui, reste à eux.`,

@@ -56,6 +56,8 @@ export const STORAGE_KEYS = {
   /** Dernier écran ouvert. */
   lastView: { key: 'last_view', kind: 'trace' },
   lastDriveBackupMonth: { key: 'last_drive_backup_month', kind: 'trace' },
+  /** Copie mensuelle Drive : dernière réussite, dernier essai (jour), premier échec depuis (voir hooks/portfolio/monthlyBackup). */
+  monthlyBackupState: { key: 'monthly_backup_state', kind: 'trace' },
   duplicateDismissed: { key: 'pecule_duplicate_dismissed', kind: 'trace' },
   quickAddLastAccount: { key: 'quickadd_last_account', kind: 'trace' },
   /** Alertes de l'Accueil mises en « Plus tard » (clé de l'alerte → fin du report). */

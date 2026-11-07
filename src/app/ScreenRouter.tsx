@@ -205,7 +205,7 @@ export const ScreenRouter = memo(function ScreenRouter({ place, setView, onSelec
           restitutionDoneOn={doc.parentalRestitution?.done?.date} restitutionPlannedDate={doc.parentalRestitution?.plannedDate}
           yearClosing={derived.yearClosing} pays={doc.pays}
           rateChanges={rateChanges} onOpenRateChanges={openRates}
-          onOpenYearClosing={openClosing} yearGoal={derived.yearGoal} wishesToComplete={wishesToComplete(doc.wishes ?? NO_WISHES)}
+          onOpenYearClosing={openClosing} yearGoal={derived.yearGoal} donations={doc.donations} taxEstimate={derived.taxEstimate} retirementCeiling={c.retirementCeiling} wishesToComplete={wishesToComplete(doc.wishes ?? NO_WISHES)}
           plannedWithdrawals={c.plannedWithdrawals} onRecordPlannedWithdrawal={actions.recordPlannedWithdrawal} onDeletePlannedWithdrawal={actions.deletePlannedWithdrawal}
           askSlot={<Lazy><AskPeculeEntry data={derived.fullData} geminiApiKey={data.geminiApiKey} taxEstimate={derived.taxEstimate} monthPlan={derived.monthPlan} onOpenSettings={openSettings} /></Lazy>}
           onMarkMilestonesSeen={actions.markMilestonesSeen} onValidatePayReview={actions.validatePayReview} />}
@@ -277,7 +277,7 @@ export const ScreenRouter = memo(function ScreenRouter({ place, setView, onSelec
           onImport={data.importData}
           onUndoImport={data.recoverSetAside}
           backupSlot={<Lazy>
-            <DriveBackupsPanel list={data.listDriveBackups} restore={data.restoreDriveBackup} undo={data.recoverSetAside} confirm={(t, m, ok, label) => dialog.confirm(t, m, ok, true, label)} />
+            <DriveBackupsPanel getData={data.currentData} list={data.listDriveBackups} restore={data.restoreDriveBackup} undo={data.recoverSetAside} confirm={(t, m, ok, label) => dialog.confirm(t, m, ok, true, label)} />
             <CloudBackupPanel getData={data.currentData} onImport={data.importData} undo={data.recoverSetAside} confirm={dialog.confirm} />
             <SetAsideVersionsPanel list={data.listSetAsideVersions} recover={data.recoverSetAside} confirm={dialog.confirm} />
           </Lazy>}

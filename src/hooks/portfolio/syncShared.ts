@@ -1,6 +1,7 @@
 // Types, erreurs et petites règles communs au moteur de synchronisation (useDriveSync) et à
 // ses aides (copies locales, écran de choix).
 import { canonicalize } from '../../lib/schema';
+import { NetworkError } from '../../lib/networkError';
 import type { FailureLike } from '../../lib/syncErrors';
 import type { GlobalAppData } from '../../types';
 import { ConflictError, ApiError, type DriveFileInfo, type FileMeta } from '../../services/googleDriveService';
@@ -54,9 +55,11 @@ export const classifySyncError = (err: unknown): SyncFailure => {
   if (err instanceof ConflictError) return 'conflict';
   if (err instanceof Error && err.message === 'SESSION_EXPIRED') return 'session';
   if (err instanceof ApiError && err.status === 404) return 'notfound';
-  // fetch échoue par TypeError quand la requête ne peut pas partir (réseau coupé, DNS,
-  // délai) : navigator.onLine n'est pas toujours fiable (portail captif).
-  if (err instanceof TypeError) return 'offline';
+  // Seul un échec venu du réseau lui-même (requête partie nulle part, DNS, délai) est « hors
+  // ligne » : navigator.onLine n'est pas toujours fiable (portail captif). Il est reconnu à
+  // son type (NetworkError, posé à la source par authedFetch et backendService). Une autre
+  // TypeError est un bug de code : erreur inattendue, jamais « hors ligne ».
+  if (err instanceof NetworkError) return 'offline';
   return 'error';
 };
 export const failureOf = (err: unknown): FailureLike => (typeof err === 'object' && err !== null ? err as FailureLike : {});
