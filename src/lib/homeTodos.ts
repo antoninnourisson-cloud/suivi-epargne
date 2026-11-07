@@ -10,8 +10,8 @@ import type { TaxReturnAlert } from './taxReturn';
 import type { EmergencyFund } from './planning';
 import { describeStaleBalances, type StaleBalance } from './freshness';
 import type { YearClosingStatus } from './yearClosing';
-import { type DueRecurring, type FiscalReview } from './finance';
-import { daysBetween, parseISODate } from './dates';
+import { computeRestitutionPlan, type DueRecurring, type FiscalReview } from './finance';
+import { daysBetween, formatISODay, parseISODate } from './dates';
 import { describeFiscalAnniversary, findFiscalAnniversaries } from './fiscalClock';
 import type { RateProposalInfo } from './rateChanges';
 import type { BackupUploadProblem } from './recoveryCodeCheck';
@@ -101,6 +101,12 @@ export interface HomeTodoInput {
   dismissedRateRevision: string | null;
   ratesEditorOpen: boolean;
   parentalYearEnd: number | null;
+  /**
+   * Restitution du capital des parents : date prévue (ou conseillée, le 1er janvier) tant qu'elle
+   * n'est pas enregistrée, `done` une fois faite. Absent : aucun rappel de restitution, et le
+   * rappel des intérêts de décembre garde son seul chiffre « à ce jour ».
+   */
+  restitution?: { plannedDate?: string; done?: boolean };
   inactiveEmpty: SavingsAccount[];
   fiscalReview: FiscalReview;
   taxReturnAlert: TaxReturnAlert | null;
@@ -171,7 +177,8 @@ export const buildHomeTodos = (i: HomeTodoInput): HomeTodo[] => {
   const closingOpen = !!closing && closing.inSeason && !closing.closed;
   if (closing && closingOpen) out.push({
     key: `year-closing-${closing.year}`, icon: 'calendar-check', tone: 'action', snoozable: true, pinned: true,
-    text: `Clôture de l'année ${closing.year} : ${closing.done} étape${closing.done > 1 ? 's' : ''} sur ${closing.total} faite${closing.done > 1 ? 's' : ''}.`,
+    // Même compte que la feuille (closingProgress) : l'étape « Clôturer » compte aussi, d'où + 1.
+    text: `Clôture de l'année ${closing.year} : ${closing.done} étape${closing.done > 1 ? 's' : ''} sur ${closing.total + 1} faite${closing.done > 1 ? 's' : ''}.`,
     detail: 'Soldes au 31 décembre, intérêts, relevés, bilan et archive : tout au même endroit, dans l\'ordre.',
     primary: i.can.navigate ? { label: 'Ouvrir la clôture', action: { type: 'open-year-closing' } } : undefined,
   });
@@ -277,11 +284,43 @@ export const buildHomeTodos = (i: HomeTodoInput): HomeTodo[] => {
       primary: go('Voir mes dons', 'donations'),
     });
   }
-  if (i.parentalYearEnd !== null) out.push({
-    key: `parental-ye-${year}`, icon: 'piggy-bank', tone: 'info', snoozable: true,
-    text: `Fin d'année : le capital de vos parents a produit environ ${eur0(i.parentalYearEnd)} d'intérêts cette année. Ils vous reviennent ; le capital, lui, reste à eux.`,
-    primary: go('Voir la part parentale', 'parental'),
-  });
+  // Restitution du capital des parents (même tableau que « À rendre », Comptes › Parents) :
+  // en décembre, puis après la date prévue tant que rien n'est enregistré. Épinglée en tête.
+  const restitution = i.restitution;
+  const plannedDate = restitution && !restitution.done ? restitution.plannedDate : undefined;
+  const plan = plannedDate ? computeRestitutionPlan(i.accounts, plannedDate) : null;
+  if (plannedDate && plan && plan.total > 0) {
+    const today = formatISODay(i.now);
+    const detail = `${formatEUR(plan.total)} à rendre à vos parents, compte par compte. Leurs intérêts ${plan.interestYear} vous restent.`;
+    if (today > plannedDate) out.push({
+      key: `restitution-due-${plannedDate}`, icon: 'gift', tone: 'action', snoozable: true, pinned: true,
+      text: `La restitution était prévue le ${effectiveDay(plannedDate, year)} : enregistrez-la.`,
+      detail,
+      primary: go('Enregistrer la restitution', 'parental'),
+    });
+    else if (i.now.getMonth() === 11 || daysBetween(i.now, parseISODate(plannedDate)) <= 31) out.push({
+      key: `restitution-prep-${plannedDate}`, icon: 'gift', tone: 'action', snoozable: true, pinned: true,
+      text: `Préparer la restitution du ${effectiveDay(plannedDate, year)}`,
+      detail,
+      primary: go('Voir la restitution', 'parental'),
+    });
+  }
+  // Intérêts du capital des parents, en décembre : deux chiffres clairs, celui d'aujourd'hui et
+  // la projection du tableau « À rendre » (même calcul : computeRestitutionPlan).
+  if (i.parentalYearEnd !== null) {
+    const toDate = eur0(i.parentalYearEnd);
+    const projected = plan && plan.interestYear === year && plan.totalInterest > 1 ? plan.totalInterest : null;
+    const when = projected === null || !plannedDate ? null
+      : plannedDate > `${year}-12-31` ? 'au 31 décembre' : `à la restitution du ${effectiveDay(plannedDate, year)}`;
+    const figures = projected !== null && eur0(projected) !== toDate
+      ? `environ ${toDate} à ce jour, ${eur0(projected)} ${when}`
+      : `environ ${toDate}`;
+    out.push({
+      key: `parental-ye-${year}`, icon: 'piggy-bank', tone: 'info', snoozable: true, pinned: true,
+      text: `Fin d'année : le capital de vos parents a produit ${figures} d'intérêts cette année. Ils vous reviennent ; le capital, lui, reste à eux.`,
+      primary: go('Voir la part parentale', 'parental'),
+    });
+  }
   if (i.can.deleteAccount) for (const a of i.inactiveEmpty) out.push({
     key: `empty-${a.id}`, icon: 'trash', tone: 'info', snoozable: true,
     text: `${a.name} est à 0 € et inactif.`,

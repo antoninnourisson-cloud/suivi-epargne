@@ -35,7 +35,8 @@ const pick = () => {
   fireEvent.change(input, { target: { files: [new File(['x'], 'releve.pdf', { type: 'application/pdf' })] } });
 };
 const note = () => document.querySelector('[data-read-note="av"]') as HTMLElement;
-const field = (label: string) => (screen.getByLabelText(label) as HTMLInputElement).value;
+// Les montants s'affichent à la française (« 5 230,5 ») : on compare sans espaces.
+const field = (label: string) => (screen.getByLabelText(label) as HTMLInputElement).value.replace(/\s/g, '');
 
 describe('Lire le relevé', () => {
   it('sans clé Gemini : pas de bouton', () => {
@@ -49,7 +50,7 @@ describe('Lire le relevé', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Lire le relevé, Assurance vie' }));
     pick();
     await waitFor(() => expect(note()).toBeTruthy());
-    expect(field('Valeur au 31 décembre, Assurance vie')).toBe('5230,50');
+    expect(field('Valeur au 31 décembre, Assurance vie')).toBe('5230,5');
     expect(field('Versements 2026, Assurance vie')).toBe('1200');
     expect(field('Taux servi 2026, Assurance vie')).toBe('2,6');
     expect(within(note()).queryByRole('alert')).toBeNull();

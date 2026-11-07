@@ -3,8 +3,8 @@
 // « Voir tout ».
 import React, { useState } from 'react';
 import { lsGet, lsGetJSON, lsSet, lsSetJSON } from '../lib/storage';
-import { ChevronDown, Clock, ListTodo } from 'lucide-react';
-import { Button, Card, Chip } from './ui';
+import { ChevronDown, ListTodo } from 'lucide-react';
+import { Button, Card } from './ui';
 import { formatEUR } from '../lib/format';
 import { sortAlerts, type AlertGain } from '../lib/alerts';
 import { pruneSnoozed, storageKey } from '../lib/storageKeys';
@@ -102,10 +102,12 @@ export const TodoList: React.FC<{ items: TodoSpec[] }> = ({ items }) => {
                     </div>
                   </div>
                   {(item.primary || item.secondary || item.snoozable) && (
-                    <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
-                      {item.snoozable && <Chip kind="suggestion" icon={Clock} onClick={() => snooze(item.key)}>Plus tard</Chip>}
-                      {item.secondary && <Button variant="text" onClick={item.secondary.onClick}>{item.secondary.label}</Button>}
-                      {item.primary && <Button variant="tonal" onClick={item.primary.onClick}>{item.primary.label}</Button>}
+                    // Action principale pleine d'abord, puis les actions discrètes ; à 412 px, trois
+                    // boutons passent à la ligne proprement, alignés à gauche, cibles de 48 px.
+                    <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1">
+                      {item.primary && <Button size="sm" variant="filled" className="px-5!" onClick={item.primary.onClick}>{item.primary.label}</Button>}
+                      {item.secondary && <Button size="sm" variant="text" onClick={item.secondary.onClick}>{item.secondary.label}</Button>}
+                      {item.snoozable && <Button size="sm" variant="text" className="ml-auto text-on-surface-variant!" onClick={() => snooze(item.key)}>Plus tard</Button>}
                     </div>
                   )}
                   {item.extra && <div className="mt-3">{item.extra}</div>}

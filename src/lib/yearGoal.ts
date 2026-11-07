@@ -4,6 +4,18 @@
 // Chargé à part avec les calculs datés de l'Accueil (app/seasonal).
 import type { GlobalAppData } from '../types';
 import { computeYearReview } from './agenda';
+import { computeMonthlySavingsCapacity } from './finance';
+
+/**
+ * Rythme d'épargne prévu par le plan de l'app, en euros par mois : le montant du plan de paie
+ * (Pilotage) s'il existe, sinon la capacité d'épargne calculée. 0 : pas de plan. Même source
+ * que la page « Cap sur » de « Votre année » (lib/yearReview) et que l'objectif proposé à la
+ * clôture de l'année (lib/yearClosingSheet).
+ */
+export const plannedMonthlySaving = (data: GlobalAppData): number => {
+  const plan = data.config?.paydayAmount ?? computeMonthlySavingsCapacity(data);
+  return Number.isFinite(plan) && plan > 0 ? plan : 0;
+};
 
 export interface YearGoalProgress { year: number; goal: number; saved: number }
 

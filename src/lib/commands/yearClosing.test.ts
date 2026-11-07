@@ -37,6 +37,8 @@ describe('recordYearClosing', () => {
     expect(a.totalDeposits).toBe(4200);
     expect(a.interestRate).toBe(2.7);
     expect(r.accountIds.sort()).toEqual(['av', 'la', 'lep']);
+    // Le message dit ce qui a été enregistré.
+    expect(r.message).toBe('Soldes de 3 comptes, intérêt de 1 compte et taux servi de 1 compte enregistrés');
 
     const undone = applyPatch(after, r.undo(after));
     expect(undone.accounts.map(x => [x.ownedAmount, x.movements.length, x.balanceCheckedAt, x.interestRate, x.totalDeposits])).toEqual(

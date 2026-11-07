@@ -1,7 +1,7 @@
 // Entrée « Votre année <Y> » de l'Historique : le chiffre d'ouverture du récapitulatif
 // annuel et un bouton qui ouvre la feuille des pages. Lien direct possible depuis la
 // notification de début janvier (`?view=history&year=2026`).
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { Sparkles } from 'lucide-react';
 import type { GlobalAppData } from '../../types';
 import { buildYearInReview, defaultReviewYear, yearsWithData } from '../../lib/yearReview';
@@ -42,8 +42,11 @@ export const YearInReviewCard: React.FC<{ data: GlobalAppData }> = ({ data }) =>
     return () => window.removeEventListener('pecule:open-year', onOpen);
   }, [today]);
 
-  // Lien consommé : retiré de l'adresse pour qu'un rechargement ne rouvre pas la feuille.
-  useEffect(() => {
+  // Lien consommé : retiré de l'adresse pour qu'un rechargement ne rouvre pas la feuille. Effet de
+  // mise en page (avant les effets ordinaires) : la feuille, qui pose ensuite son entrée d'historique
+  // pour le geste Retour, n'y recopie pas `year`. Jamais pendant le rendu : un rendu abandonné
+  // (chargement à la demande) relirait l'adresse déjà nettoyée.
+  useLayoutEffect(() => {
     if (linked === null) return;
     const params = new URLSearchParams(window.location.search);
     params.delete('year');

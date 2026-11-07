@@ -34,6 +34,12 @@ const openSheet = async (page: Page) => {
 
 const euros = (text: string) => Number(text.replace(/\s/g, '').replace(',', '.'));
 const field = (n: number) => n.toFixed(2).replace('.', ',');
+/** Remplace le montant d'un champ (le champ passe du format « 2 539 » à la saisie brute au focus : fill() perdrait la sélection). */
+const setAmount = async (input: ReturnType<Page['locator']>, text: string) => {
+  await input.click();
+  await input.press('Control+A');
+  await input.pressSequentially(text);
+};
 
 test.describe("Clôture de l'année : la feuille (démo, téléphone)", () => {
   test.beforeEach(({ isMobile }) => { test.skip(!isMobile, 'format téléphone seulement'); });
@@ -56,10 +62,10 @@ test.describe("Clôture de l'année : la feuille (démo, téléphone)", () => {
     const credited = interest.getByLabel(/^Crédité par la banque, /).first();
     const computed = euros(await credited.inputValue());
     expect(computed).toBeGreaterThan(5);
-    await credited.fill(field(computed - 2.3));
+    await setAmount(credited, field(computed - 2.3));
     await expect(interest).toContainText(/2,30\s€ de moins que prévu\./);
     await expect(interest).not.toContainText('Causes possibles');
-    await credited.fill(field(computed - 8));
+    await setAmount(credited, field(computed - 8));
     await expect(interest).toContainText(/8,00\s€ de moins que prévu\. Causes possibles : un retrait en milieu de quinzaine/);
     await interest.scrollIntoViewIfNeeded();
     await shot(page, 'r4-feuille-interets');
@@ -70,24 +76,31 @@ test.describe("Clôture de l'année : la feuille (démo, téléphone)", () => {
     await expect(restitution).toContainText(/Les intérêts 2026 vous restent, y compris les \d+\s€ produits par le capital de vos parents\./);
     await expect(restitution.getByRole('button', { name: 'Préparer la restitution' })).toBeVisible();
     const goal = sheet.getByLabel('Objectif 2027');
-    await goal.fill('9 000');
+    await setAmount(goal, '9000');
     await restitution.scrollIntoViewIfNeeded();
     await shot(page, 'r4-restitution-objectif');
 
     // 3. « Enregistrer », puis « Annuler » remet l'état d'avant.
-    await sheet.getByRole('button', { name: 'Enregistrer' }).click();
+    await sheet.getByRole('button', { name: 'Enregistrer mes saisies' }).click();
+    // La feuille reste ouverte ; le message dit ce qui a été enregistré.
+    await expect(sheet).toBeVisible();
+    await expect(sheet).toContainText(/ntérêts? de \d+ comptes?/);
+    await sheet.getByRole('button', { name: 'Fermer' }).click();
     await expect(sheet).toBeHidden();
     await expect(goalLine).toContainText(/Objectif 2027 : .* sur 9\s000\s€/);
-    const status = page.getByRole('status').filter({ hasText: /^Clôture : / });
+    const status = page.getByRole('status').filter({ hasText: /enregistrés?/ });
     await status.getByRole('button', { name: 'Annuler' }).click();
     await expect(goalLine).toHaveCount(0);
     sheet = await openSheet(page);
-    await expect(sheet.locator('[data-step="interest"]').getByLabel(/^Crédité par la banque, /).first()).toHaveValue(field(computed));
-    await expect(sheet.getByLabel('Objectif 2027')).not.toHaveValue('9000');
+    const creditedAgain = sheet.locator('[data-step="interest"]').getByLabel(/^Crédité par la banque, /).first();
+    await expect.poll(async () => euros(await creditedAgain.inputValue())).toBeCloseTo(computed, 2);
+    await expect(sheet.getByLabel('Objectif 2027')).not.toHaveValue(/^9\s?000$/);
 
     // 4. L'objectif 2027 apparaît à l'Accueil, dans la carte de l'objectif du mois.
-    await sheet.getByLabel('Objectif 2027').fill('9 000');
-    await sheet.getByRole('button', { name: 'Enregistrer' }).click();
+    await setAmount(sheet.getByLabel('Objectif 2027'), '9000');
+    await sheet.getByRole('button', { name: 'Enregistrer mes saisies' }).click();
+    await expect(sheet).toBeVisible();
+    await sheet.getByRole('button', { name: 'Fermer' }).click();
     await expect(sheet).toBeHidden();
     await expect(goalLine).toContainText(/^Objectif 2027 : .* sur 9\s000\s€$/);
     await goalLine.scrollIntoViewIfNeeded();

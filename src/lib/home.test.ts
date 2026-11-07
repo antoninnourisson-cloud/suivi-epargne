@@ -8,6 +8,8 @@ import {
 } from './home';
 import { buildAgenda } from './agenda';
 import type { Alert } from './alerts';
+import { computeRestitutionPlan } from './finance';
+import { formatEUR } from './format';
 
 const fiscal = { ...DEFAULT_FISCAL_CONFIG, ceilings: { livretA: 22950, ldds: 12000, lep: 10000 } };
 let seq = 0;
@@ -404,6 +406,55 @@ describe('liste « À faire »', () => {
     });
   });
 
+  describe('restitution du capital des parents', () => {
+    const parents = [acc('la', AccountType.LIVRET_A, 0, { name: 'Livret A', parentalCapital: 10000, interestRate: 3, openingDate: '2020-01-01' })];
+    const dec = (day: number, over: Partial<HomeTodoInput> = {}) => buildHomeTodos(base({
+      now: new Date(2026, 11, day), accounts: parents, restitution: { plannedDate: '2027-01-01' }, ...over,
+    }));
+
+    it('donne les deux chiffres des intérêts : à ce jour et au 31 décembre (celui du tableau « À rendre »)', () => {
+      const today = parentalYearEndInterest(parents, new Date(2026, 11, 1))!;
+      const todos = dec(1, { parentalYearEnd: today });
+      const interest = todos.find(t => t.key === 'parental-ye-2026')!;
+      const projected = computeRestitutionPlan(parents, '2027-01-01').totalInterest;
+      expect(projected).toBeGreaterThan(today);
+      expect(interest.text).toContain(`environ ${formatEUR(today, 0)} à ce jour, ${formatEUR(projected, 0)} au 31 décembre`);
+      expect(interest.text).toContain('Ils vous reviennent ; le capital, lui, reste à eux.');
+    });
+
+    it('sans restitution connue : un seul chiffre, comme avant', () => {
+      const interest = buildHomeTodos(base({ now: new Date(2026, 11, 1), parentalYearEnd: 155 })).find(t => t.key === 'parental-ye-2026')!;
+      expect(interest.text).toContain(`a produit environ ${formatEUR(155, 0)} d'intérêts cette année`);
+      expect(interest.text).not.toContain('à ce jour');
+    });
+
+    it('en décembre : « Préparer la restitution » et les intérêts passent en tête', () => {
+      const todos = dec(1, { parentalYearEnd: 155 });
+      const prep = todos.find(t => t.key === 'restitution-prep-2027-01-01')!;
+      expect(prep.text).toBe('Préparer la restitution du 1er janvier 2027');
+      expect(prep.detail).toContain(`${formatEUR(10000)} à rendre à vos parents`);
+      expect(prep.primary?.action).toEqual({ type: 'navigate', view: 'parental' });
+      expect(prep.pinned).toBe(true);
+      expect(todos.find(t => t.key === 'parental-ye-2026')?.pinned).toBe(true);
+      // La préparation vient avant les intérêts.
+      expect(todos.findIndex(t => t.key === prep.key)).toBeLessThan(todos.findIndex(t => t.key === 'parental-ye-2026'));
+    });
+
+    it('pas de rappel avant décembre, ni une fois la restitution enregistrée', () => {
+      const mine = (todos: { key: string }[]) => todos.filter(t => /^(restitution|parental)/.test(t.key));
+      expect(mine(buildHomeTodos(base({ now: new Date(2026, 10, 20), accounts: parents, restitution: { plannedDate: '2027-01-01' } })))).toEqual([]);
+      expect(mine(dec(1, { restitution: { done: true } }))).toEqual([]);
+    });
+
+    it("après la date prévue, tant que rien n'est enregistré : au passé", () => {
+      const todos = buildHomeTodos(base({ now: new Date(2027, 0, 3), accounts: parents, restitution: { plannedDate: '2027-01-01' } }));
+      const due = todos.find(t => t.key === 'restitution-due-2027-01-01')!;
+      expect(due.text).toBe('La restitution était prévue le 1er janvier : enregistrez-la.');
+      expect(due.pinned).toBe(true);
+      expect(todos.some(t => t.key.startsWith('restitution-prep'))).toBe(false);
+    });
+  });
+
   it('keeps the historic keys (snoozes depend on them) and names actions', () => {
     const la = acc('la', AccountType.LIVRET_A, 100, { name: 'Livret A' });
     const recurring = { id: 'r1', label: 'Virement', amount: 50, type: 'IN' as const, accountId: 'la', dayOfMonth: 5, active: true };
@@ -439,9 +490,9 @@ describe('liste « À faire »', () => {
     }));
     const open = january({ year: 2026, closed: false, inSeason: true, done: 1, total: 7 });
     expect(open.map(t => t.key)).toEqual(['year-closing-2026']);
-    expect(open[0]).toMatchObject({ icon: 'calendar-check', tone: 'action', snoozable: true, pinned: true, text: 'Clôture de l\'année 2026 : 1 étape sur 7 faite.' });
+    expect(open[0]).toMatchObject({ icon: 'calendar-check', tone: 'action', snoozable: true, pinned: true, text: 'Clôture de l\'année 2026 : 1 étape sur 8 faite.' });
     expect(open[0].primary?.action).toEqual({ type: 'open-year-closing' });
-    expect(january({ year: 2026, closed: false, inSeason: true, done: 3, total: 7 })[0].text).toBe('Clôture de l\'année 2026 : 3 étapes sur 7 faites.');
+    expect(january({ year: 2026, closed: false, inSeason: true, done: 3, total: 7 })[0].text).toBe('Clôture de l\'année 2026 : 3 étapes sur 8 faites.');
     // Clôturée : plus de tâche de clôture ni de taux servi ; barème, paramètres fiscaux et copie
     // trimestrielle reviennent à part s'ils restent à faire.
     expect(january({ year: 2026, closed: true, inSeason: true, done: 0, total: 0 }).map(t => t.key)).toEqual([`scale-${LATEST_TAX_SCALE.year}`, 'annual-2027', 'export']);

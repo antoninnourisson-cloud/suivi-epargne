@@ -271,6 +271,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalC
     dismissedRateRevision: choices.dismissedRateRevision,
     ratesEditorOpen,
     parentalYearEnd: parentalYearEndInterest(accounts, now),
+    // Même date que l'alerte « Après la restitution » : prévue, sinon conseillée (1er janvier).
+    restitution: restitutionDoneOn ? { done: true }
+      : restitutionPlannedDate ? { plannedDate: restitutionPlannedDate }
+      : hasParentalCapital ? { plannedDate: suggestedRestitutionDate(parseISODate(today)) } : undefined,
     inactiveEmpty: findInactiveEmptyAccounts(accounts, now),
     fiscalReview: findFiscalReview(fiscalConfig, now),
     taxReturnAlert: taxReturnAlert ?? null,

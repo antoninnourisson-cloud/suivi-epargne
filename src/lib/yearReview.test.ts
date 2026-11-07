@@ -95,6 +95,18 @@ describe('buildYearInReview', () => {
     expect(plain(planned.pages.find(x => x.id === 'next-year')?.text)).toContain('en solo');
   });
 
+  it('date de restitution passée et pas enregistrée : « Cap sur » la dit au passé, jamais au futur', () => {
+    // 5 janvier 2026 : la restitution prévue le 1er janvier 2026 n'a pas été enregistrée.
+    const late = buildYearInReview(base({ parentalRestitution: { plannedDate: '2026-01-01' } }), 2025, NOW);
+    const text = plain(late.pages.find(x => x.id === 'next-year')?.text);
+    expect(text).toContain('devait leur revenir le 1er janvier 2026');
+    expect(text).toContain('en solo');
+    expect(text).not.toMatch(/Le 1er janvier 2026, le capital/);
+    // Date à venir : au futur, comme avant.
+    const ahead = buildYearInReview(base({ parentalRestitution: { plannedDate: '2026-01-31' } }), 2025, NOW);
+    expect(plain(ahead.pages.find(x => x.id === 'next-year')?.text)).toContain('Le 31 janvier 2026, le capital de vos parents leur revient');
+  });
+
   it('suivi commencé en cours d\'année : le solde de départ est reconstitué au 1er janvier', () => {
     const data = base({ history: [{ date: '2025-10-07', totalAmount: 15000, ownedAmount: 15000 }] });
     const net = buildYearInReview(data, 2025, NOW).pages.find(p => p.id === 'net')!;

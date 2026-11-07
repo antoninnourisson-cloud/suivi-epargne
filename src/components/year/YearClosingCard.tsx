@@ -4,7 +4,7 @@
 import React, { useMemo } from 'react';
 import { CalendarCheck } from 'lucide-react';
 import type { GlobalAppData } from '../../types';
-import { buildYearClosing, closingApplies, closingYearOf } from '../../lib/yearClosing';
+import { buildYearClosing, closingApplies, closingProgress, closingYearOf } from '../../lib/yearClosing';
 import { Button } from '../ui';
 
 export interface YearClosingCardProps {
@@ -24,9 +24,11 @@ export const YearClosingCard: React.FC<YearClosingCardProps> = ({ data, onOpen, 
   // Rien à clôturer (aucun compte suivi l'an dernier : tout premier usage) : pas de carte.
   if (!closingApplies(data, year)) return null;
 
+  // Comme dans la feuille : l'étape « Clôturer » est comptée.
+  const { done, total } = closingProgress(closing);
   const summary = closing.closedOn
     ? 'Année clôturée : plus de rappel de clôture.'
-    : `${closing.done} étape${closing.done > 1 ? 's' : ''} sur ${closing.total} faite${closing.done > 1 ? 's' : ''}`;
+    : `${done} étape${done > 1 ? 's' : ''} sur ${total} faite${done > 1 ? 's' : ''}`;
 
   return (
     <section id="year-closing" aria-labelledby="year-closing-title" className="rounded-2xl p-5 sm:p-6 bg-surface-container-lowest dark:bg-surface-container-low border border-outline-variant text-on-surface">
@@ -41,9 +43,9 @@ export const YearClosingCard: React.FC<YearClosingCardProps> = ({ data, onOpen, 
           {closing.closedOn ? 'Voir la clôture' : 'Ouvrir la clôture'}
         </Button>
       </div>
-      {!closing.closedOn && closing.total > 0 && (
+      {!closing.closedOn && total > 0 && (
         <div className="mt-3 h-1.5 rounded-full bg-surface-container-highest overflow-hidden" aria-hidden="true">
-          <div className="h-full bg-primary rounded-full" style={{ width: `${Math.round((closing.done / closing.total) * 100)}%` }} />
+          <div className="h-full bg-primary rounded-full" style={{ width: `${Math.round((done / total) * 100)}%` }} />
         </div>
       )}
     </section>

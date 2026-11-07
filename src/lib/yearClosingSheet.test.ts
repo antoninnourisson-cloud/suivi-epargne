@@ -2,7 +2,9 @@
 // saisies → une seule demande, récapitulatif de restitution, objectif ; ligne de l'Accueil.
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { AccountType, type GlobalAppData, type SavingsAccount } from '../types';
-import { buildClosingSheet, closingSheetInput, interestGap, readGoal, INTEREST_GAP_CAUSES, type ClosingDrafts } from './yearClosingSheet';
+import { buildClosingSheet, closingSheetInput, creditedText, interestGap, readGoal, stepFilledOnScreen, INTEREST_GAP_CAUSES, type ClosingDrafts } from './yearClosingSheet';
+import { recordYearClosing, yearClosingSummary } from './commands';
+import { applyPatch } from './commands/testHelpers';
 import { yearGoalProgress } from './yearGoal';
 import { yearGoalLine } from '../components/dashboard/SavingsCard';
 import { computeAccruedParentalInterest } from './finance';
@@ -39,9 +41,9 @@ describe('interestGap', () => {
 describe('buildClosingSheet', () => {
   it('calculé par Pécule (la proposition d\'Actualiser), soldes au 31 décembre, objectif prérempli', () => {
     const m = buildClosingSheet(data([acc({})]), 2026, JAN);
-    expect(m.interest).toEqual([{ accountId: 'la', name: 'Livret A', computed: 300, done: false }]);
+    expect(m.interest).toEqual([{ accountId: 'la', name: 'Livret A', computed: 300, done: false, recorded: 0 }]);
     expect(m.balances).toEqual([expect.objectContaining({ accountId: 'la', atYearEnd: 10000, done: false })]);
-    expect(m.goal).toEqual({ year: 2027, suggested: 0 });
+    expect(m.goal).toEqual({ year: 2027, suggested: 0, saved: 0 });
     expect(buildClosingSheet(data([acc({})], { yearGoals: { 2027: 9000 } }), 2026, JAN).goal.current).toBe(9000);
   });
 
@@ -58,6 +60,70 @@ describe('buildClosingSheet', () => {
     // Restitution faite : plus de récapitulatif.
     const done = { ...data(accounts), parentalRestitution: { done: { date: '2027-01-01', accounts: [{ accountId: 'la', amount: 4460 }], interestsOffered: [] } } } as unknown as GlobalAppData;
     expect(buildClosingSheet(done, 2026, JAN).restitution).toBeNull();
+  });
+});
+
+describe("objectif proposé : le plan de l'app, sinon le mis de côté", () => {
+  it('avec un plan (rythme du Pilotage) : douze mois, et le mis de côté en repère', () => {
+    const accounts = [acc({ movements: [...acc({}).movements, { id: 'v', date: '2026-05-05', amount: 4820, label: 'Versement', type: 'IN' }] })];
+    const m = buildClosingSheet(data(accounts, { paydayAmount: 771 }), 2026, JAN);
+    expect(m.goal).toEqual({ year: 2027, suggested: 9252, saved: 4820, monthly: 771 });
+    // Un objectif déjà enregistré reste l'objectif ; le repère est toujours là.
+    expect(buildClosingSheet(data(accounts, { paydayAmount: 771, yearGoals: { 2027: 8000 } }), 2026, JAN).goal).toEqual({ year: 2027, current: 8000, suggested: 9252, saved: 4820, monthly: 771 });
+  });
+
+  it("sans plan : le mis de côté de l'année écoulée, comme avant", () => {
+    const accounts = [acc({ movements: [...acc({}).movements, { id: 'v', date: '2026-05-05', amount: 4820, label: 'Versement', type: 'IN' }] })];
+    const m = buildClosingSheet(data(accounts), 2026, JAN);
+    expect(m.goal.suggested).toBe(4820);
+    expect(m.goal.monthly).toBeUndefined();
+  });
+});
+
+describe('intérêts saisis différents du calcul (le scénario de la répétition)', () => {
+  const ldds = () => acc({
+    id: 'ldds', name: 'LDDS', type: AccountType.LDDS, totalAmount: 3000, ownedAmount: 3000, interestRate: 1.43,
+    movements: [{ id: 'i', date: '2020-01-01', amount: 3000, label: 'Solde initial', type: 'IN', tag: 'initial' }],
+  });
+
+  it("« Inchangé » puis intérêts corrigés à l'étape 2 : enregistrés une fois, jamais d'écart reproposé", () => {
+    const accounts = [ldds()];
+    const m = buildClosingSheet(data(accounts), 2026, JAN);
+    const computed = m.interest[0].computed;
+    expect(computed).toBeGreaterThan(30);
+    const credited = Math.round((computed - 1.93) * 100) / 100;
+    const r = closingSheetInput(m, accounts, { ...EMPTY, credited: { ldds: creditedText(credited) }, unchanged: ['ldds'] }, '2027-01-10');
+    if (!('input' in r)) throw new Error(r.error);
+    expect(r.input.updates).toEqual([expect.objectContaining({ accountId: 'ldds', interest: credited, owned: Math.round((3000 + credited) * 100) / 100, confirm: true })]);
+    expect(yearClosingSummary(r.input)).toBe('Solde de 1 compte et intérêt de 1 compte enregistrés');
+
+    const done = recordYearClosing({ accounts }, r.input);
+    if (!done.ok) throw new Error(done.error);
+    const after = applyPatch({ accounts }, done.next).accounts!;
+    expect(done.message).toBe('Solde de 1 compte et intérêt de 1 compte enregistrés');
+
+    // Ensuite : la ligne est faite, avec le montant saisi ; l'écart de 1,93 € n'est jamais reproposé.
+    const m2 = buildClosingSheet(data(after), 2026, JAN);
+    expect(m2.interest[0]).toMatchObject({ done: true, recorded: credited });
+    expect(m2.closing.steps.find(x => x.id === 'interest')!.done).toBe(true);
+    expect(m2.balances[0].atYearEnd).toBeCloseTo(3000 + credited, 2);
+    const again = closingSheetInput(m2, after, EMPTY, '2027-01-10');
+    expect(again).toEqual({ input: { updates: [], rates: [], date: '2027-01-10' } });
+    // Même en recochant « Inchangé » : aucun intérêt n'est ajouté.
+    const confirmOnly = closingSheetInput(m2, after, { ...EMPTY, unchanged: ['ldds'] }, '2027-01-10');
+    expect('input' in confirmOnly && confirmOnly.input.updates.every(u => !u.interest)).toBe(true);
+  });
+
+  it("compteur de la feuille : une étape est complète à l'écran dès que chaque ligne est faite ou saisie", () => {
+    const accounts = [ldds()];
+    const m = buildClosingSheet(data(accounts), 2026, JAN);
+    expect(stepFilledOnScreen(m, 'balances', EMPTY)).toBe(false);
+    expect(stepFilledOnScreen(m, 'balances', { ...EMPTY, unchanged: ['ldds'] })).toBe(true);
+    expect(stepFilledOnScreen(m, 'balances', { ...EMPTY, values: { ldds: '3 010' } })).toBe(true);
+    expect(stepFilledOnScreen(m, 'balances', { ...EMPTY, values: { ldds: 'abc' } })).toBe(false);
+    expect(stepFilledOnScreen(m, 'interest', EMPTY)).toBe(false);
+    expect(stepFilledOnScreen(m, 'interest', { ...EMPTY, credited: { ldds: '41' } })).toBe(true);
+    expect(stepFilledOnScreen(m, 'review', EMPTY)).toBe(false);
   });
 });
 

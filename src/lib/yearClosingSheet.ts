@@ -6,12 +6,14 @@
 //    du fonds euros ;
 //  - soldes au 31 décembre des autres comptes ;
 //  - restitution : le capital des parents compte par compte et les intérêts qui vous restent ;
-//  - objectif de l'année qui commence, prérempli avec ce qui a été mis de côté (« Votre année »).
+//  - objectif de l'année qui commence, prérempli avec le rythme prévu par le plan de l'app (même
+//    source que « Cap sur » de « Votre année »), sinon avec ce qui a été mis de côté.
 // Tout part en une seule commande (commands/yearClosing : updateBalances, applyRateChange,
 // « Taux inchangé ») : un seul « Annuler ». Fonctions pures, testées ; chargé avec la feuille.
 import { AccountType, type GlobalAppData, type SavingsAccount } from '../types';
 import { buildYearClosing, closingInterestRows, closingScope, parentalAt, parentalInterestOffered, type YearClosing } from './yearClosing';
 import { computeYearReview } from './agenda';
+import { plannedMonthlySaving } from './yearGoal';
 import { isSavingsFlow, ownedAmountAt, tracksDeposits } from './finance';
 import { formatEUR } from './format';
 import { parseFrenchNumber } from './numbers';
@@ -40,6 +42,8 @@ export interface ClosingInterestLine {
   computed: number;
   /** Déjà enregistrés : plus de champ. */
   done: boolean;
+  /** Intérêts enregistrés (le montant saisi, quel qu'il soit) quand `done`, sinon 0. */
+  recorded: number;
 }
 
 export interface ClosingValueLine {
@@ -70,8 +74,12 @@ export interface ClosingSheetModel {
   statements: ClosingValueLine[];
   /** Restitution encore à faire (même condition que l'étape) ; `null` sinon. */
   restitution: ClosingRestitutionSummary | null;
-  /** Objectif de l'année qui commence : enregistré, sinon le mis de côté de l'année clôturée. */
-  goal: { year: number; current?: number; suggested: number };
+  /**
+   * Objectif de l'année qui commence : enregistré (`current`), sinon proposé (`suggested`) : le
+   * rythme prévu par le plan × 12 quand il existe (`monthly`), sinon le mis de côté de l'année
+   * clôturée. `saved` : ce qui a été mis de côté l'année clôturée, en repère sous le champ.
+   */
+  goal: { year: number; current?: number; suggested: number; saved: number; monthly?: number };
 }
 
 const totalAtYearEnd = (a: SavingsAccount, yearEnd: string) => round2(ownedAmountAt(a, yearEnd) + Math.max(0, parentalAt(a, yearEnd)));
@@ -88,8 +96,8 @@ export const buildClosingSheet = (data: GlobalAppData, year: number, now: Date =
     closing.steps.find(s => s.id === stepId)?.items.find(i => i.key === key)?.done ?? false;
   const { balanceAccounts, placements } = closingScope(data, year);
 
-  const interest = closingInterestRows(data, year, now).map(({ account, expected, pending }) => ({
-    accountId: account.id, name: account.name, computed: round2(pending ? pending.amount : expected), done: !pending,
+  const interest = closingInterestRows(data, year, now).map(({ account, expected, pending, recorded }) => ({
+    accountId: account.id, name: account.name, computed: round2(pending ? pending.amount : expected), done: !pending, recorded,
   }));
   const balances = balanceAccounts.map(a => ({ accountId: a.id, name: a.name, atYearEnd: totalAtYearEnd(a, yearEnd), done: itemDone('balances', a.id) }));
   const statements = placements.map(a => ({
@@ -106,11 +114,15 @@ export const buildClosingSheet = (data: GlobalAppData, year: number, now: Date =
     parentalInterest: parentalInterestOffered(data, year),
   } : null;
 
-  const saved = computeYearReview(data, year, now).saved;
+  const saved = Math.max(0, Math.round(computeYearReview(data, year, now).saved));
   const current = data.config?.yearGoals?.[String(year + 1)];
+  const monthly = plannedMonthlySaving(data);
   return {
     year, closing, interest, balances, statements, restitution,
-    goal: { year: year + 1, ...(current !== undefined ? { current } : {}), suggested: Math.max(0, Math.round(saved)) },
+    goal: {
+      year: year + 1, ...(current !== undefined ? { current } : {}),
+      suggested: monthly > 0 ? Math.round(monthly * 12) : saved, saved, ...(monthly > 0 ? { monthly } : {}),
+    },
   };
 };
 
@@ -191,4 +203,20 @@ export const readGoal = (text: string): number | null | undefined => {
   if (v === undefined) return null;
   if (v === null) return undefined;
   return v >= 1 ? Math.round(v) : null;
+};
+
+/**
+ * Étape saisie dans la feuille et complète à l'écran, avant même « Enregistrer » : chaque ligne
+ * est déjà faite (enregistrée) ou a reçu une saisie lisible (un montant tapé, « Inchangé », le
+ * montant des intérêts crédités, le taux servi). Sert au compteur d'étapes de la feuille ;
+ * l'étape n'est « faite » pour de bon (repliée, dans la liste de l'Accueil) qu'une fois enregistrée.
+ */
+export const stepFilledOnScreen = (model: ClosingSheetModel, stepId: string, drafts: ClosingDrafts): boolean => {
+  const valueOk = (l: ClosingValueLine) => l.done || drafts.unchanged.includes(l.accountId) || typeof read(drafts.values[l.accountId]) === 'number';
+  switch (stepId) {
+    case 'balances': return model.balances.every(valueOk);
+    case 'interest': return model.interest.every(l => l.done || typeof read(drafts.credited[l.accountId]) === 'number');
+    case 'statements': return model.statements.every(l => valueOk(l) && (!l.rate || l.rate.done || typeof read(drafts.rates[l.accountId]) === 'number'));
+    default: return false;
+  }
 };

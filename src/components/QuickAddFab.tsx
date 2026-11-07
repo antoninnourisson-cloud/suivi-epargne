@@ -23,20 +23,28 @@ const LABEL = 'Ajouter un mouvement';
 
 export const QuickAddFab: React.FC<{ scrollRef: React.RefObject<HTMLElement | null>; resetKey: string; onClick: () => void }> = ({ scrollRef, resetKey, onClick }) => {
   const [hidden, setHidden] = useState(false);
+  // Page défilée : le bouton se réduit à son icône (56 px au lieu d'environ 150), pour ne plus
+  // recouvrir les boutons des cartes quand le défilement s'arrête.
+  const [compact, setCompact] = useState(false);
   const last = useRef(0);
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
+    // Sur téléphone, c'est la page (document) qui défile ; sur ordinateur, <main>. On suit les deux.
+    const read = () => Math.max(el.scrollTop, document.scrollingElement?.scrollTop ?? 0);
     setHidden(false);
-    last.current = el.scrollTop;
+    setCompact(read() > 80);
+    last.current = read();
     const onScroll = () => {
-      const y = el.scrollTop;
+      const y = read();
       const delta = y - last.current;
+      setCompact(y > 80);
       if (Math.abs(delta) > 8) setHidden(delta > 0 && y > 80);
       last.current = y;
     };
     el.addEventListener('scroll', onScroll, { passive: true });
-    return () => el.removeEventListener('scroll', onScroll);
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => { el.removeEventListener('scroll', onScroll); window.removeEventListener('scroll', onScroll); };
   }, [scrollRef, resetKey]);
   return (
     <button
@@ -48,9 +56,9 @@ export const QuickAddFab: React.FC<{ scrollRef: React.RefObject<HTMLElement | nu
       tabIndex={hidden ? -1 : undefined}
       // Nom accessible complet ; le libellé visible « Mouvement » en fait partie (WCAG 2.5.3).
       aria-label={LABEL}
-      className={`md:hidden fixed bottom-[calc(6rem+env(safe-area-inset-bottom))] right-4 z-40 h-14 pl-4 pr-5 rounded-2xl bg-primary-container text-on-primary-container shadow-lg hover:shadow-xl flex items-center gap-3 font-medium transition-all duration-300 ${hidden ? 'translate-y-28 opacity-0 pointer-events-none' : ''}`}
+      className={`md:hidden fixed bottom-[calc(6rem+env(safe-area-inset-bottom))] right-4 z-40 h-14 ${compact ? 'w-14 justify-center' : 'pl-4 pr-5'} rounded-2xl bg-primary-container text-on-primary-container shadow-lg hover:shadow-xl flex items-center gap-3 font-medium transition-all duration-300 ${hidden ? 'translate-y-28 opacity-0 pointer-events-none' : ''}`}
     >
-      <Plus className="w-6 h-6" aria-hidden="true" /> <span className="text-sm">Mouvement</span>
+      <Plus className="w-6 h-6" aria-hidden="true" /> <span className={compact ? 'sr-only' : 'text-sm'}>Mouvement</span>
     </button>
   );
 };

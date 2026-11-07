@@ -14,7 +14,8 @@
 import type { GlobalAppData } from '../types';
 import { computeYearReview, type YearReview } from './agenda';
 import { computeGoodMonths, computeMilestones, motivationSettings, type GoodMonthsSummary, type MonthResult } from './motivation';
-import { computeAccountBalanceAtDate, computeMonthlySavingsCapacity, isSavingsFlow } from './finance';
+import { computeAccountBalanceAtDate, isSavingsFlow } from './finance';
+import { plannedMonthlySaving } from './yearGoal';
 import { formatEUR, formatSignedEUR } from './format';
 import { formatISODay, parseISODate } from './dates';
 
@@ -241,14 +242,17 @@ export const buildYearInReview = (data: GlobalAppData, year: number, today: Date
 
   // 10. Un mot pour l'année suivante (seulement si elle n'est pas déjà passée).
   if (year + 1 >= today.getFullYear()) {
-    const plan = config.paydayAmount ?? computeMonthlySavingsCapacity(data);
+    const plan = plannedMonthlySaving(data);
     const next = year + 1;
     const planned = data.parentalRestitution?.plannedDate;
     const soloNext = !data.parentalRestitution?.done && planned?.startsWith(`${next}-`);
     if (plan > 0) {
       pages.push({
         id: 'next-year', label: `Cap sur ${next}`, value: `${eur(plan)} par mois`,
-        text: `Au rythme prévu dans votre pilotage, ${next} pourrait ajouter environ ${eur(plan * 12)} à votre épargne.${soloNext ? ` Le ${dayLong(planned as string)}, le capital de vos parents leur revient : vous continuerez en solo.` : ''}`,
+        text: `Au rythme prévu dans votre pilotage, ${next} pourrait ajouter environ ${eur(plan * 12)} à votre épargne.${soloNext ? (planned as string) < formatISODay(today)
+          // Date passée, restitution pas encore enregistrée : au passé, jamais « le 1er janvier » au futur.
+          ? ` Le capital de vos parents devait leur revenir le ${dayLong(planned as string)} : une fois rendu et enregistré, vous continuerez en solo.`
+          : ` Le ${dayLong(planned as string)}, le capital de vos parents leur revient : vous continuerez en solo.` : ''}`,
       });
     }
   }

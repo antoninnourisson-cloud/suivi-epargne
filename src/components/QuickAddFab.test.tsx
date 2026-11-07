@@ -30,4 +30,26 @@ describe('QuickAddFab', () => {
     expect(fab().hasAttribute('inert')).toBe(false);
     expect(fab().getAttribute('aria-hidden')).toBeNull();
   });
+
+  it('sur téléphone, c’est la page qui défile : le bouton se réduit à son icône au-delà de 80 px', () => {
+    const el = document.createElement('div');
+    Object.defineProperty(el, 'scrollTop', { value: 0, writable: true, configurable: true });
+    // jsdom ne fait pas défiler la page : élément de défilement et position simulés.
+    const page = document.createElement('div');
+    Object.defineProperty(page, 'scrollTop', { value: 0, writable: true, configurable: true });
+    Object.defineProperty(document, 'scrollingElement', { value: page, configurable: true });
+    render(<QuickAddFab scrollRef={{ current: el }} resetKey="dashboard" onClick={vi.fn()} />);
+    const label = () => document.querySelector('button.fixed span') as HTMLSpanElement;
+    expect(label().className).not.toContain('sr-only');
+    act(() => {
+      page.scrollTop = 200;
+      window.dispatchEvent(new Event('scroll'));
+    });
+    expect(label().className).toContain('sr-only');
+    act(() => {
+      page.scrollTop = 0;
+      window.dispatchEvent(new Event('scroll'));
+    });
+    expect(label().className).not.toContain('sr-only');
+  });
 });

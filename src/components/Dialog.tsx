@@ -45,7 +45,7 @@ export const Dialog: React.FC<{ state: DialogState; onClose: () => void }> = ({ 
     <Modal open={state.open} onClose={onClose} label={state.title} className="max-w-sm sm:max-w-md p-6" initialFocusRef={state.danger && state.kind === 'confirm' ? cancelRef : undefined}>
       {state.danger && <AlertTriangle className="w-6 h-6 mx-auto mb-4 text-error" aria-hidden="true" />}
       <h2 className={`text-2xl leading-8 font-normal text-on-surface mb-4 ${state.danger ? 'text-center' : ''}`}>{state.title}</h2>
-      {state.message && <p className="text-sm text-on-surface-variant mb-6">{state.message}</p>}
+      {state.message && <p className="text-sm text-on-surface-variant mb-6 whitespace-pre-line">{state.message}</p>}
       {state.kind === 'prompt' && (
         <TextField
           className="mb-6"

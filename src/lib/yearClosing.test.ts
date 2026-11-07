@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { AccountType, type GlobalAppData, type SavingsAccount } from '../types';
 import {
   addClosingChecks, buildYearClosing, closingApplies, closingYearOf, isClosingSeason, isYearClosed, remainingSteps, setClosingCheck,
-  setYearClosed, yearArchiveCsv, yearClosingStatus, CLOSING_CHECKS, type YearClosing,
+  setYearClosed, yearArchiveCsv, yearClosingStatus, closingInterestRows, closingProgress, CLOSING_CHECKS, type YearClosing,
 } from './yearClosing';
 import { hasParentalCapital, hasParentalHistory } from './parentalMode';
 import { migrate } from './schema';
@@ -88,6 +88,24 @@ describe('buildYearClosing', () => {
     expect(done.done).toBe(2);
   });
 
+  it('intérêts : un montant différent du calcul, une fois enregistré, éteint la ligne (jamais d\'écart reproposé)', () => {
+    // 300 € calculés, 297,70 € crédités par la banque et saisis : la ligne est faite, avec le montant saisi.
+    const recorded = livret({
+      totalAmount: 10297.7, ownedAmount: 10297.7, balanceCheckedAt: '2026-12-31',
+      movements: [...livret().movements!, { id: 'int', date: '2026-12-31', amount: 297.7, label: 'Intérêts 2026', type: 'IN', kind: 'adjustment' }],
+    });
+    const rows = closingInterestRows(data({ accounts: [recorded] }), 2026, JAN);
+    expect(rows).toEqual([expect.objectContaining({ pending: null, recorded: 297.7 })]);
+    expect(rows[0].expected).toBeCloseTo(300, 2);
+    const s = step(buildYearClosing(data({ accounts: [recorded] }), 2026, JAN), 'interest')!;
+    expect(s.done).toBe(true);
+    expect(s.items[0]).toMatchObject({ done: true, detail: expect.stringMatching(/^297,70\s€ : enregistrés$/) });
+    // Même chose plus tard dans la saison de clôture.
+    expect(closingInterestRows(data({ accounts: [recorded] }), 2026, new Date(2027, 1, 20, 12))[0]).toMatchObject({ pending: null, recorded: 297.7 });
+    // Rien d'enregistré : la proposition reste entière.
+    expect(closingInterestRows(data(), 2026, JAN)[0]).toMatchObject({ recorded: 0, pending: { year: 2026, amount: 300 } });
+  });
+
   it('intérêts : « Déjà enregistrés » à la main quand l\'app ne peut pas le voir', () => {
     const c = buildYearClosing(data({}, { yearClosings: { 2026: { checked: [CLOSING_CHECKS.interest] } } }), 2026, JAN);
     expect(step(c, 'interest')).toMatchObject({ done: true, check: { checked: true } });
@@ -126,6 +144,9 @@ describe('buildYearClosing', () => {
     expect(todo.items.map(i => i.key)).toEqual(['fiscal-params']);
     expect(todo.items[0].button).toEqual({ label: 'C\'est à jour', action: { type: 'confirm-fiscal-params', year: 2027 } });
     expect(todo.buttons[0].action).toEqual({ type: 'navigate', view: 'settings' });
+    // Dit ce qui est vérifié et où : barème appliqué aux revenus de l'année, brochure de l'impôt.
+    expect(todo.detail).toMatch(/barème appliqué aux revenus 2026/);
+    expect(todo.detail).toMatch(/brochure pratique de l'impôt sur le revenu/);
     const reviewed = step(buildYearClosing(data({ fiscalConfig: { ...DEFAULT_FISCAL_CONFIG, paramsReviewedYear: 2027 } }), 2026, JAN), 'fiscal-params')!;
     expect(reviewed).toMatchObject({ done: true });
     expect(reviewed.items[0]).toMatchObject({ done: true, detail: 'vérifiés pour 2027', button: undefined });
@@ -166,8 +187,14 @@ describe('buildYearClosing', () => {
     const shared = livret({ totalAmount: 15000, ownedAmount: 10000, parentalCapital: 5000 });
     const planned = step(buildYearClosing(data({ accounts: [shared], parentalRestitution: { plannedDate: '2027-01-01' } }), 2026, JAN), 'restitution')!;
     expect(planned).toMatchObject({ done: false });
-    expect(planned.detail).toMatch(/^Prévue le 1er janvier : 5\s000\s€ à rendre/);
+    // Date passée et restitution pas enregistrée : on parle au passé.
+    expect(planned.detail).toMatch(/^Elle était prévue le 1er janvier : rendez l'argent \(5\s000\s€\), puis enregistrez-la dans Part parentale\./);
     expect(planned.buttons[0].action).toEqual({ type: 'navigate', view: 'parental' });
+    // Date à venir : au futur ; le jour même, elle n'est pas encore passée.
+    const future = step(buildYearClosing(data({ accounts: [shared], parentalRestitution: { plannedDate: '2027-02-01' } }), 2026, JAN), 'restitution')!;
+    expect(future.detail).toMatch(/^Prévue le 1er février : 5\s000\s€ à rendre/);
+    const sameDay = step(buildYearClosing(data({ accounts: [shared], parentalRestitution: { plannedDate: '2027-01-10' } }), 2026, JAN), 'restitution')!;
+    expect(sameDay.detail).toMatch(/^Prévue le 10 janvier/);
     const unplanned = step(buildYearClosing(data({ accounts: [shared] }), 2026, JAN), 'restitution')!;
     expect(unplanned.detail).toMatch(/de capital de vos parents sur vos comptes/);
     const restitution = { plannedDate: '2027-01-01', done: { date: '2027-01-01', accounts: [{ accountId: 'la', name: 'Livret A', amount: 5000 }], interestsOffered: [{ year: 2026, amount: 150 }] } };
@@ -261,6 +288,17 @@ describe('closingApplies', () => {
     expect(closingApplies(data({ accounts: [livret({ movements: [] })] }), 2026)).toBe(true);
     // Un relevé mensuel de l'année suffit.
     expect(closingApplies({ accounts: [added], history: [{ date: '2026-06-01', totalAmount: 1, ownedAmount: 1 }] }, 2026)).toBe(true);
+  });
+});
+
+describe('closingProgress', () => {
+  it('compte aussi l\'étape « Clôturer » : une fois faite, elle avance le compteur', () => {
+    const open = buildYearClosing(data(), 2026, JAN);
+    expect(closingProgress(open)).toEqual({ done: 0, total: 7 });
+    const closed = buildYearClosing(data({}, { yearClosings: { 2026: { closedOn: '2027-01-12' } } }), 2026, JAN);
+    expect(closingProgress(closed)).toEqual({ done: 1, total: 7 });
+    // Les notifications et l'Accueil gardent le compte hors clôture.
+    expect(open).toMatchObject({ done: 0, total: 6 });
   });
 });
 

@@ -15,6 +15,17 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '2026.11.07-2',
+    date: '2026-11-07',
+    title: 'Fin d’année répétée et corrigée',
+    items: [
+      "Clôture de l'année : des intérêts crédités différents du calcul sont enregistrés tels quels, sans écart reproposé ; le solde de l'étape 1 suit la correction. L'objectif de l'année suivante est prérempli d'après votre plan, avec ce que vous avez mis de côté en repère.",
+      "La feuille de clôture replie les étapes faites, reste ouverte après « Enregistrer mes saisies », compte ses 9 étapes en direct et n'ouvre plus le clavier d'office ; « Clôturer » est le seul bouton plein.",
+      "Décembre : « Préparer la restitution du 1er janvier » et les intérêts de vos parents (à ce jour et au 31 décembre) passent en tête de l'À faire ; une restitution prévue et pas encore enregistrée est rappelée au passé.",
+      "Tâches de l'Accueil : l'action principale est un bouton plein, « Plus tard » est plus discret ; le bouton « Mouvement » se réduit à son icône quand on fait défiler.",
+    ],
+  },
+  {
     version: '2026.11.07',
     date: '2026-11-07',
     title: 'Avant le 31 décembre',

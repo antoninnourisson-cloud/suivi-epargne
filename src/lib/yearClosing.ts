@@ -21,6 +21,7 @@ import {
   computeAccruedInterest, computeAccruedParentalInterest, computeDonationSummary, findFiscalReview, isInitialBalance, isRateReviewedSince,
   ownedAmountAt, suggestCreditedInterest, INTEREST_CREDITED_DEC31_TYPES,
 } from './finance';
+import { isInterestLabel } from './finance/interest';
 import { DEFAULT_FISCAL_CONFIG } from '../constants';
 import { freshnessLimitDays, lastBalanceCheck } from './freshness';
 import { buildTaxReturnChecklist, listFr, taxReturnTopics } from './taxReturn';
@@ -78,7 +79,7 @@ export interface YearClosingStep {
   detail: string;
   done: boolean;
   /** Coche à la main proposée (étape que l'app ne peut pas, ou pas toujours, constater). */
-  check?: { key: string; label: string; checked: boolean };
+  check?: { key: string; label: string; checked: boolean; /** Une phrase qui explique la case. */ hint?: string };
   items: YearClosingItem[];
   buttons: YearClosingButton[];
 }
@@ -186,24 +187,44 @@ export const closingScope = (data: Pick<GlobalAppData, 'accounts'>, year: number
 };
 
 /**
+ * Intérêts déjà enregistrés pour l'année : les mouvements hors épargne (correction, variation
+ * de valeur) ou au libellé d'intérêts, du 31 décembre à `refISO` (même lecture que
+ * suggestCreditedInterest). Seuls les montants positifs comptent ; 0 si rien.
+ */
+const recordedInterest = (a: SavingsAccount, year: number, refISO: string): number => {
+  const sum = a.movements
+    .filter(m => m.kind !== 'parental' && m.date >= `${year}-12-31` && m.date <= refISO)
+    .filter(m => m.kind === 'adjustment' || m.kind === 'valuation' || isInterestLabel(m.label))
+    .reduce((s, m) => s + signedAmount(m), 0);
+  return sum > 0.005 ? round2(sum) : 0;
+};
+
+/**
  * Intérêts crédités au 31 décembre (étape 2) : la proposition d'« Actualiser », arrêtée au
  * 31 mars (après, une hausse d'un livret est un versement). Seulement les comptes crédités ce
  * jour-là (livrets, épargne logement) : un compte à terme paie selon son contrat.
  * `pending` : ce qui reste à enregistrer (`null` : déjà enregistrés).
+ * Dès que des intérêts de l'année sont enregistrés (`recorded`, le montant saisi, quel qu'il
+ * soit), la ligne est faite : l'écart avec le calcul de Pécule n'est jamais reproposé, ce
+ * seraient des intérêts fictifs (la banque a crédité ce qu'elle a crédité).
  */
 export const closingInterestRows = (data: Pick<GlobalAppData, 'accounts'>, year: number, now: Date = new Date()): {
-  account: SavingsAccount; expected: number; pending: { year: number; amount: number } | null;
+  account: SavingsAccount; expected: number; pending: { year: number; amount: number } | null; recorded: number;
 }[] => {
   const todayISO = formatISODay(now);
   const refISO = todayISO < `${year + 1}-03-31` ? todayISO : `${year + 1}-03-31`;
+  const seen = refISO >= `${year + 1}-01-01`;
   return (data.accounts || [])
     .filter(a => existedAtYearEnd(a, `${year}-12-31`) && INTEREST_CREDITED_DEC31_TYPES.includes(a.type))
     .map(a => ({ a, expected: computeAccruedInterest(a, year, new Date(year + 1, 0, 1)) }))
     .filter(r => r.expected > 0.005)
-    .map(({ a, expected }) => ({
-      account: a, expected,
-      pending: refISO >= `${year + 1}-01-01` ? suggestCreditedInterest(a, refISO) : { year, amount: round2(expected) },
-    }));
+    .map(({ a, expected }) => {
+      const recorded = seen ? recordedInterest(a, year, refISO) : 0;
+      return {
+        account: a, expected, recorded,
+        pending: recorded > 0 ? null : seen ? suggestCreditedInterest(a, refISO) : { year, amount: round2(expected) },
+      };
+    });
 };
 
 /**
@@ -250,9 +271,9 @@ export const buildYearClosing = (data: GlobalAppData, year: number, now: Date = 
   // 2. Intérêts crédités au 31 décembre (closingInterestRows : la proposition d'« Actualiser »).
   const interestRows = closingInterestRows(data, year, now);
   if (interestRows.length > 0) {
-    const items = interestRows.map(({ account: a, expected, pending }) => ({
+    const items = interestRows.map(({ account: a, expected, pending, recorded }) => ({
       key: a.id, label: a.name, done: !pending,
-      detail: pending ? `${eur2(pending.amount)} attendus : à enregistrer` : `${eur2(expected)} : enregistrés`,
+      detail: pending ? `${eur2(pending.amount)} attendus : à enregistrer` : `${eur2(recorded || expected)} : enregistrés`,
     }));
     const byHand = checked.has(CLOSING_CHECKS.interest);
     const offered = parentalInterestOffered(data, year);
@@ -262,8 +283,8 @@ export const buildYearClosing = (data: GlobalAppData, year: number, now: Date = 
       id: 'interest', title: `Enregistrer les intérêts ${year}`, done, items,
       detail: (done
         ? 'Intérêts enregistrés, hors épargne.'
-        : 'Ces comptes ont reçu leurs intérêts le 31 décembre. Dans Actualiser, saisissez le solde affiché par la banque : Pécule propose ces intérêts et les compte hors épargne.') + parents,
-      check: { key: CLOSING_CHECKS.interest, label: 'Déjà enregistrés', checked: byHand },
+        : 'Ces comptes ont reçu leurs intérêts le 31 décembre. Saisissez ce que la banque a crédité : Pécule ne les compte pas comme de l\'argent mis de côté.') + parents,
+      check: { key: CLOSING_CHECKS.interest, label: 'Déjà enregistrés', hint: 'Cochez si vous avez déjà saisi ces intérêts dans un mouvement', checked: byHand },
       buttons: [{ label: 'Actualiser', action: { type: 'navigate', view: 'update' } }],
     });
   }
@@ -316,7 +337,10 @@ export const buildYearClosing = (data: GlobalAppData, year: number, now: Date = 
     const planned = restitution?.plannedDate;
     steps.push({
       id: 'restitution', title: 'Restitution du capital de vos parents', done: false, items: [],
-      detail: planned
+      detail: planned && planned < todayISO
+        // Date passée et restitution pas enregistrée : on en parle au passé.
+        ? `Elle était prévue le ${dayLabel(planned, refYear)} : rendez l'argent (${eur0(total)}), puis enregistrez-la dans Part parentale.`
+        : planned
         ? `Prévue le ${dayLabel(planned, refYear)} : ${eur0(total)} à rendre. Une fois les virements faits, enregistrez-la dans Part parentale.`
         : `${eur0(total)} de capital de vos parents sur vos comptes : préparez la restitution dans Part parentale.`,
       buttons: [{ label: 'Part parentale', action: { type: 'navigate', view: 'parental' } }],
@@ -367,7 +391,7 @@ export const buildYearClosing = (data: GlobalAppData, year: number, now: Date = 
   });
   steps.push({
     id: 'fiscal-params', title: `Paramètres fiscaux ${year + 1}`, done: paramsReviewed && !newScale, items: fiscalItems,
-    detail: 'Ils changent chaque année et servent au calcul de votre impôt et de vos droits au LEP : comparez-les avec les chiffres officiels.',
+    detail: `Pécule calcule votre impôt et vos droits au LEP avec le plafond de revenus du LEP, l'abattement plafonné et le barème appliqué aux revenus ${year}. Comparez-les avec la brochure pratique de l'impôt sur le revenu de l'année (impots.gouv.fr), puis touchez « C'est à jour ».`,
     buttons: [{ label: 'Ouvrir les paramètres', action: { type: 'navigate', view: 'settings' } }],
   });
 
@@ -471,3 +495,10 @@ export const yearArchiveCsv = (data: Pick<GlobalAppData, 'accounts'>, year: numb
     ],
   };
 };
+
+/**
+ * Avancement avec l'étape « Clôturer » : « 3 étapes sur 9 » (la clôture compte, une fois faite).
+ * `YearClosing.done` et `total` restent hors la clôture (notifications, Accueil).
+ */
+export const closingProgress = (closing: Pick<YearClosing, 'done' | 'total' | 'closedOn'>): { done: number; total: number } =>
+  ({ done: closing.done + (closing.closedOn ? 1 : 0), total: closing.total + 1 });

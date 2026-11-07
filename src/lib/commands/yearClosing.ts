@@ -17,6 +17,27 @@ export interface YearClosingInput {
 
 const sameRate = (a: number, b: number) => Math.abs(a - b) < 1e-9;
 
+const comptes = (n: number) => `${n} compte${n > 1 ? 's' : ''}`;
+
+/**
+ * Ce qui part à l'enregistrement, en une phrase : « Soldes de 3 comptes et intérêts de 2 comptes
+ * enregistrés ». Les intérêts sont ceux saisis (au moins 1 centime) ; `null` si rien à dire.
+ * Partagé par le message de la commande et la feuille de clôture.
+ */
+export const yearClosingSummary = (input: Pick<YearClosingInput, 'updates' | 'rates'>): string | null => {
+  const interests = input.updates.filter(u => (u.interest ?? 0) >= 0.005).length;
+  const parts: { n: number; one: string; many: string }[] = [
+    { n: input.updates.length, one: 'solde', many: 'soldes' },
+    { n: interests, one: 'intérêt', many: 'intérêts' },
+    { n: input.rates.length, one: 'taux servi', many: 'taux servis' },
+  ].filter(p => p.n > 0);
+  if (parts.length === 0) return null;
+  const texts = parts.map(p => `${p.n > 1 ? p.many : p.one} de ${comptes(p.n)}`);
+  const sentence = texts.length > 1 ? `${texts.slice(0, -1).join(', ')} et ${texts[texts.length - 1]}` : texts[0];
+  const plural = parts.length > 1 || parts[0].n > 1;
+  return `${sentence.charAt(0).toUpperCase()}${sentence.slice(1)} enregistré${plural ? 's' : ''}`;
+};
+
 export const recordYearClosing = (state: CommandState, input: YearClosingInput): CommandResult<{ accountIds: string[] }> => {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date)) return fail('invalid', 'Date illisible.');
   if (input.rates.some(r => !(Number.isFinite(r.rate) && r.rate >= 0 && r.rate <= 20))) return fail('invalid', 'Un taux doit être compris entre 0 et 20 %.');
@@ -44,7 +65,10 @@ export const recordYearClosing = (state: CommandState, input: YearClosingInput):
     ok: true,
     next: { accounts },
     accountIds: ids,
-    message: ids.length > 1 ? `Clôture : ${ids.length} comptes enregistrés` : 'Clôture : 1 compte enregistré',
+    message: yearClosingSummary({
+      updates: input.updates.filter(u => (balances?.ok ? balances.changedIds : []).includes(u.accountId)),
+      rates: input.rates.filter(r => accounts.some(a => a.id === r.accountId)),
+    }) ?? (ids.length > 1 ? `${ids.length} comptes enregistrés` : '1 compte enregistré'),
     undo: current => {
       // Taux d'abord (champs du compte), puis soldes et mouvements (annulation d'« Actualiser »).
       const restored = current.accounts.map(a => {
