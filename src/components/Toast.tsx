@@ -14,6 +14,18 @@ export interface ToastItem {
   durationMs?: number;
 }
 
+/** Confirmation « simple » : ni erreur, ni bouton (« Annuler »). Celle-là peut être remplacée. */
+const isPlainConfirmation = (t: Pick<ToastItem, 'kind' | 'action'>) => t.kind !== 'error' && !t.action;
+
+/**
+ * Pile des toasts après l'ajout de `next` : un nouveau message de confirmation (pas une erreur)
+ * remplace les confirmations simples encore affichées, au lieu de s'empiler dessus. Une erreur
+ * ou un message avec action (« Annuler ») n'est jamais retiré par un autre : il part à la fin
+ * de sa durée, pour ne pas faire perdre une annulation.
+ */
+export const pushToast = (prev: ToastItem[], next: ToastItem): ToastItem[] =>
+  [...(next.kind === 'error' ? prev : prev.filter(t => !isPlainConfirmation(t))), next];
+
 export const useToasts = () => {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
 
@@ -24,7 +36,7 @@ export const useToasts = () => {
   const addToast = useCallback((toast: Omit<ToastItem, 'id'>) => {
     const id = crypto.randomUUID();
     // Le minuteur vit dans ToastView : il se met en pause au survol et au focus (WCAG 2.2.1).
-    setToasts(prev => [...prev, { ...toast, id }]);
+    setToasts(prev => pushToast(prev, { ...toast, id }));
     return id;
   }, []);
 

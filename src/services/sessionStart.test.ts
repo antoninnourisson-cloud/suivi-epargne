@@ -23,6 +23,8 @@ vi.mock('./backendService', () => ({
 
 type Service = typeof import('./googleDriveService');
 // État du module (scripts chargés, client de jeton) remis à zéro pour chaque test.
+// Après vi.resetModules, la classe vue par le service n'est plus celle importée ici : on la relit.
+const networkError = async () => new (await import('../lib/networkError')).NetworkError('Failed to fetch');
 const freshService = async (): Promise<Service> => { vi.resetModules(); return import('./googleDriveService'); };
 const googleScripts = () => [...document.querySelectorAll<HTMLScriptElement>('script')].map(s => s.src).filter(src => /google\.com/.test(src));
 const setOnline = (online: boolean) => Object.defineProperty(navigator, 'onLine', { configurable: true, get: () => online });
@@ -79,7 +81,7 @@ describe('mode serveur : aucun SDK Google au démarrage', () => {
 
   it('Worker injoignable : session gardée (hors ligne), pas de déconnexion', async () => {
     storeToken(-1);
-    backend.fetchAccessToken = async () => { throw new TypeError('Failed to fetch'); };
+    backend.fetchAccessToken = async () => { throw await networkError(); };
     const svc = await freshService();
     expect(await svc.resumeSession()).toBe('offline');
   });
@@ -106,7 +108,7 @@ describe('mode serveur : aucun SDK Google au démarrage', () => {
     await svc.resumeSession({ onNewLogin: notNew });
     expect(notNew).not.toHaveBeenCalled();
     backend.session = false;
-    backend.loginCode = async () => { throw new TypeError('Failed to fetch'); };
+    backend.loginCode = async () => { throw await networkError(); };
     svc = await freshService();
     await expect(svc.resumeSession()).rejects.toBeInstanceOf(TypeError);
   });

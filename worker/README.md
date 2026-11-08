@@ -265,6 +265,9 @@ efface un marqueur par rappel envoyé (quelques centaines au plus), ce qui reste
   officiel de la RFC 8291 ; sessions, state OAuth, abonnements et mode discret ont leurs tests)
 - `npm run setup-secrets -- --force` régénère la clé de chiffrement ET les clés des notifications. À
   éviter : ça déconnecte tous les appareils et oblige à réactiver les notifications partout.
+- Pour ne changer QUE les clés des notifications (sans toucher aux autres secrets) :
+  `npm run setup-secrets -- --only=vapid`, puis sur chaque appareil Paramètres → Notifications →
+  Désactiver, puis Activer. Rien ne s'affiche. `--help` liste les options sans rien poser.
 - Changer un secret sans casser les connexions (clé de chiffrement avec `ENCRYPTION_KEY_PREVIOUS`,
   clés des notifications, code secret Google, adresses autorisées, jeton de déploiement) : voir
   [MAINTENANCE.md](../MAINTENANCE.md), section *Changer un secret du serveur*, qui dit aussi ce qui

@@ -71,7 +71,7 @@ describe('plafond du foyer', () => {
 
 describe('estimation du revenu de l\'année en cours', () => {
   it('compte l\'autre salaire du Pilotage, comme le revenu fiscal de référence', () => {
-    const asOf = new Date(2026, 5, 15);
+    const asOf = new Date(2026, 9, 15);
     const lep = { id: 'l', name: 'LEP', type: AccountType.LEP, totalAmount: 100, ownedAmount: 100, parentalCapital: 0 };
     const doc = migrate({ accounts: [lep], config: { grossAnnual: 24_000, extraMonthlyIncome: 0 } });
     const second = { ...doc, config: { ...doc.config, extraMonthlyIncome: 600 } };
@@ -82,5 +82,37 @@ describe('estimation du revenu de l\'année en cours', () => {
     expect(alone?.source).toBe('estimation');
     expect(both?.rfr).toBe(Math.round(expected));
     expect(both!.rfr).toBeGreaterThan(alone!.rfr + 600 * 12 * 0.9);
+  });
+});
+
+describe('année estimée autour du 1er janvier', () => {
+  const lepAccount = { id: 'l', name: 'LEP', type: AccountType.LEP, totalAmount: 100, ownedAmount: 100, parentalCapital: 0 };
+  // Salaire seul, sans fiche ni avis : l'estimation est la seule donnée, au-dessus du plafond.
+  const doc = migrate({ accounts: [lepAccount], config: { grossAnnual: 60_000, extraMonthlyIncome: 0 } });
+  const at = (iso: string, d = doc) => lepTimelineFromData(d, new Date(iso));
+  const overYear = (iso: string, d = doc) => { const t = at(iso, d); return { year: t?.overYear, years: t?.years.map(y => y.year), status: t?.status }; };
+
+  it("le 31 décembre 2026 et le 2 janvier 2027 : toujours les revenus 2026, pas l'année qui commence", () => {
+    expect(overYear('2026-12-31T12:00:00')).toEqual({ year: 2026, years: [2026], status: 'one-over' });
+    expect(overYear('2027-01-02T12:00:00')).toEqual({ year: 2026, years: [2026], status: 'one-over' });
+    const t = at('2027-01-02T12:00:00')!;
+    expect(describeLepTimeline(t)?.title).toBe('LEP : revenus 2026 au-dessus du plafond');
+    expect(describeLepTimeline(t)?.detail).toContain('Si vos revenus 2027 dépassent aussi');
+    expect(t.closeBy).toBe('2029-04-30');
+  });
+  it("jusqu'à fin juillet l'estimation reste sur l'année écoulée ; dès août (avis publiés), sur l'année en cours", () => {
+    expect(overYear('2027-07-31T12:00:00').years).toEqual([2026]);
+    expect(overYear('2027-08-01T12:00:00').years).toEqual([2027]);
+  });
+  it('une seule année estimée : jamais deux années consécutives tirées de la même estimation', () => {
+    for (const iso of ['2027-01-02T12:00:00', '2027-05-10T12:00:00', '2027-09-01T12:00:00']) {
+      expect(at(iso)?.years.filter(y => y.source === 'estimation')).toHaveLength(1);
+      expect(at(iso)?.status).not.toBe('closing');
+    }
+  });
+  it("avis de l'année écoulée saisi : il fait foi, et l'estimation passe à l'année en cours", () => {
+    const withAvis = { ...doc, config: { ...doc.config, rfrByYear: { 2026: 15_000 } } };
+    expect(overYear('2027-01-02T12:00:00', withAvis).years).toEqual([2026, 2027]);
+    expect(at('2027-01-02T12:00:00', withAvis)?.years.map(y => y.source)).toEqual(['avis', 'estimation']);
   });
 });

@@ -7,6 +7,7 @@ import { ChevronDown, ListTodo } from 'lucide-react';
 import { Button, Card } from './ui';
 import { formatEUR } from '../lib/format';
 import { sortAlerts, type AlertGain } from '../lib/alerts';
+import { snoozeEndMs } from '../lib/homeTodos';
 import { pruneSnoozed, storageKey } from '../lib/storageKeys';
 
 export interface TodoSpec {
@@ -20,8 +21,10 @@ export interface TodoSpec {
   secondary?: { label: string; onClick: () => void };
   /** Contenu déplié sous l'alerte (ex. éditeur de taux). */
   extra?: React.ReactNode;
-  /** Masque l'alerte 7 jours. Absent = pas de « Plus tard » (l'alerte a sa propre sortie). */
+  /** Masque l'alerte 7 jours (ou jusqu'à sa date de retour, `snoozeUntil`). Absent = pas de « Plus tard » (l'alerte a sa propre sortie). */
   snoozable?: boolean;
+  /** « Plus tard » jusqu'à ce jour (AAAA-MM-JJ) au lieu de 7 jours ; passé ou absent : 7 jours. */
+  snoozeUntil?: string;
   /** Ce que l'alerte vaut en euros : puce « +39 €/an », et rang dans la liste. */
   gain?: AlertGain;
   /** En tête de la liste quel que soit son montant (clôture de l'année en janvier-février). */
@@ -62,9 +65,9 @@ export const TodoList: React.FC<{ items: TodoSpec[] }> = ({ items }) => {
   const sorted = sortAlerts(visible);
   const shown = showAll ? sorted : sorted.slice(0, SHOWN_BY_DEFAULT);
 
-  const snooze = (key: string) => {
+  const snooze = (item: TodoSpec) => {
     // Les reports finis sont retirés au passage : la liste ne grossit plus sans fin.
-    const next = { ...pruneSnoozed(snoozed, now), [key]: now + 7 * 86_400_000 };
+    const next = { ...pruneSnoozed(snoozed, now), [item.key]: snoozeEndMs(item.snoozeUntil, now) };
     setSnoozed(next);
     lsSetJSON(SNOOZE_KEY, next);
   };
@@ -107,7 +110,7 @@ export const TodoList: React.FC<{ items: TodoSpec[] }> = ({ items }) => {
                     <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1">
                       {item.primary && <Button size="sm" variant="filled" className="px-5!" onClick={item.primary.onClick}>{item.primary.label}</Button>}
                       {item.secondary && <Button size="sm" variant="text" onClick={item.secondary.onClick}>{item.secondary.label}</Button>}
-                      {item.snoozable && <Button size="sm" variant="text" className="ml-auto text-on-surface-variant!" onClick={() => snooze(item.key)}>Plus tard</Button>}
+                      {item.snoozable && <Button size="sm" variant="text" className="ml-auto text-on-surface-variant!" onClick={() => snooze(item)}>Plus tard</Button>}
                     </div>
                   )}
                   {item.extra && <div className="mt-3">{item.extra}</div>}

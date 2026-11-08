@@ -53,6 +53,8 @@ const removeEndpoint = async (env: Env, sub: string, match: (x: StoredSubscripti
 
 export const handleUnsubscribe = async (req: Request, env: Env): Promise<Response> => {
   const s = await requireSession(req, env);
+  const limited = await accountLimited(req, env, 'unsubscribe', s.session.sub);
+  if (limited) return limited;
   const body = await readJsonBody(req) as { endpoint?: unknown };
   // L'appareil se désabonne lui-même : il ne veut plus rien recevoir, rien n'est gardé.
   const { result } = await removeEndpoint(env, s.session.sub, x => x.endpoint === body.endpoint);

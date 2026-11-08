@@ -49,6 +49,22 @@ describe('ConflictDialog', () => {
     expect(diffs.textContent).toContain('Seulement sur cet appareil : « Épargne du mois »');
   });
 
+  it.each([
+    ['Garder la version de cet appareil', 'Envoi…'],
+    ['Garder la version de Drive', 'Chargement…'],
+  ])('« %s » en attente : le bouton dit « %s »', async (name, waiting) => {
+    let finish: (r: 'done') => void = () => {};
+    const onResolve = vi.fn(() => new Promise<'done'>(r => { finish = r; }));
+    render(<ConflictDialog open conflict={view()} onClose={() => {}} onResolve={onResolve} onRetry={() => {}} onResolved={() => {}} />);
+    fireEvent.click(screen.getByRole('button', { name }));
+    const step = screen.getByRole('generic', { name: 'Confirmer votre choix' });
+    fireEvent.click(within(step).getByRole('button', { name }));
+    await waitFor(() => expect(step.textContent).toContain(waiting));
+    expect(step.textContent).not.toContain('Enregistrement…');
+    finish('done');
+    await waitFor(() => expect(onResolve).toHaveBeenCalled());
+  });
+
   it('rien ne s’applique sans confirmation ; « Retour » annule le choix', async () => {
     const onResolve = vi.fn(async () => 'done' as const);
     const onResolved = vi.fn();

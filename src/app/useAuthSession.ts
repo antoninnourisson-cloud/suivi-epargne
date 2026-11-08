@@ -9,6 +9,7 @@ import { isBackendEnabled } from '../services/backendService';
 import { disablePush } from '../services/pushService';
 import { setGeminiModelOverride } from '../services/geminiModel';
 import { clearTraces, storageKey } from '../lib/storageKeys';
+import { NetworkError } from '../lib/networkError';
 import type { PortfolioData } from '../hooks/usePortfolioData';
 import { preloadStartView } from './screens';
 import type { AddToast, DialogApi } from './UiProviders';
@@ -89,7 +90,7 @@ export const useAuthSession = ({ isAuthenticated, setIsAuthenticated, data, lock
         setIsAuthenticated(true);
       })
       .catch(e => {
-        if (e instanceof TypeError) {
+        if (e instanceof NetworkError) {
           // Serveur injoignable au retour de la connexion : l'utilisateur pourra réessayer.
           addToast({ message: 'Serveur injoignable — vérifiez votre connexion puis rechargez.', kind: 'error' });
         } else {

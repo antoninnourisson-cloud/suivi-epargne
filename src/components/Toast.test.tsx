@@ -4,7 +4,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import React, { useState } from 'react';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { ToastContainer, ToastContext, toastDurationMs, useUndoableRemove, UNDO_TOAST_KEYBOARD_MS, UNDO_TOAST_MS, type ToastItem } from './Toast';
+import { ToastContainer, ToastContext, pushToast, toastDurationMs, useUndoableRemove, UNDO_TOAST_KEYBOARD_MS, UNDO_TOAST_MS, type ToastItem } from './Toast';
 
 afterEach(cleanup);
 
@@ -95,5 +95,24 @@ describe('ToastContainer : durée réelle', () => {
     const onDismiss = mount({ message: 'x'.repeat(120), kind: 'error' });
     act(() => { vi.advanceTimersByTime(10 * 60_000); });
     expect(onDismiss).not.toHaveBeenCalled();
+  });
+});
+
+describe('pile des messages (pushToast)', () => {
+  const t = (id: string, over: Partial<ToastItem> = {}): ToastItem => ({ id, message: id, kind: 'success', ...over });
+  const ids = (list: ToastItem[]) => list.map(x => x.id);
+  it('une nouvelle confirmation remplace la confirmation simple précédente', () => {
+    expect(ids(pushToast([t('a')], t('b')))).toEqual(['b']);
+    expect(ids(pushToast([t('a', { kind: undefined }), t('b', { kind: 'info' })], t('c')))).toEqual(['c']);
+  });
+  it("un message avec « Annuler » n'est jamais retiré par un autre", () => {
+    const undo = t('u', { action: { label: 'Annuler', onClick: () => {} } });
+    expect(ids(pushToast([undo, t('a')], t('b')))).toEqual(['u', 'b']);
+    expect(ids(pushToast([undo], t('b', { action: { label: 'Annuler', onClick: () => {} } })))).toEqual(['u', 'b']);
+  });
+  it("une erreur n'est jamais retirée, et n'en retire aucun autre", () => {
+    const err = t('e', { kind: 'error' });
+    expect(ids(pushToast([err, t('a')], t('b')))).toEqual(['e', 'b']);
+    expect(ids(pushToast([t('a')], t('f', { kind: 'error' })))).toEqual(['a', 'f']);
   });
 });

@@ -121,13 +121,22 @@ describe('session : rafraîchissement et perte', () => {
     expect(localStorage.getItem('auth_persistence')).toBeNull();
   });
 
-  it('serveur injoignable pendant le rafraîchissement : « hors ligne » (TypeError), la session reste', async () => {
-    backend.refresh = async () => { throw new TypeError('Failed to fetch'); };
+  it('serveur injoignable pendant le rafraîchissement : « hors ligne » (NetworkError), la session reste', async () => {
+    backend.refresh = async () => { throw new NetworkError('Failed to fetch'); };
     vi.stubGlobal('fetch', vi.fn(async () => json({}, 401)));
     const err = await readConfigFile('f').catch((e: unknown) => e);
-    expect(err).toBeInstanceOf(TypeError);
+    expect(err).toBeInstanceOf(NetworkError);
     expect(authLost).not.toHaveBeenCalled();
     expect(localStorage.getItem('auth_persistence')).toBe('true');
+  });
+
+  it('TypeError nue au rafraîchissement (bug de code, pas le réseau) : session perdue, pas « hors ligne »', async () => {
+    backend.refresh = async () => { throw new TypeError('valeur indéfinie'); };
+    vi.stubGlobal('fetch', vi.fn(async () => json({}, 401)));
+    const err = await readConfigFile('f').catch((e: unknown) => e);
+    expect(err).not.toBeInstanceOf(NetworkError);
+    expect((err as Error).message).toBe('SESSION_EXPIRED');
+    expect(authLost).toHaveBeenCalled();
   });
 
   it('rafraîchissement refusé par le serveur : SESSION_EXPIRED', async () => {

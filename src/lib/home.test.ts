@@ -6,6 +6,8 @@ import {
   findCeilingAlerts, findInactiveEmptyAccounts, isConstrainedAccount, isDateRange, monthDelta, parentalYearEndInterest, payPeriodSavings, periodCsvExport, savingsGauge,
   savingsOn, savingsProjection, upcomingDebits, homeAgenda, MAX_SERIES_DAYS, type HomeTodoInput,
 } from './home';
+import { snoozeEndMs, SNOOZE_DEFAULT_MS } from './homeTodos';
+import { findFiscalReview } from './finance/fiscalParams';
 import { buildAgenda } from './agenda';
 import type { Alert } from './alerts';
 import { computeRestitutionPlan } from './finance';
@@ -381,6 +383,23 @@ describe('liste « À faire »', () => {
       expect(todo(at(11, 15), figures)?.key).toBe('year-end-tax-2026-last');
     });
 
+    it("« Plus tard » avant le 15 décembre : masquée jusqu'au 15 décembre ; ensuite 7 jours, comme les autres tâches", () => {
+      const early = todo(at(10, 20), figures)!;
+      expect(early.snoozeUntil).toBe('2026-12-15');
+      const novembre = at(10, 20).getTime();
+      // Jusqu'au 15 décembre à minuit : le dernier rappel (autre clé) revient ce jour-là.
+      expect(snoozeEndMs(early.snoozeUntil, novembre)).toBe(new Date(2026, 11, 15).getTime());
+      expect(snoozeEndMs(early.snoozeUntil, at(11, 14).getTime())).toBe(new Date(2026, 11, 15).getTime());
+      expect(todo(at(11, 15), figures)?.snoozeUntil).toBeUndefined();
+      // Les autres tâches gardent 7 jours.
+      const [stale] = buildHomeTodos(base({ daysSinceUpdate: 30 }));
+      expect(stale.snoozeUntil).toBeUndefined();
+      expect(snoozeEndMs(stale.snoozeUntil, novembre)).toBe(novembre + SNOOZE_DEFAULT_MS);
+      // Date déjà passée ou illisible : 7 jours.
+      expect(snoozeEndMs('2026-11-01', novembre)).toBe(novembre + SNOOZE_DEFAULT_MS);
+      expect(snoozeEndMs("n'importe quoi", novembre)).toBe(novembre + SNOOZE_DEFAULT_MS);
+    });
+
     it('sans revenu connu, la tâche reste générale : aucun montant', () => {
       for (const f of [undefined, null, { year: 2026 }]) {
         const t = todo(at(11, 1), f);
@@ -501,6 +520,22 @@ describe('liste « À faire »', () => {
       .toEqual(['av-rate-2027']);
     // Sans navigation, la tâche reste mais sans bouton.
     expect(buildHomeTodos(base({ now: jan, can: { ...can, navigate: false }, yearClosing: { year: 2026, closed: false, inSeason: true, done: 0, total: 7 } }))[0].primary).toBeUndefined();
+  });
+
+  it("paramètres fiscaux : un seul geste pour la clôture (étape 7) et l'Accueil, jamais les deux pendant la clôture", () => {
+    const jan = new Date(2027, 0, 20);
+    const todos = (paramsReviewedYear: number | undefined, yearClosing: HomeTodoInput['yearClosing']) => {
+      const cfg = { ...fiscal, paramsReviewedYear };
+      return buildHomeTodos(base({ now: jan, fiscalConfig: cfg, fiscalReview: findFiscalReview(cfg, jan), yearClosing })).map(t => t.key);
+    };
+    // Clôture en cours : seule la tâche de clôture.
+    expect(todos(undefined, { year: 2026, closed: false, inSeason: true, done: 0, total: 7 })).toEqual(['year-closing-2026']);
+    // Clôturée sans l'étape 7 : le rappel de l'Accueil reste, c'est la même donnée à confirmer.
+    expect(todos(undefined, { year: 2026, closed: true, inSeason: true, done: 0, total: 0 })).toContain('annual-2027');
+    // Étape 7 cochée dans la feuille (« C'est à jour » : année suivante) : plus de rappel à l'Accueil.
+    expect(todos(2027, { year: 2026, closed: true, inSeason: true, done: 0, total: 0 })).not.toContain('annual-2027');
+    // Et l'inverse : « C'est à jour » à l'Accueil (même année) vaut pour l'étape 7 (lib/yearClosing : >= année + 1).
+    expect(findFiscalReview({ ...fiscal, paramsReviewedYear: 2027 }, jan).annualCheckDue).toBe(false);
   });
 
   it('rappel annuel du code de secours : dû, il mène aux Paramètres et se reporte ; sinon rien', () => {

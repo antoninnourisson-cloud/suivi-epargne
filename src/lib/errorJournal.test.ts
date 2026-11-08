@@ -66,7 +66,9 @@ describe('errorJournal', () => {
   it('enregistre, relit et efface sur l\'appareil ; un journal abîmé repart de zéro', () => {
     recordError('affichage', new Error('a'));
     recordError('chargement', new Error('b'));
-    expect(readErrorJournal().map(x => x.message)).toEqual(['Error: b', 'Error: a']);
+    recordError('synchronisation', new Error('c'));
+    expect(readErrorJournal().map(x => x.source)).toEqual(['synchronisation', 'chargement', 'affichage']);
+    expect(readErrorJournal().map(x => x.message)).toEqual(['Error: c', 'Error: b', 'Error: a']);
     clearErrorJournal();
     expect(readErrorJournal()).toEqual([]);
     localStorage.setItem('pecule_error_journal', '[{"oops":1}]');

@@ -107,7 +107,7 @@ export const useDriveSync = (isAuthenticated: boolean, docState: DocumentState) 
   const failSync = (err: unknown): SyncErrorInfo => {
     const info = classifySyncFailure(failureOf(err));
     // Bug de code (et non panne de Drive) : noté dans le journal de l'appareil, comme les autres erreurs.
-    if (info.reason === 'unexpected') recordError('chargement', err);
+    if (info.reason === 'unexpected') recordError('synchronisation', err);
     dispatch({ type: 'error', info });
     if (info.transient) scheduleRetry(); else clearTimeout(retryTimerRef.current);
     return info;

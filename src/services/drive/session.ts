@@ -253,7 +253,7 @@ const refreshTokenSilently = (): Promise<void> => {
  *   dernière copie connue (voir usePortfolioData) et recharge Drive au retour du réseau ;
  * - 'signed-out' : aucune session, ou session refusée : écran de connexion.
  * Aucun SDK Google n'est attendu en mode serveur, et rien n'est tenté hors ligne.
- * Lève une TypeError si le code de retour de connexion n'a pas pu être échangé faute de
+ * Lève une NetworkError si le code de retour de connexion n'a pas pu être échangé faute de
  * réseau alors qu'aucune session n'existait.
  * `onNewLogin` : appelé quand une connexion vient d'aboutir (code de retour du Worker),
  * peut-être avec un autre compte Google que la session précédente.
@@ -280,7 +280,7 @@ export const resumeSession = async (opts: { onNewLogin?: () => void } = {}): Pro
     return 'ready';
   } catch (e) {
     // Réseau, serveur ou SDK injoignable : la session n'est pas en cause.
-    return e instanceof TypeError ? 'offline' : 'signed-out';
+    return e instanceof NetworkError ? 'offline' : 'signed-out';
   }
 };
 
@@ -366,9 +366,9 @@ export const authedFetch = async (url: string, options: RequestInit = {}): Promi
     try {
       await refreshTokenSilently();
     } catch (e) {
-      // Réseau/serveur injoignable (TypeError) : c'est « hors ligne », pas une session
+      // Réseau/serveur injoignable (NetworkError) : c'est « hors ligne », pas une session
       // perdue — sinon une simple coupure pendant un rafraîchissement déconnectait.
-      if (e instanceof TypeError) throw e;
+      if (e instanceof NetworkError) throw e;
       handleAuthLost();
       throw new Error('SESSION_EXPIRED', { cause: e });
     }

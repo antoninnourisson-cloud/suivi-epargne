@@ -33,6 +33,13 @@ const WORDING = {
   },
 } as const;
 
+// Mot du bouton de confirmation pendant l'action : garder cette version l'envoie sur Drive (ou, pour
+// un doublon, ne remplace rien), reprendre l'autre la charge à la place de celle-ci.
+const BUSY_LABEL = {
+  conflict: { local: 'Envoi…', remote: 'Chargement…' },
+  duplicate: { local: 'Mise de côté…', remote: 'Chargement…' },
+} as const;
+
 const dateTime = (iso: string | null) => {
   if (!iso || Number.isNaN(Date.parse(iso))) return 'date inconnue';
   return new Date(iso).toLocaleString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
@@ -200,7 +207,7 @@ export const ConflictDialog: React.FC<{
           <div className="mt-3 flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
             <Button variant="text" disabled={busy} onClick={() => { setChoice(null); setError(null); }}>Retour</Button>
             {error === 'copy-failed' && <Button variant="danger" disabled={busy} onClick={() => void confirm(true)}>Continuer sans copie</Button>}
-            <Button variant="filled" isLoading={busy} disabled={error === 'copy-failed'} onClick={() => void confirm()}>{w.keep[choice]}</Button>
+            <Button variant="filled" isLoading={busy} loadingLabel={BUSY_LABEL[conflict.kind][choice]} disabled={error === 'copy-failed'} onClick={() => void confirm()}>{w.keep[choice]}</Button>
           </div>
         </div>
       )}

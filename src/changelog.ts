@@ -15,6 +15,17 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '2026.11.07-3',
+    date: '2026-11-07',
+    title: 'Taux d’août et finitions',
+    items: [
+      "Livret A et LDDS : la comparaison des placements au Livret A tient compte du passage à 1,7 % au 1er août 2026 ; la démo aussi. Vérifiez que vos livrets portent bien 1,7 % depuis cette date.",
+      "LEP : de janvier à juillet, l'estimation de vos revenus reste sur l'année écoulée tant que son avis d'impôt n'est pas arrivé, au lieu de passer trop tôt à l'année nouvelle.",
+      "« Plus tard » sur « Avant le 31 décembre » la masque jusqu'au 15 décembre, puis un dernier rappel. Un nouveau message de confirmation remplace le précédent au lieu de s'empiler.",
+      "Fenêtre de conflit : les boutons disent ce qu'ils font pendant l'attente (« Envoi… », « Chargement… »). En coulisses : un bug n'est plus jamais pris pour une coupure réseau à la connexion ni pour la sauvegarde de secours.",
+    ],
+  },
+  {
     version: '2026.11.07-2',
     date: '2026-11-07',
     title: 'Fin d’année répétée et corrigée',
@@ -138,7 +149,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     date: '2026-11-04',
     title: 'Comparaison au Livret A sur de longues périodes',
     items: [
-      "La comparaison d'un placement au Livret A (Analyses › Rendement) prend les taux officiels depuis 2014 (par exemple 0,5 % en 2021, 3 % en 2023, 1,5 % depuis février 2026) avant le plus ancien changement de taux noté sur votre Livret A. Ce que vous avez noté sur le compte reste prioritaire.",
+      "La comparaison d'un placement au Livret A (Analyses › Rendement) prend les taux officiels depuis 2014 (par exemple 0,5 % en 2021, 3 % en 2023, 1,7 % depuis août 2026) avant le plus ancien changement de taux noté sur votre Livret A. Ce que vous avez noté sur le compte reste prioritaire.",
     ],
   },
   {

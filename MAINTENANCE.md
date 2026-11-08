@@ -164,8 +164,8 @@ Deux façons de poser un secret, de même effet : **navigateur** (tableau de bor
 Les deux forment **une paire** : toujours les changer ensemble. `VAPID_SUBJECT` n'est pas un secret (il est dans `worker/wrangler.toml`).
 - **Ce qui casse** : chaque abonnement existant a été créé pour l'ancienne clé publique. Les services de notification (Google, Apple, Mozilla) refusent alors les envois, **sans bruit** : le serveur ne retire que les abonnements « disparus » (404 ou 410), pas les refusés. Les notifications s'arrêtent sur **tous** les appareils, et le champ `notifications` de `/status` (envois tentés, reçus, en échec) montre les échecs ; la surveillance ouvre une issue `panne` si tous les envois d'un passage échouent (§ 9).
 - **Ce qu'il faut refaire** : sur **chaque** appareil, Paramètres → Notifications → **Désactiver**, puis **Activer** (l'app voit que la clé a changé, supprime l'ancien abonnement et en crée un nouveau), puis « Envoyer un test ». Rien d'autre côté serveur ni sur Drive.
-- **Marche à suivre** : génération et envoi directs chez Cloudflare, sans que rien ne s'affiche (commande, dans `worker/`, après `npx wrangler login`) :
-  `node -e "const c=require('crypto');const {publicKey:p,privateKey:k}=c.generateKeyPairSync('ec',{namedCurve:'P-256'});const v={VAPID_PUBLIC_KEY:p.export({format:'der',type:'spki'}).subarray(-65).toString('base64url'),VAPID_PRIVATE_KEY:k.export({format:'jwk'}).d};for(const n in v)require('child_process').spawnSync('npx wrangler secret put '+n,{shell:true,input:v[n],stdio:['pipe','inherit','inherit']})"`
+- **Marche à suivre** : génération et envoi directs chez Cloudflare, sans que rien ne s'affiche et sans toucher aux autres secrets (commande, dans `worker/`, après `npx wrangler login`) :
+  `npm run setup-secrets -- --only=vapid`
   L'ancienne paire n'est plus utile (rien à conserver). Ces clés ne se changent que si elles ont fuité : sinon, ne pas y toucher.
 
 #### `GOOGLE_CLIENT_SECRET` (code secret du client OAuth Google)

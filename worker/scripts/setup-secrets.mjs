@@ -7,6 +7,9 @@
 //   npm run setup-secrets            → production (Cloudflare)
 //   npm run setup-secrets -- --dev   → écrit .dev.vars pour `npm run dev` (valeurs locales)
 //   npm run setup-secrets -- --force → régénère même les secrets déjà présents (voir ci-dessous)
+//   npm run setup-secrets -- --only=vapid → régénère UNIQUEMENT la paire de clés des notifications
+//                                            (VAPID), sans toucher aux autres secrets
+//   npm run setup-secrets -- --help  → affiche l'aide, ne pose rien
 //
 // ATTENTION à --force : régénérer ENCRYPTION_KEY rend illisibles les refresh tokens déjà
 // stockés (il faudra se reconnecter partout) ; régénérer les clés VAPID invalide les
@@ -16,9 +19,33 @@ import { spawnSync } from 'node:child_process';
 import { writeFileSync, existsSync } from 'node:fs';
 import { webcrypto as crypto } from 'node:crypto';
 
-const args = new Set(process.argv.slice(2));
+const AIDE = [
+  'Usage : npm run setup-secrets -- [options]',
+  '  (aucune)          pose les secrets manquants de production (les présents restent inchangés)',
+  '  --dev             écrit .dev.vars pour « npm run dev » (valeurs locales)',
+  '  --force           régénère aussi les secrets déjà présents',
+  '  --generated-only  ne pose que les secrets générés (aucune saisie)',
+  '  --only=vapid      régénère UNIQUEMENT la paire de clés des notifications, sans toucher aux',
+  '                    autres secrets (chaque appareil devra ensuite désactiver puis réactiver',
+  '                    les notifications)',
+  '  --help            affiche cette aide et ne pose rien',
+].join('\n');
+
+const argv = process.argv.slice(2);
+const KNOWN = ['--dev', '--force', '--generated-only', '--only=vapid', '--help', '-h'];
+if (argv.includes('--help') || argv.includes('-h')) { console.log(AIDE); process.exit(0); }
+const unknown = argv.filter(a => !KNOWN.includes(a));
+if (unknown.length) { console.error(`Option inconnue : ${unknown.join(' ')}\n\n${AIDE}`); process.exit(1); }
+
+const args = new Set(argv);
 const DEV = args.has('--dev');
 const FORCE = args.has('--force');
+// Seule la paire VAPID est régénérée (et posée, même si elle existe déjà).
+const ONLY_VAPID = args.has('--only=vapid');
+if (ONLY_VAPID && (DEV || FORCE || args.has('--generated-only'))) {
+  console.error(`--only=vapid ne se combine avec aucune autre option.\n\n${AIDE}`);
+  process.exit(1);
+}
 // Ne pose que les secrets GÉNÉRÉS (aucune saisie) : le secret client Google et l'e-mail
 // autorisé peuvent alors être renseignés ailleurs (tableau de bord Cloudflare).
 const GENERATED_ONLY = args.has('--generated-only');
@@ -46,7 +73,20 @@ const existingSecrets = () => {
   return new Set([...(r.stdout || '').matchAll(/"name"\s*:\s*"([^"]+)"/g)].map(m => m[1]));
 };
 
+// Régénère et pose la paire VAPID seule : les valeurs passent par l'entrée standard de wrangler,
+// rien n'est affiché ni écrit. Les deux clés vont ensemble : jamais l'une sans l'autre.
+const rotateVapid = async () => {
+  const generated = await generate();
+  for (const name of ['VAPID_PUBLIC_KEY', 'VAPID_PRIVATE_KEY']) {
+    const r = wrangler(`secret put ${name}`, { input: generated[name] });
+    if (r.status !== 0) { console.error(`Échec pour ${name} :`, r.stderr || r.stdout); process.exit(1); }
+    console.log(`✔ ${name} régénéré et enregistré`);
+  }
+  console.log('Paire VAPID remplacée ; les autres secrets sont inchangés. Sur chaque appareil : Paramètres → Notifications → Désactiver, puis Activer.');
+};
+
 const main = async () => {
+  if (ONLY_VAPID) return rotateVapid();
   const generated = await generate();
 
   if (DEV) {

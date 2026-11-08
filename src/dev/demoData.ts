@@ -52,7 +52,7 @@ const PAYSLIPS: PayslipRecord[] = NETS.map((net, i) => {
 });
 
 const ACCOUNTS: SavingsAccount[] = [
-    { id: 'demo-la', name: 'Livret A', institution: 'Banque Démo', type: AccountType.LIVRET_A, totalAmount: 15200, ownedAmount: 8200, parentalCapital: 7000, interestRate: 1.5, rateHistory: [{ date: '2026-02-01', rate: 1.7 }], openingDate: '2019-03-01', ceiling: 22950, balanceCheckedAt: d(10),
+    { id: 'demo-la', name: 'Livret A', institution: 'Banque Démo', type: AccountType.LIVRET_A, totalAmount: 15200, ownedAmount: 8200, parentalCapital: 7000, interestRate: 1.7, rateHistory: [{ date: '2026-02-01', rate: 1.7 }, { date: '2026-08-01', rate: 1.5 }], openingDate: '2019-03-01', ceiling: 22950, balanceCheckedAt: d(10),
       movements: [
         { id: 'm1', date: '2019-03-01', amount: 9000, label: 'Solde initial', type: 'IN', tag: 'initial' },
         ...laMoves,
@@ -62,7 +62,7 @@ const ACCOUNTS: SavingsAccount[] = [
     { id: 'demo-lep', name: 'LEP', institution: 'Banque Démo', type: AccountType.LEP, totalAmount: 10000, ownedAmount: 7500, parentalCapital: 2500, interestRate: 2.5, openingDate: '2022-01-10', ceiling: 10000, movements: [],
       // Solde lu il y a quatre mois : « À faire » propose de le vérifier (lib/freshness).
       balanceCheckedAt: d(120) },
-    { id: 'demo-ldds', name: 'LDDS', institution: 'Banque Démo', type: AccountType.LDDS, totalAmount: 3000, ownedAmount: 3000, parentalCapital: 0, interestRate: 1.5, rateHistory: [{ date: '2026-02-01', rate: 1.7 }], openingDate: '2023-05-02', ceiling: 12000, balanceCheckedAt: d(10),
+    { id: 'demo-ldds', name: 'LDDS', institution: 'Banque Démo', type: AccountType.LDDS, totalAmount: 3000, ownedAmount: 3000, parentalCapital: 0, interestRate: 1.7, rateHistory: [{ date: '2026-02-01', rate: 1.7 }, { date: '2026-08-01', rate: 1.5 }], openingDate: '2023-05-02', ceiling: 12000, balanceCheckedAt: d(10),
       movements: [...lddsMoves, mv('ldds-out-1', afterPay(1, 12), 200, 'Réparation voiture', 'OUT')] },
     { id: 'demo-av', name: 'Assurance vie', institution: 'Assureur Démo', type: AccountType.ASSURANCE_VIE, totalAmount: 4300, ownedAmount: 4300, parentalCapital: 0, interestRate: 2.6, openingDate: '2024-06-15', totalDeposits: 4000, balanceCheckedAt: d(10),
       // Versé : 3 000 € à l'ouverture puis 200 € par mois ; relevé du 31/12 : +300 € de valeur.

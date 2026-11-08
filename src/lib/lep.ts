@@ -35,6 +35,11 @@ const rfrFromNetTaxable = (netTaxable: number, cap = 14555, min = 509) =>
 /**
  * Revenus de chaque année : l'avis d'imposition saisi fait foi, sinon la somme des fiches
  * de paie (au moins 6 mois, ramenée à 12), sinon l'estimation de l'année en cours.
+ *
+ * Début janvier à fin juillet, l'avis de l'année écoulée n'est pas encore sorti : c'est elle qui
+ * reste à vérifier, pas l'année qui commence. Sans avis ni fiches pour cette année-là,
+ * l'estimation (le salaire actuel, la seule donnée) lui est donc attribuée, et non à l'année
+ * qui vient de s'ouvrir. L'estimation n'est jamais comptée deux fois : une seule année estimée.
  */
 export const buildLepIncomeYears = (
   data: Pick<GlobalAppData, 'payslips' | 'config'>,
@@ -45,6 +50,8 @@ export const buildLepIncomeYears = (
   const Y = asOf.getFullYear();
   const avis = (data.config as { rfrByYear?: Record<string, number> }).rfrByYear || {};
   const out: LepIncomeYear[] = [];
+  const noticePending = asOf.getMonth() < 7;
+  let estimateUsed = false;
   for (let y = Y - 3; y <= Y; y++) {
     const fromAvis = avis[String(y)];
     if (typeof fromAvis === 'number' && fromAvis > 0) { out.push({ year: y, rfr: fromAvis, source: 'avis' }); continue; }
@@ -57,7 +64,11 @@ export const buildLepIncomeYears = (
       out.push({ year: y, rfr: Math.round(rfrFromNetTaxable(net, allowance?.cap, allowance?.min)), source: 'fiches' });
       continue;
     }
-    if (y === Y && currentYearEstimate && currentYearEstimate > 0) out.push({ year: y, rfr: Math.round(currentYearEstimate), source: 'estimation' });
+    const wanted = y === Y || (y === Y - 1 && noticePending);
+    if (wanted && !estimateUsed && currentYearEstimate && currentYearEstimate > 0) {
+      estimateUsed = true;
+      out.push({ year: y, rfr: Math.round(currentYearEstimate), source: 'estimation' });
+    }
   }
   return out;
 };

@@ -133,7 +133,10 @@ export interface LivretAComparison {
  * - 2020 à 2023 : Banque de France (0,5 % au 1er février 2020, nouvelle formule ; 1 %, 2 %,
  *   puis 3 % aux 1er février 2022, 1er août 2022 et 1er février 2023) ;
  * - 2025 à 2026 : Banque de France, « Cadre juridique de l'épargne réglementée », mise à jour
- *   de juin 2026 (2,4 %, 1,7 %, 1,5 %).
+ *   de juin 2026 (2,4 %, 1,7 %, 1,5 %) ;
+ * - 1er août 2026 : 1,7 % (info.gouv.fr, « Le taux du livret A augmente à compter du 1er août
+ *   2026 », vérifié le 2026-11-07 : https://www.info.gouv.fr/actualite/augmentation-du-taux-du-livret-a-a-compter-du-1er-aout-2026).
+ *   À compléter à chaque révision (1er février et 1er août).
  * https://www.banque-france.fr/system/files/2026-07/ER2025_A4_Cadre-juridique.pdf
  * Avant le 1er août 2014 : le plus ancien taux (1 %) s'applique, faute de source vérifiée.
  */
@@ -147,6 +150,7 @@ export const LIVRET_A_OFFICIAL_RATES: readonly { date: string; rate: number }[] 
   { date: '2025-02-01', rate: 2.4 },
   { date: '2025-08-01', rate: 1.7 },
   { date: '2026-02-01', rate: 1.5 },
+  { date: '2026-08-01', rate: 1.7 },
 ];
 
 /**

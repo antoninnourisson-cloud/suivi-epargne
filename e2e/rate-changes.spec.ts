@@ -2,7 +2,7 @@
 // de la veille fiscale (simulée dans le stockage de l'appareil) crée la tâche de l'Accueil ; la
 // feuille montre le Livret A et le LDDS, puis « Vos autres comptes » ; « Appliquer » change le
 // taux des deux livrets, visible sur le compte ; un seul « Annuler » remet l'ancien.
-// Démo : Livret A et LDDS à 1,5 % (taux officiel depuis le 1er février 2026), LEP à 2,5 %,
+// Démo : Livret A et LDDS à 1,7 % (taux officiel depuis le 1er août 2026), LEP à 2,5 %,
 // Assurance vie à 2,6 %.
 import { test, expect, type Page } from './fixtures';
 import { LATEST_VERSION } from '../src/changelog';
@@ -48,7 +48,7 @@ test.describe('Les taux ont changé (démo, téléphone)', () => {
     const errors: string[] = [];
     page.on('pageerror', e => errors.push(e.message));
     await openDemo(page);
-    const task = page.locator('li').filter({ hasText: /^Les taux ont changé : Livret A et LDDS 1,5 % → 1,25 % au 1er février 2027\./ });
+    const task = page.locator('li').filter({ hasText: /^Les taux ont changé : Livret A et LDDS 1,7 % → 1,25 % au 1er février 2027\./ });
     await expect(task).toBeVisible();
     // Le taux ne passe plus par la carte générique de la veille.
     await expect(page.getByRole('heading', { name: 'Veille fiscale' })).toHaveCount(0);
@@ -58,7 +58,7 @@ test.describe('Les taux ont changé (démo, téléphone)', () => {
     await task.getByRole('button', { name: 'Voir et appliquer' }).click();
     const sheet = page.getByRole('dialog', { name: 'Les taux ont changé' });
     await expect(sheet).toBeVisible();
-    await expect(sheet.getByText(/Actuel : 1,5 % · Livret A, LDDS/)).toBeVisible();
+    await expect(sheet.getByText(/Actuel : 1,7 % · Livret A, LDDS/)).toBeVisible();
     await expect(sheet.getByLabel('Nouveau taux, Livret A et LDDS')).toHaveValue('1,25');
     await expect(sheet.getByLabel('À partir du, Livret A et LDDS')).toHaveValue('2027-02-01');
     const others = sheet.getByRole('list', { name: 'Vos autres comptes' });
@@ -73,9 +73,9 @@ test.describe('Les taux ont changé (démo, téléphone)', () => {
     await expect(task).toHaveCount(0);
     await expectAccountRate(page, 'LDDS', '1,25');
 
-    // Un seul « Annuler » : les deux livrets reviennent à 1,5 %, et la tâche revient.
+    // Un seul « Annuler » : les deux livrets reviennent à 1,7 %, et la tâche revient.
     await status.getByRole('button', { name: 'Annuler' }).click();
-    await expectAccountRate(page, 'Livret A', '1,5');
+    await expectAccountRate(page, 'Livret A', '1,7');
     await goTo(page, 'Accueil', true);
     await expect(task).toBeVisible();
     expect(errors).toEqual([]);

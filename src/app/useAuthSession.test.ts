@@ -6,6 +6,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { useAuthSession } from './useAuthSession';
+import { NetworkError } from '../lib/networkError';
 import { initGoogleApi, handleAuthClick, handleSignOut, resumeSession, hasStoredSession } from '../services/googleDriveService';
 import { isBackendEnabled } from '../services/backendService';
 import { disablePush } from '../services/pushService';
@@ -94,7 +95,7 @@ describe('démarrage', () => {
 
   it('serveur injoignable au retour de connexion : message, écran de connexion', async () => {
     window.history.replaceState(null, '', '/#login_code=abc');
-    vi.mocked(resumeSession).mockRejectedValue(new TypeError('Failed to fetch'));
+    vi.mocked(resumeSession).mockRejectedValue(new NetworkError('Failed to fetch'));
     const { result, addToast } = setup({ isAuthenticated: false, locked: false });
     expect(result.current.sessionPending).toBe(true);
     await waitFor(() => expect(result.current.sessionPending).toBe(false));

@@ -315,6 +315,22 @@ describe('écritures plafonnées par compte', () => {
     expect(keys).toEqual(expect.arrayContaining(['subscribe:u1', 'remove:u1', 'lock-reset:u1']));
   });
 
+  it("/push/unsubscribe : 429 par compte, sans écriture ; sans rien à retirer, la liste n'est pas réécrite", async () => {
+    const { token } = await createSession(kv.asKV(), 'u1', 'me@example.com');
+    expect((await post('/push/subscribe', token, { subscription: await goodSub() })).status).toBe(200);
+    // Endpoint inconnu : réponse normale, aucune écriture dans KV.
+    const before = kv.writes;
+    expect(await (await post('/push/unsubscribe', token, { endpoint: endpoint('inconnu') })).json()).toEqual({ ok: true, devices: 1 });
+    expect(kv.writes).toBe(before);
+    const { limiter, keys } = makeLimiter(['unsubscribe:']);
+    env.API_LIMITER = limiter;
+    const res = await post('/push/unsubscribe', token, { endpoint: endpoint('moi') });
+    expect(res.status).toBe(429);
+    expect(res.headers.get('Retry-After')).toBe('60');
+    expect(kv.writes).toBe(before);
+    expect(keys).toContain('unsubscribe:u1');
+  });
+
   it('/auth/bind : 429 par compte avant tout contrôle de la preuve', async () => {
     const { token } = await createSession(kv.asKV(), 'u1', 'me@example.com');
     const { limiter, keys } = makeLimiter(['bind:']);

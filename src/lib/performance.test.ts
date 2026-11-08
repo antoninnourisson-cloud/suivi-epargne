@@ -229,6 +229,6 @@ describe('Livret A sur la même période', () => {
     // Sans historique : tout le tableau, au format « ancien taux jusqu'au jour J ».
     const all = livretAHistoryWithOfficial(undefined);
     expect(all).toHaveLength(LIVRET_A_OFFICIAL_RATES.length - 1);
-    expect(all.at(-1)).toEqual({ date: '2026-02-01', rate: 1.7 });
+    expect(all.at(-1)).toEqual({ date: '2026-08-01', rate: 1.5 }); // 1,5 % jusqu'au 1er août 2026, puis 1,7 %
   });
 });

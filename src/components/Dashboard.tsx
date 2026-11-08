@@ -304,7 +304,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalC
       case 'dismiss-rate-reminder': choices.dismissRateRevision(a.revisionKey); break;
       case 'delete-account': { const acc = accounts.find(x => x.id === a.accountId); if (acc) onDeleteAccount?.(acc); break; }
       case 'apply-tax-scale': onUpdateFiscalConfig?.(prev => { const scale = findFiscalReview(prev).newScale; return scale ? applyTaxScale(prev, scale) : prev; }); break;
-      case 'confirm-fiscal-params': onUpdateFiscalConfig?.(prev => ({ ...prev, paramsReviewedYear: a.year })); break;
+      case 'confirm-fiscal-params': onUpdateFiscalConfig?.(prev => ({ ...prev, paramsReviewedYear: Math.max(prev.paramsReviewedYear ?? 0, a.year) })); break;
       case 'open-settings': onOpenSettings?.(); break;
       // Carte « Sauvegardes et données » : la sauvegarde de secours y propose de retaper le code.
       case 'check-backup-code': onOpenSettings?.('data'); break;
@@ -327,7 +327,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ accounts, history, fiscalC
     }
   };
   const todos: TodoSpec[] = homeTodos.map(t => ({
-    key: t.key, icon: TODO_ICONS[t.icon], tone: t.tone, text: t.text, detail: t.detail, gain: t.gain, snoozable: t.snoozable, pinned: t.pinned,
+    key: t.key, icon: TODO_ICONS[t.icon], tone: t.tone, text: t.text, detail: t.detail, gain: t.gain, snoozable: t.snoozable, snoozeUntil: t.snoozeUntil, pinned: t.pinned,
     primary: t.primary && { label: t.primary.label, onClick: () => run(t.primary!.action) },
     secondary: t.secondary && { label: t.secondary.label, onClick: () => run(t.secondary!.action) },
     extra: t.key === 'rates' && ratesEditorOpen && onUpdateAccounts ? <RegulatedRatesEditor accounts={accounts} onApply={onUpdateAccounts} /> : undefined,

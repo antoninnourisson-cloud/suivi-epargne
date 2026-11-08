@@ -62,6 +62,11 @@ export interface HomeTodo {
   detail?: string;
   gain?: AlertGain;
   snoozable?: boolean;
+  /**
+   * « Plus tard » jusqu'à ce jour (AAAA-MM-JJ) au lieu des 7 jours habituels. Passé ou absent :
+   * 7 jours.
+   */
+  snoozeUntil?: string;
   /** En tête de la liste, avant le tri par montant (clôture de l'année en janvier-février). */
   pinned?: boolean;
   primary?: { label: string; action: HomeAction };
@@ -149,6 +154,15 @@ export interface HomeTodoInput {
    */
   yearEndTax?: YearEndTaxFigures | null;
 }
+
+/** Durée habituelle d'un « Plus tard » : 7 jours. */
+export const SNOOZE_DEFAULT_MS = 7 * 86_400_000;
+
+/** Fin d'un « Plus tard » : la date propre à la tâche (début de ce jour) si elle est à venir, sinon 7 jours. */
+export const snoozeEndMs = (until: string | undefined, nowMs: number): number => {
+  const end = until ? parseISODate(until).getTime() : NaN;
+  return Number.isFinite(end) && end > nowMs ? end : nowMs + SNOOZE_DEFAULT_MS;
+};
 
 /** Début d'août à fin septembre : les avis arrivent fin juillet à fin août, quelques-uns début octobre. */
 export const isTaxNoticeSeason = (now: Date): boolean => now.getMonth() === 7 || now.getMonth() === 8;
@@ -275,8 +289,11 @@ export const buildHomeTodos = (i: HomeTodoInput): HomeTodo[] => {
       else if (d.acquired > 0) sentences.push(`Vos dons de ${year} vous donnent déjà ${eur0(d.acquired)} de réduction.`);
       else if (d.extra > 0) sentences.push(`${eur0(d.example)} donnés avant le 31 décembre réduiraient votre impôt ${year} de ${eur0(d.extra)}.`);
     }
+    const finalReminder = isYearEndFinalReminder(i.now);
     out.push({
-      key: `year-end-tax-${year}-${isYearEndFinalReminder(i.now) ? 'last' : 'early'}`, icon: 'calendar-check', tone: 'info', snoozable: true,
+      key: `year-end-tax-${year}-${finalReminder ? 'last' : 'early'}`, icon: 'calendar-check', tone: 'info', snoozable: true,
+      // « Plus tard » avant le 15 décembre : masquée jusqu'au 15 décembre, où revient le dernier rappel.
+      snoozeUntil: finalReminder ? undefined : `${year}-12-15`,
       text: 'Avant le 31 décembre',
       detail: sentences.length > 0
         ? `${sentences.join(' ')} Estimation d'après votre salaire.`

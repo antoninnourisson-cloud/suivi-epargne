@@ -19,6 +19,7 @@ import {
   parseBackupBlob, parseRecoveryCode, sha256b64url, shouldAutoUpload, type CloudBackupBlobV1,
 } from '../lib/cloudBackupCrypto';
 import { backendFetch, hasBackendSession, isBackendEnabled } from './backendService';
+import { NetworkError } from '../lib/networkError';
 
 export { generateRecoveryCode } from '../lib/cloudBackupCrypto';
 
@@ -56,7 +57,7 @@ const fail = (code: CloudBackupFailure): never => { throw new CloudBackupFailure
 export const failureCode = (e: unknown): CloudBackupFailure =>
   e instanceof CloudBackupFailureError ? e.code
     : e instanceof CloudBackupError ? e.code
-    : e instanceof TypeError ? 'OFFLINE'
+    : e instanceof NetworkError ? 'OFFLINE'
     : 'SERVER';
 
 export const FAILURE_MESSAGES: Record<CloudBackupFailure, string> = {

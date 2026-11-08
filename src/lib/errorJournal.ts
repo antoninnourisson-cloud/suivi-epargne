@@ -11,7 +11,7 @@ import { lsDel, lsGetJSON, lsSetJSON } from './storage';
 import { storageKey } from './storageKeys';
 
 /** D'où vient l'erreur. */
-export type ErrorSource = 'affichage' | 'script' | 'promesse' | 'chargement';
+export type ErrorSource = 'affichage' | 'script' | 'promesse' | 'chargement' | 'synchronisation';
 
 export interface ErrorEntry {
   /** Moment (ISO). */
@@ -31,7 +31,7 @@ const MAX_MESSAGE = 200;
 const MAX_WHERE = 300;
 const KEY = storageKey('errorJournal');
 
-const SOURCES: readonly ErrorSource[] = ['affichage', 'script', 'promesse', 'chargement'];
+const SOURCES: readonly ErrorSource[] = ['affichage', 'script', 'promesse', 'chargement', 'synchronisation'];
 const isEntry = (v: unknown): v is ErrorEntry => {
   const e = v as ErrorEntry;
   return !!e && typeof e === 'object' && typeof e.at === 'string' && typeof e.version === 'string'

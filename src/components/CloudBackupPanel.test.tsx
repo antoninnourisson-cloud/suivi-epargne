@@ -40,6 +40,7 @@ vi.mock('../services/cloudBackup', async () => {
 
 import { CloudBackupPanel } from './SettingsPanels';
 import { ToastContext } from './Toast';
+import { NetworkError } from '../lib/networkError';
 
 const data = { ...emptyData(), accounts: [{ id: 'a1', name: 'Livret A', totalAmount: 10, ownedAmount: 10, parentalCapital: 0 }] } as never;
 
@@ -248,7 +249,7 @@ describe('Sauvegarde de secours chiffrée (Réglages)', () => {
 
   it('envoyer maintenant : une erreur reste discrète (message dans le panneau)', async () => {
     svc.getDeviceEnrollment.mockResolvedValue({ enabledAt: '2026-09-01T00:00:00Z' });
-    svc.uploadNow.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    svc.uploadNow.mockRejectedValueOnce(new NetworkError('Failed to fetch')); // échec réseau (posé à la source)
     setup();
     fireEvent.click(await screen.findByRole('button', { name: /Envoyer maintenant/ }));
     expect(await screen.findByRole('alert')).toHaveProperty('textContent', 'Serveur injoignable (hors ligne ?).');
