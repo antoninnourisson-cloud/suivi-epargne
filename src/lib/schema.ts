@@ -478,6 +478,10 @@ export const withoutDeviceOnlyFields = <T extends GlobalAppData>(data: T): T => 
   return { ...data, config: config as GlobalAppData['config'] };
 };
 
+/** Taille maximale d'un fichier de sauvegarde à importer : bien plus que n'importe quelle vraie sauvegarde. */
+export const IMPORT_MAX_BYTES = 10 * 1024 * 1024;
+export const IMPORT_TOO_LARGE_MESSAGE = 'Fichier trop volumineux pour une sauvegarde Pécule (10 Mo au plus).';
+
 /**
  * Contrôle d'un fichier importé avant de remplacer quoi que ce soit. Renvoie la liste des
  * problèmes (vide = importable).

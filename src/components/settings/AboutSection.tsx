@@ -13,6 +13,7 @@ const SHOWN_FIRST = 3;
 const LINKS: { label: string; href: string; external?: boolean }[] = [
   { label: 'Présentation de Pécule', href: 'presentation.html' },
   { label: 'Confidentialité', href: 'confidentialite.html' },
+  { label: 'Mentions légales', href: 'mentions-legales.html' },
   { label: 'Aide (wiki)', href: `${REPO}/wiki`, external: true },
   { label: 'Code source', href: REPO, external: true },
   { label: 'Licence AGPL-3.0', href: `${REPO}/blob/main/LICENSE`, external: true },

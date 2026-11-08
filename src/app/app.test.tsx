@@ -259,7 +259,7 @@ describe('indicateur de synchronisation', () => {
     expect(syncLabel({ kind: 'idle' }, 'short')).toBe('À jour');
     for (const variant of ['full', 'short'] as const) {
       expect(syncLabel({ kind: 'offline' }, variant)).toBe('Hors ligne');
-      expect(syncLabel({ kind: 'saving' }, variant)).toBe('Sauvegarde...');
+      expect(syncLabel({ kind: 'saving' }, variant)).toBe('Sauvegarde…');
       expect(syncLabel({ kind: 'conflict' }, variant)).toBe('Conflit');
     }
   });
@@ -274,8 +274,8 @@ describe('indicateur de synchronisation', () => {
     const at = new Date(2026, 9, 20, 9, 5, 7);
     expect(syncTitle({ kind: 'saved', at }, at)).toBe('Dernière écriture confirmée sur Drive : 09:05:07');
     expect(syncTitle({ kind: 'idle' }, null)).toBeUndefined();
-    expect(syncTitle({ kind: 'blocked', reason: 'session' }, null)).toMatch(/rien n’est envoyé sur Drive/);
-    expect(syncTitle({ kind: 'blocked', reason: 'session' }, at)).toMatch(/rien n’est envoyé sur Drive.*09:05:07/);
+    expect(syncTitle({ kind: 'blocked', reason: 'session' }, null)).toMatch(/rien n'est envoyé sur Drive/);
+    expect(syncTitle({ kind: 'blocked', reason: 'session' }, at)).toMatch(/rien n'est envoyé sur Drive.*09:05:07/);
   });
 });
 

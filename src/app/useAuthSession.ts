@@ -12,13 +12,8 @@ import { clearTraces, storageKey } from '../lib/storageKeys';
 import { NetworkError } from '../lib/networkError';
 import type { PortfolioData } from '../hooks/usePortfolioData';
 import { preloadStartView } from './screens';
+import { demoRequested } from '../lib/demoMode';
 import type { AddToast, DialogApi } from './UiProviders';
-
-// Mode démo (`?demo=1`, données fictives, sans Google) : en développement, et dans le build de
-// production des tests de bout en bout (__E2E_DEMO__, voir vite.config.ts). Jamais dans le
-// build publié : la condition y vaut `false` et la branche est retirée du bundle.
-const DEMO_ALLOWED: boolean = import.meta.env.DEV || __E2E_DEMO__;
-const demoRequested = () => DEMO_ALLOWED && new URLSearchParams(window.location.search).has('demo');
 
 // Fichier reçu par « Partager vers Pécule » et pas encore lu (cache `pecule-partage`, voir
 // public/share-sw.js et services/sharedFile) : il ne survit pas à la déconnexion. Nom écrit
@@ -74,7 +69,8 @@ export const useAuthSession = ({ isAuthenticated, setIsAuthenticated, data, lock
   useEffect(() => {
     if (initStartedRef.current) return;
     initStartedRef.current = true;
-    if (demoRequested()) {
+    // Condition écrite en toutes lettres : repliée à `false` au build publié, elle emporte l'import().
+    if ((import.meta.env.DEV || __E2E_DEMO__) && demoRequested()) {
       import('../dev/demoData').then(({ DEMO_DATA }) => { setIsApiLoaded(true); setIsAuthenticated(true); setSessionPending(false); loadDemoData(DEMO_DATA); }).catch(console.error);
       return;
     }

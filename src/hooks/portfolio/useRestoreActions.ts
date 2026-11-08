@@ -4,7 +4,7 @@
 // envoie ensuite la nouvelle version, avec contrôle de révision (voir useDriveSync).
 import { useCallback } from 'react';
 import type { RefObject } from 'react';
-import { validateImport } from '../../lib/schema';
+import { IMPORT_MAX_BYTES, IMPORT_TOO_LARGE_MESSAGE, validateImport } from '../../lib/schema';
 import { setAsideVersion, getSetAside, removeSetAside, listSetAside, type SetAsideVersion } from '../../services/setAsideVersions';
 import { listBackups, readConfigFile, type DriveBackup } from '../../services/googleDriveService';
 import type { DocumentState } from './useDocument';
@@ -38,6 +38,8 @@ export const useRestoreActions = (docState: DocumentState, { hasLoadedRef, offli
    * (`recoverSetAside`).
    */
   const importData = useCallback(async (file: File, opts?: { requireSetAside?: boolean }): Promise<ImportOutcome> => {
+    // Refus AVANT toute lecture : un fichier énorme ne doit pas être chargé en mémoire.
+    if (file.size > IMPORT_MAX_BYTES) return { ok: false, error: IMPORT_TOO_LARGE_MESSAGE };
     try {
       const parsed: unknown = JSON.parse(await file.text());
       const errors = validateImport(parsed);

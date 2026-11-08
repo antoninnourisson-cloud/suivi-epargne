@@ -116,16 +116,18 @@ export const verifyBiometric = async (): Promise<boolean> => {
 
 // --- PIN (repli si la biométrie n'est pas disponible, ou par préférence) ---
 // Seul un hash salé est stocké — jamais le PIN en clair. Dérivation PBKDF2 (SHA-256,
-// 310 000 itérations, reco OWASP) et non un simple SHA-256 : un PIN de 4-8 chiffres ne
+// 600 000 itérations, reco OWASP 2023 ; 310 000 jusqu'au 7 novembre 2026) et non un simple SHA-256 : un PIN de 4-8 chiffres ne
 // couvre que ~10⁴ à 10⁸ candidats, un hash "une passe" se casse donc instantanément
 // hors-ligne depuis le localStorage. PBKDF2 rend l'énumération coûteuse ; verifyPin
 // ajoute en plus un délai croissant après échecs. Rappel des limites (voir l'en-tête du
 // fichier) : quelqu'un qui exécute du JS sur la page contourne le verrou de toute façon —
 // ceci protège le CODE lui-même (souvent réutilisé ailleurs par son propriétaire : carte
 // bleue, téléphone...), pas seulement l'accès à l'app.
-const PIN_ITERATIONS = 310_000;
+export const PIN_ITERATIONS = 600_000;
 // Hashs d'avant cette migration (SHA-256 une passe, sans compteur d'itérations stocké) :
-// encore vérifiables, puis migrés vers PBKDF2 au premier déverrouillage réussi.
+// encore vérifiables, puis migrés vers PBKDF2 au premier déverrouillage réussi. Même chose pour
+// un code enregistré avec MOINS d'itérations que PIN_ITERATIONS : ré-enregistré avec le nombre
+// actuel au prochain déverrouillage réussi.
 const PIN_ITERATIONS_KEY = 'app_lock_pin_iterations';
 const PIN_FAILS_KEY = 'app_lock_pin_fails';
 
@@ -234,7 +236,8 @@ export const verifyPin = async (pin: string): Promise<boolean> => {
     localStorage.removeItem(PIN_FAILS_KEY);
     // Migration transparente de l'ancien format au premier déverrouillage réussi.
     // Un ancien code à 4-5 chiffres ne respecte plus le format : il reste à l'ancien format.
-    if (storedIterations === 0 && /^\d{6,8}$/.test(pin)) await storePin(pin).catch(() => { /* le legacy reste valide */ });
+    // Un code à moins d'itérations que le nombre actuel est renforcé de la même façon.
+    if (storedIterations < PIN_ITERATIONS && /^\d{6,8}$/.test(pin)) await storePin(pin).catch(() => { /* le legacy reste valide */ });
   } else {
     try {
       const prev = JSON.parse(localStorage.getItem(PIN_FAILS_KEY) || '{"count":0}');

@@ -35,11 +35,11 @@ describe('code PIN', () => {
     expect(isPinEnabled()).toBe(false);
   });
 
-  it('ne garde qu’un dérivé PBKDF2 salé (310 000 itérations), jamais le code', async () => {
+  it('ne garde qu’un dérivé PBKDF2 salé (600 000 itérations), jamais le code', async () => {
     await enablePin('246813');
     expect(isPinEnabled()).toBe(true);
     expect(isLockEnabled()).toBe(true);
-    expect(localStorage.getItem(ITER)).toBe('310000');
+    expect(localStorage.getItem(ITER)).toBe('600000');
     const stored = Object.values({ ...localStorage }).join('|');
     expect(stored).not.toContain('246813');
     // Deux enregistrements du même code : sels et dérivés différents.
@@ -68,6 +68,41 @@ describe('code PIN', () => {
   });
 });
 
+describe('code enregistré avec moins de tours', () => {
+  /** Dérivé PBKDF2 comme l'app le faisait avant 600 000 tours (310 000). */
+  const oldDerived = async (pin: string, salt: string, iterations: number) => {
+    const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(pin), 'PBKDF2', false, ['deriveBits']);
+    const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt: Uint8Array.from(atob(salt), c => c.charCodeAt(0)), iterations }, key, 256);
+    return b64(bits);
+  };
+
+  it('un code à 310 000 tours est accepté, puis ré-enregistré à 600 000 au déverrouillage réussi', async () => {
+    const salt = 'c2VsLTMxMGs=';
+    localStorage.setItem(SALT, salt);
+    localStorage.setItem(HASH, await oldDerived('135790', salt, 310_000));
+    localStorage.setItem(ITER, '310000');
+    // Un mauvais code ne migre rien.
+    expect(await verifyPin('000000')).toBe(false);
+    expect(localStorage.getItem(ITER)).toBe('310000');
+    localStorage.removeItem(FAILS);
+
+    expect(await verifyPin('135790')).toBe(true);
+    expect(localStorage.getItem(ITER)).toBe('600000');
+    expect(localStorage.getItem(SALT)).not.toBe(salt);
+    expect(localStorage.getItem(HASH)).not.toBe(await oldDerived('135790', salt, 310_000));
+    // Le même code passe toujours, un autre non.
+    expect(await verifyPin('135790')).toBe(true);
+    expect(await verifyPin('135791')).toBe(false);
+  });
+
+  it('un code déjà à 600 000 tours reste tel quel', async () => {
+    await enablePin('246813');
+    const hash = localStorage.getItem(HASH);
+    expect(await verifyPin('246813')).toBe(true);
+    expect(localStorage.getItem(HASH)).toBe(hash);
+  });
+});
+
 describe('ancien format (SHA-256 en une passe)', () => {
   it('reste vérifiable, puis passe à PBKDF2 au premier déverrouillage réussi', async () => {
     localStorage.setItem(SALT, 'c2VsLWFuY2llbg==');
@@ -77,7 +112,7 @@ describe('ancien format (SHA-256 en une passe)', () => {
     localStorage.removeItem(FAILS);
 
     expect(await verifyPin('135790')).toBe(true);
-    expect(localStorage.getItem(ITER)).toBe('310000');
+    expect(localStorage.getItem(ITER)).toBe('600000');
     expect(localStorage.getItem(HASH)).not.toBe(await legacyHash('135790', 'c2VsLWFuY2llbg=='));
     expect(await verifyPin('135790')).toBe(true);
     expect(await verifyPin('135791')).toBe(false);
@@ -124,7 +159,7 @@ describe('ancien code court : renforcement proposé une fois par jour', () => {
     await enablePin('246813');
     expect(localStorage.getItem(HASH)).not.toBe(oldHash);
     expect(localStorage.getItem(SALT)).not.toBe('c2Vs');
-    expect(localStorage.getItem(ITER)).toBe('310000');
+    expect(localStorage.getItem(ITER)).toBe('600000');
     expect(localStorage.getItem('app_lock_pin_upgrade_asked')).toBeNull();
     expect(await verifyPin('246813')).toBe(true);
     expect(await verifyPin('1234')).toBe(false);

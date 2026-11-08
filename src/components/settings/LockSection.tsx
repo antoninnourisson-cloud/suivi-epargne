@@ -54,7 +54,7 @@ export const LockSection: React.FC = () => {
   const submitPinSetup = async () => {
     setPinError(null);
     if (!/^\d{6,8}$/.test(pinDraft)) {
-      setPinError('Le code doit faire entre 6 et 8 chiffres (un code court se devine en quelques minutes si quelqu’un copie les données du navigateur).');
+      setPinError('Le code doit faire entre 6 et 8 chiffres (un code court se devine en quelques minutes si quelqu\'un copie les données du navigateur).');
       return;
     }
     try {

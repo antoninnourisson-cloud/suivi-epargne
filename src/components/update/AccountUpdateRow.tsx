@@ -147,7 +147,7 @@ export const AccountUpdateRow: React.FC<AccountUpdateRowProps> = ({
             Inchangé
           </Chip>
           <span className="text-xs text-on-surface-variant">
-            {confirmed ? 'Solde confirmé tel quel à l’enregistrement.' : 'Le solde n’a pas bougé ? Confirmez-le.'}
+            {confirmed ? 'Solde confirmé tel quel à l\'enregistrement.' : 'Le solde n\'a pas bougé ? Confirmez-le.'}
           </span>
         </div>
       )}
@@ -324,8 +324,8 @@ export const AccountUpdateRow: React.FC<AccountUpdateRowProps> = ({
               onChange={e => onDepositsChange(e.target.value)}
               error={b.errors.deposits}
               supporting={depositsDraft === undefined
-                ? 'Renseignez-les une fois : ensuite, les versements de l’ajustement les mettent à jour, et le reste de l’écart compte comme gain ou perte de valeur.'
-                : depositsDraft !== null ? <>Plus-value latente : <MoneyText value={newTotal - depositsDraft} decimals={0} className="font-medium" />. Un versement les augmente d’autant.</> : undefined}
+                ? 'Renseignez-les une fois : ensuite, les versements de l\'ajustement les mettent à jour, et le reste de l\'écart compte comme gain ou perte de valeur.'
+                : depositsDraft !== null ? <>Plus-value latente : <MoneyText value={newTotal - depositsDraft} decimals={0} className="font-medium" />. Un versement les augmente d'autant.</> : undefined}
             />
           )}
           <TextField

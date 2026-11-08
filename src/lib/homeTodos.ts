@@ -428,7 +428,7 @@ export const buildHomeTodos = (i: HomeTodoInput): HomeTodo[] => {
         ? 'Sauvegarde de secours : le dernier envoi a échoué.'
         : p.never ? `Sauvegarde de secours : aucun envoi depuis son activation, il y a ${p.days} jours.`
           : `Sauvegarde de secours : dernier envoi il y a ${p.days} jours.`,
-      detail: p.kind === 'error' && p.reason ? `${p.reason} Pécule réessaiera à votre prochaine ouverture.` : 'Ouvrez Pécule connecté à Internet : la copie repart seule. Sinon, regardez l’état dans les Paramètres.',
+      detail: p.kind === 'error' && p.reason ? `${p.reason} Pécule réessaiera à votre prochaine ouverture.` : 'Ouvrez Pécule connecté à Internet : la copie repart seule. Sinon, regardez l\'état dans les Paramètres.',
       primary: { label: 'Voir la sauvegarde', action: { type: 'check-backup-code' } },
     });
   }

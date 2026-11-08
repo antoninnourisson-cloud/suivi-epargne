@@ -156,7 +156,7 @@ export const InstitutionChart: React.FC<{ data: { name: string; value: number }[
   const nameWidth = Math.min(140, Math.max(64, Math.max(0, ...data.map(d => d.name.length)) * 8 + 8));
 
   const summary = data.length === 0
-    ? 'Aucun compte pour l’instant.'
+    ? 'Aucun compte pour l\'instant.'
     : <>{withParents ? 'Votre part, hors capital de vos parents' : 'Le total de vos comptes'} : <b className="font-medium text-on-surface tabular-nums">{fmt0(total)}</b>.</>;
 
   const columns: Column<{ name: string; value: number }>[] = [

@@ -52,7 +52,7 @@ export const NotificationSettings: React.FC<{ paydayDay?: number; onOpenPayday?:
           ? 'Autorisation refusée. Vous pouvez la réactiver dans les réglages du navigateur pour ce site.'
           : code === 'SESSION_EXPIRED'
             ? 'Session expirée : reconnectez-vous puis réessayez.'
-            : 'L’opération a échoué. Vérifiez votre connexion et réessayez.',
+            : 'L\'opération a échoué. Vérifiez votre connexion et réessayez.',
       });
     } finally {
       setBusy(false);
@@ -68,7 +68,7 @@ export const NotificationSettings: React.FC<{ paydayDay?: number; onOpenPayday?:
   return (
     <div className="space-y-4">
       <Hint>
-        Recevez les rappels même app fermée : jour de paie, abonnements, échéances récurrentes, révision des taux réglementés, bilan du mois, déclaration de revenus (en avril), soldes non actualisés… Vérification une fois par jour ; chaque rappel n’est envoyé qu’une fois. Réglage propre à cet appareil.
+        Recevez les rappels même app fermée : jour de paie, abonnements, échéances récurrentes, révision des taux réglementés, bilan du mois, déclaration de revenus (en avril), soldes non actualisés… Vérification une fois par jour ; chaque rappel n'est envoyé qu'une fois. Réglage propre à cet appareil.
         Les alertes de sécurité (retrait du verrou demandé sur un autre appareil, effacement des copies de secours demandé) arrivent toujours, sans aucun montant.
       </Hint>
 
@@ -77,14 +77,14 @@ export const NotificationSettings: React.FC<{ paydayDay?: number; onOpenPayday?:
       {state === 'unsupported' && (
         <Notice tone="warning" icon={AlertTriangle}>
           {isIosOutsideHomeScreen()
-            ? 'Sur iPhone, les notifications ne fonctionnent que dans l’app installée : Partager → « Sur l’écran d’accueil », puis ouvrez-la depuis l’icône.'
-            : 'Ce navigateur ne prend pas en charge les notifications push (ou l’app n’est pas encore installée comme application).'}
+            ? 'Sur iPhone, les notifications ne fonctionnent que dans l\'app installée : Partager → « Sur l\'écran d\'accueil », puis ouvrez-la depuis l\'icône.'
+            : 'Ce navigateur ne prend pas en charge les notifications push (ou l\'app n\'est pas encore installée comme application).'}
         </Notice>
       )}
 
       {state === 'denied' && (
         <Notice tone="warning" icon={AlertTriangle}>
-          Les notifications sont bloquées pour ce site. Réautorisez-les dans les réglages du navigateur (icône à gauche de l’adresse), puis revenez ici.
+          Les notifications sont bloquées pour ce site. Réautorisez-les dans les réglages du navigateur (icône à gauche de l'adresse), puis revenez ici.
         </Notice>
       )}
 

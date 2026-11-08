@@ -70,8 +70,8 @@ export default defineConfig({
     __BUILD_SHA__: JSON.stringify((process.env.GITHUB_SHA || 'dev').slice(0, 7)),
     // Build de production destiné aux tests de bout en bout (playwright.config.ts, dossier
     // dist-e2e, jamais publié) : seul écart avec le build publié, le mode démo (`?demo=1`)
-    // y reste disponible. Le build publié vaut `false` : la branche démo et ses données
-    // fictives sont retirées du bundle. Déclaration : src/vite-env.d.ts.
+    // y reste disponible. Le build publié vaut `false` : les import() de src/dev/ (données
+    // fictives) sont repliés et n'y produisent aucun fichier (src/lib/demoMode.ts). Déclaration : src/vite-env.d.ts.
     __E2E_DEMO__: JSON.stringify(process.env.PECULE_E2E_BUILD === '1'),
   },
   plugins: [
@@ -95,7 +95,7 @@ export default defineConfig({
         //   en ligne, et se rabattent sur une police système hors ligne ;
         // - le sous-ensemble latin-ext : son unicode-range (index.css) ne le charge que pour
         //   des caractères hors du français ; hors ligne, une police système les affiche.
-        globIgnores: ['fonts/**', '**/*latin-ext*'],
+        globIgnores: ['fonts/**', '**/*latin-ext*', '404.html'],
       },
       // Icônes du manifeste déjà prises par globPatterns : ne pas les ajouter une seconde fois.
       includeManifestIcons: false,

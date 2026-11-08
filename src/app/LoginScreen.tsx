@@ -37,9 +37,10 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ ready, apiError, lockR
         <Button variant="outlined" onClick={onLogin} className="w-full min-h-12">Continuer avec Google</Button>
       }
     </div>
-    <p className="mt-4 text-sm font-bold text-white/85 flex gap-4 justify-center">
+    <p className="mt-4 text-sm font-bold text-white/85 flex flex-wrap gap-x-4 gap-y-1 justify-center">
       <a href="presentation.html" className="underline underline-offset-2 hover:text-white">Découvrir Pécule</a>
       <a href="confidentialite.html" className="underline underline-offset-2 hover:text-white">Confidentialité</a>
+      <a href="mentions-legales.html" className="underline underline-offset-2 hover:text-white">Mentions légales</a>
     </p>
     <p className="mt-2 text-xs font-bold text-white/70">version {APP_VERSION}</p>
   </main>

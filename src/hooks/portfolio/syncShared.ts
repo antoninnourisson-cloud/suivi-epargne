@@ -97,7 +97,7 @@ export interface SyncConflictView {
 }
 
 /** Résultat d'un import : `undoId`, la version mise de côté juste avant (pour « Annuler »), si elle a pu l'être. */
-export interface ImportOutcome { ok: boolean; undoId?: string }
+export interface ImportOutcome { ok: boolean; undoId?: string; /** Raison du refus, en clair, quand elle mérite d'être dite (fichier trop volumineux). */ error?: string }
 
 export type ConflictChoice = 'local' | 'remote';
 export type ConflictResolution = 'done' | 'copy-failed' | 'unavailable';

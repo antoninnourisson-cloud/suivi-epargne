@@ -6,7 +6,7 @@
 import { fetchFiscalSources, FiscalSource } from '../fiscalSources';
 import { cachedSiteCheck } from '../siteCheck';
 import { readCronLog, readFiscalWatchHealth } from '../cronLog';
-import { LATEST_KEY, FAILURE_KEY, FiscalWatchRun, runAndStoreFiscalWatch, canRunOnDemand } from '../fiscalWatchJob';
+import { LATEST_KEY, FAILURE_KEY, FiscalWatchRun, runAndStoreFiscalWatch, canRunOnDemand, hasDailyBudget, DAILY_BUDGET_ERROR, DAILY_BUDGET_MESSAGE } from '../fiscalWatchJob';
 import { json } from './http';
 import { requireSession } from './session';
 import { CronHealth } from './cron';
@@ -41,6 +41,10 @@ export const handleFiscalWatchRun = async (req: Request, env: Env): Promise<Resp
   if (!(await canRunOnDemand(env.STORE))) {
     const latest = await env.STORE.get<FiscalWatchRun>(LATEST_KEY, 'json');
     return json(req, env, { error: 'TOO_SOON', ...(latest ? { latest } : {}) }, 429, { 'Retry-After': '3600' });
+  }
+  // Plafond du jour atteint : 503, que l'app affiche comme « IA du serveur indisponible pour le moment ».
+  if (!(await hasDailyBudget(env.STORE))) {
+    return json(req, env, { error: DAILY_BUDGET_ERROR, message: DAILY_BUDGET_MESSAGE }, 503, { 'Retry-After': '3600' });
   }
   const run = await runAndStoreFiscalWatch(env.STORE, env.AI);
   return json(req, env, run, run.ok ? 200 : 502);

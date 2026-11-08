@@ -40,6 +40,30 @@ export const FAILURE_KEY = 'fiscal-watch:last-failure';
 const MIN_INTERVAL_AFTER_SUCCESS_MS = 20 * 3600_000;
 const ATTEMPT_TTL_S = 6 * 3600;
 
+/**
+ * Plafond QUOTIDIEN (jour UTC, comme le quota Workers AI) de neurones dépensés par la veille,
+ * tous passages confondus (lundi, relances, « Vérifier maintenant ») : sous les 10 000 gratuits.
+ * Un passage est refusé si le total du jour dépasse déjà ce plafond, ou si le budget d'un
+ * passage complet le ferait dépasser.
+ */
+export const FISCAL_DAILY_CEILING = 8_000;
+export const DAILY_BUDGET_ERROR = 'DAILY_BUDGET';
+export const DAILY_BUDGET_MESSAGE = "Le plafond de calcul de l'IA du serveur est atteint pour aujourd'hui : réessayez demain.";
+const DAILY_TTL_S = 2 * 86400;
+export const dailyNeuronsKey = (now: Date): string => `fiscal-watch:neurons:${now.toISOString().slice(0, 10)}`;
+
+const readDailyNeurons = async (store: KVNamespace, now: Date): Promise<number> => {
+  const raw = await store.get(dailyNeuronsKey(now)).catch(() => null);
+  const n = raw === null ? 0 : Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+};
+
+/** Un passage de plus tient-il dans le plafond du jour ? */
+export const hasDailyBudget = async (store: KVNamespace, now: Date = new Date()): Promise<boolean> => {
+  const total = await readDailyNeurons(store, now);
+  return total <= FISCAL_DAILY_CEILING && total + FISCAL_WATCH_BUDGET <= FISCAL_DAILY_CEILING;
+};
+
 /** Le binding Workers AI (`[ai] binding = "AI"`), réduit à ce qui sert ici. */
 export interface AiRunner { run(model: string, inputs: Record<string, unknown>): Promise<unknown> }
 
@@ -399,8 +423,16 @@ export const runFiscalWatch = async (
  */
 export const runAndStoreFiscalWatch = async (store: KVNamespace, ai: AiRunner | undefined, opts: { now?: Date; fetcher?: typeof fetch } = {}): Promise<FiscalWatchRun> => {
   if (!ai) throw new Error('AI_BINDING_MISSING');
-  await store.put(ATTEMPT_KEY, (opts.now ?? new Date()).toISOString(), { expirationTtl: ATTEMPT_TTL_S });
+  const now = opts.now ?? new Date();
+  if (!(await hasDailyBudget(store, now))) throw new Error(DAILY_BUDGET_ERROR);
+  await store.put(ATTEMPT_KEY, now.toISOString(), { expirationTtl: ATTEMPT_TTL_S });
   const run = await runFiscalWatch(ai, opts);
+  // Une seule écriture de compteur par passage (quota KV), et aucune si l'IA n'a pas servi.
+  const spent = run.neuronsUsed ?? run.neuronsEstimate;
+  if (spent > 0) {
+    const total = (await readDailyNeurons(store, now)) + spent;
+    await store.put(dailyNeuronsKey(now), String(Math.round(total * 10) / 10), { expirationTtl: DAILY_TTL_S });
+  }
   if (run.ok) await store.put(LATEST_KEY, JSON.stringify(run));
   else await store.put(FAILURE_KEY, JSON.stringify(run), { expirationTtl: 30 * 86400 });
   return run;
@@ -441,7 +473,7 @@ export const isFiscalRetryDue = async (store: KVNamespace, now: Date = new Date(
   if (await store.get(ATTEMPT_KEY)) return false;
   const latest = await store.get<FiscalWatchRun>(LATEST_KEY, 'json');
   if (latest && new Date(latest.checkedAt).getTime() > new Date(health.lastFailureAt).getTime()) return false;
-  return true;
+  return hasDailyBudget(store, now);
 };
 
 /** Note une relance (avant de la lancer : une relance interrompue compte quand même). */

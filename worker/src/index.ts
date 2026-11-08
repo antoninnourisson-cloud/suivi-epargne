@@ -53,7 +53,7 @@
 import { AiRunner, FISCAL_WATCH_CRON } from './fiscalWatchJob';
 import { isOriginAcceptable, clearOAuthCookie, BodyTooLargeError } from './security';
 import { NONCE_HEADER } from './deviceProof';
-import { corsHeaders, json, htmlPage, rateLimited } from './handlers/http';
+import { corsHeaders, HSTS, json, htmlPage, rateLimited } from './handlers/http';
 import { AuthFailure, issuedNonces } from './handlers/session';
 import { handleAuthStart, handleAuthCallback, handleExchange, handleBind, handleSessions, handleRevokeSession, handleToken, handleLogout, handleLogoutAll, handleAccountDelete } from './handlers/auth';
 import { handleSubscribe, handleUnsubscribe, handleDevices, handleRemoveDevice, handleTestPush, handleLockResetAlert } from './handlers/push';
@@ -121,7 +121,7 @@ const route = async (req: Request, env: Env, url: URL, r: string): Promise<Respo
 export default {
   async fetch(req: Request, env: Env): Promise<Response> {
     const url = new URL(req.url);
-    if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: corsHeaders(req, env) });
+    if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: { 'Strict-Transport-Security': HSTS, ...corsHeaders(req, env) } });
     const r = `${req.method} ${url.pathname}`;
 
     // Origine refusée : réponse immédiate, sans lecture ni écriture KV.

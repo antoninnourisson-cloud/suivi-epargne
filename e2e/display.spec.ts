@@ -172,4 +172,41 @@ test.describe('Affichage (démo)', () => {
       expect(small, view).toEqual([]);
     }
   });
+
+  // Texte agrandi dans les réglages d'Android (jusqu'à 200 %, html { font-size: 200% }) : rien ne
+  // doit sortir de l'écran de 412 px, ni la barre du bas, ni l'en-tête, ni le choix du mouvement.
+  for (const [scale, size] of [['normal', '100%'], ['agrandi à 200 %', '200%']] as const) {
+    test(`sur téléphone (412 px), texte ${scale} : barre du bas, en-tête et mouvement rapide tiennent sans défilement horizontal`, async ({ page, isMobile }) => {
+      test.skip(!isMobile, 'écran de téléphone seulement');
+      await page.setViewportSize({ width: 412, height: 915 });
+      await page.addInitScript(f => { try { localStorage.setItem('last_seen_version', f.v); } catch { /* ignoré */ } }, { v: LATEST_VERSION });
+      await page.goto('/?demo=1');
+      await page.addStyleTag({ content: `html { font-size: ${size} }` });
+      await expect(page.locator('main h2').first()).toBeAttached();
+      await page.waitForTimeout(1500); // en-tête et bandeaux en place (le libellé de synchronisation arrive après)
+      // Éléments dont un bord sort de l'écran (page, barre du bas, bouton du thème).
+      const outside = (sel: string) => page.locator(sel).evaluateAll(els => els
+        .filter(el => { const r = el.getBoundingClientRect(); return r.width > 0 && (r.left < -1 || r.right > window.innerWidth + 1); })
+        .map(el => `${el.tagName} ${(el.getAttribute('aria-label') ?? el.textContent ?? '').trim().slice(0, 30)}`));
+      const pageOverflow = () => page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+
+      const nav = page.getByRole('navigation', { name: 'Navigation principale' }).filter({ visible: true });
+      await expect(nav).toBeVisible();
+      expect(await outside('nav[aria-label="Navigation principale"] button'), 'barre du bas').toEqual([]);
+      expect(await outside('header button'), 'en-tête').toEqual([]);
+      expect(await pageOverflow(), 'défilement horizontal de la page').toBeLessThanOrEqual(0);
+      // Les cinq entrées restent là, avec leur nom.
+      await expect(nav.getByRole('button')).toHaveCount(5);
+
+      await page.getByRole('button', { name: 'Ajouter un mouvement' }).filter({ visible: true }).first().click();
+      const sheet = page.getByRole('dialog', { name: 'Ajouter un mouvement' });
+      await expect(sheet.getByRole('group', { name: 'Type de mouvement' })).toBeVisible();
+      const choices = await sheet.getByRole('group', { name: 'Type de mouvement' }).evaluate(el => ({
+        outside: Array.from(el.querySelectorAll('button')).filter(b => { const r = b.getBoundingClientRect(); return r.left < -1 || r.right > window.innerWidth + 1; }).length,
+        scroll: el.scrollWidth - el.clientWidth,
+      }));
+      expect(choices, 'choix du mouvement').toEqual({ outside: 0, scroll: 0 });
+      expect(await sheet.evaluate(el => el.scrollWidth - el.clientWidth), 'feuille').toBeLessThanOrEqual(0);
+    });
+  }
 });

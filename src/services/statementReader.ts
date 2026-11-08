@@ -9,6 +9,7 @@
 // ================================================
 import { extractBankStatement, GeminiError, type ExtractOptions } from './geminiService';
 import type { StatementData } from '../lib/statementImport';
+import { demoRequested } from '../lib/demoMode';
 
 /** Taille maximale d'un relevé (même limite que l'avis d'imposition). */
 export const STATEMENT_MAX_BYTES = 15 * 1024 * 1024;
@@ -21,10 +22,8 @@ export const STATEMENT_FILES_ACCEPT = `${STATEMENT_ACCEPT},.ofx,.qfx,.csv,text/c
 /** Fichier OFX, QFX ou CSV : lu sur l'appareil par du code pur (lib/statementFiles), sans clé. */
 export const isLocalStatementFile = (file: Pick<File, 'name'>): boolean => /\.(ofx|qfx|csv)$/i.test(file.name);
 
-// Mode démo (`?demo=1`) : en développement et dans le build des tests de bout en bout
-// seulement (même règle que useAuthSession) ; jamais dans le build publié.
-const DEMO_ALLOWED: boolean = import.meta.env.DEV || __E2E_DEMO__;
-export const isDemoSession = (): boolean => DEMO_ALLOWED && new URLSearchParams(window.location.search).has('demo');
+// Mode démo (`?demo=1`) : même porte que useAuthSession (lib/demoMode), fermée dans le build publié.
+export const isDemoSession = demoRequested;
 
 /** Erreur de lecture, avec un message en clair pour l'écran. */
 export class StatementReadError extends Error {
@@ -70,7 +69,8 @@ export const readStatementFile = async (file: File, apiKey: string, options: Ext
   if (!mime) throw new StatementReadError('Choisissez un relevé au format PDF, ou une capture d\'écran (image).', 'file');
   if (file.size > STATEMENT_MAX_BYTES) throw new StatementReadError('Fichier trop lourd (15 Mo au plus) : gardez seulement les pages du relevé.', 'file');
   if (file.size === 0) throw new StatementReadError('Ce fichier est vide.', 'file');
-  if (options.demo ?? isDemoSession()) {
+  // Condition écrite en toutes lettres : repliée à `false` au build publié, elle emporte l'import().
+  if ((import.meta.env.DEV || __E2E_DEMO__) && (options.demo ?? isDemoSession())) {
     const { demoStatement } = await import('../dev/demoStatement');
     return demoStatement();
   }

@@ -11,7 +11,7 @@
 // Même unité que l'avertissement de Vite : kB = 1 000 octets, fichier minifié, hors gzip.
 // Vite ne fait qu'avertir au-delà de 500 kB : sans ce script, la CI resterait verte.
 // Lancé par .github/workflows/ci.yml juste après `npm run build`.
-import { readFileSync, statSync } from 'node:fs';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -89,6 +89,12 @@ export const startupVerdict = (count, bytes, limitKb = STARTUP_LIMIT_KB) => {
     : { ok: true, message: `Démarrage : ${shown} sur ${limitKb} kB (marge ${(limitKb - kb).toFixed(2)} kB).` };
 };
 
+/** Fichiers du mode démo (« demoData-AbC123.js », « demoStatement-….js ») trouvés dans le dossier
+ * assets du build, chemins relatifs au build. */
+export const demoFiles = dir => {
+  try { return readdirSync(path.join(dir, 'assets')).filter(f => /^demo[^/]*.js$/i.test(f)).map(f => `assets/${f}`); } catch { return []; }
+};
+
 /** Contrôle d'un dossier de build. Ne lève pas : rend le verdict. */
 export const checkBuild = (dir, limitKb = LIMIT_KB, startupLimitKb = STARTUP_LIMIT_KB) => {
   let html;
@@ -109,6 +115,10 @@ export const checkBuild = (dir, limitKb = LIMIT_KB, startupLimitKb = STARTUP_LIM
   const verdicts = [main, startup];
   if (lazy.length) {
     verdicts.push({ ok: false, message: `Fichier à charger à la demande présent au démarrage : ${lazy.join(', ')}. Il doit rester derrière un import() (voir vite.config.ts).` });
+  }
+  const demo = demoFiles(dir);
+  if (demo.length) {
+    verdicts.push({ ok: false, message: `Mode démo présent dans le build publié : ${demo.join(', ')}. Les import() de src/dev/ doivent être repliés (src/lib/demoMode.ts).` });
   }
   return { ok: verdicts.every(v => v.ok), message: verdicts.map(v => v.message).join('\n') };
 };

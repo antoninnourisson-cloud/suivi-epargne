@@ -21,12 +21,14 @@ interface BottomNavProps {
 // `expanded` : bouton qui ouvre une feuille (« Plus ») ; le lecteur d'écran annonce qu'il
 // ouvre une boîte de dialogue, et si elle est ouverte.
 const TabButton: React.FC<{ active: boolean; onClick: () => void; icon: React.ComponentType<{ className?: string }>; label: string; current?: boolean; expanded?: boolean }> = ({ active, onClick, icon: Icon, label, current, expanded }) => (
-  // Barre de navigation Material 3 : l'onglet actif porte un indicateur en pilule.
-  <button onClick={onClick} aria-current={current ? 'page' : undefined} aria-haspopup={expanded === undefined ? undefined : 'dialog'} aria-expanded={expanded} className="group flex-1 flex flex-col items-center justify-center gap-1 pt-3 pb-4 min-h-20">
-    <span className={`h-8 w-16 rounded-full flex items-center justify-center transition-colors ${active ? 'bg-secondary-container text-on-secondary-container' : 'text-on-surface-variant group-hover:bg-on-surface/8'}`}>
+  // Barre de navigation Material 3 : l'onglet actif porte un indicateur en pilule. Texte agrandi
+  // (html { font-size: 200% }) : le bouton peut rétrécir (min-w-0), la pilule (w-16, en rem)
+  // rétrécit avec lui (max-w-full) et le libellé se tronque au lieu de pousser la barre hors écran.
+  <button onClick={onClick} aria-current={current ? 'page' : undefined} aria-haspopup={expanded === undefined ? undefined : 'dialog'} aria-expanded={expanded} className="group flex-1 min-w-0 flex flex-col items-center justify-center gap-1 pt-3 pb-4 min-h-20">
+    <span className={`h-8 w-16 max-w-full rounded-full flex items-center justify-center transition-colors ${active ? 'bg-secondary-container text-on-secondary-container' : 'text-on-surface-variant group-hover:bg-on-surface/8'}`}>
       <Icon className="w-5 h-5" aria-hidden="true" />
     </span>
-    <span className={`text-xs ${active ? 'font-bold text-on-surface' : 'font-medium text-on-surface-variant'}`}>{label}</span>
+    <span className={`max-w-full truncate text-xs ${active ? 'font-bold text-on-surface' : 'font-medium text-on-surface-variant'}`}>{label}</span>
   </button>
 );
 

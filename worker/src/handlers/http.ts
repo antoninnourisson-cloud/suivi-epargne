@@ -7,6 +7,9 @@ import { allowedOrigins } from '../security';
 import { PROOF_HEADER, NONCE_HEADER } from '../deviceProof';
 import type { Env } from '../index';
 
+/** Même valeur que le site (edge/src/index.ts) : HTTPS imposé un an, sous-domaines compris. */
+export const HSTS = 'max-age=31536000; includeSubDomains';
+
 export const corsHeaders = (req: Request, env: Env): Record<string, string> => {
   const origin = req.headers.get('Origin');
   if (!origin || !allowedOrigins(env).includes(origin)) return {};
@@ -24,7 +27,7 @@ export const corsHeaders = (req: Request, env: Env): Record<string, string> => {
 export const json = (req: Request, env: Env, data: unknown, status = 200, extra: Record<string, string> = {}): Response =>
   new Response(JSON.stringify(data), {
     status,
-    headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', ...corsHeaders(req, env), ...extra },
+    headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Strict-Transport-Security': HSTS, ...corsHeaders(req, env), ...extra },
   });
 
 const escapeHtml = (s: string) => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
@@ -42,7 +45,7 @@ export const htmlPage = (env: Env, title: string, message: string, status = 400)
     {
       status,
       headers: {
-        'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff',
+        'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Strict-Transport-Security': HSTS,
         // Page sans script ni image : seuls les styles en ligne (attributs style) sont permis, et
         // aucune page tierce ne peut l'afficher dans un cadre.
         'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'",
@@ -52,7 +55,7 @@ export const htmlPage = (env: Env, title: string, message: string, status = 400)
   );
 
 export const redirect = (location: string, headers: Record<string, string> = {}): Response =>
-  new Response(null, { status: 302, headers: { Location: location, 'Cache-Control': 'no-store', ...headers } });
+  new Response(null, { status: 302, headers: { Location: location, 'Cache-Control': 'no-store', 'Strict-Transport-Security': HSTS, ...headers } });
 
 /**
  * Limiteur par compte pour les routes qui ÉCRIVENT dans KV (en plus du limiteur par IP du

@@ -71,7 +71,7 @@ describe('SyncStatus', () => {
     fireEvent.click(screen.getByRole('button', { name: /Synchronisation : Erreur sync/ }));
     const sheet = screen.getByRole('dialog', { name: 'Synchronisation avec Drive' });
     expect(sheet.textContent).toContain('Oui, sur cet appareil');
-    expect(sheet.textContent).toContain('Aucune depuis l’ouverture de Pécule');
+    expect(sheet.textContent).toContain("Aucune depuis l'ouverture de Pécule");
     fireEvent.click(screen.getByRole('button', { name: 'Réessayer' }));
     expect(onRetry).toHaveBeenCalledTimes(1);
     expect(screen.getByRole('dialog')).toBeTruthy();

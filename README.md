@@ -227,6 +227,8 @@ Signaler une faille : voir [SECURITY.md](SECURITY.md). Contact : [contact@pecule
 
 Prérequis : **Node.js 24+** (version de référence dans [`.nvmrc`](.nvmrc)).
 
+**Navigateur : Chrome 111 ou plus récent (Android ou ordinateur).** Ce n'est pas un choix de style : Vite 8 compile par défaut pour la cible « baseline widely available » (Chrome 111, Edge 111, Firefox 114, Safari 16.4), et Tailwind 4 s'appuie sur des fonctions CSS récentes (`@property`, `color-mix()`, couches `@layer`) disponibles à partir de Chrome 111. Un navigateur plus ancien afficherait une page abîmée ou blanche.
+
 ```bash
 npm ci                 # dépendances de l'app
 npm ci --prefix worker # dépendances du serveur (nécessaires au typecheck)

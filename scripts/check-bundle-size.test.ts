@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import {
-  checkBuild, LIMIT_KB, STARTUP_LIMIT_KB, lazyInStartup, mainEntryPath, preloadedPaths, startupFiles, startupVerdict, staticImports, verdict,
+  checkBuild, demoFiles, LIMIT_KB, STARTUP_LIMIT_KB, lazyInStartup, mainEntryPath, preloadedPaths, startupFiles, startupVerdict, staticImports, verdict,
 } from './check-bundle-size.mjs';
 
 describe('check-bundle-size', () => {
@@ -102,6 +102,18 @@ describe('check-bundle-size', () => {
     expect(res.ok).toBe(false);
     expect(res.message).toContain('Démarrage trop lourd');
     expect(res.message).toContain('Fichier principal : assets/index-m.js');
+  });
+
+  it('refuse un fichier du mode démo dans le build publié', () => {
+    const files = { 'assets/index-abc.js': 100, 'assets/demoData-AbC1.js': 10, 'assets/demoStatement-x.js': 10, 'assets/demographie-x.css': 10 };
+    const dir = build(html, files);
+    expect(demoFiles(dir).sort()).toEqual(['assets/demoData-AbC1.js', 'assets/demoStatement-x.js']);
+    const res = checkBuild(dir, 5, 5);
+    expect(res.ok).toBe(false);
+    expect(res.message).toContain('Mode démo présent');
+    expect(res.message).toContain('demoData-AbC1.js');
+    expect(checkBuild(build(html, { 'assets/index-abc.js': 100 }), 5, 5).ok).toBe(true);
+    expect(demoFiles(path.join(tmpdir(), 'pecule-absent-xyz'))).toEqual([]);
   });
 
   it('échoue clairement sans build, sans script principal ou sans le fichier cité', () => {

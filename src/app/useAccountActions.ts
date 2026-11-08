@@ -372,7 +372,7 @@ export const useAccountActions = (doc: AppDoc, setters: Setters, addToast: AddTo
         deps.current.dialog.open({
           kind: 'confirm', confirmLabel: 'Appliquer',
           title: 'Utiliser les chiffres réels de cette fiche',
-          message: `Le Pilotage budgétaire affichera les montants exacts de la fiche de ${p.extracted.period || 'cette fiche'} (brut, charges, impôt réellement prélevé...) à la place de la formule théorique. Le brut annuel sera aussi mis à jour (${plainEUR(estimate)}, extrapolé), à la place de ${plainEUR(docRef.current.config.grossAnnual)} actuellement.`,
+          message: `Le Pilotage budgétaire affichera les montants exacts de la fiche de ${p.extracted.period || 'cette fiche'} (brut, charges, impôt réellement prélevé…) à la place de la formule théorique. Le brut annuel sera aussi mis à jour (${plainEUR(estimate)}, extrapolé), à la place de ${plainEUR(docRef.current.config.grossAnnual)} actuellement.`,
           onConfirm: () => {
             s().patchConfig({ grossAnnual: estimate });
             s().setActivePayslipId(p.id);

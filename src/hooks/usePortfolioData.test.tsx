@@ -440,6 +440,17 @@ describe('synchronisation Drive', () => {
     expect((drive.writes[0] as { config: Record<string, unknown> }).config.geminiApiKey).toBeUndefined();
   });
 
+  it('refuse un fichier de plus de 10 Mo avant de le lire', async () => {
+    const { result } = await load();
+    const huge = new File(['{}'], 'enorme.json');
+    Object.defineProperty(huge, 'size', { value: 10 * 1024 * 1024 + 1 });
+    const text = vi.spyOn(huge, 'text');
+    let outcome: { ok: boolean; error?: string } = { ok: true };
+    await act(async () => { outcome = await result.current.importData(huge); });
+    expect(outcome).toEqual({ ok: false, error: 'Fichier trop volumineux pour une sauvegarde Pécule (10 Mo au plus).' });
+    expect(text).not.toHaveBeenCalled();
+  });
+
   it('refuse un import invalide et accepte un fichier valide', async () => {
     const { result } = await load();
     const bad = new File(['{"accounts": "nope"}'], 'x.json');

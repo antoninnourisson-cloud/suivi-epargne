@@ -18,6 +18,7 @@ import { useToast } from './Toast';
 import { GeminiModelField } from './SettingsPanels';
 import { isBackendEnabled } from '../services/backendService';
 import { LATEST_VERSION } from '../changelog';
+import { IMPORT_MAX_BYTES, IMPORT_TOO_LARGE_MESSAGE } from '../lib/schema';
 import { Button, PageHeader, TextField } from './ui';
 import { SettingsCard, Hint, Notice } from './settings/SettingsCard';
 import { BenefitsFields, FiscalFields, benefitsSummary, fiscalSummary } from './settings/SalarySections';
@@ -42,7 +43,7 @@ interface SettingsProps {
   onSavePickerKey: (key: string) => void;
   onExport: () => void;
   /** `undoId` : version mise de côté juste avant l'import (« Annuler » la remet, via `onUndoImport`). */
-  onImport: (file: File) => Promise<{ ok: boolean; undoId?: string }>;
+  onImport: (file: File) => Promise<{ ok: boolean; undoId?: string; error?: string }>;
   onUndoImport?: (undoId: string) => Promise<boolean>;
   // Panneaux composés par App (sauvegardes Drive, veille fiscale, appareils et confidentialité).
   backupSlot?: React.ReactNode;
@@ -81,6 +82,8 @@ export const Settings: React.FC<SettingsProps> = ({ payslips = [], config, workB
     const file = e.target.files?.[0];
     e.target.value = ''; // permet de resélectionner le même fichier après une annulation
     if (!file) return;
+    // Refus avant même la confirmation : le fichier n'est pas lu.
+    if (file.size > IMPORT_MAX_BYTES) { setPendingImport(null); setImportMsg(IMPORT_TOO_LARGE_MESSAGE); return; }
     setImportMsg(null);
     setPendingImport(file);
   };
@@ -89,7 +92,7 @@ export const Settings: React.FC<SettingsProps> = ({ payslips = [], config, workB
     if (!pendingImport) return;
     const file = pendingImport;
     setPendingImport(null);
-    const { ok, undoId } = await onImport(file);
+    const { ok, undoId, error } = await onImport(file);
     // Les données remplacées ont été mises de côté : « Annuler » les remet tout de suite.
     if (ok && undoId && onUndoImport && toast) {
       setImportMsg(null);
@@ -106,7 +109,7 @@ export const Settings: React.FC<SettingsProps> = ({ payslips = [], config, workB
       });
       return;
     }
-    setImportMsg(ok ? 'Données importées (sauvegarde en cours).' : 'Fichier invalide : aucune donnée n\'a été remplacée.');
+    setImportMsg(ok ? 'Données importées (sauvegarde en cours).' : error ?? 'Fichier invalide : aucune donnée n\'a été remplacée.');
   };
 
   // Brouillon = données actuelles + modifications pas encore enregistrées. Ce ne sont PAS

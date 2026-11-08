@@ -222,7 +222,7 @@ réponses) ; sinon `401` avec `REAUTH_REQUIRED` (session inconnue, ou d'avant la
 | `GET /health` 🔒 | — | `{"lastRunAt","ok","usersProcessed","error"?}` (dernière tâche quotidienne) |
 | `GET /fiscal-sources` 🔒 | — | `{"fetchedAt","sources":[{url,topic,text,ok}]}` (texte des pages officielles, cache 3 jours) |
 | `GET /fiscal-watch` 🔒 | — | dernier relevé : `{"checkedAt","model","ok","values","sources":[{url,topic,status,fields,rejected}],"neuronsEstimate","neuronsUsed"?}` ; `404 NOT_YET_RUN` avant le premier |
-| `POST /fiscal-watch/run` 🔒 | — | relance la veille (≤ 1 min) ; `429 TOO_SOON` (+ `latest`) moins de 20 h après un succès ou 6 h après un essai ; `502` si aucune valeur relevée ; `503 AI_UNAVAILABLE` sans binding |
+| `POST /fiscal-watch/run` 🔒 | — | relance la veille (≤ 1 min) ; `429 TOO_SOON` (+ `latest`) moins de 20 h après un succès ou 6 h après un essai ; `503 DAILY_BUDGET` (+ `message`) si le plafond du jour (8 000 neurones, tous passages confondus) est atteint ; `502` si aucune valeur relevée ; `503 AI_UNAVAILABLE` sans binding |
 
 ## Tout révoquer d'un coup
 - Dans l'app : **Supprimer mes données serveur** (`POST /account/delete`) efface tout ce que

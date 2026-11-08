@@ -91,6 +91,22 @@ describe('Paramètres : import de fichier', () => {
     expect(onUndoImport).toHaveBeenCalledWith('avant-import');
     expect(toast).toHaveBeenLastCalledWith({ message: 'Import annulé : vos données d\'avant sont revenues', kind: 'success' });
   });
+
+  it('refuse un fichier de plus de 10 Mo sans le lire ni demander de confirmation', () => {
+    const onImport = vi.fn(async (_f: File) => ({ ok: true }));
+    render(
+      <Settings config={DEFAULT_FISCAL_CONFIG} workBenefits={DEFAULT_WORK_BENEFITS} geminiApiKey="" pickerApiKey=""
+        onUpdateFiscal={() => {}} onUpdateBenefits={() => {}} onSaveGeminiKey={() => {}} onSavePickerKey={() => {}}
+        onExport={() => {}} onImport={onImport} />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /Sauvegardes et données/ }));
+    const file = new File(['{}'], 'enorme.json', { type: 'application/json' });
+    Object.defineProperty(file, 'size', { value: 10 * 1024 * 1024 + 1 });
+    fireEvent.change(screen.getByLabelText(/Importer un fichier/), { target: { files: [file] } });
+    expect(screen.getByText('Fichier trop volumineux pour une sauvegarde Pécule (10 Mo au plus).')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Remplacer mes données' })).toBeNull();
+    expect(onImport).not.toHaveBeenCalled();
+  });
 });
 
 describe('Paramètres : affichage des taux et du thème', () => {

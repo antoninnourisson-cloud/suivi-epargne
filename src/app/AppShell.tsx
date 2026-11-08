@@ -110,8 +110,13 @@ export const AppShell: React.FC<AppShellProps> = ({ place, onNavigate, onOpenScr
       </aside>
 
       {/* En-tête compact mobile (la barre latérale est masquée en dessous de md) */}
-      <header className="md:hidden sticky top-0 z-30 bg-surface-container text-on-surface px-4 h-16 flex items-center justify-between">
-        <h1 className="text-[22px] font-bold text-primary dark:text-on-surface flex items-center gap-2"><Logo className="w-8 h-8" /> Pécule</h1>
+      {/* Texte agrandi (html { font-size: 200% }) : les boutons (en rem) ne tiennent plus avec le nom et
+          le libellé de synchronisation. Requêtes de conteneur en rem, donc suivant la taille du texte :
+          sous 18 rem le libellé de synchronisation disparaît (le point reste, avec son nom pour les
+          lecteurs d'écran), sous 14 rem le nom aussi (lu quand même). Au texte normal, un écran d'au
+          moins 320 px offre 20 rem : rien ne change. */}
+      <header className="@container md:hidden sticky top-0 z-30 bg-surface-container text-on-surface px-4 h-16 flex items-center justify-between">
+        <h1 className="text-[22px] font-bold text-primary dark:text-on-surface flex items-center gap-2"><Logo className="w-8 h-8" /> <span className="@max-[14rem]:sr-only">Pécule</span></h1>
         <div className="flex items-center gap-1 -mr-3">
           <SyncStatus phase={syncPhase} lastSavedAt={lastSavedAt} variant="short" onOpen={openSync} />
           <DiscreetButton discreet={discreet} onToggle={onToggleDiscreet} />

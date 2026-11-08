@@ -15,6 +15,18 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '2026.11.08-2',
+    date: '2026-11-08',
+    title: 'Vérifications de fond',
+    items: [
+      "Texte agrandi à 200 % dans Android : la barre du bas, l'en-tête et les choix du mouvement rapide restent dans l'écran.",
+      "Code PIN encore plus long à deviner hors de l'app (600 000 tours de calcul) : votre code est ré-enregistré tout seul au prochain déverrouillage.",
+      "Importer une sauvegarde : un fichier de plus de 10 Mo est refusé tout de suite, avec un message clair.",
+      "Nouvelle page « Mentions légales » (connexion, Paramètres › À propos, présentation) et page d'erreur en français pour une adresse qui n'existe pas.",
+      "Coulisses : les données fictives de la démo ne sont plus livrées avec l'app, le serveur impose aussi HTTPS, et la veille fiscale a un plafond par jour.",
+    ],
+  },
+  {
     version: '2026.11.08',
     date: '2026-11-08',
     title: 'Ménage et documentation',

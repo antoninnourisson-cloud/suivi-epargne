@@ -286,6 +286,19 @@ describe('en-têtes de sécurité', () => {
     const html = await res.text();
     expect(html).not.toMatch(/<script|<link|<img|<style|<iframe/i);
   });
+
+  it('toutes les réponses du serveur imposent HTTPS (Strict-Transport-Security, comme le site)', async () => {
+    const HSTS = 'max-age=31536000; includeSubDomains';
+    expect((await call('/status')).headers.get('Strict-Transport-Security')).toBe(HSTS);   // JSON
+    expect((await call('/inconnu')).headers.get('Strict-Transport-Security')).toBe(HSTS);  // JSON, erreur
+    expect((await worker.fetch(new Request(`${W}/auth/callback`), env)).headers.get('Strict-Transport-Security')).toBe(HSTS); // page HTML
+    const options = await worker.fetch(new Request(`${W}/status`, { method: 'OPTIONS', headers: { Origin: ORIGIN } }), env);
+    expect(options.status).toBe(204);
+    expect(options.headers.get('Strict-Transport-Security')).toBe(HSTS);                    // préparation CORS
+    const start = await worker.fetch(new Request(`${W}/auth/start?return=${encodeURIComponent(APP)}`), env);
+    expect(start.status).toBe(302);
+    expect(start.headers.get('Strict-Transport-Security')).toBe(HSTS);                      // redirection
+  });
 });
 
 // ---------- 5. Écritures plafonnées ----------

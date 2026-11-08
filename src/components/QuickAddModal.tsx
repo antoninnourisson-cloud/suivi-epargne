@@ -209,15 +209,21 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ open, accounts, in
     <Modal open={open} onClose={onClose} label="Ajouter un mouvement" variant="sheet" className="max-w-md p-6" initialFocusRef={initialKind === 'WISH' ? nameRef : amountRef} closeOnScrim={!dirty}>
       <form onSubmit={submit} noValidate>
         <div className="flex items-center justify-between gap-2 mb-5">
-          <h2 className="text-2xl font-normal text-on-surface">Ajouter un mouvement</h2>
+          <h2 className="min-w-0 hyphens-auto break-words text-2xl font-normal text-on-surface">Ajouter un mouvement</h2>
           <IconButton icon={X} label="Fermer" onClick={onClose} className="-mr-3" />
         </div>
 
         <div className="space-y-5">
-          <SegmentedButton
-            label="Type de mouvement" options={kinds} value={type} onChange={k => { setTransferError(null); setType(k); }}
-            className="w-full [&>button]:flex-1 [&>button]:px-2 max-sm:[&>button]:h-12 max-[359px]:[&>button]:px-1 max-[359px]:[&>button]:text-xs max-[359px]:[&>button>svg]:hidden"
-          />
+          {/* Texte agrandi (html { font-size: 200% }) : la largeur de la feuille, comptée en rem
+              (requête de conteneur), tombe sous 19 rem et les quatre choix passent en grille de
+              2 colonnes, chacun en pilule. Au texte normal, un écran d'au moins 360 px offre plus de
+              19 rem : rien ne change. */}
+          <div className="@container">
+            <SegmentedButton
+              label="Type de mouvement" options={kinds} value={type} onChange={k => { setTransferError(null); setType(k); }}
+              className="w-full [&>button]:flex-1 [&>button]:px-2 max-sm:[&>button]:h-12 max-[359px]:[&>button]:px-1 max-[359px]:[&>button]:text-xs max-[359px]:[&>button>svg]:hidden @max-[19rem]:min-[360px]:grid @max-[19rem]:min-[360px]:grid-cols-2 @max-[19rem]:min-[360px]:gap-2 @max-[19rem]:min-[360px]:rounded-none @max-[19rem]:min-[360px]:border-0 @max-[19rem]:min-[360px]:overflow-visible @max-[19rem]:min-[360px]:[&>button]:rounded-full @max-[19rem]:min-[360px]:[&>button]:border @max-[19rem]:min-[360px]:[&>button]:border-outline"
+            />
+          </div>
           {/* Retrait guidé : un lien sous les choix, pas un choix de plus. Sous 360 px, les quatre choix perdent leur icône pour tenir. */}
           {onOpenNeed && !wish && (
             <button type="button" onClick={onOpenNeed} className="-mt-2 min-h-12 text-sm font-medium text-primary underline underline-offset-4 decoration-primary/40 hover:decoration-primary text-left">

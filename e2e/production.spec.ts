@@ -3,7 +3,7 @@
 // violation de la politique de sécurité (CSP) ni erreur, et le service worker s'installe puis
 // sert l'app hors ligne. Contre le serveur de développement, seule la première partie a un sens.
 import { test, expect } from './fixtures';
-import { E2E_BUILD, WORKER_ORIGIN } from './target';
+import { E2E_BUILD, E2E_DIST, WORKER_ORIGIN } from './target';
 import { LATEST_VERSION } from '../src/changelog';
 
 test.describe('Build publié', () => {
@@ -65,5 +65,17 @@ test.describe('Build publié', () => {
       // sans serveur, requêtes hors précache) : toute autre erreur compte.
       expect(offline.filter(p => !/accounts\.google\.com|ERR_INTERNET_DISCONNECTED|Failed to load resource/.test(p))).toEqual([]);
     }
+  });
+
+  // Seul le build publié (dist, E2E_DIST) ferme la porte du mode démo : le développement et
+  // dist-e2e l'ouvrent exprès.
+  test('?demo=1 ne mène pas au mode démo', async ({ page }) => {
+    test.skip(!E2E_DIST, 'Le mode démo existe hors du build publié.');
+    await page.route(WORKER_ORIGIN, route => route.abort());
+    await page.route('https://accounts.google.com/gsi/client', route => route.fulfill({ contentType: 'text/javascript', body: '' }));
+    await page.addInitScript(v => { try { localStorage.setItem('last_seen_version', v); } catch { /* ignoré */ } }, LATEST_VERSION);
+    await page.goto('/?demo=1');
+    await expect(page.getByRole('button', { name: 'Continuer avec Google' })).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByText(/mode démo/i)).toHaveCount(0);
   });
 });
