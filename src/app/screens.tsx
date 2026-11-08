@@ -91,7 +91,10 @@ export const preloadStartView = () => {
   const linked = params.get('view');
   const linkedPlace = isView(linked) ? placeOf(linked, params.get('tab')) : null;
   const place = linkedPlace || parsePlace(lsGet(LAST_VIEW_KEY)) || { screen: 'dashboard' as const };
-  (START_VIEW_LOADERS[encodePlace(place)] ?? START_VIEW_LOADERS.dashboard)().catch(() => undefined);
+  // Clé venue de l'adresse ou du stockage local : seulement un chargeur connu (jamais une propriété héritée).
+  const key = encodePlace(place);
+  const load = Object.hasOwn(START_VIEW_LOADERS, key) ? START_VIEW_LOADERS[key] : START_VIEW_LOADERS.dashboard;
+  load().catch(() => undefined);
 };
 
 /**

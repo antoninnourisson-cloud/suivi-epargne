@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import edge, { REVALIDATE, cspFromHtml } from '../src/index';
+import edge, { REVALIDATE, cspFromHtml, stripHtmlComments } from '../src/index';
 
 const origin = (init: ResponseInit = {}, body: BodyInit | null = '<!doctype html><title>Pécule</title>') =>
   vi.fn(async (_req: Request) => new Response(body, {
@@ -128,5 +128,25 @@ describe('POST /csp-report', () => {
     expect((await call('https://pecule-app.com/ailleurs', { method: 'POST', body: '{}', headers: { 'Content-Type': 'application/csp-report' } })).status).toBe(405);
     expect((await call('https://pecule-app.com/csp-report', { method: 'PUT', body: '{}' })).status).toBe(405);
     expect(f).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('commentaires HTML retirés en une seule passe', () => {
+  it('retire chaque commentaire, et tout ce qui suit un commentaire non fermé', () => {
+    expect(stripHtmlComments('a<!-- un -->b<!-- deux -->c')).toBe('abc');
+    expect(stripHtmlComments('a<!-- jamais fermé <meta http-equiv="Content-Security-Policy">')).toBe('a');
+    expect(stripHtmlComments('sans commentaire')).toBe('sans commentaire');
+  });
+
+  it('une balise citée dans un commentaire ne compte pas', () => {
+    const html = '<!-- <meta http-equiv="Content-Security-Policy" content="default-src *"> --><meta http-equiv="Content-Security-Policy" content="default-src \'self\'">';
+    expect(cspFromHtml(html)).toBe("default-src 'self'");
+  });
+
+  it('beaucoup de débuts de commentaire sans fin : réponse immédiate', () => {
+    const html = '<!--'.repeat(50_000);
+    const started = performance.now();
+    expect(stripHtmlComments(html)).toBe('');
+    expect(performance.now() - started).toBeLessThan(500);
   });
 });

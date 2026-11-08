@@ -142,7 +142,7 @@ export interface ClosingDrafts {
 
 const read = (text: string | undefined): number | null | undefined => {
   if (text === undefined || text.trim() === '') return undefined;
-  const v = parseFrenchNumber(text.replace('€', '').replace('%', ''));
+  const v = parseFrenchNumber(text.replace(/[€%]/g, ''));
   return v !== null && Number.isFinite(v) && v >= 0 ? v : null;
 };
 

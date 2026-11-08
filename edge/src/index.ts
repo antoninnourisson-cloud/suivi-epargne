@@ -79,10 +79,27 @@ const CSP_REPORT_PATH = '/csp-report';
 const CSP_REPORT_MAX_BYTES = 16 * 1024;
 const CSP_REPORT_MAX_ENTRIES = 20;
 
+/**
+ * HTML sans ses commentaires, en une seule passe (temps linéaire) : un commentaire non fermé
+ * court jusqu'à la fin, comme pour le navigateur.
+ */
+export const stripHtmlComments = (html: string): string => {
+  let out = '';
+  let i = 0;
+  for (;;) {
+    const start = html.indexOf('<!--', i);
+    if (start === -1) return out + html.slice(i);
+    out += html.slice(i, start);
+    const end = html.indexOf('-->', start + 4);
+    if (end === -1) return out;
+    i = end + 3;
+  }
+};
+
 /** Politique de la balise <meta http-equiv="Content-Security-Policy">, espaces normalisés, ou `null`. */
 export const cspFromHtml = (html: string): string | null => {
   // Les commentaires peuvent citer la balise sans qu'elle s'applique.
-  for (const tag of html.replace(/<!--[\s\S]*?-->/g, '').match(/<meta\b[^>]*>/gi) ?? []) {
+  for (const tag of stripHtmlComments(html).match(/<meta\b[^>]*>/gi) ?? []) {
     if (!/\bhttp-equiv\s*=\s*["']?content-security-policy["'\s/>]/i.test(tag)) continue;
     const content = /\bcontent\s*=\s*(?:"([^"]*)"|'([^']*)')/i.exec(tag);
     const policy = (content?.[1] ?? content?.[2] ?? '').replace(/\s+/g, ' ').trim().replace(/;$/, '').trim();
