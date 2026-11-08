@@ -42,7 +42,7 @@ export interface EmergencyFund {
  * tous les comptes (placements, assurance vie et comptes courants compris), sauf l'immobilier,
  * l'épargne retraite et salariale bloquée (PER, PEE) et les contrats à échéance.
  */
-export const availableSavingsOf = (accounts: Pick<SavingsAccount, 'type' | 'ownedAmount' | 'contractEndDate'>[]): number =>
+const availableSavingsOf = (accounts: Pick<SavingsAccount, 'type' | 'ownedAmount' | 'contractEndDate'>[]): number =>
   accounts
     .filter(a => !a.contractEndDate && ![AccountType.IMMOBILIER, AccountType.PER, AccountType.PEE].includes(a.type))
     .reduce((s, a) => s + a.ownedAmount, 0);

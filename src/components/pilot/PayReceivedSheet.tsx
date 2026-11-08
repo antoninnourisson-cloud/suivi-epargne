@@ -40,7 +40,7 @@ import { usePayReceivedForm, parseAmount, dayLabel, monthLabel, type AddedRow, t
 export type { PayRitualProps } from './usePayReceivedForm';
 
 /** Page officielle du don manuel (déclaration en ligne d'un don d'argent). */
-export const GIFT_DECLARATION_URL = 'https://www.impots.gouv.fr/particulier/don-manuel';
+const GIFT_DECLARATION_URL = 'https://www.impots.gouv.fr/particulier/don-manuel';
 /** Titre de l'étape 2 d'un versement en plus, selon sa nature. */
 const EXTRA_PLAN_TITLE: Record<ExtraNature, string> = {
   refund: 'Que faire de ce remboursement', sale: 'Que faire de cette vente', gift: 'Que faire de ce cadeau', other: 'Que faire de ce versement',

@@ -82,7 +82,7 @@ export const attemptMonthlyBackup = (data: unknown, opts: { force?: boolean; now
   return inFlight;
 };
 
-export interface MonthlyBackupProblem {
+interface MonthlyBackupProblem {
   /** Date de la dernière copie réussie. */
   since: Date;
   /** true : seul le mois est connu (copies faites avant que la date soit notée) ; `since` = 1er du mois. */

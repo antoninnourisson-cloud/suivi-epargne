@@ -11,7 +11,7 @@ import type { DocumentState } from './useDocument';
 import type { ImportOutcome } from './syncShared';
 
 /** Ce que le moteur de synchronisation sait des données affichées. */
-export interface ShownDataRefs {
+interface ShownDataRefs {
   /** Un chargement Drive a réussi. */
   hasLoadedRef: RefObject<boolean>;
   /** La copie hors ligne est affichée. */

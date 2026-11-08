@@ -10,7 +10,7 @@ import { Button } from './ui';
 import { useCardSummary, useInSettingsCard } from './settings/SettingsCard';
 
 /** État de la veille (useFiscalWatch) : la carte le reçoit tel quel. */
-export interface FiscalWatchView {
+interface FiscalWatchView {
   proposals: FiscalProposal[];
   running: boolean;
   checkedAt?: string;

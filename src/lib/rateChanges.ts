@@ -30,6 +30,6 @@ export const splitFiscalProposals = <P extends { key: string }>(proposals: reado
 });
 
 /** Comptes dont la banque ou l'assureur fixe le taux : corrigés à la main dans la feuille. */
-export const OTHER_RATE_TYPES: readonly AccountType[] = [AccountType.LIVRET_BANCAIRE, AccountType.ASSURANCE_VIE];
+const OTHER_RATE_TYPES: readonly AccountType[] = [AccountType.LIVRET_BANCAIRE, AccountType.ASSURANCE_VIE];
 export const otherRateAccounts = (accounts: readonly SavingsAccount[]): SavingsAccount[] =>
   accounts.filter(a => OTHER_RATE_TYPES.includes(a.type));

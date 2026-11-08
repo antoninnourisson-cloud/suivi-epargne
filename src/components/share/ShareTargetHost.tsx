@@ -174,7 +174,7 @@ export const ShareTargetHost: React.FC<ShareTargetHostProps> = props => {
   const text = noKey
     ? 'Pour lire ce document, Pécule a besoin d\'une clé Gemini. Ajoutez-la dans Paramètres, rubrique « Clés et services », puis partagez le fichier à nouveau. Le fichier reçu a été effacé.'
     : phase.kind === 'missing'
-      ? 'Le fichier partagé n\'est plus disponible : il est effacé dès sa lecture, et au bout d\'une heure s\'il n\'a pas été ouvert. Partagez-le à nouveau.'
+      ? 'Le fichier partagé n\'est plus disponible : il est effacé dès sa lecture, et au bout de 10 minutes s\'il n\'a pas été ouvert. Partagez-le à nouveau.'
       : REFUSED_TEXT[phase.reason];
   return (
     <Modal open onClose={onDone} label="Fichier non importé" variant="sheet" className="max-w-lg p-6">

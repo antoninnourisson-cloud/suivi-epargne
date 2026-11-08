@@ -93,7 +93,7 @@ const route = async (req: Request, env: Env, url: URL, r: string): Promise<Respo
     case 'GET /fiscal-sources': return handleFiscalSources(req, env);
     case 'GET /fiscal-watch': return handleFiscalWatch(req, env);
     case 'POST /fiscal-watch/run': return handleFiscalWatchRun(req, env);
-    case 'GET /auth/start': return handleAuthStart(req, env, url);
+    case 'GET /auth/start': return handleAuthStart(env, url);
     case 'GET /auth/callback': {
       const res = await handleAuthCallback(req, env, url);
       res.headers.append('Set-Cookie', clearOAuthCookie());

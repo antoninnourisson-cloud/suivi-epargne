@@ -11,7 +11,7 @@ import { sealJSON, openJSON } from './localVault';
 import { lsGet, lsDel } from '../lib/storage';
 import { storageKey } from '../lib/storageKeys';
 
-export type SetAsideReason = 'conflict' | 'restore' | 'import' | 'recover' | 'unsent';
+type SetAsideReason = 'conflict' | 'restore' | 'import' | 'recover' | 'unsent';
 
 export interface SetAsideVersion {
   id: string;

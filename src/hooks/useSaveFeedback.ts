@@ -3,7 +3,7 @@
 // ================================================
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
 
-export type SaveStatus = 'idle' | 'pending' | 'saved';
+type SaveStatus = 'idle' | 'pending' | 'saved';
 
 /** Dernière écriture Drive confirmée (null : aucune pendant cette session). */
 export const LastSavedAtContext = createContext<Date | null>(null);

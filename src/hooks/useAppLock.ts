@@ -291,7 +291,7 @@ export const useAppLock = () => {
 };
 
 /** État du chargement des données, vu par la fin d'une réinitialisation du verrou. */
-export interface LockResetLoadState {
+interface LockResetLoadState {
   /** Un chargement Drive était en cours au rendu précédent. */
   wasLoading: boolean;
   /** Un chargement Drive est en cours. */

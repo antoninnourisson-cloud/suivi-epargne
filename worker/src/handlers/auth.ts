@@ -17,7 +17,7 @@ import type { Env } from '../index';
 
 const LOGIN_CODE_TTL = 60;       // minimum KV ; le code est effacé dès l'échange
 
-export const handleAuthStart = async (req: Request, env: Env, url: URL): Promise<Response> => {
+export const handleAuthStart = async (env: Env, url: URL): Promise<Response> => {
   const state = newOAuthState(safeReturnUrl(url.searchParams.get('return'), env));
   const signed = await signState(state, await deriveStateKey(env.ENCRYPTION_KEY));
   const params = new URLSearchParams({

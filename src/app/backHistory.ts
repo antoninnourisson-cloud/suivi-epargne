@@ -5,7 +5,7 @@
 // L'adresse ne change jamais (pushState sans adresse) : ?partage=, ?demo=1 et les alias
 // d'anciennes adresses restent intacts. Un seul écouteur `popstate` dispatche les gestes.
 
-export interface PecState { pecNav?: number; pecModal?: boolean }
+interface PecState { pecNav?: number; pecModal?: boolean }
 
 const readState = (): PecState => {
   const s: unknown = window.history.state;
@@ -41,9 +41,6 @@ const listen = () => {
   listening = true;
   window.addEventListener('popstate', onPop);
 };
-
-/** Nombre de fenêtres qui écoutent le geste Retour. */
-export const openModalCount = () => modalHandlers.length;
 
 /** Pose l'entrée d'une fenêtre (à son ouverture ou quand un Retour refusé la remet). */
 export const pushModalEntry = () => {

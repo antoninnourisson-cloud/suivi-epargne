@@ -47,11 +47,11 @@ export const removeStoredCopy = (key: string, stored: string): void => {
 };
 
 /** Même copie : même fichier Drive et même contenu. */
-export const sameCopy = (a: { fileId?: string; data: unknown }, b: { fileId?: string; data: unknown }) =>
+const sameCopy = (a: { fileId?: string; data: unknown }, b: { fileId?: string; data: unknown }) =>
   (a.fileId ?? null) === (b.fileId ?? null) && canonicalize(a.data) === canonicalize(b.data);
 
 /** Met de côté (30 jours, chiffrée) une copie jamais envoyée, sauf si elle y est déjà. Lève en cas d'échec. */
-export const setAsideUnsent = async (snap: StoredSnapshot) => {
+const setAsideUnsent = async (snap: StoredSnapshot) => {
   const kept = await listSetAside(snap.fileId);
   if (kept.some(e => sameCopy(e, snap))) return;
   const at = snap.savedAt && !Number.isNaN(Date.parse(snap.savedAt))
@@ -193,7 +193,7 @@ export type StoredCopies = (readonly [string, string | null])[];
 export interface UnreadableCopy { key: string; stored: string; lost: boolean }
 
 /** Copie de l'abri redevenue lisible, différente de Drive et rattachée au fichier ouvert. */
-export interface HeldReadable { stored: string; snap: StoredSnapshot }
+interface HeldReadable { stored: string; snap: StoredSnapshot }
 
 /**
  * Copies locales jamais envoyées (quarantaine, miroir, abri) qui diffèrent de `reference`
@@ -271,7 +271,7 @@ export const dropLostCopies = (copies: UnreadableCopy[]): void => {
  * `unreadable` qu'une copie existe mais ne peut pas être relue. Rien n'est écrit ni effacé ici.
  * `shown` : état affiché (copie hors ligne modifiée ici), relevé avant toute attente.
  */
-export interface DeviceTrace { found: boolean; newest: StoredSnapshot | null; unreadable: boolean }
+interface DeviceTrace { found: boolean; newest: StoredSnapshot | null; unreadable: boolean }
 export const findDeviceTrace = async (
   offlineStore: OfflineStore, storedCopies: StoredCopies, shown: StoredSnapshot | null, knownFileId: string | null,
 ): Promise<DeviceTrace> => {

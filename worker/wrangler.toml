@@ -2,7 +2,7 @@
 # Guide complet : worker/README.md
 # Le nom technique `suivi-epargne-api` (ancien nom de l'app) est conservé : le changer créerait
 # un autre Worker, à une autre adresse (redirection OAuth, VITE_BACKEND_URL, sessions...).
-# Déploiement automatique : .github/workflows/worker.yml (dès que les secrets GitHub existent).
+# Déploiement automatique : .github/workflows/deploy.yml, job « Déploiement du serveur » (dès que les secrets GitHub existent).
 name = "suivi-epargne-api"
 main = "src/index.ts"
 compatibility_date = "2026-10-01"
@@ -20,7 +20,7 @@ compatibility_date = "2026-10-01"
 workers_dev = false
 
 [vars]
-# Client OAuth : DOIT être le même que celui de l'app (src/services/googleDriveService.ts),
+# Client OAuth : DOIT être le même que celui de l'app (src/services/drive/session.ts),
 # sinon le scope drive.file ne donne pas accès au fichier de données déjà créé.
 GOOGLE_CLIENT_ID = "763862877733-hl1an9vcn0ibnoq2iq035927528mimd5.apps.googleusercontent.com"
 APP_URL = "https://pecule-app.com/"

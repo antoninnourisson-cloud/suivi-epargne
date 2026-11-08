@@ -37,10 +37,7 @@ export const askSuggestions = (today: Date = new Date()): string[] => {
   return [...BASE_SUGGESTIONS, ...USUAL_SUGGESTIONS];
 };
 
-/** Les six suggestions du reste de l'année. */
-export const ASK_SUGGESTIONS = [...BASE_SUGGESTIONS, ...USUAL_SUGGESTIONS];
-
-export interface AskPeculeProps {
+interface AskPeculeProps {
   data: GlobalAppData;
   geminiApiKey: string;
   taxEstimate?: SalaryTaxEstimate;

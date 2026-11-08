@@ -7,7 +7,7 @@ import type { DriveFileInfo } from '../../services/googleDriveService';
 import type { ConflictCtx, StoredSnapshot } from './syncShared';
 
 /** Dernier état vu par les écouteurs (onglets, retour au premier plan) sans les réabonner. */
-export type StatusSnapshot = SyncStatus & { syncConflict: boolean; localBackup: StoredSnapshot | null; isAuthenticated: boolean };
+type StatusSnapshot = SyncStatus & { syncConflict: boolean; localBackup: StoredSnapshot | null; isAuthenticated: boolean };
 
 export const useSyncRefs = (initialStatus: StatusSnapshot) => ({
   // Base de la copie hors ligne affichée : le contenu de Drive qu'elle reflète.

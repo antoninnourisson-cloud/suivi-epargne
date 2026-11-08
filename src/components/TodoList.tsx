@@ -27,7 +27,7 @@ export interface TodoSpec {
   snoozeUntil?: string;
   /** Ce que l'alerte vaut en euros : puce « +39 €/an », et rang dans la liste. */
   gain?: AlertGain;
-  /** En tête de la liste quel que soit son montant (clôture de l'année en janvier-février). */
+  /** En tête de la liste quel que soit son montant (lu par sortAlerts : clôture, retrait prévu, taux, restitution). */
   pinned?: boolean;
 }
 

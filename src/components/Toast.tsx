@@ -1,7 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { CheckCircle2, X, AlertCircle } from 'lucide-react';
 
-export interface ToastAction {
+interface ToastAction {
   label: string;
   onClick: () => void;
 }
@@ -57,7 +57,7 @@ export const ToastContainer: React.FC<{ toasts: ToastItem[]; onDismiss: (id: str
  *  (plus de 80 caractères : le temps de le lire n'est pas garanti) ; un message avec action
  *  (« Annuler ») garde 10 s ; une confirmation courte 3 s ; une durée fournie l'emporte, sauf
  *  pour une erreur (au moins 10 s). Retourne null pour « jusqu'à fermeture ». */
-export const LONG_ERROR_CHARS = 80;
+const LONG_ERROR_CHARS = 80;
 export const toastDurationMs = (t: Pick<ToastItem, 'message' | 'kind' | 'action' | 'durationMs'>): number | null => {
   if (t.kind === 'error') {
     if (t.message.length > LONG_ERROR_CHARS) return null;

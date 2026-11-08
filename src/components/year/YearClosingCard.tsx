@@ -7,7 +7,7 @@ import type { GlobalAppData } from '../../types';
 import { buildYearClosing, closingApplies, closingProgress, closingYearOf } from '../../lib/yearClosing';
 import { Button } from '../ui';
 
-export interface YearClosingCardProps {
+interface YearClosingCardProps {
   /** Données complètes (comptes, dons, restitution, réglages). */
   data: GlobalAppData;
   /** Ouvre la feuille de clôture. */

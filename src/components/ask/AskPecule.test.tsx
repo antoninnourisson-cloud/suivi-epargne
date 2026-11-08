@@ -18,7 +18,17 @@ vi.mock('../../lib/askSnapshot', async importOriginal => {
   return { ...real, buildAskSnapshot: (...a: Parameters<typeof real.buildAskSnapshot>) => { build(); return real.buildAskSnapshot(...a); } };
 });
 
-import { AskPecule, ASK_SUGGESTIONS, askSuggestions } from './AskPecule';
+import { AskPecule, askSuggestions } from './AskPecule';
+
+/** Les six suggestions du reste de l'année. */
+const ASK_SUGGESTIONS = [
+  'Combien ai-je épargné ce trimestre ?',
+  'Quel compte me rapporte le plus ?',
+  'Où en est mon Livret A par rapport au plafond ?',
+  'Quels prélèvements arrivent dans les 30 prochains jours ?',
+  "Combien d'intérêts cette année ?",
+  'Combien me coûtent mes abonnements par an ?',
+];
 
 const setup = (key = 'cle') => {
   const props = { data: emptyData(), geminiApiKey: key, onClose: vi.fn(), onOpenSettings: vi.fn() };

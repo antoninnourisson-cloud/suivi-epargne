@@ -205,9 +205,9 @@ export const numbersInText = (text: string): { all: Set<number>; percent: Set<nu
 const has = (nums: Set<number>, v: number) => nums.has(Math.round(v * 10_000) / 10_000);
 const unitSet = (n: ReturnType<typeof numbersInText>, unit: Unit) => (unit === 'euros' ? n.euros : n.percent);
 
-export interface WatchedOut { value: unknown; source: string; effectiveDate?: string; quote?: string; quoteFound?: boolean; year?: number }
-export type WatchValues = Record<string, WatchedOut>;
-export interface Rejected { field: string; reason: string }
+interface WatchedOut { value: unknown; source: string; effectiveDate?: string; quote?: string; quoteFound?: boolean; year?: number }
+type WatchValues = Record<string, WatchedOut>;
+interface Rejected { field: string; reason: string }
 
 const normQuote = (s: string) => s.replace(/[\s  ]+/g, ' ').trim().toLowerCase();
 
@@ -269,8 +269,8 @@ export const validatePageValues = (parsed: unknown, source: { url: string; text:
 
 // ---------- Exécution ----------
 
-export type PageStatus = 'ok' | 'fetch_failed' | 'invalid_json' | 'ai_error' | 'skipped_budget' | 'no_fields';
-export interface SourceReport {
+type PageStatus = 'ok' | 'fetch_failed' | 'invalid_json' | 'ai_error' | 'skipped_budget' | 'no_fields';
+interface SourceReport {
   url: string; topic: string; status: PageStatus; fields: string[]; rejected: Rejected[];
   neuronsEstimate: number; neuronsUsed?: number; retriedWithoutSchema?: boolean; error?: string;
 }
@@ -416,7 +416,7 @@ export const canRunOnDemand = async (store: KVNamespace, now: Date = new Date())
 /** Relances après un échec : dates (ISO) des dernières, gardées 8 jours. */
 export const RETRIES_KEY = 'fiscal-watch:retries';
 /** Au plus 6 relances par semaine glissante (quota Workers AI), jamais deux le même jour. */
-export const MAX_RETRIES_PER_WEEK = 6;
+const MAX_RETRIES_PER_WEEK = 6;
 const WEEK_MS = 7 * 86400_000;
 
 const dayOf = (iso: string): string => iso.slice(0, 10);

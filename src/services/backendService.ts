@@ -40,7 +40,7 @@ const NONCE_HEADER = 'X-Pecule-Nonce';
 const getSessionToken = (): string | null => lsGet(SESSION_KEY);
 export const hasBackendSession = (): boolean => !!getSessionToken();
 
-export interface AccessTokenResponse { access_token: string; expires_in: number }
+interface AccessTokenResponse { access_token: string; expires_in: number }
 
 /** Type d'appareil déclaré au serveur (liste des appareils connectés, alertes). */
 const deviceLabel = (): string => describeDevice(typeof navigator === 'undefined' ? '' : navigator.userAgent);
@@ -392,7 +392,7 @@ export const sendTestPush = async (): Promise<boolean> => {
  * réessayer), `no-session` (pas de session serveur valable sur cet appareil : l'alerte
  * partira avec la session suivante).
  */
-export type LockResetAlertResult = 'sent' | 'failed' | 'no-session';
+type LockResetAlertResult = 'sent' | 'failed' | 'no-session';
 
 /**
  * « Code oublié » sur cet appareil : le serveur prévient les AUTRES appareils (notification
@@ -472,7 +472,7 @@ export interface ServerHealth { lastRunAt: string | null; ok: boolean | null; us
 export const getServerHealth = async (): Promise<ServerHealth> => authedJson<ServerHealth>('/health');
 
 // --- Veille fiscale : texte des pages officielles, téléchargé par le serveur ---
-export interface FiscalSourceText { url: string; topic: string; text: string; ok: boolean }
+interface FiscalSourceText { url: string; topic: string; text: string; ok: boolean }
 export const getFiscalSources = async (): Promise<FiscalSourceText[]> =>
   (await authedJson<{ sources: FiscalSourceText[] }>('/fiscal-sources')).sources || [];
 

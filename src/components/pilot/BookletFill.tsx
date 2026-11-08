@@ -4,7 +4,7 @@
 import React, { useId } from 'react';
 import { MoneyText } from '../ui';
 
-export interface BookletStat {
+interface BookletStat {
   id: string;
   name: string;
   ceiling: number;

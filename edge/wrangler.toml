@@ -2,7 +2,7 @@
 # ajouter les en-têtes de sécurité HTTP que GitHub Pages ne permet pas de configurer
 # (HSTS, anti-iframe, Permissions-Policy...) et les bons en-têtes de cache (un an pour les
 # fichiers hachés, revalidation pour les pages et le service worker). Il ne touche pas au contenu.
-# Déploiement automatique : .github/workflows/edge.yml. Explications : MAINTENANCE.md § 8.
+# Déploiement automatique : .github/workflows/deploy.yml, job « Déploiement des en-têtes de sécurité ». Explications : MAINTENANCE.md § 8.
 #
 # Les routes ne s'activent QUE si les enregistrements DNS du domaine sont « Proxied »
 # (nuage orange) dans Cloudflare. En « DNS only », le Worker est déployé mais jamais appelé :

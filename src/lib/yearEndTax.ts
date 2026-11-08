@@ -11,9 +11,9 @@ import { computePerAdvantage } from './retirement';
 import { round2 } from './money';
 
 /** Versement PER d'exemple (réduit si le plafond restant est plus petit). */
-export const YEAR_END_PER_EXAMPLE = 1000;
+const YEAR_END_PER_EXAMPLE = 1000;
 /** Don d'exemple, au taux de 66 % (le cas courant). */
-export const YEAR_END_DONATION_EXAMPLE = 100;
+const YEAR_END_DONATION_EXAMPLE = 100;
 
 /** Du 15 novembre au 31 décembre inclus. */
 export const isYearEndTaxSeason = (now: Date): boolean =>

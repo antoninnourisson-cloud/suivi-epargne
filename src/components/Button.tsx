@@ -14,8 +14,8 @@
 // `aria-describedby`), par exemple « Ajoutez une clé Gemini dans les Paramètres ».
 import React from 'react';
 
-export type ButtonVariant = 'filled' | 'tonal' | 'outlined' | 'text' | 'danger';
-export type ButtonSize = 'sm' | 'md';
+type ButtonVariant = 'filled' | 'tonal' | 'outlined' | 'text' | 'danger';
+type ButtonSize = 'sm' | 'md';
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;

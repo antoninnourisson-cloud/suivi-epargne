@@ -13,7 +13,7 @@ export const SITE_CHECK_KEY = 'health:site';
 /** Résultat réutilisé pendant 15 min : `/status` est public, il ne doit pas servir de relais. */
 const SITE_CHECK_TTL_MS = 15 * 60 * 1000;
 
-export interface SiteCheck {
+interface SiteCheck {
   checkedAt: string;
   ok: boolean;
   /** Pages en échec (code HTTP ou contenu inattendu). */

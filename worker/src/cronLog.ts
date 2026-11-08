@@ -6,19 +6,19 @@
 import { GoogleAuthError } from './google';
 
 /** Les deux tâches planifiées (wrangler.toml) : rappels quotidiens et veille fiscale du lundi. */
-export type CronName = 'daily' | 'fiscal-watch';
+type CronName = 'daily' | 'fiscal-watch';
 /** Catégorie d'erreur : lecture Drive, envoi de notification, jeton Google, veille, autre. */
-export type CronErrorCategory = 'drive' | 'notification' | 'token' | 'watch' | 'other';
+type CronErrorCategory = 'drive' | 'notification' | 'token' | 'watch' | 'other';
 
 /** Envois de notifications d'un passage : tentés, reçus (2xx), refusés ou en erreur. Les appareils disparus (404/410) ne comptent dans aucun des deux. */
 export interface NotificationTally { attempted: number; delivered: number; failed: number }
 
-export interface CronLogEntry {
+interface CronLogEntry {
   at: string; cron: CronName; ok: boolean; errors?: CronErrorCategory[];
   /** Passage quotidien seulement ; absent des passages d'avant le suivi des envois. */
   notifications?: NotificationTally;
 }
-export interface FiscalWatchHealth { lastSuccessAt: string | null; lastFailureAt: string | null; ok: boolean | null }
+interface FiscalWatchHealth { lastSuccessAt: string | null; lastFailureAt: string | null; ok: boolean | null }
 
 export const CRON_LOG_KEY = 'health:cron-log';
 export const FISCAL_WATCH_HEALTH_KEY = 'health:fiscal-watch';

@@ -17,7 +17,7 @@ import {
 } from '../services/appLockService';
 import { Button } from './ui';
 
-export interface ForgotOptions {
+interface ForgotOptions {
   /** Effacer aussi les modifications pas encore sur Drive (choix explicite). */
   discardUnsynced: boolean;
 }

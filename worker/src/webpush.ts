@@ -128,7 +128,7 @@ export interface PushMessage {
  * l'abonnement n'existe plus (appareil désinscrit) et doit être supprimé par l'appelant.
  */
 /** Délai maximal (ms) d'un envoi au service push. */
-export const PUSH_TIMEOUT_MS = 15_000;
+const PUSH_TIMEOUT_MS = 15_000;
 
 export const sendPush = async (
   subscription: PushSubscriptionJSON,

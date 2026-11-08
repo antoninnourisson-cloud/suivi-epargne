@@ -57,7 +57,7 @@ export const parseSubscription = (raw: unknown): PushSubscriptionJSON | null => 
   return { endpoint, keys: { p256dh, auth } };
 };
 
-export type UpsertResult = { ok: true; list: StoredSubscription[] } | { ok: false; error: 'TOO_MANY_DEVICES' };
+type UpsertResult = { ok: true; list: StoredSubscription[] } | { ok: false; error: 'TOO_MANY_DEVICES' };
 
 /** Ajoute ou remplace (même endpoint) l'abonnement, rattaché à la session courante. */
 export const upsertSubscription = (
@@ -75,7 +75,7 @@ export const upsertSubscription = (
 /** Identifiant court et stable d'un appareil, sans exposer l'endpoint complet. */
 export const deviceId = async (endpoint: string): Promise<string> => (await sha256b64url(endpoint)).slice(0, 16);
 
-export interface DeviceInfo { id: string; host: string; createdAt: string | null; current: boolean }
+interface DeviceInfo { id: string; host: string; createdAt: string | null; current: boolean }
 
 export const describeDevices = async (list: StoredSubscription[], currentSessionHash: string): Promise<DeviceInfo[]> =>
   Promise.all(list.map(async s => ({

@@ -82,7 +82,7 @@ const getKey = (): Promise<CryptoKey | null> => {
 /** Tests unitaires seulement (jsdom sans IndexedDB) : retiré du build publié. */
 const plaintextAllowedForTests = (): boolean => import.meta.env.MODE === 'test' && typeof indexedDB === 'undefined';
 
-export interface SealOptions {
+interface SealOptions {
   /**
    * Copie qui existe déjà ailleurs (la copie hors ligne, double de Drive) : jamais en clair.
    * Lève `VAULT_UNAVAILABLE` si le navigateur ne peut pas garder la clé ; rien n'est écrit.

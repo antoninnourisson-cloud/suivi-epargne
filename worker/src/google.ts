@@ -33,7 +33,7 @@ export class GoogleAuthError extends Error {
 
 /** Délais maximaux (ms) des appels sortants : sans eux, un service qui ne répond pas bloque la tournée. */
 export const TOKEN_TIMEOUT_MS = 10_000;
-export const DRIVE_TIMEOUT_MS = 15_000;
+const DRIVE_TIMEOUT_MS = 15_000;
 
 const isTimeout = (e: unknown): boolean => e instanceof Error && (e.name === 'TimeoutError' || e.name === 'AbortError');
 
@@ -67,7 +67,7 @@ export const refreshAccessToken = (refreshToken: string, clientId: string, clien
  * DIRECTEMENT de l'endpoint de Google, en back-channel TLS authentifié par le secret
  * client — cas explicitement prévu par OpenID Connect Core §3.1.3.7.
  */
-export interface IdTokenClaims {
+interface IdTokenClaims {
   sub: string; email?: string; email_verified?: boolean; aud?: string | string[]; iss?: string; exp?: number; azp?: string;
 }
 

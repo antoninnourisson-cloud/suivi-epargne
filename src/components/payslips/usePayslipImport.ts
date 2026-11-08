@@ -15,7 +15,7 @@ import { payslipConsistency } from '../../lib/payslipChecks';
 import { STATEMENT_MAX_BYTES, statementMimeType } from '../../services/statementReader';
 
 // Fiche en cours d'import, avant d'être définitivement enregistrée dans `payslips`.
-export interface DraftPayslip {
+interface DraftPayslip {
   fileId: string;
   fileName: string;
   mimeType: string;
@@ -31,7 +31,7 @@ export interface DraftPayslip {
   localFile?: File;
 }
 
-export type AmountField = Exclude<keyof PayslipExtractedData, 'employer' | 'period'>;
+type AmountField = Exclude<keyof PayslipExtractedData, 'employer' | 'period'>;
 // Montants relus avant d'enregistrer : un seul style de champ (TextField), libellés reliés.
 export const AMOUNT_FIELDS: { key: AmountField; label: string; supporting?: string }[] = [
   { key: 'grossAmount', label: 'Brut' },
@@ -45,7 +45,7 @@ export const AMOUNT_FIELDS: { key: AmountField; label: string; supporting?: stri
   { key: 'netPaid', label: 'Net payé', supporting: 'Le montant viré sur votre compte.' },
 ];
 
-export type PayslipSaveMode = 'new' | 'replace' | 'add';
+type PayslipSaveMode = 'new' | 'replace' | 'add';
 
 /**
  * Exécute `fn` en notant les violations de CSP survenues pendant ce temps. Un appel réseau
@@ -86,7 +86,7 @@ const describeError = (e: unknown, blocked: string[]): string => {
 export const withSavedPayslip = (prev: PayslipRecord[], record: PayslipRecord, replaced: ReadonlySet<string>): PayslipRecord[] =>
   [record, ...prev.filter(p => !replaced.has(p.id))];
 
-export interface PayslipImportOptions {
+interface PayslipImportOptions {
   payslips: PayslipRecord[];
   geminiApiKey: string;
   pickerApiKey: string;

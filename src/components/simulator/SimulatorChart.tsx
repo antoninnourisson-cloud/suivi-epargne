@@ -20,7 +20,6 @@ export interface SimChartRow {
   baseline: number;
   scenario: number;
   band?: [number, number];
-  p50?: number;
 }
 
 /** Sans scénario, le plan actuel est la seule courbe : il prend la couleur principale. */

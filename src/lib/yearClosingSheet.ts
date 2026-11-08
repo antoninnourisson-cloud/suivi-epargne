@@ -21,7 +21,7 @@ import { round2 } from './money';
 import type { BalanceUpdate, YearClosingInput } from './commands';
 
 /** Au-delà de cet écart (en euros), la ligne dit d'où il peut venir. Choix d'affichage. */
-export const INTEREST_GAP_LIMIT = 5;
+const INTEREST_GAP_LIMIT = 5;
 export const INTEREST_GAP_CAUSES = 'Causes possibles : un retrait en milieu de quinzaine, ou un taux changé en cours d\'année.';
 
 /** Écart entre les intérêts crédités par la banque et ceux calculés par Pécule. */

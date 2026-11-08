@@ -73,7 +73,7 @@ const viewUrl = (appUrl: string, view: string) =>
 const MONTH_NAMES = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
 
 /** Date civile (calendrier), mois de 1 à 12. */
-export interface CivilDate { year: number; month: number; day: number }
+interface CivilDate { year: number; month: number; day: number }
 
 const PARIS_PARTS = new Intl.DateTimeFormat('fr-FR', { timeZone: 'Europe/Paris', year: 'numeric', month: '2-digit', day: '2-digit' });
 

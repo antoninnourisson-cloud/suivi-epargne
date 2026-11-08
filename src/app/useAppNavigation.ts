@@ -30,7 +30,7 @@ const TABS_KEY = storageKey('screenTabs');
 const isTabMap = (v: unknown): v is Record<string, string> => !!v && typeof v === 'object' && !Array.isArray(v);
 
 /** Dernier onglet affiché de cet écran, s'il existe encore ; sinon l'onglet par défaut. */
-export const rememberedPlace = (screen: Screen): Place => placeIn(screen, lsGetJSON(TABS_KEY, {}, isTabMap)[screen]);
+const rememberedPlace = (screen: Screen): Place => placeIn(screen, lsGetJSON(TABS_KEY, {}, isTabMap)[screen]);
 
 const rememberTab = (screen: Screen, tab: ScreenTab) => {
   const map = lsGetJSON(TABS_KEY, {}, isTabMap);

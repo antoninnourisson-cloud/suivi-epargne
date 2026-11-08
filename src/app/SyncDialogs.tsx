@@ -36,7 +36,7 @@ export const useSyncDialogs = (syncConflict: boolean, hasConflictView: boolean) 
   return useMemo(() => ({ conflictOpen, openConflict, closeConflict, logoutOpen, openLogout, closeLogout }),
     [conflictOpen, openConflict, closeConflict, logoutOpen, openLogout, closeLogout]);
 };
-export type SyncDialogsState = ReturnType<typeof useSyncDialogs>;
+type SyncDialogsState = ReturnType<typeof useSyncDialogs>;
 
 type DialogData = Pick<PortfolioData,
   'conflict' | 'syncStatus' | 'syncConflict' | 'localBackup' | 'closeDuplicateComparison' | 'resolveConflict'

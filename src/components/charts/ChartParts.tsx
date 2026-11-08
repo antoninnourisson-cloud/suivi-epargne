@@ -5,7 +5,7 @@
 import React from 'react';
 
 /** Forme de la pastille : carré (aire), trait (courbe), trait pointillé, ou aire pâle (fourchette). */
-export type SwatchShape = 'square' | 'line' | 'dashed' | 'band';
+type SwatchShape = 'square' | 'line' | 'dashed' | 'band';
 
 /** Opacité de la pastille « fourchette » : la même que l'aire pâle du graphique. */
 const swatchStyle = (color: string, striped: boolean | undefined, shape: SwatchShape, bandOpacity: number): React.CSSProperties => {

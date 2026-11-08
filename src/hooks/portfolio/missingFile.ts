@@ -43,5 +43,3 @@ export const createMissingFileStore = () => {
   };
 };
 export type MissingFileStore = ReturnType<typeof createMissingFileStore>;
-/** Ce que l'interface en voit (sans la copie). */
-export type MissingFileView = Pick<MissingFileStore, 'subscribe' | 'getSnapshot'>;

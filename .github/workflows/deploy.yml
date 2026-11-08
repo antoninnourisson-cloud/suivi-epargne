@@ -260,7 +260,7 @@ jobs:
       - name: Lecture de la dernière version du changelog
         id: changelog
         # Version = première occurrence de version: '...' dans le fichier (l'entrée en tête).
-        # Les puces viennent du vrai tableau CHANGELOG : Node 22 retire les types TypeScript
+        # Les puces viennent du vrai tableau CHANGELOG : Node 24 retire les types TypeScript
         # à la volée, ce qui évite de parser des chaînes JS (apostrophes, guillemets) à la main.
         run: |
           VERSION=$(grep -m1 -oP "version:\s*'\K[^']+" src/changelog.ts)

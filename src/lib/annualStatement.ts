@@ -13,9 +13,9 @@ export interface AnnualStatementData {
 }
 
 /** Taux servi plausible : de 0 à 10 % (choix de prudence : au-delà, c'est une erreur de lecture). */
-export const ANNUAL_RATE_MAX = 10;
+const ANNUAL_RATE_MAX = 10;
 
-export const rateIsPlausible = (rate: number): boolean => rate >= 0 && rate <= ANNUAL_RATE_MAX;
+const rateIsPlausible = (rate: number): boolean => rate >= 0 && rate <= ANNUAL_RATE_MAX;
 
 /** Ce que la feuille peut préremplir : une valeur non plausible n'est jamais proposée. */
 export interface AnnualStatementFill {

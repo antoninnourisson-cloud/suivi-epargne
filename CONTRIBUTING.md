@@ -47,7 +47,7 @@ Chaque couche a son outil ; un test se place dans la couche la plus basse qui pe
 |---|---|---|
 | **Calculs** (soldes, intérêts, fiscalité, paie, simulateur) | `src/lib/*.test.ts` | Vitest, groupe « calculs » : fonctions pures, sans écran. Les propriétés (le total reste égal à part propre plus part des parents, un intérêt ne devient jamais négatif…) sont vérifiées sur des milliers de cas tirés au hasard avec **fast-check** (`src/lib/finance/*.properties.test.ts`) |
 | **Anciens fichiers de données** | `src/lib/__fixtures__/` | un fichier d'exemple par époque du format, passé par `migrate()` et comparé à un instantané ; un test échoue si le format de l'app dépasse le plus récent (voir `src/lib/schema.fixtures.test.ts`) |
-| **Écrans, hooks, services** | `src/**/*.test.tsx`, `src/services/*.test.ts` | Vitest, groupe « écrans », avec React Testing Library ; les services parlent à de faux navigateurs et serveurs (`vi.mock`, `vi.stubGlobal`) |
+| **Écrans, hooks, services** | `src/**/*.test.tsx`, `src/services/**/*.test.ts`, `src/hooks/**/*.test.ts` | Vitest, groupe « écrans », avec React Testing Library ; les services parlent à de faux navigateurs et serveurs (`vi.mock`, `vi.stubGlobal`) |
 | **Serveur** (`worker/`) et **en-têtes** (`edge/`) | `worker/test/`, `edge/test/` | Vitest, groupe « serveur », avec un faux KV en mémoire (`worker/test/kvFake.ts`) : aucun appel réseau |
 | **Parcours complets** dans un vrai navigateur | `e2e/*.spec.ts` | Playwright. Surtout en **mode démo** (`?demo=1`, données fictives, rien d'écrit sur Drive) ; la synchronisation, les conflits, le hors ligne et la session expirée tournent **sans démo contre un faux Drive** en mémoire (`e2e/fakeDrive.ts`, interceptions `page.route`) |
 | **Accessibilité** | `e2e/accessibility.spec.ts` (WCAG 2 A et AA), `e2e/contrast.spec.ts` (contrastes, clair et sombre) | axe-core injecté dans les écrans et les feuilles principales ; un nouvel écran s'ajoute à leur liste |
@@ -71,9 +71,10 @@ Elles sont détaillées dans [MAINTENANCE.md](MAINTENANCE.md) (§ 1, *Invariants
 
 - **Soldes** : tout changement de solde passe par `src/lib/accountOps.ts`. Le total d'un compte est toujours la part propre plus la part des parents.
 - **Capital des parents** : il ne peut jamais être retiré par l'utilisateur. Toute nouvelle façon de retirer de l'argent doit le vérifier.
-- **Fichier de données** : tout ce qui entre passe par `migrate()` (`src/lib/schema.ts`), et les champs inconnus sont conservés. Un changement de format augmente `APP_SCHEMA_VERSION` et ajoute une migration testée.
+- **Fichier de données** : tout ce qui entre passe par `migrate()` (`src/lib/schema.ts`), et les champs inconnus sont conservés. Une nouvelle forme de données ajoute une migration testée dans `migrate()` ; `APP_SCHEMA_VERSION` n'augmente que si un ancien client deviendrait dangereux (MAINTENANCE.md § 1).
 - **Calculs** : les calculs financiers sont des fonctions pures dans `src/lib/`, testées dans `src/lib/*.test.ts`. Pas de calcul métier dans les composants.
 - **Chiffres fiscaux** : chaque valeur (taux, plafond, barème) cite sa source officielle (service-public.gouv.fr, impots.gouv.fr, Légifrance) dans le code ou la PR.
+- **Réseau** : un échec qui vient vraiment du réseau est une `NetworkError` (`src/lib/networkError.ts`), jamais une `TypeError` reconnue au hasard : seule la `NetworkError` est présentée comme « hors ligne ».
 - **Secrets** : aucune clé ni aucun jeton dans le code. La clé Gemini reste sur l'appareil.
 - **Changelog** : toute modification visible ajoute une entrée **en tête** de `src/changelog.ts` (version `AAAA.MM.JJ`, suffixe `-2`, `-3`… le même jour, jamais dans le futur), en phrases simples et sans jargon.
 

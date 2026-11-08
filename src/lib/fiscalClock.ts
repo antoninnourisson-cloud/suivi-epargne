@@ -82,7 +82,7 @@ export interface FiscalAnniversary {
 }
 
 /** Fenêtre pendant laquelle la tâche de l'Accueil reste affichée après l'anniversaire. */
-export const FISCAL_ANNIVERSARY_DAYS = 30;
+const FISCAL_ANNIVERSARY_DAYS = 30;
 
 /**
  * Comptes PEA / assurance vie (avec un solde et une date d'ouverture) dont l'anniversaire fiscal

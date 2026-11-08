@@ -7,7 +7,7 @@
 // ================================================
 import { b64urlDecode, b64urlEncode, randomToken, utf8 } from './crypto';
 
-export interface OriginConfig { APP_URL: string; LEGACY_APP_URL?: string; EXTRA_ORIGINS?: string }
+interface OriginConfig { APP_URL: string; LEGACY_APP_URL?: string; EXTRA_ORIGINS?: string }
 
 const extraOrigins = (env: OriginConfig): string[] =>
   (env.EXTRA_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean);
@@ -57,7 +57,7 @@ const STATE_KEY_INFO = 'pecule/oauth-state/hmac/v1';
 export const STATE_TTL_MS = 10 * 60 * 1000;
 export const OAUTH_COOKIE = '__Host-pecule_oauth';
 
-export interface OAuthState { returnUrl: string; exp: number; nonce: string }
+interface OAuthState { returnUrl: string; exp: number; nonce: string }
 
 export const deriveStateKey = async (encryptionKeyB64url: string): Promise<CryptoKey> => {
   const ikm = await crypto.subtle.importKey('raw', b64urlDecode(encryptionKeyB64url), 'HKDF', false, ['deriveBits']);

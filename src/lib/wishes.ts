@@ -10,9 +10,9 @@ import { round2 } from './money';
 /** Catégories proposées tant que l'utilisateur n'a pas fait les siennes. */
 export const DEFAULT_WISH_CATEGORIES: readonly string[] = ['Maison', 'Livres', 'Gros projets', 'Loisirs', 'Tech'];
 /** Catégorie d'une envie lue sans catégorie dans un fichier abîmé. */
-export const FALLBACK_WISH_CATEGORY = 'Autres';
+const FALLBACK_WISH_CATEGORY = 'Autres';
 /** Au-delà de ce nombre de mois, un prix est « à revérifier ». */
-export const STALE_PRICE_MONTHS = 3;
+const STALE_PRICE_MONTHS = 3;
 
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -131,7 +131,7 @@ export const sanitizeWishes = (raw: unknown): Wish[] | undefined => {
 // Regroupement et totaux
 // ---------------------------------------------------------------------------
 
-export const isBought = (w: Wish): boolean => w.boughtAt !== undefined;
+const isBought = (w: Wish): boolean => w.boughtAt !== undefined;
 export const openWishes = (wishes: readonly Wish[]): Wish[] => wishes.filter(w => !isBought(w));
 /** Achetées, la plus récente d'abord. */
 export const boughtWishes = (wishes: readonly Wish[]): Wish[] =>

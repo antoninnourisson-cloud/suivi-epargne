@@ -44,7 +44,7 @@ export interface CloudBackupStatus {
   lastErrorAt?: string;
 }
 
-export type CloudBackupFailure = 'SESSION_EXPIRED' | 'OFFLINE' | 'TOO_LARGE' | 'RATE_LIMITED' | 'SERVER' | 'NOT_ENABLED' | 'NO_BACKUP'
+type CloudBackupFailure = 'SESSION_EXPIRED' | 'OFFLINE' | 'TOO_LARGE' | 'RATE_LIMITED' | 'SERVER' | 'NOT_ENABLED' | 'NO_BACKUP'
   | 'INVALID_CODE' | 'TYPO' | 'WRONG_CODE' | 'CORRUPTED' | 'UNSUPPORTED_FORMAT' | 'UNSUPPORTED_VERSION';
 
 class CloudBackupFailureError extends Error {
@@ -146,7 +146,7 @@ const api = async (path: string, init: RequestInit = {}): Promise<Response> => {
 
 /** Effacement des copies programmé sur le serveur (7 jours après la demande, annulable). */
 export interface ServerDeletion { requestedAt: string; purgeAt: string }
-export interface ServerBackups {
+interface ServerBackups {
   /** Dates (AAAA-MM-JJ) des copies gardées, la plus récente d'abord. */
   dates: string[];
   deletion: ServerDeletion | null;

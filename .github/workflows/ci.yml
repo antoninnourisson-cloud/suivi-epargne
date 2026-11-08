@@ -77,7 +77,7 @@ jobs:
         # de reconstruire. Ce qui part en ligne est donc exactement ce qui est testé ici.
         run: npm run build
 
-      - name: Plafond du fichier principal (500 kB)
+      - name: Plafonds du démarrage (fichier principal, total, graphiques à la demande)
         # Vite ne fait qu'avertir au-delà de 500 kB : ce contrôle fait échouer la CI (donc le
         # déploiement) si le JS chargé au démarrage dépasse le plafond. Voir le script.
         run: node scripts/check-bundle-size.mjs dist

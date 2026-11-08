@@ -37,7 +37,7 @@ import { Button, IconButton, TextField } from '../ui';
 /** Objectif de l'année modifié : montant, ou `null` pour le retirer. */
 export interface YearGoalChange { year: number; amount: number | null }
 
-export interface YearClosingSheetProps {
+interface YearClosingSheetProps {
   /** Année clôturée (l'année écoulée). */
   year: number;
   data: GlobalAppData;

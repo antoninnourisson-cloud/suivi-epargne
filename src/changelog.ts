@@ -15,6 +15,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '2026.11.08',
+    date: '2026-11-08',
+    title: 'Ménage et documentation',
+    items: [
+      "Fichier partagé vers Pécule et jamais ouvert : le message dit bien qu'il est effacé au bout de 10 minutes.",
+      "Coulisses : ménage du code (exports et champs inutilisés retirés), aide, wiki et page de confidentialité relus et mis à jour, alertes de sécurité de GitHub corrigées, outils du serveur à jour.",
+    ],
+  },
+  {
     version: '2026.11.07-3',
     date: '2026-11-07',
     title: 'Taux d’août et finitions',

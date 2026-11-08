@@ -16,9 +16,11 @@ Ce que le serveur fait, et seulement ça :
    Paris (heure d'été comprise). Chaque rappel n'est envoyé qu'une fois.
 3. **Sauvegarde de secours chiffrée** (facultative, `PUT/GET/DELETE /backup`) : l'app chiffre ses
    données avec une clé dérivée d'un code de secours que le serveur ne reçoit jamais ; il garde
-   les copies récentes et au moins une par mois sur un an (`src/backupRetention.ts`), sans
+   les copies récentes et au moins une par mois sur un an (`src/backupRetention.ts`, 24 copies au plus), sans
    pouvoir les lire, et ne les efface jamais sur-le-champ (7 jours de délai, annulable).
 4. **Veille fiscale hebdomadaire**, détaillée ci-dessous.
+
+**Où est le code** (dans `worker/src/` ; les chemins `src/…` de ce document sont relatifs à `worker/`) : `index.ts` aiguille les routes et les deux crons vers `handlers/` (`auth`, `session`, `push`, `pushStore`, `backup`, `cron`, `status`, `http` pour les réponses communes et la limitation par compte) ; le reste est rangé par sujet (`google`, `sessions`, `deviceProof`, `security`, `crypto`, `subscriptions`, `webpush`, `reminders`, `fiscalSources`, `fiscalWatchJob`, `backupRetention`, `siteCheck`, `cronLog`, `userRecords`). Les rappels réutilisent le code de l'app (`../src/lib`, `../src/types.ts`) : une notification dit ce que dit la bannière correspondante.
 
 La **veille fiscale** (`src/fiscalWatchJob.ts`) : chaque lundi à 5 h UTC,
 le serveur relit 10 pages officielles (`src/fiscalSources.ts`) : 9 de service-public.gouv.fr,
@@ -32,7 +34,9 @@ gardé en KV (`fiscal-watch:latest`) ; l'app le compare à ses paramètres et **
 écarts (jamais appliqués d'office), et Paramètres → Veille fiscale → *Détail du relevé* montre
 chaque valeur avec la phrase de la page. À l'ouverture, l'app relance la veille si le dernier
 relevé manque ou date de plus de 8 jours (`POST /fiscal-watch/run`, bridé) ; sans relevé
-récent, elle revient à Gemini (clé de l'appareil).
+récent, elle revient à Gemini (clé de l'appareil). Si l'essai du lundi échoue, le cron de 7 h le
+relance chaque jour (6 fois par semaine au plus) jusqu'au premier succès
+(`retryFiscalWatchIfFailed`, `src/handlers/cron.ts`).
 
 L'app reste hébergée sur GitHub Pages (derrière Cloudflare et le Worker des en-têtes `edge/`,
 qui n'a rien à voir avec ce serveur). Tant que `VITE_BACKEND_URL` n'est pas défini, elle
@@ -56,7 +60,7 @@ Un onglet s'ouvre : autorise l'accès.
 ```
 npx wrangler kv namespace create STORE
 ```
-Copie l'`id` affiché dans `wrangler.toml` (ligne `id = "REMPLACER_PAR_L_ID_DU_NAMESPACE"`), puis :
+Copie l'`id` affiché dans `wrangler.toml` (section `[[kv_namespaces]]`, ligne `id`, qui porte celui du déploiement actuel : à remplacer pour un autre compte), puis :
 ```
 npx wrangler deploy
 ```
@@ -99,7 +103,7 @@ de bord Cloudflare : Workers & Pages → `suivi-epargne-api` → Paramètres →
 *Ajouter* → type **Secret**. C'est la méthode utilisée pour le déploiement actuel.
 
 ### 6. Relier l'app
-Crée `.env.production` à la racine du dépôt :
+Dans `.env.production` à la racine du dépôt (déjà présent pour le déploiement actuel) :
 ```
 VITE_BACKEND_URL=https://suivi-epargne-api.<ton-sous-domaine>.workers.dev
 ```

@@ -57,7 +57,7 @@ const SUGGESTIONS: Record<Direction, string[]> = {
 const RECENT_COUNT = 3;
 
 /** Libellé déjà utilisé sur le compte, avec le dernier montant qui l'accompagnait. */
-export interface RecentLabel { label: string; amount: number }
+interface RecentLabel { label: string; amount: number }
 
 /**
  * Les trois derniers libellés distincts (sans tenir compte des majuscules) des dépôts ou des

@@ -1,6 +1,3 @@
-// ================================================
-// FILE: src/App.tsx
-// ================================================
 // Assemblage de l'app. Chaque morceau vit dans src/app :
 //  - UiProviders : toasts et fenêtre de confirmation (état à part, hors d'App) ;
 //  - useAuthSession : démarrage, connexion, déconnexion ; useLockFlow : verrou de l'appareil ;

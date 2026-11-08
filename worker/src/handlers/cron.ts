@@ -116,7 +116,7 @@ const remindUser = async (env: Env, sub: string, now: Date, errors?: CronErrors)
  * constate un accès retiré chez Google, et tout est alors effacé comme dans /token. Une
  * panne passagère de Google ne purge rien.
  */
-const sweepUserRecords = async (env: Env, now: Date, errors: CronErrors): Promise<void> => {
+const sweepUserRecords = async (env: Env, errors: CronErrors): Promise<void> => {
   let cursor: string | undefined;
   do {
     const page = await env.STORE.list({ prefix: USER_PREFIX, cursor });
@@ -157,7 +157,7 @@ export const runDailyReminders = async (env: Env): Promise<void> => {
       }
       cursor = page.list_complete ? undefined : page.cursor;
     } while (cursor);
-    await sweepUserRecords(env, now, errors);
+    await sweepUserRecords(env, errors);
     await purgeDueBackupDeletions(env, now.getTime(), errors);
   } catch (e) {
     errors.add(e);

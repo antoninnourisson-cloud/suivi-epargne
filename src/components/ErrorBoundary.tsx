@@ -17,7 +17,7 @@ interface State { error: Error | null }
  * réseau : ce n'est ni un bug ni une nouvelle version, il suffit d'attendre le réseau.
  * `retry` : prépare un nouveau chargement (React.lazy garde sinon l'échec en mémoire).
  */
-export class NeedsNetworkError extends Error {
+class NeedsNetworkError extends Error {
   retry: () => void;
   constructor(retry: () => void) { super('SCREEN_NEEDS_NETWORK'); this.name = 'NeedsNetworkError'; this.retry = retry; }
 }

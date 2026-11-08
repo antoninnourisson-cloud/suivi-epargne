@@ -165,7 +165,7 @@ export const snoozeEndMs = (until: string | undefined, nowMs: number): number =>
 };
 
 /** Début d'août à fin septembre : les avis arrivent fin juillet à fin août, quelques-uns début octobre. */
-export const isTaxNoticeSeason = (now: Date): boolean => now.getMonth() === 7 || now.getMonth() === 8;
+const isTaxNoticeSeason = (now: Date): boolean => now.getMonth() === 7 || now.getMonth() === 8;
 
 const ALERT_ICONS: Record<AlertKind, HomeTodoIcon> = {
   'dormant-cash': 'wallet', 'better-rate': 'transfer', 'livret-full': 'alert', 'restitution-room': 'gift', 'payslip-anomaly': 'file-warning',

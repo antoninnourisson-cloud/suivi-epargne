@@ -91,7 +91,7 @@ const proofMessage = (nonce: string, method: string, path: string): Uint8Array<A
   utf8(`${nonce}\n${method.toUpperCase()}\n${path}`);
 
 /** `stale` : nonce inconnu ou périmé (l'app reprend le nonce rendu et réessaie). */
-export type ProofCheck = 'ok' | 'missing' | 'invalid' | 'stale';
+type ProofCheck = 'ok' | 'missing' | 'invalid' | 'stale';
 
 /**
  * Vérifie une preuve `<nonce>.<signature>` (signature ECDSA P-256 / SHA-256 au format brut

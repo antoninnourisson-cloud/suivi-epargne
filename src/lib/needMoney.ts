@@ -21,7 +21,7 @@ import { EPS, round2 } from './money';
 const LIVRET_TYPES: readonly AccountType[] = [AccountType.LIVRET_BANCAIRE, AccountType.LIVRET_A, AccountType.LDDS, AccountType.CEL, AccountType.LEP];
 
 /** Rang d'un compte : 0 livret, 1 LEP (dernier des livrets), 2 assurance vie, 3 PEA ; null : jamais proposé. */
-export const needRank = (account: SavingsAccount, fiscal: FiscalConfig, asOf: Date): 0 | 1 | 2 | 3 | null => {
+const needRank = (account: SavingsAccount, fiscal: FiscalConfig, asOf: Date): 0 | 1 | 2 | 3 | null => {
   if (!(account.ownedAmount > EPS)) return null;
   if (account.type === AccountType.LEP) return 1;
   if (LIVRET_TYPES.includes(account.type)) return 0;

@@ -10,7 +10,7 @@ import { useEffect, useState } from 'react';
 import { isBackendEnabled } from '../../services/backendService';
 import { backupCodeCheckDue, backupUploadProblem, type BackupUploadProblem } from '../../lib/recoveryCodeCheck';
 
-export interface BackupReminders {
+interface BackupReminders {
   codeCheckDue: boolean;
   /** Pour une erreur : `reason` est la phrase en clair (FAILURE_MESSAGES). */
   uploadProblem: (BackupUploadProblem & { reason?: string }) | null;

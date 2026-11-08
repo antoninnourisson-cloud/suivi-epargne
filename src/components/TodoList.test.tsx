@@ -30,3 +30,17 @@ describe('TodoList : « Plus tard »', () => {
     expect(snoozed().c).toBe(new Date(2026, 10, 20, 10).getTime() + 7 * 86_400_000);
   });
 });
+
+describe('TodoList : tâches épinglées', () => {
+  it('une tâche épinglée passe devant les autres, même dernière de la liste', () => {
+    const items = [
+      spec('a', { tone: 'action' }),
+      spec('b', { tone: 'action' }), spec('c', { tone: 'action' }), spec('d', { tone: 'action' }),
+      spec('e', { pinned: true }),
+    ];
+    render(<TodoList items={items} />);
+    expect(screen.getByText('Tâche e')).toBeTruthy(); // visible sans « Voir tout »
+    const texts = screen.getAllByText(/^Tâche /).map(el => el.textContent);
+    expect(texts[0]).toBe('Tâche e');
+  });
+});

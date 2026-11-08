@@ -43,7 +43,7 @@ export const SCREEN_LABELS: Record<Screen, string> = {
 };
 
 /** Onglet par défaut d'un écran (premier onglet), `undefined` pour un écran sans onglets. */
-export const defaultTab = (screen: Screen): ScreenTab | undefined => tabsOf(screen)[0]?.key;
+const defaultTab = (screen: Screen): ScreenTab | undefined => tabsOf(screen)[0]?.key;
 
 /** Endroit complet d'un écran : l'onglet demandé s'il lui appartient, sinon celui par défaut. */
 export const placeIn = (screen: Screen, tab?: unknown): Place => {
