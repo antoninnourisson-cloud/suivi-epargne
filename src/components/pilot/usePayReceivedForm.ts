@@ -81,9 +81,13 @@ export const usePayReceivedForm = ({ doc, geminiApiKey, pickerApiKey, onRecordPa
     const c = doc.config;
     const motivation = motivationSettings(c);
     if (!motivation.enabled) return undefined;
-    const goodMonths = computeGoodMonths({ accounts: doc.accounts, today, paydayDay: c.paydayDay, payslips: doc.payslips, pays, threshold: motivation.threshold, trackingStartISO: c.trackingStartDate });
+    // La paie déclarée ici termine le mois d'épargne en cours, même versée avant son jour
+    // habituel : le bilan proposé est celui qu'afficherait l'Accueil une fois la paie notée (sinon
+    // il y reviendrait en carte « à valider » juste après le rituel).
+    const withThisPay = [...pays, { id: 'paie-en-cours', receivedOn: today, savingsMonth: savingsMonthOf(today) }];
+    const goodMonths = computeGoodMonths({ accounts: doc.accounts, today, paydayDay: c.paydayDay, payslips: doc.payslips, pays: withThisPay, threshold: motivation.threshold, trackingStartISO: c.trackingStartDate });
     const plan = c.paydayAmount ?? computeMonthlySavingsCapacity(doc);
-    const r = computePayReview({ accounts: doc.accounts, goodMonths, today, plan, trackingStartISO: c.trackingStartDate, pays });
+    const r = computePayReview({ accounts: doc.accounts, goodMonths, today, plan, trackingStartISO: c.trackingStartDate, pays: withThisPay });
     return r && !isPayReviewDone(r.key, c.payReviewsDone, pays) ? r : undefined;
     // Calculé à l'ouverture : valider le bilan ne doit pas faire disparaître l'étape en cours.
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -15,6 +15,14 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '2026.11.24',
+    date: '2026-11-24',
+    title: 'Paie en avance',
+    items: [
+      "Paie reçue quelques jours avant son jour habituel : « J'ai reçu ma paie » commence par le bilan du mois qu'elle termine, au lieu de le laisser revenir ensuite en carte sur l'Accueil.",
+    ],
+  },
+  {
     version: '2026.11.08-2',
     date: '2026-11-08',
     title: 'Vérifications de fond',

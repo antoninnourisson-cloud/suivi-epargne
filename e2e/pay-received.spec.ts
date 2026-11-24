@@ -234,3 +234,20 @@ test('autre argent reçu : la nature d’abord, un cadeau placé (avec la questi
   await expect(history.getByRole('listitem').filter({ hasText: /^Remboursement reçu le .* : 40\s€/ })).toContainText('Resté sur le compte courant');
   expect(errors).toEqual([]);
 });
+
+test('paie déclarée avant son jour habituel : le rituel commence par le bilan du mois qu’elle termine', async ({ page }) => {
+  // Démo : paie attendue le 27 ; déclarée le 24 novembre, elle termine le mois d'épargne de
+  // novembre, dont le bilan est proposé dans le rituel, puis ne revient pas sur l'Accueil.
+  await page.clock.setFixedTime(new Date('2026-11-24T10:00:00'));
+  await openDemo(page, 'view=dashboard');
+  const savings = page.getByRole('region', { name: /^Épargne de novembre$/ });
+  await savings.getByRole('button', { name: "J'ai reçu ma paie", exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: "J'ai reçu ma paie" });
+  await expect(dialog.getByRole('heading', { name: /^Bilan de novembre/ })).toBeVisible();
+  await dialog.getByRole('button', { name: 'Continuer' }).click();
+  await expect(dialog.getByRole('heading', { name: 'Votre paie' })).toBeVisible();
+  await dialog.getByRole('button', { name: 'Voir la répartition' }).click();
+  await dialog.getByRole('button', { name: 'Tout marquer fait' }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page.getByRole('region', { name: /^Bilan d/ })).toHaveCount(0);
+});
