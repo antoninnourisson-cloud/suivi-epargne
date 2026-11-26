@@ -173,7 +173,7 @@ export const usePayslipImport = ({ payslips, geminiApiKey, pickerApiKey, onSave,
       console.error('Analyse Gemini échouée', analysis.error);
       const code = analysis.error instanceof GeminiError ? analysis.error.code : undefined;
       const error = code === 'OVERLOADED'
-        ? "Gemini est très sollicité en ce moment (plusieurs tentatives et modèles essayés automatiquement). Réessayez dans quelques minutes, ou saisissez les montants à la main."
+        ? "Gemini n'a pas répondu à temps ou est très sollicité en ce moment (plusieurs modèles essayés automatiquement). Réessayez dans quelques minutes, ou saisissez les montants à la main."
         : code === 'AUTH'
           ? "Gemini refuse la clé API : vérifiez-la dans les Paramètres."
           : "L'extraction automatique a échoué. Vous pouvez saisir les montants manuellement ci-dessous.";

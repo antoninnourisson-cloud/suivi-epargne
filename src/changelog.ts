@@ -15,6 +15,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '2026.11.26',
+    date: '2026-11-26',
+    title: 'Lecture des documents plus rapide',
+    items: [
+      "Fiches de paie, relevés et avis d'impôt : Gemini les lit en réfléchissant moins longtemps (réglage conseillé par Google pour relever des chiffres), donc plus vite.",
+      "Si Gemini tarde, Pécule passe tout de suite à un autre modèle et s'arrête au bout de 2 minutes et demie au plus pour une fiche de paie, avec un message clair, au lieu d'attendre plusieurs minutes sans rien afficher.",
+    ],
+  },
+  {
     version: '2026.11.24',
     date: '2026-11-24',
     title: 'Paie en avance',

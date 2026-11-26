@@ -234,3 +234,40 @@ describe('extractAnnualStatement', () => {
     expect((await extractAnnualStatement('k', 'b64', 'application/pdf', NO_WAIT).catch(e => e)).message).toBe('RÉPONSE_GEMINI_ILLISIBLE');
   });
 });
+
+describe('lecture de documents : rapide et bornée dans le temps', () => {
+  it('demande une réflexion « low » aux modèles Gemini 3, sans rien changer d’autre', async () => {
+    const bodies: unknown[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, init: { body: string }) => {
+      bodies.push(JSON.parse(init.body));
+      return ok({ netPaid: 2400 });
+    }));
+    await extractPayslipData('k', 'b64', 'application/pdf', NO_WAIT);
+    expect(bodies[0]).toMatchObject({ generationConfig: { responseMimeType: 'application/json', thinkingConfig: { thinkingLevel: 'low' } } });
+  });
+
+  it('un délai dépassé passe au modèle suivant, sans réessayer le même', async () => {
+    const abort = Object.assign(new Error('aborted'), { name: 'AbortError' });
+    const models: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      models.push(/models\/([^:]+):/.exec(url)![1]);
+      if (models.length === 1) throw abort;
+      return ok({ grossAmount: 1 });
+    }));
+    expect((await extractPayslipData('k', 'b64', 'application/pdf', NO_WAIT)).grossAmount).toBe(1);
+    expect(models).toEqual(['gemini-3.6-flash', 'gemini-3.8-flash']);
+  });
+
+  it('s’arrête à la durée maximale totale, au lieu d’enchaîner les essais pendant des minutes', async () => {
+    // Chaque requête « pend » jusqu'à son délai (simulé par l'abandon du signal).
+    vi.stubGlobal('fetch', vi.fn((_url: string, init: { signal: AbortSignal }) => new Promise((_resolve, reject) => {
+      init.signal.addEventListener('abort', () => reject(Object.assign(new Error('aborted'), { name: 'AbortError' })));
+    })));
+    const started = Date.now();
+    const e = await extractPayslipData('k', 'b64', 'application/pdf', { ...NO_WAIT, requestTimeoutMs: 4_000, deadlineMs: 6_000 }).catch(err => err);
+    expect(e).toBeInstanceOf(GeminiError);
+    expect((e as GeminiError).code).toBe('OVERLOADED');
+    // Une requête de 4 s, puis moins de 5 s restantes : arrêt, sans attendre les autres modèles.
+    expect(Date.now() - started).toBeLessThan(5_500);
+  }, 10_000);
+});

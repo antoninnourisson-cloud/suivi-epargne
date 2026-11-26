@@ -54,7 +54,23 @@ export interface ExtractOptions {
   retryDelaysMs?: number[];
   // Délai maximal d'UNE requête.
   requestTimeoutMs?: number;
+  // Durée maximale de TOUT l'essai (tous modèles et reprises compris).
+  deadlineMs?: number;
 }
+
+/**
+ * Lecture d'un document : peu de raisonnement suffit (relever des chiffres), et la réflexion par
+ * défaut des modèles Gemini 3 (« medium ») pouvait dépasser le délai d'une requête sur un PDF.
+ * `thinkingLevel: "low"` est accepté par gemini-3.6-flash et gemini-3.8-flash (« minimal » ne
+ * l'est pas par 3.8), et ignoré des modèles qui ne le connaissent pas (Gemini 2.5 : pas envoyé).
+ * Source : https://ai.google.dev/gemini-api/docs/generate-content/thinking (vérifié le 2026-11-26).
+ */
+const DOCUMENT_THINKING = 'low';
+const withThinking = (body: string, model: string, level: string | undefined): string => {
+  if (!level || !/^gemini-3/.test(model)) return body;
+  const parsed = JSON.parse(body) as { generationConfig?: Record<string, unknown> };
+  return JSON.stringify({ ...parsed, generationConfig: { ...parsed.generationConfig, thinkingConfig: { thinkingLevel: level } } });
+};
 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
@@ -96,20 +112,30 @@ const responseText = (data: unknown): string => {
  * heures de pointe, donc reprise du même modèle après chaque délai de `retryDelays`, puis
  * bascule sur les modèles de repli ; un modèle retiré (404) est sauté ; une erreur non
  * passagère (clé refusée, requête invalide) interrompt tout de suite — réessayer n'y
- * changerait rien. Renvoie le texte de la réponse (jamais vide).
+ * changerait rien. Un délai dépassé passe au modèle suivant (le même modèle, déjà trop lent,
+ * le serait encore), et `deadlineMs` borne la durée totale : jamais plusieurs minutes d'attente
+ * sans réponse. Renvoie le texte de la réponse (jamais vide).
  */
-const generate = async (apiKey: string, body: string, retryDelays: number[], timeoutMs: number): Promise<string> => {
+const generate = async (
+  apiKey: string, body: string, retryDelays: number[], timeoutMs: number,
+  extra: { thinkingLevel?: string; deadlineMs?: number } = {},
+): Promise<string> => {
   if (!apiKey) throw new GeminiError('GEMINI_API_KEY_MISSING', 'AUTH');
   const models = modelChain();
+  const deadline = Date.now() + (extra.deadlineMs ?? Number.POSITIVE_INFINITY);
   let lastFailure = '';
   outer: for (const model of models) {
+    const modelBody = withThinking(body, model, extra.thinkingLevel);
     for (let attempt = 0; attempt <= retryDelays.length; attempt++) {
       if (attempt > 0) await sleep(retryDelays[attempt - 1]);
+      // Moins de 5 s avant la limite totale : inutile de lancer une requête de plus.
+      const remaining = deadline - Date.now();
+      if (remaining < 5_000) { lastFailure ||= 'durée maximale atteinte'; break outer; }
       let r: Response;
       try {
-        r = await callModel(model, apiKey, body, timeoutMs);
+        r = await callModel(model, apiKey, modelBody, Math.min(timeoutMs, remaining));
       } catch (e: unknown) {
-        if ((e as { name?: string } | null)?.name === 'AbortError') { lastFailure = `${model} : délai dépassé`; continue; }
+        if ((e as { name?: string } | null)?.name === 'AbortError') { lastFailure = `${model} : délai dépassé`; continue outer; }
         throw e; // réseau coupé : inutile d'insister
       }
       if (r.ok) {
@@ -233,7 +259,8 @@ export const extractPayslipData = async (
   options: ExtractOptions = {}
 ): Promise<PayslipExtractedData> => {
   const answer = await generate(apiKey, documentRequest(PROMPT, base64Data, mimeType, RESPONSE_SCHEMA),
-    options.retryDelaysMs ?? [2_000, 6_000], options.requestTimeoutMs ?? 60_000);
+    options.retryDelaysMs ?? [2_000, 6_000], options.requestTimeoutMs ?? 60_000,
+    { thinkingLevel: DOCUMENT_THINKING, deadlineMs: options.deadlineMs ?? 150_000 });
   return sanitizePayslip(parseObject(answer));
 };
 
@@ -321,7 +348,8 @@ export const sanitizeTaxNotice = (parsed: Record<string, unknown>, now = new Dat
 /** Lit un avis d'imposition (PDF ou photo). Même chaîne de modèles et reprises que les fiches de paie. */
 export const extractTaxNotice = async (apiKey: string, base64Data: string, mimeType: string, options: ExtractOptions = {}): Promise<TaxNoticeData> => {
   const answer = await generate(apiKey, documentRequest(TAX_NOTICE_PROMPT, base64Data, mimeType, TAX_NOTICE_SCHEMA),
-    options.retryDelaysMs ?? [3_000, 6_000], options.requestTimeoutMs ?? 60_000);
+    options.retryDelaysMs ?? [3_000, 6_000], options.requestTimeoutMs ?? 60_000,
+    { thinkingLevel: DOCUMENT_THINKING, deadlineMs: options.deadlineMs ?? 150_000 });
   return sanitizeTaxNotice(parseObject(answer));
 };
 
@@ -364,7 +392,8 @@ export const sanitizeAnnualStatement = (parsed: Record<string, unknown>, now = n
 /** Lit le relevé annuel d'un placement (PDF ou photo). Rien n'est enregistré ici : la feuille de clôture préremplit, l'utilisateur valide. */
 export const extractAnnualStatement = async (apiKey: string, base64Data: string, mimeType: string, options: ExtractOptions = {}): Promise<AnnualStatementData> => {
   const answer = await generate(apiKey, documentRequest(ANNUAL_STATEMENT_PROMPT, base64Data, mimeType, ANNUAL_STATEMENT_SCHEMA),
-    options.retryDelaysMs ?? [2_000, 6_000], options.requestTimeoutMs ?? 90_000);
+    options.retryDelaysMs ?? [2_000, 6_000], options.requestTimeoutMs ?? 90_000,
+    { thinkingLevel: DOCUMENT_THINKING, deadlineMs: options.deadlineMs ?? 180_000 });
   return sanitizeAnnualStatement(parseObject(answer));
 };
 
@@ -420,7 +449,8 @@ Utilise la date d'opération, pas la date de valeur. Ignore les lignes de total,
 export const extractBankStatement = async (apiKey: string, base64Data: string, mimeType: string, options: ExtractOptions = {}): Promise<StatementData> => {
   const answer = await generate(apiKey, documentRequest(STATEMENT_PROMPT, base64Data, mimeType, STATEMENT_SCHEMA),
     // Relevé de plusieurs pages : réponse plus longue que pour une fiche de paie.
-    options.retryDelaysMs ?? [2_000, 6_000], options.requestTimeoutMs ?? 120_000);
+    options.retryDelaysMs ?? [2_000, 6_000], options.requestTimeoutMs ?? 120_000,
+    { thinkingLevel: DOCUMENT_THINKING, deadlineMs: options.deadlineMs ?? 240_000 });
   return sanitizeStatement(parseObject(answer));
 };
 

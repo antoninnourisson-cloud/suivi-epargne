@@ -89,9 +89,12 @@ export const PayslipDraftCard: React.FC<DraftCardProps> = ({ imp, keysNoteId, va
         )}
 
         {draft.status === 'extracting' && (
-          <p role="status" className="flex items-center justify-center gap-2 py-6 text-sm text-on-surface-variant">
-            <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> Analyse en cours…
-          </p>
+          <div role="status" className="py-6 text-center text-sm text-on-surface-variant">
+            <p className="flex items-center justify-center gap-2">
+              <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> Analyse en cours…
+            </p>
+            <p className="mt-1 text-xs">Souvent moins d'une minute ; au-delà de 2 minutes et demie, Pécule s'arrête et vous laisse saisir les montants.</p>
+          </div>
         )}
 
         {draft.status === 'reviewing' && (
