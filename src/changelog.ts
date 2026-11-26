@@ -21,6 +21,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     items: [
       "Fiches de paie, relevés et avis d'impôt : Gemini les lit en réfléchissant moins longtemps (réglage conseillé par Google pour relever des chiffres), donc plus vite.",
       "Si Gemini tarde, Pécule passe tout de suite à un autre modèle et s'arrête au bout de 2 minutes et demie au plus pour une fiche de paie, avec un message clair, au lieu d'attendre plusieurs minutes sans rien afficher.",
+      "Bons mois : la veille de la paie, après un mois de 31 jours, le mois d'épargne en cours n'est plus compté comme terminé (ni « raté »), et votre série ne retombe plus à zéro pour la journée.",
     ],
   },
   {

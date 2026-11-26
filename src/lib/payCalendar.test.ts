@@ -58,11 +58,11 @@ describe('fenêtres des mois d\'épargne', () => {
   });
   it('paie avant le 15 : la fenêtre porte le mois même', () => {
     const w = payWindows({ paydayDay: 5 }, '2026-10-20', 2);
-    expect(w.map(x => [x.key, x.start, x.end])).toEqual([['2026-09', '2026-09-05', '2026-10-05'], ['2026-10', '2026-10-05', '2026-11-04']]);
+    expect(w.map(x => [x.key, x.start, x.end])).toEqual([['2026-09', '2026-09-05', '2026-10-05'], ['2026-10', '2026-10-05', '2026-11-05']]);
   });
   it('sans jour de paie ni paie déclarée : mois civils', () => {
     const w = payWindows({}, '2026-10-20', 2);
-    expect(w.map(x => [x.key, x.start, x.end, x.source])).toEqual([['2026-09', '2026-09-01', '2026-10-01', 'calendar'], ['2026-10', '2026-10-01', '2026-10-31', 'calendar']]);
+    expect(w.map(x => [x.key, x.start, x.end, x.source])).toEqual([['2026-09', '2026-09-01', '2026-10-01', 'calendar'], ['2026-10', '2026-10-01', '2026-11-01', 'calendar']]);
   });
   it('fiche de paie enregistrée à une semaine près : elle ouvre la fenêtre (même mois d\'épargne)', () => {
     const w = payWindows({ paydayDay: 27, payslips: [slip('2026-09', '2026-09-24T08:00:00Z')] }, '2026-10-02', 2);
@@ -84,13 +84,13 @@ describe('fenêtres des mois d\'épargne', () => {
   });
   it('paie en retard (3 novembre pour octobre) : épargne de novembre, à partir du 3', () => {
     const w = payWindows({ paydayDay: 27, pays: [pay('late', '2026-11-03')] }, '2026-11-05', 2);
-    expect(w.map(x => [x.key, x.start, x.end])).toEqual([['2026-10', '2026-09-27', '2026-11-03'], ['2026-11', '2026-11-03', '2026-12-03']]);
+    expect(w.map(x => [x.key, x.start, x.end])).toEqual([['2026-10', '2026-09-27', '2026-11-03'], ['2026-11', '2026-11-03', '2026-11-27']]);
   });
   it('paie déclarée après coup (antidatée) : les fenêtres passées sont corrigées', () => {
     const before = payWindows({ paydayDay: 27 }, '2026-11-05', 2);
     expect(before[1].start).toBe('2026-10-27');
     const after = payWindows({ paydayDay: 27, pays: [pay('oct', '2026-10-24')] }, '2026-11-05', 2);
-    expect(after.map(x => [x.key, x.start, x.end])).toEqual([['2026-10', '2026-09-27', '2026-10-24'], ['2026-11', '2026-10-24', '2026-11-23']]);
+    expect(after.map(x => [x.key, x.start, x.end])).toEqual([['2026-10', '2026-09-27', '2026-10-24'], ['2026-11', '2026-10-24', '2026-11-27']]);
   });
   it('deux paies sur le même mois d\'épargne : la première ouvre la fenêtre ; un versement en plus n\'ouvre rien', () => {
     const pays = [pay('b', '2026-10-30'), pay('a', '2026-10-27'), pay('prime', '2026-11-10', { kind: 'extra', savingsMonth: '2026-11' })];
@@ -105,14 +105,14 @@ describe('fenêtres des mois d\'épargne', () => {
     expect(w.map(x => [x.key, x.start, x.end])).toEqual([
       ['2026-10', '2026-09-28', '2026-10-27'],
       ['2026-11', '2026-10-27', '2026-11-26'],
-      ['2026-12', '2026-11-26', '2026-12-26'],
+      ['2026-12', '2026-11-26', '2026-12-27'],
     ]);
   });
   it("cas tordus : la règle s'applique telle quelle, le mois se change à la main", () => {
     // Paie reçue le 14 octobre : rangée en octobre (règle du 15), elle remplace la paie
     // attendue du 27 septembre, qui ouvrait octobre ; septembre s'étire jusqu'au 14.
     const w = payWindows({ paydayDay: 27, pays: [pay('o', '2026-10-14')] }, '2026-10-20', 2);
-    expect(w.map(x => [x.key, x.start, x.end])).toEqual([['2026-09', '2026-08-27', '2026-10-14'], ['2026-10', '2026-10-14', '2026-11-13']]);
+    expect(w.map(x => [x.key, x.start, x.end])).toEqual([['2026-09', '2026-08-27', '2026-10-14'], ['2026-10', '2026-10-14', '2026-10-27']]);
     // Mois choisi à la main après la paie suivante : novembre reste vide, rien ne chevauche.
     const odd = payWindows({ paydayDay: 27, pays: [pay('o', '2026-10-28', { savingsMonth: '2027-01' })] }, '2026-11-02', 2);
     expect(odd.map(x => [x.key, x.start, x.end])).toEqual([['2026-11', '2026-10-27', '2026-10-28'], ['2027-01', '2026-10-28', '2026-11-27']]);
@@ -136,5 +136,15 @@ describe('payPeriodOf : façade sur la même règle', () => {
     expect(withSlip).toMatchObject({ key: '2026-10', savingsMonth: '2026-11' });
     expect(payWindows({ paydayDay: 27, payslips: [slip('2026-10', '2026-10-24T09:00:00Z')] }, '2026-10-25', 1)[0].key).toBe(withSlip.savingsMonth);
     expect(payPeriodOf(27, asOf, { pays: [pay('o', '2026-10-23')] })).toMatchObject({ key: '2026-10', savingsMonth: '2026-11' });
+  });
+});
+
+describe('fenêtre en cours : jusqu’à la prochaine paie attendue', () => {
+  it('après un mois de 31 jours, la veille de la paie, le mois d’épargne est encore en cours', () => {
+    // Paie le 27 : celle du 27 octobre ouvre novembre ; avec « 30 jours pile », elle finissait le
+    // 26 novembre, et ce jour-là novembre passait pour terminé.
+    const w = payWindows({ paydayDay: 27 }, '2026-11-26', 1);
+    expect(w[0]).toMatchObject({ key: '2026-11', start: '2026-10-27', end: '2026-11-27' });
+    expect(currentSavingsMonth({ paydayDay: 27 }, '2026-11-26').key).toBe('2026-11');
   });
 });

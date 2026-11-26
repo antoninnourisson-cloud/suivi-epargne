@@ -139,13 +139,16 @@ export const payWindows = (data: PayCalendarData, today: string, count = 12): Pa
     if (replaced?.source === 'received') continue;
     anchors.set(key, { key, start: p.receivedOn, source: 'received', payId: p.id, payMonth: replaced?.payMonth ?? p.receivedOn.slice(0, 7) });
   }
-  const sorted = [...anchors.values()].filter(a => a.start <= today).sort((a, b) => a.key.localeCompare(b.key));
+  const all = [...anchors.values()].sort((a, b) => a.key.localeCompare(b.key));
+  const sorted = all.filter(a => a.start <= today);
   // Une fenêtre s'arrête à la paie suivante : pas de chevauchement (un versement compté deux
   // fois), pas de trou. Une paie déclarée avant la paie du mois précédent (mois choisi à la
-  // main) laisse ce mois-là vide plutôt que de le faire déborder. Seule la fenêtre en cours,
-  // sans paie suivante connue, dure 30 jours pile.
+  // main) laisse ce mois-là vide plutôt que de le faire déborder. La fenêtre en cours s'arrête
+  // à la prochaine paie ATTENDUE (encore à venir) : avec 30 jours pile, la paie du 27 octobre
+  // finissait le 26 novembre, et ce mois était jugé terminé (« raté ») la veille de la paie
+  // suivante. Les 30 jours ne restent qu'un filet, faute de paie attendue connue.
   return sorted.map((a, i) => {
-    const next = sorted[i + 1];
+    const next = sorted[i + 1] ?? all.find(x => x.key > a.key && x.start > a.start);
     const end = next ? (next.start > a.start ? next.start : a.start) : addDays(a.start, PAY_WINDOW_DAYS);
     return { ...a, end };
   }).slice(-count);

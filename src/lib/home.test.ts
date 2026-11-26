@@ -299,7 +299,7 @@ describe('fenêtre « ce mois-ci » : la paie en cours', () => {
     expect(p.byPay).toBe(true);
     expect(p.start).toBe('2026-10-03');
     expect(p.since).toBe('depuis la paie du 3 octobre');
-    expect(p.end).toBe('2026-11-02');
+    expect(p.end).toBe('2026-11-01');
     expect(p.saved).toBe(40);
   });
 });
